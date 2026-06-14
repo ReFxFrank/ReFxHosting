@@ -62,7 +62,7 @@ describe('ServersService.switchGame', () => {
 
   beforeEach(() => {
     prisma = {
-      server: { findFirst: jest.fn() },
+      server: { findFirst: jest.fn(), update: jest.fn((args: any) => args) },
       gameTemplate: { findUnique: jest.fn() },
       gameSwitchLog: { create: jest.fn((args: any) => args) },
       serverVariable: { deleteMany: jest.fn((args: any) => args) },

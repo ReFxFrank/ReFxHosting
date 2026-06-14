@@ -140,7 +140,7 @@ export function calculateTax(
 
   switch (regime) {
     case 'VAT':
-      return calculateVat(subtotalMinor, region, merchantCountry, opts.customerTaxId);
+      return calculateVat(subtotalMinor, region, country, merchantCountry, opts.customerTaxId);
     case 'GST': {
       const rate = GST_RATES[region] ?? GST_RATES[country] ?? 0;
       return buildResult(subtotalMinor, rate, 'GST');
@@ -181,10 +181,13 @@ function resolveTaxType(
 function calculateVat(
   subtotalMinor: number,
   region: string,
+  country: string,
   merchantCountry: string,
   customerTaxId?: string,
 ): TaxResult {
-  const baseRate = EU_VAT_RATES[region] ?? 0;
+  // For VAT the `region` IS the country code; fall back to `country` when only
+  // that was supplied (mirrors the GST path).
+  const baseRate = EU_VAT_RATES[region] ?? EU_VAT_RATES[country] ?? 0;
 
   if (customerTaxId) {
     const { country: vatCountry, valid } = parseVatId(customerTaxId);

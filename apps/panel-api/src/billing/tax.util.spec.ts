@@ -18,15 +18,13 @@ describe('calculateTax (billing tax engine)', () => {
       expect(r.taxMinor).toBe(2300);
     });
 
-    it('infers the VAT regime from a known EU country code', () => {
-      // The regime is inferred from `country`, but the rate table is keyed by
-      // `region`; with an empty region the resolved rate is 0 (no rate found).
-      // The customer-facing path always supplies `region`, so this documents the
-      // regime-inference behaviour rather than a populated rate.
+    it('infers the VAT regime and rate from a known EU country code', () => {
+      // Regime is inferred from `country`; the rate now also falls back to
+      // `country` when `region` is empty (mirrors the GST path).
       const r = calculateTax(5000, { region: '', country: 'FR' });
       expect(r.taxType).toBe('VAT');
-      expect(r.taxRatePct).toBe(0);
-      expect(r.taxMinor).toBe(0);
+      expect(r.taxRatePct).toBe(20);
+      expect(r.taxMinor).toBe(1000);
     });
 
     it('applies the French standard rate (20%) when region is supplied', () => {
