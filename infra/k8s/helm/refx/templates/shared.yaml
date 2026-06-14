@@ -1,0 +1,66 @@
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "refx.serviceAccountName" . }}
+  labels: {{- include "refx.labels" . | nindent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "refx.fullname" . }}-config
+  labels: {{- include "refx.labels" . | nindent 4 }}
+data:
+  NODE_ENV: "production"
+  PANEL_URL: {{ printf "https://%s" .Values.ingress.hosts.api | quote }}
+  CORS_ORIGINS: {{ printf "https://%s" .Values.ingress.hosts.panel | quote }}
+  {{- range $k, $v := .Values.config }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+{{- if not .Values.secrets.existingSecret }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "refx.secretName" . }}
+  labels: {{- include "refx.labels" . | nindent 4 }}
+type: Opaque
+stringData:
+  {{- range $k, $v := .Values.secrets.data }}
+  {{- if $v }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}
+  {{- end }}
+{{- end }}
+{{- if .Values.networkPolicy.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "refx.fullname" . }}-default
+  labels: {{- include "refx.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "refx.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Allow ingress controller -> pods on app ports.
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: {{ .Values.panelApi.port }}
+        - port: {{ .Values.web.port }}
+  egress:
+    # DNS
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Everything else (DB, Redis, S3, node-agents, Stripe) — tighten per-env.
+    - {}
+{{- end }}

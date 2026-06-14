@@ -1,0 +1,110 @@
+/**
+ * Typed application configuration derived from environment variables.
+ * Loaded once by ConfigModule (see app.module.ts) and consumed via
+ * ConfigService.get<AppConfig['...']>('...').
+ */
+
+export interface AppConfig {
+  env: string;
+  port: number;
+  apiPrefix: string;
+  panelUrl: string;
+  rpId: string;
+  rpName: string;
+  corsOrigins: string[];
+  database: {
+    url: string;
+  };
+  redis: {
+    host: string;
+    port: number;
+    password?: string;
+    db: number;
+  };
+  jwt: {
+    accessSecret: string;
+    refreshSecret: string;
+    accessTtl: number;
+    refreshTtl: number;
+  };
+  secretsEncKey: string;
+  agent: {
+    requestTimeoutMs: number;
+  };
+  stripe: {
+    secretKey: string;
+    webhookSecret: string;
+  };
+  paypal: {
+    clientId: string;
+    clientSecret: string;
+    mode: string;
+  };
+  billing: {
+    invoiceNumberPrefix: string;
+    defaultCurrency: string;
+  };
+  throttle: {
+    ttl: number;
+    limit: number;
+  };
+}
+
+const toInt = (v: string | undefined, fallback: number): number => {
+  const n = Number.parseInt(v ?? '', 10);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const toList = (v: string | undefined): string[] =>
+  (v ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+export default (): AppConfig => ({
+  env: process.env.NODE_ENV ?? 'development',
+  port: toInt(process.env.PORT, 4000),
+  apiPrefix: process.env.API_PREFIX ?? 'api/v1',
+  panelUrl: process.env.PANEL_URL ?? 'http://localhost:3000',
+  rpId: process.env.PANEL_RP_ID ?? 'localhost',
+  rpName: process.env.PANEL_RP_NAME ?? 'ReFx Hosting',
+  corsOrigins: toList(process.env.CORS_ORIGINS) || ['http://localhost:3000'],
+  database: {
+    url: process.env.DATABASE_URL ?? '',
+  },
+  redis: {
+    host: process.env.REDIS_HOST ?? 'localhost',
+    port: toInt(process.env.REDIS_PORT, 6379),
+    password: process.env.REDIS_PASSWORD || undefined,
+    db: toInt(process.env.REDIS_DB, 0),
+  },
+  jwt: {
+    accessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',
+    refreshSecret: process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret',
+    accessTtl: toInt(process.env.JWT_ACCESS_TTL, 900),
+    refreshTtl: toInt(process.env.JWT_REFRESH_TTL, 2592000),
+  },
+  secretsEncKey:
+    process.env.SECRETS_ENC_KEY ??
+    '0'.repeat(64),
+  agent: {
+    requestTimeoutMs: toInt(process.env.AGENT_REQUEST_TIMEOUT_MS, 15000),
+  },
+  stripe: {
+    secretKey: process.env.STRIPE_SECRET_KEY ?? '',
+    webhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? '',
+  },
+  paypal: {
+    clientId: process.env.PAYPAL_CLIENT_ID ?? '',
+    clientSecret: process.env.PAYPAL_CLIENT_SECRET ?? '',
+    mode: process.env.PAYPAL_MODE ?? 'sandbox',
+  },
+  billing: {
+    invoiceNumberPrefix: process.env.INVOICE_NUMBER_PREFIX ?? 'INV',
+    defaultCurrency: process.env.DEFAULT_CURRENCY ?? 'USD',
+  },
+  throttle: {
+    ttl: toInt(process.env.THROTTLE_TTL, 60),
+    limit: toInt(process.env.THROTTLE_LIMIT, 120),
+  },
+});

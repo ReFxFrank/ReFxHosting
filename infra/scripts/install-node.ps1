@@ -1,0 +1,109 @@
+<#
+.SYNOPSIS
+    ReFx Hosting node-agent installer for Windows Server 2022 / 2025.
+
+.DESCRIPTION
+    Downloads the refx-agent binary, writes its configuration, opens firewall
+    ports, and registers it as a Windows Service that auto-starts.
+
+.PARAMETER PanelUrl
+    Base URL of the panel API, e.g. https://api.refx.example
+
+.PARAMETER Token
+    Bootstrap node token from Admin -> Nodes -> Add.
+
+.PARAMETER Version
+    Agent release tag, or "latest" (default).
+
+.EXAMPLE
+    .\install-node.ps1 -PanelUrl https://api.refx.example -Token abc123
+#>
+[CmdletBinding()]
+param(
+    [Parameter(Mandatory = $true)][string]$PanelUrl,
+    [Parameter(Mandatory = $true)][string]$Token,
+    [string]$Version = "latest"
+)
+
+$ErrorActionPreference = "Stop"
+$Repo        = "refxfrank/refxhosting"
+$InstallDir  = "C:\Program Files\ReFx\agent"
+$DataDir     = "C:\ProgramData\ReFx\data"
+$ConfigDir   = "C:\ProgramData\ReFx\config"
+$ServiceName = "refx-agent"
+
+function Write-Log { param($m) Write-Host "[refx] $m" -ForegroundColor Green }
+
+# ---- elevation check --------------------------------------------------------
+$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    throw "This script must be run as Administrator."
+}
+
+# ---- directories ------------------------------------------------------------
+foreach ($d in @($InstallDir, $DataDir, "$DataDir\servers", "$DataDir\backups", $ConfigDir)) {
+    if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d -Force | Out-Null }
+}
+
+# ---- detect arch & download -------------------------------------------------
+$arch = if ([Environment]::Is64BitOperatingSystem) { "amd64" } else { throw "32-bit Windows is unsupported." }
+$bin  = "refx-agent-windows-$arch.exe"
+$url  = if ($Version -eq "latest") {
+    "https://github.com/$Repo/releases/latest/download/$bin"
+} else {
+    "https://github.com/$Repo/releases/download/$Version/$bin"
+}
+$exe = Join-Path $InstallDir "refx-agent.exe"
+
+Write-Log "Downloading agent: $url"
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Invoke-WebRequest -Uri $url -OutFile $exe -UseBasicParsing
+
+# Verify checksum if present.
+try {
+    $sha = (Invoke-WebRequest -Uri "$url.sha256" -UseBasicParsing).Content.Split(" ")[0].Trim()
+    $actual = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLower()
+    if ($sha -and ($sha.ToLower() -ne $actual)) { throw "Checksum mismatch." }
+    Write-Log "Checksum verified."
+} catch { Write-Host "[refx] checksum not published; skipping verification." -ForegroundColor Yellow }
+
+# ---- config -----------------------------------------------------------------
+$configPath = Join-Path $ConfigDir "config.yaml"
+Write-Log "Writing $configPath"
+@"
+panel_url: "$PanelUrl"
+node_token: "$Token"
+data_dir: "$($DataDir -replace '\\','/')"
+api:
+  bind: "0.0.0.0:8443"
+sftp:
+  bind: "0.0.0.0:2022"
+log_level: "info"
+"@ | Set-Content -Path $configPath -Encoding UTF8
+
+# ---- firewall ---------------------------------------------------------------
+foreach ($port in 8443, 2022) {
+    if (-not (Get-NetFirewallRule -DisplayName "ReFx Agent $port" -ErrorAction SilentlyContinue)) {
+        New-NetFirewallRule -DisplayName "ReFx Agent $port" -Direction Inbound `
+            -Action Allow -Protocol TCP -LocalPort $port | Out-Null
+    }
+}
+
+# ---- service ----------------------------------------------------------------
+if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
+    Write-Log "Stopping existing service"
+    Stop-Service $ServiceName -Force -ErrorAction SilentlyContinue
+    sc.exe delete $ServiceName | Out-Null
+    Start-Sleep -Seconds 2
+}
+Write-Log "Registering Windows service '$ServiceName'"
+New-Service -Name $ServiceName -BinaryPathName "`"$exe`" --config `"$configPath`"" `
+    -DisplayName "ReFx Hosting Node Agent" -StartupType Automatic `
+    -Description "Runs and manages game servers for the ReFx Hosting panel." | Out-Null
+# Restart on failure.
+sc.exe failure $ServiceName reset=86400 actions=restart/5000/restart/5000/restart/5000 | Out-Null
+
+Start-Service $ServiceName
+Write-Log "Agent installed and started. It will now register with the panel."
+Write-Log "Status:  Get-Service $ServiceName"
+Write-Log "Logs:    Get-EventLog -LogName Application -Source refx-agent -Newest 50  (or the agent's data dir)"

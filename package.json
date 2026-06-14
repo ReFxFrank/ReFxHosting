@@ -1,0 +1,46 @@
+{
+  "name": "refxhosting",
+  "version": "0.1.0",
+  "description": "ReFx Hosting — multi-OS, multi-game server hosting platform (monorepo root).",
+  "license": "AGPL-3.0",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/refxfrank/refxhosting.git"
+  },
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "packageManager": "npm@10.8.2",
+  "workspaces": [
+    "apps/panel-api",
+    "apps/web",
+    "packages/shared"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "dev": "turbo run dev --parallel",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .gitignore",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md,yml,yaml}\" --ignore-path .gitignore",
+    "prisma:generate": "prisma generate --schema database/prisma/schema.prisma",
+    "prisma:validate": "prisma validate --schema database/prisma/schema.prisma",
+    "prisma:migrate": "prisma migrate deploy --schema database/prisma/schema.prisma",
+    "prisma:studio": "prisma studio --schema database/prisma/schema.prisma",
+    "db:seed": "ts-node --compiler-options '{\"module\":\"commonjs\"}' database/seed/seed.ts",
+    "stack:up": "docker compose -f infra/docker/docker-compose.yml --env-file .env up -d",
+    "stack:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "stack:logs": "docker compose -f infra/docker/docker-compose.yml logs -f"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "prettier": "^3.2.5",
+    "prisma": "^6.19.3",
+    "ts-node": "^10.9.2",
+    "turbo": "^2.0.6",
+    "typescript": "^5.4.0"
+  }
+}

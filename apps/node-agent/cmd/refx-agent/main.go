@@ -1,0 +1,282 @@
+// Command refx-agent is the ReFx Hosting node daemon. A single static binary
+// runs on every Linux and Windows node and is driven by the central NestJS panel.
+//
+// Boot sequence:
+//  1. load config (file + env), set up structured logging
+//  2. detect host capabilities and build the runtime Manager (Docker + native)
+//  3. register with the panel if not already registered (handshake -> signing key)
+//  4. start the HTTPS control API, WebSocket hub, SFTP server, and stats reporter
+//  5. block until SIGINT/SIGTERM, then shut everything down gracefully
+package main
+
+import (
+	"context"
+	"errors"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog"
+	"github.com/spf13/cobra"
+
+	"github.com/refxfrank/refxhosting/node-agent/internal/api"
+	"github.com/refxfrank/refxhosting/node-agent/internal/backup"
+	"github.com/refxfrank/refxhosting/node-agent/internal/config"
+	"github.com/refxfrank/refxhosting/node-agent/internal/osabstraction"
+	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
+	"github.com/refxfrank/refxhosting/node-agent/internal/runtime"
+	"github.com/refxfrank/refxhosting/node-agent/internal/server"
+	"github.com/refxfrank/refxhosting/node-agent/internal/sftp"
+	"github.com/refxfrank/refxhosting/node-agent/internal/stats"
+)
+
+// version is overridden at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
+func main() {
+	var cfgPath string
+	root := &cobra.Command{
+		Use:           "refx-agent",
+		Short:         "ReFx Hosting node daemon",
+		Version:       version,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return run(cmd.Context(), cfgPath)
+		},
+	}
+	root.PersistentFlags().StringVarP(&cfgPath, "config", "c", "", "path to config.yaml (or set REFX_CONFIG)")
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	if err := root.ExecuteContext(ctx); err != nil {
+		l := zerolog.New(os.Stderr)
+		l.Error().Err(err).Msg("agent exited with error")
+		os.Exit(1)
+	}
+}
+
+// run wires the agent together and blocks until shutdown.
+func run(ctx context.Context, cfgPath string) error {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+	log := newLogger(cfg.Log)
+	log.Info().Str("version", version).Str("data_dir", cfg.DataDir).Msg("starting refx-agent")
+
+	if err := cfg.EnsureDirs(); err != nil {
+		return err
+	}
+
+	caps := osabstraction.DetectCapabilities()
+	log.Info().
+		Str("os", caps.OS).
+		Bool("cgroups_v2", caps.CgroupsV2).
+		Bool("job_objects", caps.JobObjects).
+		Bool("docker", caps.DockerAvailable).
+		Msg("detected host capabilities")
+
+	// --- runtime Manager (Docker + native + windows-container skeleton) ----
+	mgr, dockerRT := buildManager(log, cfg, caps)
+
+	// --- TLS for the control API + SFTP host key ---------------------------
+	tlsCfg, fingerprint, err := loadOrGenerateTLS(cfg.API.TLSCert, cfg.API.TLSKey)
+	if err != nil {
+		return err
+	}
+
+	// --- panel client + registration --------------------------------------
+	pc := panel.New(panel.Options{
+		Logger:        log,
+		BaseURL:       cfg.Panel.URL,
+		NodeID:        cfg.NodeID,
+		SigningKey:    cfg.SigningKey,
+		Timeout:       cfg.Panel.Timeout,
+		SkipTLSVerify: cfg.Panel.SkipTLSVerify,
+	})
+
+	if !cfg.IsRegistered() {
+		log.Info().Msg("node not registered; performing handshake")
+		resp, regErr := pc.Register(ctx, panel.RegisterRequest{
+			BootstrapToken: cfg.Panel.BootstrapToken,
+			AgentVersion:   version,
+			Capabilities:   caps,
+			TLSFingerprint: fingerprint,
+		})
+		if regErr != nil {
+			return regErr
+		}
+		cfg.NodeID = resp.NodeID
+		cfg.SigningKey = resp.SigningKey
+		if err := cfg.SaveState(); err != nil {
+			log.Warn().Err(err).Msg("failed to persist node identity")
+		}
+		// TODO(impl): unmarshal resp.Servers and Register() each onto the Manager.
+	}
+
+	// Reconcile any surviving Docker containers with the (now-known) servers.
+	if dockerRT != nil {
+		_ = dockerRT.EnsureNetwork(ctx)
+		_ = dockerRT.Reconcile(ctx, mgr.Get)
+	}
+
+	// --- WebSocket hub -----------------------------------------------------
+	hub := newHub(log, mgr, cfg.SigningKey)
+
+	// --- backup manager ----------------------------------------------------
+	backups, err := buildBackups(ctx, log, cfg)
+	if err != nil {
+		return err
+	}
+
+	// --- SFTP server -------------------------------------------------------
+	sftpAuth := sftp.NewMemoryAuthenticator()
+	// TODO(impl): populate sftpAuth from panel-pushed per-server credentials.
+	hostKey, err := loadOrGenerateHostKey(filepath.Join(cfg.DataDir, "sftp_host_key"))
+	if err != nil {
+		return err
+	}
+	sftpSrv, err := sftp.New(log, cfg.SFTP.BindAddr, sftpAuth, hostKey)
+	if err != nil {
+		return err
+	}
+
+	// --- control API -------------------------------------------------------
+	apiSrv := api.New(cfg.API.BindAddr, tlsCfg, api.Deps{
+		Logger:         log,
+		Manager:        mgr,
+		Installer:      server.NewInstaller(log),
+		Backups:        backups,
+		Hub:            hub,
+		SigningKey:     cfg.SigningKey,
+		MetricsHandler: promhttp.Handler(),
+	})
+
+	// --- stats collector ---------------------------------------------------
+	collector := stats.New(stats.Options{
+		Logger:            log,
+		Manager:           mgr,
+		Client:            pc,
+		NodeID:            cfg.NodeID,
+		Version:           version,
+		StatInterval:      cfg.Stats.Interval,
+		HeartbeatInterval: cfg.Stats.HeartbeatInterval,
+	})
+
+	// --- run all subsystems; first error or signal triggers shutdown -------
+	return supervise(ctx, log, []service{
+		{"control-api", apiSrv.Start},
+		{"sftp", sftpSrv.Start},
+		{"stats", func(c context.Context) error { collector.Run(c); return nil }},
+	})
+}
+
+// buildManager constructs the runtime Manager with the backends available on the
+// host. Docker is wired only when an engine is reachable; native is always
+// available; the Windows container backend is a skeleton.
+func buildManager(log zerolog.Logger, cfg *config.Config, caps osabstraction.Capabilities) (*runtime.Manager, *runtime.DockerRuntime) {
+	var dockerRT *runtime.DockerRuntime
+	if caps.DockerAvailable || cfg.Runtime.Docker.Host != "" {
+		if d, err := runtime.NewDockerRuntime(log, cfg.Runtime.Docker.Host, cfg.Runtime.Docker.Network); err == nil {
+			dockerRT = d
+		} else {
+			log.Warn().Err(err).Msg("docker runtime unavailable")
+		}
+	}
+
+	native := runtime.NewNativeRuntime(log)
+	winc := runtime.NewWindowsContainerRuntime(log)
+
+	opts := runtime.Options{
+		Logger:           log,
+		ServersDir:       cfg.ServersDir(),
+		Native:           native,
+		WindowsContainer: winc,
+	}
+	if dockerRT != nil {
+		opts.Docker = dockerRT
+	}
+	return runtime.NewManager(opts), dockerRT
+}
+
+// buildBackups constructs the backup manager from config (local or S3).
+func buildBackups(ctx context.Context, log zerolog.Logger, cfg *config.Config) (*backup.Manager, error) {
+	tmp := filepath.Join(cfg.DataDir, "tmp")
+	var store backup.Storage
+	switch cfg.Backup.Driver {
+	case "s3":
+		s, err := backup.NewS3Storage(ctx, backup.S3Config{
+			Endpoint:     cfg.Backup.S3.Endpoint,
+			Region:       cfg.Backup.S3.Region,
+			Bucket:       cfg.Backup.S3.Bucket,
+			AccessKey:    cfg.Backup.S3.AccessKey,
+			SecretKey:    cfg.Backup.S3.SecretKey,
+			UsePathStyle: cfg.Backup.S3.UsePathStyle,
+		})
+		if err != nil {
+			return nil, err
+		}
+		store = s
+	default:
+		dir := cfg.Backup.LocalDir
+		if dir == "" {
+			dir = filepath.Join(cfg.DataDir, "backups")
+		}
+		s, err := backup.NewLocalStorage(dir)
+		if err != nil {
+			return nil, err
+		}
+		store = s
+	}
+	return backup.New(log, store, tmp), nil
+}
+
+// service is a named long-running subsystem.
+type service struct {
+	name string
+	run  func(context.Context) error
+}
+
+// supervise runs all services until the context is cancelled or one fails. A
+// failing service cancels the rest so shutdown is coordinated.
+func supervise(ctx context.Context, log zerolog.Logger, services []service) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	errCh := make(chan error, len(services))
+	for _, svc := range services {
+		svc := svc
+		go func() {
+			log.Info().Str("service", svc.name).Msg("starting subsystem")
+			if err := svc.run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Error().Err(err).Str("service", svc.name).Msg("subsystem failed")
+				errCh <- err
+				cancel()
+				return
+			}
+			errCh <- nil
+		}()
+	}
+
+	<-ctx.Done()
+	log.Info().Msg("shutdown signal received; stopping subsystems")
+
+	// Allow subsystems a grace window to wind down.
+	timer := time.NewTimer(20 * time.Second)
+	defer timer.Stop()
+	for range services {
+		select {
+		case <-errCh:
+		case <-timer.C:
+			log.Warn().Msg("shutdown grace period elapsed; forcing exit")
+			return nil
+		}
+	}
+	log.Info().Msg("agent stopped cleanly")
+	return nil
+}

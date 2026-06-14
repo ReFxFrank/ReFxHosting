@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# ReFx Hosting — database migration + seed runner
+# -----------------------------------------------------------------------------
+# A one-shot image whose job is to bring the Postgres schema up to date
+# (prisma migrate deploy) and load seed data (database/seed/seed.ts).
+#
+# Build context MUST be the repo root so that database/prisma and database/seed
+# are available:
+#     docker build -f infra/docker/Dockerfile.migrate -t refx-migrate ../../
+# (compose already does this — see the `migrate` service in docker-compose.yml)
+#
+# Runtime requires DATABASE_URL to be set (pointing at the compose `postgres`
+# service, e.g. postgresql://refx:refx@postgres:5432/refx?schema=public).
+# =============================================================================
+FROM node:20-bookworm-slim
+
+# Prisma needs OpenSSL at runtime; argon2 (used by the seed) is a prebuilt
+# native module but ca-certificates/openssl keep installs reliable.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production
+WORKDIR /repo
+
+# Local toolchain so the seed can `import { PrismaClient }` and `import argon2`.
+# Versions pinned to match panel-api (Prisma 6, @prisma/client 6). The schema's
+# only preview feature is `metrics`, valid on both 5 and 6.
+COPY <<'EOF' /repo/package.json
+{
+  "name": "refx-migrate",
+  "private": true,
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "prisma": "^6.19.3",
+    "argon2": "^0.41.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.0"
+  }
+}
+EOF
+RUN npm install --no-audit --no-fund
+
+# Schema + seed assets in separate layers so a schema-only change does not bust
+# the seed layer and vice-versa.
+COPY database/prisma ./database/prisma
+COPY database/seed ./database/seed
+
+# Generate the Prisma client at build time so the seed has it available.
+RUN npx prisma generate --schema ./database/prisma/schema.prisma
+
+# ---------------------------------------------------------------------------
+# Entrypoint:
+#   1. Apply committed migrations (prisma migrate deploy — non-interactive,
+#      production-safe). If no migrations dir, fall back to db push (dev only).
+#   2. Run the TypeScript seed (idempotent upserts). Non-fatal: a failed seed
+#      must not block the API from starting, but we surface the exit clearly.
+# ---------------------------------------------------------------------------
+RUN printf '%s\n' \
+    '#!/bin/sh' \
+    'set -e' \
+    'SCHEMA=./database/prisma/schema.prisma' \
+    'echo "[migrate] applying migrations (prisma migrate deploy)"' \
+    'if [ -d ./database/prisma/migrations ]; then' \
+    '  npx prisma migrate deploy --schema "$SCHEMA"' \
+    'else' \
+    '  echo "[migrate] no migrations/ dir — using prisma db push (dev fallback)"' \
+    '  npx prisma db push --schema "$SCHEMA" --accept-data-loss' \
+    'fi' \
+    'if [ -f ./database/seed/seed.ts ]; then' \
+    '  echo "[seed] running database/seed/seed.ts"' \
+    '  ts-node --transpile-only --compiler-options "{\\"module\\":\\"commonjs\\"}" ./database/seed/seed.ts || echo "[seed] seed failed (non-fatal)"' \
+    'else' \
+    '  echo "[seed] no seed.ts found — skipping"' \
+    'fi' \
+    'echo "[migrate] done"' \
+    > /usr/local/bin/run-migrate.sh \
+    && chmod +x /usr/local/bin/run-migrate.sh
+
+ENTRYPOINT ["/usr/local/bin/run-migrate.sh"]

@@ -1,0 +1,401 @@
+"use client";
+
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Layers, Plus, Pencil } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
+import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input, Textarea, Label } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "@/components/ui/sonner";
+import { formatMb } from "@/lib/utils";
+import type { GameTemplate } from "@/lib/types";
+
+interface TemplateForm {
+  id?: string;
+  name: string;
+  slug: string;
+  author: string;
+  description: string;
+  startupCommand: string;
+  stopCommand: string;
+  dockerImagesJson: string;
+  recCpuCores: number;
+  recMemoryMb: number;
+  recDiskMb: number;
+  supportsLinux: boolean;
+  supportsWindows: boolean;
+}
+
+const emptyForm: TemplateForm = {
+  name: "",
+  slug: "",
+  author: "",
+  description: "",
+  startupCommand: "",
+  stopCommand: "",
+  dockerImagesJson: "{}",
+  recCpuCores: 2,
+  recMemoryMb: 4096,
+  recDiskMb: 10240,
+  supportsLinux: true,
+  supportsWindows: false,
+};
+
+export default function AdminTemplatesPage() {
+  const queryClient = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
+  const [form, setForm] = useState<TemplateForm>(emptyForm);
+
+  const { data: templates, isLoading } = useQuery({
+    queryKey: ["admin", "templates"],
+    queryFn: () => api.admin.templates(),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: (input: Partial<GameTemplate>) => api.admin.saveTemplate(input),
+    onSuccess: () => {
+      toast.success("Template saved");
+      queryClient.invalidateQueries({ queryKey: ["admin", "templates"] });
+      setEditOpen(false);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to save template"),
+  });
+
+  function openNew() {
+    setForm(emptyForm);
+    setEditOpen(true);
+  }
+
+  function openEdit(t: GameTemplate) {
+    setForm({
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      author: t.author,
+      description: t.description ?? "",
+      startupCommand: t.startupCommand,
+      stopCommand: "",
+      dockerImagesJson: JSON.stringify(t.dockerImages ?? {}, null, 2),
+      recCpuCores: t.recCpuCores,
+      recMemoryMb: t.recMemoryMb,
+      recDiskMb: t.recDiskMb,
+      supportsLinux: t.supportsLinux,
+      supportsWindows: t.supportsWindows,
+    });
+    setEditOpen(true);
+  }
+
+  function handleSave() {
+    let dockerImages: Record<string, string>;
+    try {
+      const parsed = JSON.parse(form.dockerImagesJson || "{}");
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+        throw new Error("Docker images must be a JSON object");
+      }
+      dockerImages = parsed as Record<string, string>;
+    } catch {
+      toast.error("Docker images must be valid JSON (e.g. { \"latest\": \"image:tag\" })");
+      return;
+    }
+
+    saveMutation.mutate({
+      id: form.id,
+      name: form.name,
+      slug: form.slug,
+      author: form.author,
+      description: form.description || null,
+      startupCommand: form.startupCommand,
+      dockerImages,
+      recCpuCores: form.recCpuCores,
+      recMemoryMb: form.recMemoryMb,
+      recDiskMb: form.recDiskMb,
+      supportsLinux: form.supportsLinux,
+      supportsWindows: form.supportsWindows,
+      // stopCommand is part of the larger config payload. TODO(impl).
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Game templates"
+        description="Manage the eggs used to install and run games on nodes."
+        actions={
+          <Button onClick={openNew}>
+            <Plus className="size-4" /> New template
+          </Button>
+        }
+      />
+
+      {isLoading ? (
+        <ListSkeleton rows={4} />
+      ) : templates?.length ? (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Slug</TableHead>
+                  <TableHead>Author</TableHead>
+                  <TableHead>Version</TableHead>
+                  <TableHead>Deploy</TableHead>
+                  <TableHead>Recommended</TableHead>
+                  <TableHead className="w-10" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {templates.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell className="font-medium">{t.name}</TableCell>
+                    <TableCell className="font-mono text-xs">{t.slug}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {t.author}
+                    </TableCell>
+                    <TableCell className="tabular-nums text-sm text-muted-foreground">
+                      v{t.version}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap gap-1">
+                        {t.deployMethods.map((m) => (
+                          <Badge key={m} variant="secondary">
+                            {m}
+                          </Badge>
+                        ))}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {t.recCpuCores} vCPU · {formatMb(t.recMemoryMb)} ·{" "}
+                      {formatMb(t.recDiskMb)}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => openEdit(t)}
+                      >
+                        <Pencil className="size-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : (
+        <EmptyState
+          icon={Layers}
+          title="No templates yet"
+          description="Create your first game template to make games available for deployment."
+          action={
+            <Button onClick={openNew}>
+              <Plus className="size-4" /> New template
+            </Button>
+          }
+        />
+      )}
+
+      {/* Create / edit dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-h-[90svh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{form.id ? "Edit template" : "New template"}</DialogTitle>
+            <DialogDescription>
+              Configure the core metadata and runtime for this game egg.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="tpl-name">Name</Label>
+                <Input
+                  id="tpl-name"
+                  placeholder="Minecraft Java"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tpl-slug">Slug</Label>
+                <Input
+                  id="tpl-slug"
+                  placeholder="minecraft-java"
+                  value={form.slug}
+                  onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))}
+                  className="font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-author">Author</Label>
+              <Input
+                id="tpl-author"
+                placeholder="ReFx"
+                value={form.author}
+                onChange={(e) => setForm((f) => ({ ...f, author: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-desc">Description</Label>
+              <Textarea
+                id="tpl-desc"
+                placeholder="Short description of the game template…"
+                value={form.description}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, description: e.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-startup">Startup command</Label>
+              <Textarea
+                id="tpl-startup"
+                placeholder="java -Xms128M -Xmx{{MEMORY}}M -jar server.jar"
+                value={form.startupCommand}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, startupCommand: e.target.value }))
+                }
+                className="font-mono text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-stop">Stop command</Label>
+              <Textarea
+                id="tpl-stop"
+                placeholder="stop"
+                value={form.stopCommand}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, stopCommand: e.target.value }))
+                }
+                className="font-mono text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="tpl-images">Docker images (JSON)</Label>
+              <Textarea
+                id="tpl-images"
+                placeholder={`{\n  "latest": "ghcr.io/refx/minecraft:latest"\n}`}
+                value={form.dockerImagesJson}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, dockerImagesJson: e.target.value }))
+                }
+                className="min-h-[120px] font-mono text-xs"
+              />
+              <p className="text-xs text-muted-foreground">
+                Map of display name to image reference. Must be valid JSON.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="tpl-cpu">Rec. CPU cores</Label>
+                <Input
+                  id="tpl-cpu"
+                  type="number"
+                  min={0}
+                  value={form.recCpuCores}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, recCpuCores: Number(e.target.value) }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tpl-mem">Rec. memory (MB)</Label>
+                <Input
+                  id="tpl-mem"
+                  type="number"
+                  min={0}
+                  value={form.recMemoryMb}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, recMemoryMb: Number(e.target.value) }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="tpl-disk">Rec. disk (MB)</Label>
+                <Input
+                  id="tpl-disk"
+                  type="number"
+                  min={0}
+                  value={form.recDiskMb}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, recDiskMb: Number(e.target.value) }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-1 items-center justify-between rounded-lg border p-3">
+                <span className="text-sm font-medium">Supports Linux</span>
+                <Switch
+                  checked={form.supportsLinux}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, supportsLinux: v }))
+                  }
+                />
+              </div>
+              <div className="flex flex-1 items-center justify-between rounded-lg border p-3">
+                <span className="text-sm font-medium">Supports Windows</span>
+                <Switch
+                  checked={form.supportsWindows}
+                  onCheckedChange={(v) =>
+                    setForm((f) => ({ ...f, supportsWindows: v }))
+                  }
+                />
+              </div>
+            </div>
+
+            {/* TODO(impl): full editor for variables, install script and config files —
+                this is a large surface and is stubbed for now. */}
+            <p className="text-xs text-muted-foreground">
+              TODO(impl): variable, install-script and config-file editors are not yet
+              available here.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={saveMutation.isPending}
+              disabled={!form.name.trim() || !form.slug.trim()}
+              onClick={handleSave}
+            >
+              Save template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

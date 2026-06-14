@@ -1,0 +1,105 @@
+{
+  "name": "Project Zomboid",
+  "slug": "project-zomboid",
+  "author": "ops@refx.example",
+  "description": "The Indie Stone's isometric zombie survival sim. SteamCMD-installed dedicated server with Workshop mod support and RCON administration.",
+  "category": "survival",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "Java 17": "ghcr.io/refxfrank/yolks/java:17"
+  },
+  "steamAppId": 380870,
+  "startupCommand": "./start-server.sh -servername \"{{SERVER_NAME}}\" -adminpassword \"{{ADMIN_PASS}}\" -port {{SERVER_PORT}} -udpport {{UDP_PORT}} -cachedir=/mnt/server/Zomboid",
+  "startupDetect": "SERVER STARTED|Server Steam ID",
+  "stopCommand": "quit",
+  "installScript": {
+    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 380870 validate +quit\nmkdir -p /mnt/server/Zomboid/Server\nchmod +x start-server.sh || true\necho 'Project Zomboid install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "Zomboid/Server/servertest.ini",
+      "parser": "properties",
+      "find": {
+        "DefaultPort": "{{server.build.default.port}}",
+        "MaxPlayers": "{{MAX_PLAYERS}}",
+        "PublicName": "{{SERVER_NAME}}"
+      }
+    }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 6144,
+  "recDiskMb": 12288,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Public server name and the name of the save/config set used.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting Zomboid Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "ADMIN_PASS",
+      "displayName": "Admin Password",
+      "description": "Password for the built-in 'admin' account.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 1
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "16",
+      "rules": { "required": true, "min": 1, "max": 100 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "UDP_PORT",
+      "displayName": "Direct-Connect UDP Port",
+      "description": "Secondary UDP port used by the Steam direct-connect handshake.",
+      "type": "NUMBER",
+      "defaultValue": "16262",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "MOD_IDS",
+      "displayName": "Workshop Mod IDs",
+      "description": "Semicolon-separated list of Steam Workshop mod IDs to load.",
+      "type": "STRING",
+      "defaultValue": "",
+      "rules": { "required": false, "regex": "^(\\d+(;\\d+)*)?$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    },
+    {
+      "envName": "SERVER_MEMORY",
+      "displayName": "JVM Max Heap (MB)",
+      "description": "Maximum Java heap size in megabytes for the server JVM.",
+      "type": "NUMBER",
+      "defaultValue": "4096",
+      "rules": { "required": true, "min": 2048, "max": 32768 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 5
+    }
+  ]
+}

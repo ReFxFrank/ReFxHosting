@@ -1,0 +1,907 @@
+// ============================================================================
+// ReFx Hosting — Canonical Database Schema (PostgreSQL)
+// ----------------------------------------------------------------------------
+// This is the single source of truth for the platform's relational data model.
+// The panel-api (NestJS) consumes it via Prisma Client. The node-agent (Go)
+// reads a denormalized, scoped view delivered over the agent API; it never
+// touches Postgres directly.
+//
+// Conventions:
+//   * All primary keys are UUID v7 (time-sortable) generated app-side.
+//   * Money is stored as integer minor units (cents) + ISO currency code.
+//   * Soft-deletes use `deletedAt`; hard deletes are reserved for GDPR erasure.
+//   * Every mutating action is mirrored into AuditLog.
+// ============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  // Full-text search is handled by OpenSearch (see docs/09-infrastructure.md),
+  // so no Postgres FTS preview feature is required here.
+  previewFeatures = ["metrics"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & Access
+// ---------------------------------------------------------------------------
+
+enum GlobalRole {
+  CUSTOMER
+  SUPPORT
+  ADMIN
+  OWNER
+}
+
+enum UserState {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  PENDING_VERIFICATION
+}
+
+model User {
+  id                String      @id @db.Uuid
+  email             String      @unique
+  emailVerifiedAt   DateTime?
+  // Argon2id PHC string. Null for SSO-only accounts.
+  passwordHash      String?
+  firstName         String?
+  lastName          String?
+  globalRole        GlobalRole  @default(CUSTOMER)
+  state             UserState   @default(PENDING_VERIFICATION)
+  locale            String      @default("en")
+  timezone          String      @default("UTC")
+  avatarUrl         String?
+
+  // MFA
+  totpSecretEnc     String?     // AES-256-GCM encrypted TOTP seed
+  totpEnabledAt     DateTime?
+  webauthnCredentials WebAuthnCredential[]
+  recoveryCodes     RecoveryCode[]
+
+  // Relations
+  ownedServers      Server[]    @relation("ServerOwner")
+  subUserGrants     SubUser[]   @relation("SubUserUser")
+  apiKeys           ApiKey[]
+  sessions          Session[]
+  invoices          Invoice[]
+  paymentMethods    PaymentMethod[]
+  subscriptions     Subscription[]
+  tickets           Ticket[]    @relation("TicketRequester")
+  assignedTickets   Ticket[]    @relation("TicketAssignee")
+  ticketMessages    TicketMessage[]
+  auditLogs         AuditLog[]
+  notifications     Notification[]
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  deletedAt         DateTime?
+
+  @@index([state])
+  @@index([globalRole])
+}
+
+model Session {
+  id           String   @id @db.Uuid
+  userId       String   @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshHash  String   // SHA-256 of refresh token
+  userAgent    String?
+  ip           String?
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+model WebAuthnCredential {
+  id            String   @id @db.Uuid
+  userId        String   @db.Uuid
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId  String   @unique
+  publicKey     Bytes
+  counter       BigInt   @default(0)
+  transports    String[]
+  label         String?
+  createdAt     DateTime @default(now())
+  lastUsedAt    DateTime?
+
+  @@index([userId])
+}
+
+model RecoveryCode {
+  id        String    @id @db.Uuid
+  userId    String    @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+enum ApiKeyScope {
+  READ
+  WRITE
+  ADMIN
+}
+
+model ApiKey {
+  id           String       @id @db.Uuid
+  userId       String       @db.Uuid
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  prefix       String       @unique   // first 8 chars, shown in UI
+  keyHash      String                  // SHA-256 of full key
+  scopes       ApiKeyScope[]
+  // Optional per-key IP allowlist (CIDR).
+  allowedIps   String[]
+  lastUsedAt   DateTime?
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime     @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Infrastructure: Nodes & Allocations
+// ---------------------------------------------------------------------------
+
+enum NodeOs {
+  LINUX
+  WINDOWS
+}
+
+enum NodeState {
+  PROVISIONING
+  ONLINE
+  OFFLINE
+  MAINTENANCE
+  DEGRADED
+}
+
+model Region {
+  id        String   @id @db.Uuid
+  code      String   @unique   // e.g. "eu-central", "us-east"
+  name      String
+  country   String
+  nodes     Node[]
+  createdAt DateTime @default(now())
+}
+
+model Node {
+  id            String     @id @db.Uuid
+  name          String
+  fqdn          String     @unique
+  regionId      String     @db.Uuid
+  region        Region     @relation(fields: [regionId], references: [id])
+  os            NodeOs
+  state         NodeState  @default(PROVISIONING)
+  maintenance   Boolean    @default(false)
+
+  // Agent connection
+  agentVersion  String?
+  // Bcrypt/argon hash of the per-node bootstrap token.
+  tokenHash     String
+  daemonPort    Int        @default(8443)
+  sftpPort      Int        @default(2022)
+  scheme        String     @default("https")
+
+  // Capacity (advertised by agent, overridable by admin)
+  cpuCores      Int
+  memoryMb      Int
+  diskMb        Int
+  // Overcommit ratios (1.0 = no overcommit)
+  cpuOvercommit Float      @default(1.0)
+  memOvercommit Float      @default(1.0)
+
+  servers       Server[]
+  allocations   Allocation[]
+  heartbeats    NodeHeartbeat[]
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  deletedAt     DateTime?
+
+  @@index([regionId])
+  @@index([state])
+}
+
+model NodeHeartbeat {
+  id          String   @id @db.Uuid
+  nodeId      String   @db.Uuid
+  node        Node     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  cpuPct      Float
+  memUsedMb   Int
+  diskUsedMb  Int
+  netRxBytes  BigInt
+  netTxBytes  BigInt
+  containers  Int
+  recordedAt  DateTime @default(now())
+
+  @@index([nodeId, recordedAt])
+}
+
+// One IP:port a server can bind. Primary allocation = default game port.
+model Allocation {
+  id        String   @id @db.Uuid
+  nodeId    String   @db.Uuid
+  node      Node     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  ip        String
+  port      Int
+  alias     String?
+  serverId  String?  @db.Uuid
+  server    Server?  @relation(fields: [serverId], references: [id])
+  isPrimary Boolean  @default(false)
+
+  @@unique([nodeId, ip, port])
+  @@index([serverId])
+}
+
+// ---------------------------------------------------------------------------
+// Game Templates ("Eggs" equivalent) & Categories
+// ---------------------------------------------------------------------------
+
+enum DeployMethod {
+  DOCKER
+  NATIVE_PROCESS
+  WINDOWS_CONTAINER
+  SANDBOX
+}
+
+model GameCategory {
+  id       String         @id @db.Uuid
+  name     String
+  slug     String         @unique
+  iconUrl  String?
+  templates GameTemplate[]
+}
+
+// A template is a versioned, JSON-driven game definition. Admins author these
+// in the panel with no code changes (Pterodactyl "egg" superset).
+model GameTemplate {
+  id              String         @id @db.Uuid
+  categoryId      String?        @db.Uuid
+  category        GameCategory?  @relation(fields: [categoryId], references: [id])
+  name            String         // "Minecraft: Paper"
+  slug            String         @unique
+  author          String
+  description     String?
+  version         Int            @default(1)
+
+  // Supported deployment + OS matrix
+  deployMethods   DeployMethod[]
+  supportsLinux   Boolean        @default(true)
+  supportsWindows Boolean        @default(false)
+
+  // Docker image(s): map of tag-label -> image ref
+  dockerImages    Json           // {"Java 21":"ghcr.io/refx/minecraft:21"}
+  // Native install (used for NATIVE_PROCESS): SteamCMD app id, etc.
+  steamAppId      Int?
+
+  // Startup command template with {{VAR}} interpolation.
+  startupCommand  String
+  // Regex/string the agent watches stdout for to mark "running".
+  startupDetect   String?
+  stopCommand     String         @default("^C") // or RCON "stop", signal, etc.
+
+  // Lifecycle scripts. Each: {container, entrypoint, script}
+  installScript   Json
+  // Config files to render/replace on (re)install. Array of file specs.
+  configFiles     Json           @default("[]")
+
+  // Recommended resources (used to size products / warn admins)
+  recCpuCores     Float          @default(1)
+  recMemoryMb     Int            @default(1024)
+  recDiskMb       Int            @default(5120)
+
+  variables       TemplateVariable[]
+  servers         Server[]
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+enum VariableType {
+  STRING
+  NUMBER
+  BOOLEAN
+  ENUM
+  SECRET
+}
+
+model TemplateVariable {
+  id           String       @id @db.Uuid
+  templateId   String       @db.Uuid
+  template     GameTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  envName      String       // SERVER_JARFILE
+  displayName  String       // "Server JAR file"
+  description  String?
+  type         VariableType @default(STRING)
+  defaultValue String?
+  // JSON-encoded validation rules (min/max/regex/options).
+  rules        Json         @default("{}")
+  userEditable Boolean      @default(true)
+  userViewable Boolean      @default(true)
+  sortOrder    Int          @default(0)
+
+  @@unique([templateId, envName])
+}
+
+// ---------------------------------------------------------------------------
+// Servers (the core GPortal-style identity that survives game switching)
+// ---------------------------------------------------------------------------
+
+enum ServerState {
+  INSTALLING
+  OFFLINE
+  STARTING
+  RUNNING
+  STOPPING
+  CRASHED
+  SUSPENDED
+  REINSTALLING
+  SWITCHING_GAME
+  TRANSFERRING
+}
+
+model Server {
+  id              String        @id @db.Uuid
+  // Short, user-facing identifier (e.g. "a1b2c3d4") used in URLs/SFTP user.
+  shortId         String        @unique
+  name            String
+  description     String?
+
+  ownerId         String        @db.Uuid
+  owner           User          @relation("ServerOwner", fields: [ownerId], references: [id])
+
+  nodeId          String        @db.Uuid
+  node            Node          @relation(fields: [nodeId], references: [id])
+
+  // Current game template + version pin. NULL while between games.
+  templateId      String?       @db.Uuid
+  template        GameTemplate? @relation(fields: [templateId], references: [id])
+  templateVersion Int?
+
+  state           ServerState   @default(INSTALLING)
+  deployMethod    DeployMethod  @default(DOCKER)
+
+  // Resource limits (the customer's plan; survives game switch)
+  cpuCores        Float
+  memoryMb        Int
+  swapMb          Int           @default(0)
+  diskMb          Int
+  ioWeight        Int           @default(500)
+  slots           Int?          // optional player-slot cap
+  bandwidthMbps   Int?
+
+  // Runtime config
+  startupCommand  String?
+  environment     Json          @default("{}") // resolved env var values
+  dockerImage     String?
+
+  // Billing linkage
+  subscriptionId  String?       @db.Uuid
+  subscription    Subscription? @relation(fields: [subscriptionId], references: [id])
+  suspendedAt     DateTime?
+
+  // SFTP credentials are derived; password is per-server, rotated on demand.
+  sftpPasswordEnc String?
+
+  allocations     Allocation[]
+  backups         Backup[]
+  databases       ServerDatabase[]
+  schedules       Schedule[]
+  subUsers        SubUser[]
+  variables       ServerVariable[]
+  gameHistory     GameSwitchLog[]
+  stats           ServerStat[]
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  @@index([ownerId])
+  @@index([nodeId])
+  @@index([state])
+}
+
+// Per-server override of a template variable's value.
+model ServerVariable {
+  id        String   @id @db.Uuid
+  serverId  String   @db.Uuid
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  envName   String
+  value     String
+
+  @@unique([serverId, envName])
+}
+
+// Audit of every game switch (keeps server identity, swaps software).
+model GameSwitchLog {
+  id            String   @id @db.Uuid
+  serverId      String   @db.Uuid
+  server        Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  fromTemplate  String?
+  toTemplate    String
+  preservedData Boolean  @default(false)
+  performedById String   @db.Uuid
+  createdAt     DateTime @default(now())
+
+  @@index([serverId])
+}
+
+model ServerStat {
+  id          String   @id @db.Uuid
+  serverId    String   @db.Uuid
+  server      Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  cpuPct      Float
+  memUsedMb   Int
+  diskUsedMb  Int
+  netRxBytes  BigInt
+  netTxBytes  BigInt
+  players     Int?
+  recordedAt  DateTime @default(now())
+
+  @@index([serverId, recordedAt])
+}
+
+enum SubUserState {
+  ACTIVE
+  REVOKED
+}
+
+model SubUser {
+  id          String       @id @db.Uuid
+  serverId    String       @db.Uuid
+  server      Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  userId      String       @db.Uuid
+  user        User         @relation("SubUserUser", fields: [userId], references: [id], onDelete: Cascade)
+  // Granular permissions, e.g. ["console.command","files.read","backup.create"]
+  permissions String[]
+  state       SubUserState @default(ACTIVE)
+  createdAt   DateTime     @default(now())
+
+  @@unique([serverId, userId])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Backups, Databases, Schedules
+// ---------------------------------------------------------------------------
+
+enum BackupState {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum BackupStorage {
+  LOCAL
+  S3
+}
+
+model Backup {
+  id          String        @id @db.Uuid
+  serverId    String        @db.Uuid
+  server      Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  name        String
+  state       BackupState   @default(PENDING)
+  storage     BackupStorage @default(S3)
+  // Object key / local path
+  location    String?
+  sizeBytes   BigInt        @default(0)
+  checksum    String?       // sha256
+  isLocked    Boolean       @default(false) // protected from rotation
+  ignoredFiles String[]
+  error       String?
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+
+  @@index([serverId])
+}
+
+enum DbEngine {
+  MYSQL
+  MARIADB
+  POSTGRESQL
+}
+
+model ServerDatabase {
+  id           String   @id @db.Uuid
+  serverId     String   @db.Uuid
+  server       Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  engine       DbEngine
+  name         String
+  username     String
+  passwordEnc  String
+  host         String
+  port         Int
+  remoteAccess String   @default("%") // allowed host pattern
+  createdAt    DateTime @default(now())
+
+  @@unique([serverId, name])
+}
+
+model Schedule {
+  id           String   @id @db.Uuid
+  serverId     String   @db.Uuid
+  server       Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  name         String
+  cron         String   // standard 5-field cron
+  isActive     Boolean  @default(true)
+  onlyWhenOnline Boolean @default(false)
+  lastRunAt    DateTime?
+  nextRunAt    DateTime?
+  tasks        ScheduleTask[]
+  createdAt    DateTime @default(now())
+
+  @@index([serverId])
+  @@index([nextRunAt])
+}
+
+enum ScheduleAction {
+  COMMAND
+  POWER       // start/stop/restart
+  BACKUP
+}
+
+model ScheduleTask {
+  id           String         @id @db.Uuid
+  scheduleId   String         @db.Uuid
+  schedule     Schedule       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  action       ScheduleAction
+  payload      String         // command text, "restart", etc.
+  timeOffsetMs Int            @default(0) // delay after previous task
+  sortOrder    Int            @default(0)
+  continueOnFailure Boolean   @default(false)
+}
+
+// ---------------------------------------------------------------------------
+// Billing
+// ---------------------------------------------------------------------------
+
+enum ProductType {
+  GAME_SERVER
+  VPS
+  DEDICATED
+  ADDON
+}
+
+enum BillingInterval {
+  MONTHLY
+  QUARTERLY
+  SEMIANNUAL
+  ANNUAL
+}
+
+model Product {
+  id            String          @id @db.Uuid
+  type          ProductType
+  name          String
+  slug          String          @unique
+  description   String?
+  isActive      Boolean         @default(true)
+
+  // Resource template applied to provisioned servers
+  cpuCores      Float?
+  memoryMb      Int?
+  diskMb        Int?
+  slots         Int?
+  // Templates allowed on this product (game switching whitelist). Empty = all.
+  allowedTemplateIds String[]
+
+  prices        Price[]
+  subscriptions Subscription[]
+
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model Price {
+  id          String          @id @db.Uuid
+  productId   String          @db.Uuid
+  product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  interval    BillingInterval
+  currency    String          @default("USD")
+  amountMinor Int             // cents
+  // External processor price IDs
+  stripePriceId String?
+  isActive    Boolean         @default(true)
+
+  @@unique([productId, interval, currency])
+}
+
+enum SubscriptionState {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  SUSPENDED
+  EXPIRED
+}
+
+model Subscription {
+  id              String            @id @db.Uuid
+  userId          String            @db.Uuid
+  user            User              @relation(fields: [userId], references: [id])
+  productId       String            @db.Uuid
+  product         Product           @relation(fields: [productId], references: [id])
+  priceId         String            @db.Uuid
+  interval        BillingInterval
+  state           SubscriptionState @default(ACTIVE)
+  currentPeriodStart DateTime
+  currentPeriodEnd   DateTime
+  cancelAtPeriodEnd  Boolean        @default(false)
+  autoRenew       Boolean           @default(true)
+
+  // Processor linkage
+  gateway         String            // "stripe" | "paypal"
+  gatewaySubId    String?
+
+  servers         Server[]
+  invoices        Invoice[]
+
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([userId])
+  @@index([state])
+}
+
+enum InvoiceState {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+  REFUNDED
+}
+
+model Invoice {
+  id             String        @id @db.Uuid
+  number         String        @unique // human-readable, e.g. INV-2026-000123
+  userId         String        @db.Uuid
+  user           User          @relation(fields: [userId], references: [id])
+  subscriptionId String?       @db.Uuid
+  subscription   Subscription? @relation(fields: [subscriptionId], references: [id])
+  state          InvoiceState  @default(DRAFT)
+  currency       String        @default("USD")
+
+  subtotalMinor  Int
+  taxMinor       Int           @default(0)
+  totalMinor     Int
+  amountPaidMinor Int          @default(0)
+
+  // Tax detail
+  taxType        String?       // VAT | GST | US_SALES_TAX
+  taxRatePct     Float?
+  taxRegion      String?
+  taxIdNumber    String?       // customer VAT/GST id
+
+  gateway        String?
+  gatewayInvoiceId String?
+  pdfUrl         String?
+
+  dueAt          DateTime?
+  paidAt         DateTime?
+  lineItems      InvoiceLineItem[]
+  payments       Payment[]
+
+  createdAt      DateTime      @default(now())
+
+  @@index([userId])
+  @@index([state])
+}
+
+model InvoiceLineItem {
+  id          String   @id @db.Uuid
+  invoiceId   String   @db.Uuid
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int      @default(1)
+  unitMinor   Int
+  amountMinor Int
+}
+
+enum PaymentState {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+model PaymentMethod {
+  id          String   @id @db.Uuid
+  userId      String   @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gateway     String   // stripe | paypal
+  gatewayRef  String   // pm_xxx / billing agreement id
+  brand       String?  // visa, paypal
+  last4       String?
+  expMonth    Int?
+  expYear     Int?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Payment {
+  id          String       @id @db.Uuid
+  invoiceId   String       @db.Uuid
+  invoice     Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  gateway     String
+  gatewayRef  String
+  amountMinor Int
+  currency    String
+  state       PaymentState @default(PENDING)
+  failureReason String?
+  createdAt   DateTime     @default(now())
+
+  @@index([invoiceId])
+}
+
+// ---------------------------------------------------------------------------
+// Support / Helpdesk
+// ---------------------------------------------------------------------------
+
+enum TicketState {
+  OPEN
+  PENDING_CUSTOMER
+  PENDING_AGENT
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model TicketCategory {
+  id      String   @id @db.Uuid
+  name    String
+  slug    String   @unique
+  // SLA targets in minutes
+  slaFirstResponseMin Int @default(240)
+  slaResolutionMin    Int @default(2880)
+  tickets TicketMessage[] @ignore
+}
+
+model Ticket {
+  id           String         @id @db.Uuid
+  number       Int            @unique @default(autoincrement())
+  subject      String
+  requesterId  String         @db.Uuid
+  requester    User           @relation("TicketRequester", fields: [requesterId], references: [id])
+  assigneeId   String?        @db.Uuid
+  assignee     User?          @relation("TicketAssignee", fields: [assigneeId], references: [id])
+  categoryId   String?        @db.Uuid
+  state        TicketState    @default(OPEN)
+  priority     TicketPriority @default(NORMAL)
+
+  // SLA bookkeeping
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  slaBreached     Boolean     @default(false)
+
+  messages     TicketMessage[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([state])
+  @@index([assigneeId])
+}
+
+model TicketMessage {
+  id          String          @id @db.Uuid
+  ticketId    String          @db.Uuid
+  ticket      Ticket          @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId    String          @db.Uuid
+  author      User            @relation(fields: [authorId], references: [id])
+  body        String
+  isInternal  Boolean         @default(false) // internal note, hidden from customer
+  attachments TicketAttachment[]
+  category    TicketCategory? @relation(fields: [categoryId], references: [id])
+  categoryId  String?         @db.Uuid
+  createdAt   DateTime        @default(now())
+
+  @@index([ticketId])
+}
+
+model TicketAttachment {
+  id         String        @id @db.Uuid
+  messageId  String        @db.Uuid
+  message    TicketMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  fileName   String
+  objectKey  String
+  sizeBytes  BigInt
+  mimeType   String
+  createdAt  DateTime      @default(now())
+}
+
+model CannedResponse {
+  id        String   @id @db.Uuid
+  title     String
+  body      String
+  tags      String[]
+  createdAt DateTime @default(now())
+}
+
+model KbArticle {
+  id          String   @id @db.Uuid
+  slug        String   @unique
+  title       String
+  body        String   // markdown
+  category    String?
+  isPublished Boolean  @default(false)
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Platform: Audit, Notifications, Alerts
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @db.Uuid
+  actorId    String?  @db.Uuid
+  actor      User?    @relation(fields: [actorId], references: [id])
+  action     String   // "server.power.start"
+  targetType String   // "Server"
+  targetId   String?
+  metadata   Json     @default("{}")
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+}
+
+model Notification {
+  id        String              @id @db.Uuid
+  userId    String              @db.Uuid
+  user      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   NotificationChannel @default(IN_APP)
+  title     String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, readAt])
+}
+
+enum AlertSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+model GlobalAlert {
+  id        String        @id @db.Uuid
+  severity  AlertSeverity @default(INFO)
+  title     String
+  body      String
+  isActive  Boolean       @default(true)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime      @default(now())
+}

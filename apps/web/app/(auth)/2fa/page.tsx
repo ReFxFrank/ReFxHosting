@@ -1,0 +1,129 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Fingerprint, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
+import { toast } from "@/components/ui/sonner";
+import { api, ApiError } from "@/lib/api";
+import { useAuthStore } from "@/store/auth";
+
+interface MfaState {
+  token: string;
+  methods?: ("totp" | "webauthn" | "recovery")[];
+  next?: string;
+}
+
+export default function TwoFactorPage() {
+  const router = useRouter();
+  const setSession = useAuthStore((s) => s.setSession);
+  const [mfa, setMfa] = useState<MfaState | null>(null);
+  const [code, setCode] = useState("");
+  const [useRecovery, setUseRecovery] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("refx.mfa");
+    if (!raw) {
+      router.replace("/login");
+      return;
+    }
+    setMfa(JSON.parse(raw));
+  }, [router]);
+
+  async function verify(method: "totp" | "recovery") {
+    if (!mfa) return;
+    setSubmitting(true);
+    try {
+      const res = await api.auth.verifyMfa(mfa.token, code.trim(), method);
+      if (res.tokens) {
+        sessionStorage.removeItem("refx.mfa");
+        await setSession(res.tokens, res.user);
+        router.replace(mfa.next || "/dashboard");
+      }
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Invalid code");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function verifyWebAuthn() {
+    if (!mfa) return;
+    // TODO(impl): run navigator.credentials.get() ceremony via @simplewebauthn/browser,
+    // then exchange the assertion. Stubbed to keep the flow visible.
+    toast.info("Passkey verification requires the WebAuthn ceremony (TODO impl).");
+    try {
+      const res = await api.auth.verifyWebAuthn(mfa.token, { stub: true });
+      if (res.tokens) {
+        sessionStorage.removeItem("refx.mfa");
+        await setSession(res.tokens, res.user);
+        router.replace(mfa.next || "/dashboard");
+      }
+    } catch {
+      /* expected while stubbed */
+    }
+  }
+
+  const supportsWebAuthn = mfa?.methods?.includes("webauthn");
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <ShieldCheck className="size-5" />
+        </div>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Two-factor authentication</h1>
+          <p className="text-sm text-muted-foreground">
+            {useRecovery
+              ? "Enter one of your recovery codes."
+              : "Enter the 6-digit code from your authenticator app."}
+          </p>
+        </div>
+      </div>
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          verify(useRecovery ? "recovery" : "totp");
+        }}
+        className="space-y-4"
+      >
+        <div className="space-y-2">
+          <Label htmlFor="code">{useRecovery ? "Recovery code" : "Authentication code"}</Label>
+          <Input
+            id="code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            inputMode={useRecovery ? "text" : "numeric"}
+            autoComplete="one-time-code"
+            autoFocus
+            placeholder={useRecovery ? "XXXX-XXXX" : "123456"}
+            className="text-center text-lg tracking-[0.3em]"
+          />
+        </div>
+        <Button type="submit" className="w-full" loading={submitting}>
+          Verify
+        </Button>
+      </form>
+
+      {supportsWebAuthn && !useRecovery && (
+        <Button variant="outline" className="w-full" onClick={verifyWebAuthn}>
+          <Fingerprint className="size-4" /> Use a passkey instead
+        </Button>
+      )}
+
+      <div className="text-center text-sm">
+        <button
+          type="button"
+          className="text-muted-foreground hover:text-foreground hover:underline"
+          onClick={() => setUseRecovery((v) => !v)}
+        >
+          {useRecovery ? "Use authenticator code" : "Use a recovery code"}
+        </button>
+      </div>
+    </div>
+  );
+}

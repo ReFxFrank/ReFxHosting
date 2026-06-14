@@ -1,0 +1,34 @@
+{{- if .Values.migrations.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "refx.fullname" . }}-migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "refx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    # Run before the app starts on install and every upgrade.
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        {{- include "refx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ include "refx.serviceAccountName" . }}
+      containers:
+        - name: migrate
+          image: {{ include "refx.image" (dict "Values" .Values "Chart" .Chart "image" .Values.migrations.image) }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["npx", "prisma", "migrate", "deploy", "--schema", "database/prisma/schema.prisma"]
+          envFrom:
+            - secretRef:
+                name: {{ include "refx.secretName" . }}
+            - configMapRef:
+                name: {{ include "refx.fullname" . }}-config
+{{- end }}

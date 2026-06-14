@@ -1,0 +1,23 @@
+ReFx Hosting has been deployed.
+
+  Panel (web): https://{{ .Values.ingress.hosts.panel }}
+  API:         https://{{ .Values.ingress.hosts.api }}  (Swagger at /docs, GraphQL at /graphql)
+
+Components deployed:
+  - panel-api  ({{ if .Values.panelApi.autoscaling.enabled }}HPA {{ .Values.panelApi.autoscaling.minReplicas }}-{{ .Values.panelApi.autoscaling.maxReplicas }}{{ else }}{{ .Values.panelApi.replicas }} replicas{{ end }})
+  - web        ({{ if .Values.web.autoscaling.enabled }}HPA {{ .Values.web.autoscaling.minReplicas }}-{{ .Values.web.autoscaling.maxReplicas }}{{ else }}{{ .Values.web.replicas }} replicas{{ end }})
+  {{- if .Values.migrations.enabled }}
+  - prisma migrate deploy ran as a pre-install/upgrade hook
+  {{- end }}
+
+Next steps:
+  1. Seed initial data:  kubectl run --rm -it refx-seed --image=<panel-api image> -- npm run db:seed
+  2. Install node-agents on your game nodes — they are NOT part of this chart.
+     See infra/scripts/install-node.sh (Linux) and install-node.ps1 (Windows).
+  3. Verify rollout:  kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+
+{{ if not .Values.secrets.existingSecret -}}
+WARNING: secrets were templated from values. For production set
+secrets.existingSecret to a Secret managed by your secrets store (SOPS,
+External Secrets, Vault) instead of committing them to values.yaml.
+{{- end }}

@@ -1,0 +1,77 @@
+# ---------------------------------------------------------------------------
+# ReFx Hosting — repository ignore rules
+# ---------------------------------------------------------------------------
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+jspm_packages/
+
+# Env / secrets — NEVER commit real secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/testdata/**/*.key
+config.yaml
+!infra/**/config.yaml
+
+# Build artifacts (Node / TS)
+dist/
+build/
+out/
+*.tsbuildinfo
+coverage/
+.turbo/
+.cache/
+
+# Next.js
+.next/
+next-env.d.ts
+
+# Go (node-agent)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+bin/
+/apps/node-agent/refx-agent
+/apps/node-agent/dist/
+vendor/
+
+# Prisma
+database/prisma/migrations/dev.db*
+*.db
+*.db-journal
+prisma/.env
+
+# Docker / infra
+infra/docker/data/
+infra/docker/.volumes/
+*.tar
+*.tgz
+!infra/k8s/helm/**/*.tgz.checksum
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.swp
+*~

@@ -1,0 +1,86 @@
+# =============================================================================
+# ReFx Hosting — Loki single-binary configuration
+# -----------------------------------------------------------------------------
+# A minimal, working monolithic (single-binary) Loki setup using local
+# filesystem storage. Suitable for local development and small single-host
+# deployments. For production at scale, move chunks/index to object storage
+# (e.g. the same MinIO/S3 used by the app) and split into read/write targets.
+#
+# Mounted into the container at /etc/loki/loki-config.yml and selected via
+#     -config.file=/etc/loki/loki-config.yml   (see docker-compose.yml)
+# Pinned to Loki 2.9.x — the schema/config below targets that release.
+# =============================================================================
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+# Single in-process query scheduler/frontend — fine for one binary.
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+# Index uses the TSDB store (recommended for Loki >= 2.8).
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  tsdb_shipper:
+    active_index_directory: /loki/tsdb-index
+    cache_location: /loki/tsdb-cache
+  filesystem:
+    directory: /loki/chunks
+
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
+
+limits_config:
+  # Reject anything older than 7 days; cap ingestion to sane local values.
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  max_query_series: 5000
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  volume_enabled: true
+  # Drop logs older than the retention period (enforced by the compactor).
+  retention_period: 168h
+
+ruler:
+  alertmanager_url: http://localhost:9093
+  storage:
+    type: local
+    local:
+      directory: /loki/rules
+
+# Disable phone-home analytics for local/self-hosted stacks.
+analytics:
+  reporting_enabled: false

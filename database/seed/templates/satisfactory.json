@@ -1,0 +1,90 @@
+{
+  "name": "Satisfactory",
+  "slug": "satisfactory",
+  "author": "ops@refx.example",
+  "description": "Coffee Stain's first-person factory-building sim. SteamCMD-installed dedicated server managed in-game via the server manager UI.",
+  "category": "sandbox",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "ReFx SteamCMD": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+  },
+  "steamAppId": 1690800,
+  "startupCommand": "./FactoryServer.sh -unattended -Port={{SERVER_PORT}} -ServerQueryPort={{QUERY_PORT}} -BeaconPort={{BEACON_PORT}} -maxplayers={{MAX_PLAYERS}}",
+  "startupDetect": "Server is ready|Game state updated to Running",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nBRANCH_ARGS=\"\"\nif [ \"${EXPERIMENTAL}\" = \"true\" ]; then BRANCH_ARGS=\"-beta experimental\"; fi\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 1690800 ${BRANCH_ARGS} validate +quit\nchmod +x FactoryServer.sh || true\necho 'Satisfactory install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "FactoryGame/Saved/Config/LinuxServer/GameUserSettings.ini",
+      "parser": "ini",
+      "find": {}
+    }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 12288,
+  "recDiskMb": 20480,
+  "variables": [
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent players (officially supported up to 4, higher is unsupported).",
+      "type": "NUMBER",
+      "defaultValue": "4",
+      "rules": { "required": true, "min": 1, "max": 16 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Server Query Port",
+      "description": "UDP port used for server discovery and the management API handshake.",
+      "type": "NUMBER",
+      "defaultValue": "15777",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "BEACON_PORT",
+      "displayName": "Beacon Port",
+      "description": "UDP beacon port used for client connection negotiation.",
+      "type": "NUMBER",
+      "defaultValue": "15000",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "EXPERIMENTAL",
+      "displayName": "Use Experimental Branch",
+      "description": "Install the Experimental build instead of Early Access (stable).",
+      "type": "BOOLEAN",
+      "defaultValue": "false",
+      "rules": {},
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "ADMIN_PASS",
+      "displayName": "Admin Password",
+      "description": "Optional administrator password used when claiming the server in the manager UI.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": false, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 4
+    }
+  ]
+}

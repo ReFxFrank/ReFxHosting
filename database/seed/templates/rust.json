@@ -1,0 +1,123 @@
+{
+  "name": "Rust",
+  "slug": "rust",
+  "author": "ops@refx.example",
+  "description": "Facepunch's survival sandbox. SteamCMD-installed dedicated server with Oxide/uMod support and live map configuration.",
+  "category": "survival",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "uMod": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+  },
+  "steamAppId": 258550,
+  "startupCommand": "./RustDedicated -batchmode +server.port {{SERVER_PORT}} +server.identity rust +rcon.port {{RCON_PORT}} +rcon.web 1 +rcon.password \"{{RCON_PASS}}\" +server.hostname \"{{SERVER_NAME}}\" +server.level \"{{LEVEL}}\" +server.worldsize {{WORLD_SIZE}} +server.seed {{SERVER_SEED}} +server.maxplayers {{MAX_PLAYERS}} +server.saveinterval 300",
+  "startupDetect": "Server startup complete",
+  "stopCommand": "quit",
+  "installScript": {
+    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server/steamcmd\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 258550 validate +quit\nif [ \"${OXIDE}\" = \"true\" ]; then\n  curl -fsSL -o oxide.zip https://umod.org/games/rust/download/develop\n  unzip -o oxide.zip -d /mnt/server && rm -f oxide.zip\nfi\necho 'Rust install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "server/rust/cfg/serverauto.cfg",
+      "parser": "file",
+      "find": {}
+    }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 8192,
+  "recDiskMb": 30720,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Hostname",
+      "description": "The name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting Rust Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "WORLD_SIZE",
+      "displayName": "World Size",
+      "description": "Procedural map size in meters. 3000-4500 recommended for most servers.",
+      "type": "NUMBER",
+      "defaultValue": "3500",
+      "rules": { "required": true, "min": 1000, "max": 6000 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SERVER_SEED",
+      "displayName": "World Seed",
+      "description": "Procedural generation seed. Same seed + size produces the same map.",
+      "type": "NUMBER",
+      "defaultValue": "1337",
+      "rules": { "required": true, "min": 0, "max": 2147483647 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "50",
+      "rules": { "required": true, "min": 1, "max": 500 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "LEVEL",
+      "displayName": "Map / Level",
+      "description": "World level to generate.",
+      "type": "ENUM",
+      "defaultValue": "Procedural Map",
+      "rules": { "required": true, "options": ["Procedural Map", "Barren", "HapisIsland", "SavasIsland_koth"] },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    },
+    {
+      "envName": "RCON_PORT",
+      "displayName": "RCON Port",
+      "description": "TCP port for the RCON/web-rcon interface.",
+      "type": "NUMBER",
+      "defaultValue": "28016",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 5
+    },
+    {
+      "envName": "RCON_PASS",
+      "displayName": "RCON Password",
+      "description": "Password protecting the RCON interface.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 6
+    },
+    {
+      "envName": "OXIDE",
+      "displayName": "Install uMod/Oxide",
+      "description": "Install the uMod (Oxide) modding framework on (re)install.",
+      "type": "BOOLEAN",
+      "defaultValue": "false",
+      "rules": {},
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 7
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+# =============================================================================
+# ReFx Hosting Helm values
+# Node-agents are installed on bare game nodes (see infra/scripts), NOT in k8s.
+# This chart deploys only the central panel: panel-api + web.
+# =============================================================================
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  registry: ghcr.io
+  repository: refxfrank/refxhosting
+  pullPolicy: IfNotPresent
+  tag: "" # defaults to .Chart.AppVersion
+imagePullSecrets: []
+
+# ---- panel-api --------------------------------------------------------------
+panelApi:
+  enabled: true
+  image: refxhosting-panel-api
+  replicas: 3
+  port: 4000
+  apiPrefix: api/v1
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { cpu: "1", memory: 1Gi }
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+  # health/metrics are excluded from the API prefix in main.ts.
+  livenessPath: /health
+  readinessPath: /health
+  # Extra env injected verbatim (non-secret).
+  env: {}
+
+# ---- web --------------------------------------------------------------------
+web:
+  enabled: true
+  image: refxhosting-web
+  replicas: 2
+  port: 3000
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 75
+  publicApiUrl: https://api.refx.example
+
+# ---- Ingress ----------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600" # websocket console
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+  hosts:
+    panel: panel.refx.example # -> web
+    api: api.refx.example # -> panel-api
+  tls:
+    enabled: true
+    secretName: refx-tls
+
+# ---- Secrets ----------------------------------------------------------------
+# Either provide values here (templated into a Secret) or set
+# existingSecret to a Secret you manage out-of-band (recommended).
+secrets:
+  existingSecret: ""
+  data:
+    DATABASE_URL: ""
+    REDIS_HOST: ""
+    REDIS_PASSWORD: ""
+    JWT_ACCESS_SECRET: ""
+    JWT_REFRESH_SECRET: ""
+    SECRETS_ENC_KEY: ""
+    STRIPE_SECRET_KEY: ""
+    STRIPE_WEBHOOK_SECRET: ""
+    PAYPAL_CLIENT_ID: ""
+    PAYPAL_CLIENT_SECRET: ""
+    S3_ACCESS_KEY: ""
+    S3_SECRET_KEY: ""
+
+config:
+  S3_ENDPOINT: ""
+  S3_BUCKET: refx-backups
+  S3_REGION: us-east-1
+  OPENSEARCH_NODE: ""
+  DEFAULT_CURRENCY: USD
+
+serviceAccount:
+  create: true
+  name: ""
+
+networkPolicy:
+  enabled: true
+
+# ---- Migrations (pre-install/upgrade Job) -----------------------------------
+migrations:
+  enabled: true
+  image: refxhosting-panel-api # contains prisma + schema
+
+# ---- Optional in-cluster datastores (dev/staging only) ----------------------
+postgresql:
+  enabled: false
+redis:
+  enabled: false

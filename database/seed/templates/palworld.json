@@ -1,0 +1,90 @@
+{
+  "name": "Palworld",
+  "slug": "palworld",
+  "author": "ops@refx.example",
+  "description": "Pocketpair's creature-collection survival crafting game. SteamCMD-installed dedicated server with RCON support.",
+  "category": "survival",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/refxfrank/yolks/steamcmd:proton",
+    "Proton": "ghcr.io/refxfrank/yolks/steamcmd:proton"
+  },
+  "steamAppId": 2394010,
+  "startupCommand": "./PalServer.sh -port={{SERVER_PORT}} -players={{MAX_PLAYERS}} -servername=\"{{SERVER_NAME}}\" -RCONEnabled={{RCON_ENABLED}} -RCONPort={{RCON_PORT}} -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS",
+  "startupDetect": "Setting breakpad minidump|Running Palworld dedicated server",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/refxfrank/yolks/steamcmd:proton",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 2394010 validate +quit\nmkdir -p /mnt/server/Pal/Saved/Config/LinuxServer\nchmod +x PalServer.sh || true\necho 'Palworld install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "Pal/Saved/Config/LinuxServer/PalWorldSettings.ini",
+      "parser": "ini",
+      "find": {}
+    }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 16384,
+  "recDiskMb": 20480,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game community server list.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting Palworld Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent players (hard cap of 32).",
+      "type": "NUMBER",
+      "defaultValue": "16",
+      "rules": { "required": true, "min": 1, "max": 32 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "ADMIN_PASS",
+      "displayName": "Admin Password",
+      "description": "Server admin password used for in-game admin commands.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 2
+    },
+    {
+      "envName": "RCON_ENABLED",
+      "displayName": "Enable RCON",
+      "description": "Enable the remote console interface.",
+      "type": "BOOLEAN",
+      "defaultValue": "true",
+      "rules": {},
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "RCON_PORT",
+      "displayName": "RCON Port",
+      "description": "TCP port for the RCON interface.",
+      "type": "NUMBER",
+      "defaultValue": "25575",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 4
+    }
+  ]
+}
