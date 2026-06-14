@@ -19,7 +19,7 @@ export class NotificationModel {
   @Field()
   body!: string;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   readAt?: Date | null;
 
   @Field()

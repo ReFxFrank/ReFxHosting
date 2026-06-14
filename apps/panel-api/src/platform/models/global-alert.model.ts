@@ -21,10 +21,10 @@ export class GlobalAlertModel {
   @Field()
   isActive!: boolean;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   startsAt?: Date | null;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   endsAt?: Date | null;
 
   @Field()

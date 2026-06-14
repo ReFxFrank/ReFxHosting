@@ -20,7 +20,7 @@ import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label } from "@/components/ui/input";
-import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Badge, TicketStateBadge, TicketPriorityBadge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import { formatRelative } from "@/lib/utils";
-import type { KbArticle, TicketPriority, TicketState } from "@/lib/types";
+import type { KbArticle, TicketPriority } from "@/lib/types";
 
 const PRIORITIES: { value: TicketPriority; label: string }[] = [
   { value: "LOW", label: "Low" },
@@ -55,33 +55,6 @@ const PRIORITIES: { value: TicketPriority; label: string }[] = [
   { value: "HIGH", label: "High" },
   { value: "URGENT", label: "Urgent" },
 ];
-
-const stateMap: Record<TicketState, { label: string; variant: BadgeProps["variant"] }> = {
-  OPEN: { label: "Open", variant: "default" },
-  PENDING_CUSTOMER: { label: "Pending you", variant: "warning" },
-  PENDING_AGENT: { label: "Pending agent", variant: "secondary" },
-  RESOLVED: { label: "Resolved", variant: "muted" },
-  CLOSED: { label: "Closed", variant: "muted" },
-};
-
-export function TicketStateBadge({ state }: { state: TicketState }) {
-  const cfg = stateMap[state] ?? { label: state, variant: "muted" as const };
-  return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
-}
-
-export function priorityVariant(priority: TicketPriority): BadgeProps["variant"] {
-  if (priority === "URGENT") return "destructive";
-  if (priority === "HIGH") return "warning";
-  return "muted";
-}
-
-export function TicketPriorityBadge({ priority }: { priority: TicketPriority }) {
-  return (
-    <Badge variant={priorityVariant(priority)}>
-      {PRIORITIES.find((p) => p.value === priority)?.label ?? priority}
-    </Badge>
-  );
-}
 
 const createSchema = z.object({
   subject: z.string().min(3, "Give your ticket a short subject"),

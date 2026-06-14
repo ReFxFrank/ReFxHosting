@@ -36,10 +36,10 @@ export class InvoiceModel {
   @Field(() => Float, { nullable: true })
   taxRatePct?: number | null;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   dueAt?: Date | null;
 
-  @Field({ nullable: true })
+  @Field(() => Date, { nullable: true })
   paidAt?: Date | null;
 
   @Field()

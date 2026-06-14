@@ -15,7 +15,7 @@ export class KbArticleModel {
   @Field()
   body!: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   category?: string | null;
 
   @Field()

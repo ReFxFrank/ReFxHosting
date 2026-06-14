@@ -12,10 +12,10 @@ export class UserModel {
   @Field()
   email!: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   firstName?: string | null;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   lastName?: string | null;
 
   @Field(() => String)

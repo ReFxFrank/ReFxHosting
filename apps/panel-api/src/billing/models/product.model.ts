@@ -18,7 +18,7 @@ export class ProductModel {
   @Field()
   slug!: string;
 
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   description?: string | null;
 
   @Field()

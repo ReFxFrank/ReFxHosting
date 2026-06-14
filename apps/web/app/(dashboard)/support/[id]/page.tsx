@@ -18,12 +18,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
+import { Badge, TicketPriorityBadge, TicketStateBadge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { cn, formatDateTime, initials } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 import type { TicketMessage, TicketState } from "@/lib/types";
-import { TicketPriorityBadge, TicketStateBadge } from "../page";
 
 const STATE_ACTIONS: { state: TicketState; label: string }[] = [
   { state: "RESOLVED", label: "Mark resolved" },
