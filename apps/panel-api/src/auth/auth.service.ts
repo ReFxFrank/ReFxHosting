@@ -15,12 +15,12 @@ import { uuidv7 } from '../common/util/uuid';
 import { AppConfig } from '../config/configuration';
 import { LoginDto, RegisterDto, TokenResponseDto } from './dto/auth.dto';
 
-const ARGON_OPTS: argon2.Options = {
+const ARGON_OPTS = {
   type: argon2.argon2id,
   memoryCost: 19456, // 19 MiB
   timeCost: 2,
   parallelism: 1,
-};
+} as const;
 
 @Injectable()
 export class AuthService {

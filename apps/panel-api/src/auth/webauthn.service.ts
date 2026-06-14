@@ -9,7 +9,8 @@ import {
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
-} from '@simplewebauthn/server';
+  AuthenticatorTransportFuture,
+} from '@simplewebauthn/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { uuidv7 } from '../common/util/uuid';
@@ -17,16 +18,15 @@ import { AppConfig } from '../config/configuration';
 
 /**
  * WebAuthn (passkey) registration + authentication using
- * @simplewebauthn/server. The per-ceremony challenge is cached in Redis-less
- * fashion here via a short-lived DB-less map keyed by userId; for production a
- * Redis store is the documented path.
+ * @simplewebauthn/server v9. credentialId is stored as a base64url string; the
+ * per-ceremony challenge is cached in-process keyed by userId. TODO(impl): move
+ * the challenge store to Redis so it survives multiple API instances.
  */
 @Injectable()
 export class WebAuthnService {
   private readonly rpId: string;
   private readonly rpName: string;
   private readonly origin: string;
-  // In-memory challenge cache (userId -> challenge). TODO(impl): move to Redis.
   private challenges = new Map<string, string>();
 
   constructor(
@@ -39,6 +39,10 @@ export class WebAuthnService {
     this.origin = config.get<AppConfig['panelUrl']>('panelUrl')!;
   }
 
+  private b64url(buf: Uint8Array): string {
+    return Buffer.from(buf).toString('base64url');
+  }
+
   async registrationOptions(userId: string, email: string) {
     const creds = await this.prisma.webAuthnCredential.findMany({
       where: { userId },
@@ -46,14 +50,18 @@ export class WebAuthnService {
     const options = await generateRegistrationOptions({
       rpName: this.rpName,
       rpID: this.rpId,
-      userID: Buffer.from(userId),
+      userID: userId,
       userName: email,
       attestationType: 'none',
       excludeCredentials: creds.map((c) => ({
-        id: c.credentialId,
-        transports: c.transports as any,
+        id: Buffer.from(c.credentialId, 'base64url'),
+        type: 'public-key',
+        transports: c.transports as AuthenticatorTransportFuture[],
       })),
-      authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+      authenticatorSelection: {
+        residentKey: 'preferred',
+        userVerification: 'preferred',
+      },
     });
     this.challenges.set(`reg:${userId}`, options.challenge);
     return options;
@@ -65,7 +73,9 @@ export class WebAuthnService {
     label?: string,
   ) {
     const expectedChallenge = this.challenges.get(`reg:${userId}`);
-    if (!expectedChallenge) throw new BadRequestException('No registration in progress');
+    if (!expectedChallenge) {
+      throw new BadRequestException('No registration in progress');
+    }
 
     const verification = await verifyRegistrationResponse({
       response,
@@ -78,19 +88,15 @@ export class WebAuthnService {
     }
     this.challenges.delete(`reg:${userId}`);
 
-    const { credential, credentialDeviceType } = verification.registrationInfo as any;
-    const credentialId: string = credential?.id ?? (verification.registrationInfo as any).credentialID;
-    const publicKey: Uint8Array =
-      credential?.publicKey ?? (verification.registrationInfo as any).credentialPublicKey;
-    const counter: number =
-      credential?.counter ?? (verification.registrationInfo as any).counter ?? 0;
+    const { credentialID, credentialPublicKey, counter, credentialDeviceType } =
+      verification.registrationInfo;
 
     await this.prisma.webAuthnCredential.create({
       data: {
         id: uuidv7(),
         userId,
-        credentialId,
-        publicKey: Buffer.from(publicKey),
+        credentialId: this.b64url(credentialID),
+        publicKey: Buffer.from(credentialPublicKey),
         counter: BigInt(counter),
         transports: response.response.transports ?? [],
         label: label ?? credentialDeviceType,
@@ -106,8 +112,9 @@ export class WebAuthnService {
     const options = await generateAuthenticationOptions({
       rpID: this.rpId,
       allowCredentials: creds.map((c) => ({
-        id: c.credentialId,
-        transports: c.transports as any,
+        id: Buffer.from(c.credentialId, 'base64url'),
+        type: 'public-key',
+        transports: c.transports as AuthenticatorTransportFuture[],
       })),
       userVerification: 'preferred',
     });
@@ -117,7 +124,9 @@ export class WebAuthnService {
 
   async verifyAuthentication(userId: string, response: AuthenticationResponseJSON) {
     const expectedChallenge = this.challenges.get(`auth:${userId}`);
-    if (!expectedChallenge) throw new BadRequestException('No authentication in progress');
+    if (!expectedChallenge) {
+      throw new BadRequestException('No authentication in progress');
+    }
 
     const cred = await this.prisma.webAuthnCredential.findUnique({
       where: { credentialId: response.id },
@@ -131,11 +140,11 @@ export class WebAuthnService {
       expectedChallenge,
       expectedOrigin: this.origin,
       expectedRPID: this.rpId,
-      credential: {
-        id: cred.credentialId,
-        publicKey: new Uint8Array(cred.publicKey),
+      authenticator: {
+        credentialID: Buffer.from(cred.credentialId, 'base64url'),
+        credentialPublicKey: new Uint8Array(cred.publicKey),
         counter: Number(cred.counter),
-        transports: cred.transports as any,
+        transports: cred.transports as AuthenticatorTransportFuture[],
       },
     });
     if (!verification.verified) {

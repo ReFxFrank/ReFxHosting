@@ -19,9 +19,9 @@ import (
 // image ecosystem (mcr.microsoft.com/windows/servercore, etc.).
 //
 // Two implementation routes are viable; both are deferred:
-//   1. Drive the Docker Engine running in Windows-container mode (same SDK as
-//      DockerRuntime, different daemon configuration).
-//   2. Talk to HCS directly via github.com/Microsoft/hcsshim for finer control.
+//  1. Drive the Docker Engine running in Windows-container mode (same SDK as
+//     DockerRuntime, different daemon configuration).
+//  2. Talk to HCS directly via github.com/Microsoft/hcsshim for finer control.
 type WindowsContainerRuntime struct {
 	log zerolog.Logger
 }
@@ -45,11 +45,15 @@ func (w *WindowsContainerRuntime) Install(_ context.Context, s *server.Server) (
 // TODO(impl): the methods below mirror DockerRuntime but target HCS/Windows
 // containers. They are stubbed so the type satisfies Runtime today.
 
-func (w *WindowsContainerRuntime) Start(context.Context, *server.Server) error { return ErrNotImplemented }
+func (w *WindowsContainerRuntime) Start(context.Context, *server.Server) error {
+	return ErrNotImplemented
+}
 func (w *WindowsContainerRuntime) Stop(context.Context, *server.Server, time.Duration) error {
 	return ErrNotImplemented
 }
-func (w *WindowsContainerRuntime) Kill(context.Context, *server.Server) error    { return ErrNotImplemented }
+func (w *WindowsContainerRuntime) Kill(context.Context, *server.Server) error {
+	return ErrNotImplemented
+}
 func (w *WindowsContainerRuntime) Restart(context.Context, *server.Server, time.Duration) error {
 	return ErrNotImplemented
 }

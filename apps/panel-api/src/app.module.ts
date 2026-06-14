@@ -1,0 +1,95 @@
+import { Module } from '@nestjs/common';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { GraphQLModule } from '@nestjs/graphql';
+import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
+import { BullModule } from '@nestjs/bullmq';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { join } from 'path';
+
+import configuration, { AppConfig } from './config/configuration';
+import { PrismaModule } from './prisma/prisma.module';
+import { CryptoModule } from './common/crypto/crypto.module';
+import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+
+import { AgentModule } from './agent/agent.module';
+import { AuthModule } from './auth/auth.module';
+import { UsersModule } from './users/users.module';
+import { NodesModule } from './nodes/nodes.module';
+import { ServersModule } from './servers/servers.module';
+import { BillingModule } from './billing/billing.module';
+import { SupportModule } from './support/support.module';
+import { PlatformModule } from './platform/platform.module';
+import { QueuesModule } from './queues/queues.module';
+import { MetricsInterceptor } from './platform/metrics.interceptor';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      isGlobal: true,
+      load: [configuration],
+      cache: true,
+    }),
+
+    // BullMQ root — shares the Redis connection across all queues.
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const redis = config.get<AppConfig['redis']>('redis')!;
+        return {
+          connection: {
+            host: redis.host,
+            port: redis.port,
+            password: redis.password,
+            db: redis.db,
+          },
+          defaultJobOptions: {
+            attempts: 3,
+            backoff: { type: 'exponential', delay: 5000 },
+            removeOnComplete: 1000,
+            removeOnFail: 5000,
+          },
+        };
+      },
+    }),
+
+    // Rate limiting.
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        const t = config.get<AppConfig['throttle']>('throttle')!;
+        return [{ ttl: t.ttl * 1000, limit: t.limit }];
+      },
+    }),
+
+    // Code-first GraphQL (schema generated from resolvers/models at boot).
+    GraphQLModule.forRoot<ApolloDriverConfig>({
+      driver: ApolloDriver,
+      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+      sortSchema: true,
+      playground: true,
+      context: ({ req }) => ({ req }),
+    }),
+
+    // Infra
+    PrismaModule,
+    CryptoModule,
+    AgentModule,
+
+    // Features
+    AuthModule,
+    UsersModule,
+    NodesModule,
+    ServersModule,
+    BillingModule,
+    SupportModule,
+    PlatformModule,
+    QueuesModule,
+  ],
+  providers: [
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: MetricsInterceptor },
+  ],
+})
+export class AppModule {}

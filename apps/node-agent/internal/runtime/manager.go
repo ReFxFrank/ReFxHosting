@@ -17,7 +17,7 @@ import (
 // single entry point the API/WS/stats layers use; they never touch a concrete
 // backend directly.
 type Manager struct {
-	log      zerolog.Logger
+	log        zerolog.Logger
 	serversDir string
 
 	mu       sync.RWMutex

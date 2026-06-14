@@ -16,10 +16,10 @@ import (
 type DeployMethod string
 
 const (
-	DeployDocker          DeployMethod = "DOCKER"
-	DeployNativeProcess   DeployMethod = "NATIVE_PROCESS"
+	DeployDocker           DeployMethod = "DOCKER"
+	DeployNativeProcess    DeployMethod = "NATIVE_PROCESS"
 	DeployWindowsContainer DeployMethod = "WINDOWS_CONTAINER"
-	DeploySandbox         DeployMethod = "SANDBOX"
+	DeploySandbox          DeployMethod = "SANDBOX"
 )
 
 // State mirrors the panel's ServerState enum.
@@ -136,8 +136,8 @@ type Server struct {
 
 	state       State
 	lastError   string
-	installedAt  time.Time
-	startedAt    time.Time
+	installedAt time.Time
+	startedAt   time.Time
 	// RuntimeRef is an opaque handle the active runtime stores (container id,
 	// pid, etc.). Owned by the runtime, read for diagnostics only.
 	RuntimeRef string

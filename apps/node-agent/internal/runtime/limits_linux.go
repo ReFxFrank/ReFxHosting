@@ -24,7 +24,7 @@ type cgroupV2Limiter struct {
 	path string // absolute cgroup path, e.g. /sys/fs/cgroup/refx.slice/<id>
 
 	mu        sync.Mutex
-	lastUsage uint64    // cpu.stat usage_usec
+	lastUsage uint64 // cpu.stat usage_usec
 	lastAt    time.Time
 }
 

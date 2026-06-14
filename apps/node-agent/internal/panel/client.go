@@ -65,9 +65,9 @@ func (c *Client) NodeID() string { return c.nodeID }
 
 // RegisterRequest is sent on first boot using the one-time bootstrap token.
 type RegisterRequest struct {
-	BootstrapToken string                       `json:"bootstrapToken"`
-	AgentVersion   string                       `json:"agentVersion"`
-	Capabilities   osabstraction.Capabilities   `json:"capabilities"`
+	BootstrapToken string                     `json:"bootstrapToken"`
+	AgentVersion   string                     `json:"agentVersion"`
+	Capabilities   osabstraction.Capabilities `json:"capabilities"`
 	// TLSFingerprint lets the panel pin the agent's self-signed cert.
 	TLSFingerprint string `json:"tlsFingerprint,omitempty"`
 }
@@ -97,14 +97,14 @@ func (c *Client) Register(ctx context.Context, req RegisterRequest) (*RegisterRe
 
 // Heartbeat is the periodic node-level health report.
 type Heartbeat struct {
-	NodeID      string  `json:"nodeId"`
-	CPUPct      float64 `json:"cpuPct"`
-	MemUsedMB   int64   `json:"memUsedMb"`
-	DiskUsedMB  int64   `json:"diskUsedMb"`
-	NetRxBytes  int64   `json:"netRxBytes"`
-	NetTxBytes  int64   `json:"netTxBytes"`
-	Containers  int     `json:"containers"`
-	AgentVersion string `json:"agentVersion"`
+	NodeID       string  `json:"nodeId"`
+	CPUPct       float64 `json:"cpuPct"`
+	MemUsedMB    int64   `json:"memUsedMb"`
+	DiskUsedMB   int64   `json:"diskUsedMb"`
+	NetRxBytes   int64   `json:"netRxBytes"`
+	NetTxBytes   int64   `json:"netTxBytes"`
+	Containers   int     `json:"containers"`
+	AgentVersion string  `json:"agentVersion"`
 }
 
 // SendHeartbeat pushes a node heartbeat.

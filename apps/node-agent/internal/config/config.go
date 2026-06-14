@@ -117,7 +117,7 @@ type BackupConfig struct {
 	// Driver is "local" or "s3".
 	Driver string `mapstructure:"driver"`
 	// LocalDir is where local backups are written.
-	LocalDir string `mapstructure:"local_dir"`
+	LocalDir string   `mapstructure:"local_dir"`
 	S3       S3Config `mapstructure:"s3"`
 }
 

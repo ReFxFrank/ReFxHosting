@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
@@ -66,14 +67,14 @@ func containerName(s *server.Server) string { return "refx-" + s.Spec.ShortID }
 // EnsureNetwork creates the agent's user-defined bridge network if absent. The
 // daemon calls this once at startup.
 func (d *DockerRuntime) EnsureNetwork(ctx context.Context) error {
-	_, err := d.cli.NetworkInspect(ctx, d.network, types.NetworkInspectOptions{})
+	_, err := d.cli.NetworkInspect(ctx, d.network, network.InspectOptions{})
 	if err == nil {
 		return nil
 	}
 	if !client.IsErrNotFound(err) {
 		return fmt.Errorf("docker: inspect network: %w", err)
 	}
-	_, err = d.cli.NetworkCreate(ctx, d.network, types.NetworkCreate{Driver: "bridge"})
+	_, err = d.cli.NetworkCreate(ctx, d.network, network.CreateOptions{Driver: "bridge"})
 	if err != nil {
 		return fmt.Errorf("docker: create network: %w", err)
 	}
@@ -130,10 +131,10 @@ func (d *DockerRuntime) Install(ctx context.Context, s *server.Server) (<-chan I
 	return ch, nil
 }
 
-func (d *DockerRuntime) pull(ctx context.Context, image string, ch chan<- InstallProgress) error {
-	rc, err := d.cli.ImagePull(ctx, image, types.ImagePullOptions{})
+func (d *DockerRuntime) pull(ctx context.Context, imageRef string, ch chan<- InstallProgress) error {
+	rc, err := d.cli.ImagePull(ctx, imageRef, image.PullOptions{})
 	if err != nil {
-		return fmt.Errorf("docker: pull %s: %w", image, err)
+		return fmt.Errorf("docker: pull %s: %w", imageRef, err)
 	}
 	defer rc.Close()
 	sc := bufio.NewScanner(rc)
@@ -166,11 +167,11 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 	if err != nil {
 		return fmt.Errorf("docker: create install container: %w", err)
 	}
-	if err := d.cli.ContainerStart(ctx, created.ID, types.ContainerStartOptions{}); err != nil {
+	if err := d.cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("docker: start install container: %w", err)
 	}
 	// Stream logs until the container exits.
-	logs, err := d.cli.ContainerLogs(ctx, created.ID, types.ContainerLogsOptions{
+	logs, err := d.cli.ContainerLogs(ctx, created.ID, container.LogsOptions{
 		ShowStdout: true, ShowStderr: true, Follow: true,
 	})
 	if err == nil {
@@ -201,8 +202,8 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 		Memory:     lim.MemoryMB * 1024 * 1024,
 		MemorySwap: (lim.MemoryMB + lim.SwapMB) * 1024 * 1024,
 		// NanoCPUs encodes fractional cores: 1.0 core == 1e9.
-		NanoCPUs:  int64(lim.CPUCores * 1e9),
-		PidsLimit: pidsPtr(lim.PidsLimit),
+		NanoCPUs:    int64(lim.CPUCores * 1e9),
+		PidsLimit:   pidsPtr(lim.PidsLimit),
 		BlkioWeight: uint16(clampIO(lim.IOWeight)),
 	}
 
@@ -217,11 +218,11 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 	}
 
 	host := &container.HostConfig{
-		Resources:    res,
-		PortBindings: bindings,
-		Mounts:       []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/home/container"}},
+		Resources:     res,
+		PortBindings:  bindings,
+		Mounts:        []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/home/container"}},
 		RestartPolicy: container.RestartPolicy{Name: "no"},
-		NetworkMode:  container.NetworkMode(d.network),
+		NetworkMode:   container.NetworkMode(d.network),
 	}
 	return host, ports, bindings
 }
@@ -263,7 +264,7 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 		s.RuntimeRef = created.ID
 	}
 
-	if err := d.cli.ContainerStart(ctx, name, types.ContainerStartOptions{}); err != nil {
+	if err := d.cli.ContainerStart(ctx, name, container.StartOptions{}); err != nil {
 		s.SetState(server.StateCrashed)
 		return fmt.Errorf("docker: start: %w", err)
 	}
@@ -314,7 +315,7 @@ func (d *DockerRuntime) Restart(ctx context.Context, s *server.Server, timeout t
 
 // AttachConsole attaches to the container's stdio, demultiplexing stdout/stderr.
 func (d *DockerRuntime) AttachConsole(ctx context.Context, s *server.Server) (*Console, error) {
-	resp, err := d.cli.ContainerAttach(ctx, containerName(s), types.ContainerAttachOptions{
+	resp, err := d.cli.ContainerAttach(ctx, containerName(s), container.AttachOptions{
 		Stream: true, Stdin: true, Stdout: true, Stderr: true,
 	})
 	if err != nil {
@@ -396,7 +397,7 @@ func (d *DockerRuntime) Reconfigure(ctx context.Context, s *server.Server, lim s
 
 // Destroy removes the container (data dir is left intact).
 func (d *DockerRuntime) Destroy(ctx context.Context, s *server.Server) error {
-	err := d.cli.ContainerRemove(ctx, containerName(s), types.ContainerRemoveOptions{Force: true})
+	err := d.cli.ContainerRemove(ctx, containerName(s), container.RemoveOptions{Force: true})
 	if err != nil && !client.IsErrNotFound(err) {
 		return fmt.Errorf("docker: remove: %w", err)
 	}
@@ -409,7 +410,7 @@ func (d *DockerRuntime) Destroy(ctx context.Context, s *server.Server) error {
 // restart). It is best-effort.
 func (d *DockerRuntime) Reconcile(ctx context.Context, lookup func(serverID string) (*server.Server, bool)) error {
 	args := filters.NewArgs(filters.Arg("label", labelManaged+"=true"))
-	list, err := d.cli.ContainerList(ctx, types.ContainerListOptions{All: true, Filters: args})
+	list, err := d.cli.ContainerList(ctx, container.ListOptions{All: true, Filters: args})
 	if err != nil {
 		return fmt.Errorf("docker: list: %w", err)
 	}

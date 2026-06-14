@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { uuidv7 } from '../util/uuid';
 import { AUDIT_KEY, AuditMeta } from '../decorators/audit.decorator';
@@ -51,7 +52,7 @@ export class AuditInterceptor implements NestInterceptor {
               action: meta.action,
               targetType: meta.targetType,
               targetId: targetId ?? null,
-              metadata: this.safeMeta(req),
+              metadata: this.safeMeta(req) as Prisma.InputJsonValue,
               ip: req?.ip ?? null,
               userAgent: req?.headers?.['user-agent'] ?? null,
             },

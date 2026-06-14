@@ -1,0 +1,65 @@
+# ReFx Hosting node-agent — example configuration.
+#
+# Every value can also be supplied via environment variables prefixed REFX_
+# with dots replaced by underscores, e.g. REFX_PANEL_URL, REFX_API_BIND_ADDR.
+# Precedence: defaults < this file < environment.
+#
+# On first boot only `panel.url` and `panel.bootstrap_token` are required; the
+# agent registers with the panel and persists its node id + signing key under
+# <data_dir>/agent.state, so the bootstrap token can be removed afterwards.
+
+# Persisted after registration (leave empty on first boot).
+node_id: ""
+signing_key: ""
+
+# Where per-server data, temp files, backups, and state live.
+data_dir: /var/lib/refx-agent
+
+panel:
+  url: https://panel.example.com
+  bootstrap_token: "replace-with-one-time-node-token"
+  skip_tls_verify: false
+  timeout: 30s
+
+# Inbound HTTPS control API the panel calls.
+api:
+  bind_addr: 0.0.0.0:8443
+  # Leave empty to auto-generate a self-signed cert (fingerprint reported to
+  # the panel on registration for pinning).
+  tls_cert: ""
+  tls_key: ""
+
+# Embedded SFTP server (per-server credentials issued by the panel).
+sftp:
+  bind_addr: 0.0.0.0:2022
+  host_key: "" # auto-generated at <data_dir>/sftp_host_key if empty
+
+# Runtime backends. The agent picks one per-server from the deploy method the
+# panel sends; `default` is used only when none is specified.
+runtime:
+  default: docker # docker | native_process | windows_container
+  docker:
+    host: "" # honours DOCKER_HOST when empty (unix socket / npipe)
+    network: refx0 # user-defined bridge network containers join
+
+# Stats collection + node heartbeat cadence.
+stats:
+  interval: 5s
+  heartbeat_interval: 15s
+
+# Logging.
+log:
+  level: info # trace | debug | info | warn | error
+  pretty: false # true for human-friendly console output
+
+# Backups.
+backup:
+  driver: local # local | s3
+  local_dir: /var/lib/refx-agent/backups
+  s3:
+    endpoint: "" # set for MinIO / S3-compatible; empty for AWS
+    region: us-east-1
+    bucket: refx-backups
+    access_key: ""
+    secret_key: ""
+    use_path_style: false # true for MinIO

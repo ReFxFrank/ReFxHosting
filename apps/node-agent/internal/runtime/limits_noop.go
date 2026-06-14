@@ -7,6 +7,6 @@ import "github.com/refxfrank/refxhosting/node-agent/internal/server"
 // logged at the call site).
 type noopLimiter struct{}
 
-func (noopLimiter) Apply(int) error                  { return nil }
-func (noopLimiter) Update(server.Limits) error        { return nil }
-func (noopLimiter) Destroy() error                    { return nil }
+func (noopLimiter) Apply(int) error            { return nil }
+func (noopLimiter) Update(server.Limits) error { return nil }
+func (noopLimiter) Destroy() error             { return nil }

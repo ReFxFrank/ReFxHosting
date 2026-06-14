@@ -1,7 +1,7 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
-import type { ServerState, NodeState } from "@/lib/types";
+import type { ServerState, NodeState, TicketState, TicketPriority } from "@/lib/types";
 
 const badgeVariants = cva(
   "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
@@ -71,6 +71,36 @@ const nodeStateMap: Record<NodeState, { label: string; variant: BadgeProps["vari
 export function NodeStateBadge({ state }: { state: NodeState }) {
   const cfg = nodeStateMap[state] ?? { label: state, variant: "muted" as const };
   return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
+}
+
+const ticketStateMap: Record<TicketState, { label: string; variant: BadgeProps["variant"] }> = {
+  OPEN: { label: "Open", variant: "default" },
+  PENDING_CUSTOMER: { label: "Pending you", variant: "warning" },
+  PENDING_AGENT: { label: "Pending agent", variant: "secondary" },
+  RESOLVED: { label: "Resolved", variant: "muted" },
+  CLOSED: { label: "Closed", variant: "muted" },
+};
+
+export function TicketStateBadge({ state }: { state: TicketState }) {
+  const cfg = ticketStateMap[state] ?? { label: state, variant: "muted" as const };
+  return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
+}
+
+export function priorityVariant(priority: TicketPriority): BadgeProps["variant"] {
+  if (priority === "URGENT") return "destructive";
+  if (priority === "HIGH") return "warning";
+  return "muted";
+}
+
+const priorityLabel: Record<TicketPriority, string> = {
+  LOW: "Low",
+  NORMAL: "Normal",
+  HIGH: "High",
+  URGENT: "Urgent",
+};
+
+export function TicketPriorityBadge({ priority }: { priority: TicketPriority }) {
+  return <Badge variant={priorityVariant(priority)}>{priorityLabel[priority] ?? priority}</Badge>;
 }
 
 export { Badge, badgeVariants };

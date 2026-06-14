@@ -72,13 +72,29 @@ func (l *jobObjectLimiter) write(limits server.Limits) error {
 	return nil
 }
 
+// CPU rate-control constants/struct. x/sys/windows exposes the
+// JobObjectCpuRateControlInformation class id but not the matching struct/flags,
+// so we declare them here to match the Win32 SDK definitions.
+const (
+	jobObjectCPURateControlEnable  uint32 = 0x1
+	jobObjectCPURateControlHardCap uint32 = 0x4
+)
+
+// jobObjectCPURateControlInformation mirrors
+// JOBOBJECT_CPU_RATE_CONTROL_INFORMATION. The second field is a C union; for the
+// hard-cap path it holds the CpuRate value (hundredths of a percent).
+type jobObjectCPURateControlInformation struct {
+	ControlFlags uint32
+	CpuRate      uint32
+}
+
 // setCPURate caps CPU using the rate-control information class. The rate is a
 // percentage of total machine CPU expressed in hundredths of a percent.
 func (l *jobObjectLimiter) setCPURate(cores float64) error {
 	// TODO(impl): scale by NumberOfProcessors to convert cores -> machine %.
-	var rate windows.JOBOBJECT_CPU_RATE_CONTROL_INFORMATION
-	rate.ControlFlags = windows.JOB_OBJECT_CPU_RATE_CONTROL_ENABLE |
-		windows.JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP
+	rate := jobObjectCPURateControlInformation{
+		ControlFlags: jobObjectCPURateControlEnable | jobObjectCPURateControlHardCap,
+	}
 	pct := uint32(cores * 100 * 100) // cores * 100% * (hundredths)
 	if pct == 0 {
 		pct = 1
@@ -86,8 +102,7 @@ func (l *jobObjectLimiter) setCPURate(cores float64) error {
 	if pct > 10000 {
 		pct = 10000
 	}
-	// CpuRate is a union member; set via the rate field.
-	*(*uint32)(unsafe.Pointer(&rate.Value)) = pct
+	rate.CpuRate = pct
 
 	if _, err := windows.SetInformationJobObject(
 		l.handle,
