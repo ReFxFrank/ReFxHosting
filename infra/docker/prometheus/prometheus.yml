@@ -1,0 +1,63 @@
+# =============================================================================
+# ReFx Hosting — Prometheus scrape configuration
+# -----------------------------------------------------------------------------
+# Targets use compose service names (resolved on the `refx` network).
+# =============================================================================
+global:
+  scrape_interval: 15s       # default scrape cadence
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: refx-local
+
+scrape_configs:
+  # Prometheus scraping itself.
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # panel-api (NestJS) — exposes Prometheus metrics via prom-client.
+  # prom-client's default registry is typically served at /metrics. If the API
+  # mounts metrics under its API prefix, change metrics_path to /api/v1/metrics.
+  - job_name: panel-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["panel-api:4000"]
+        labels:
+          service: panel-api
+
+  # ---------------------------------------------------------------------------
+  # node-agent (Go) — host-installed, so it is NOT on the compose network.
+  # Add each host explicitly. The agent can expose app metrics on :8443/metrics
+  # and the host can run node_exporter on :9100. Example (uncomment + edit):
+  #
+  # - job_name: node-agent
+  #   scheme: https
+  #   tls_config:
+  #     insecure_skip_verify: true   # agent uses a private CA; pin it in prod
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ["10.0.0.11:8443", "10.0.0.12:8443"]
+  #       labels:
+  #         role: game-node
+  #
+  # - job_name: node-exporter
+  #   static_configs:
+  #     - targets: ["10.0.0.11:9100", "10.0.0.12:9100"]
+  #       labels:
+  #         role: game-node
+  # ---------------------------------------------------------------------------
+
+  # ---------------------------------------------------------------------------
+  # Backing-service exporters (run as sidecars/extra services, then uncomment).
+  #
+  # postgres_exporter (e.g. prometheuscommunity/postgres-exporter on :9187):
+  # - job_name: postgres
+  #   static_configs:
+  #     - targets: ["postgres-exporter:9187"]
+  #
+  # redis_exporter (e.g. oliver006/redis_exporter on :9121):
+  # - job_name: redis
+  #   static_configs:
+  #     - targets: ["redis-exporter:9121"]
+  # ---------------------------------------------------------------------------

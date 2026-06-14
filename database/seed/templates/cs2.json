@@ -1,0 +1,101 @@
+{
+  "name": "Counter-Strike 2",
+  "slug": "cs2",
+  "author": "ops@refx.example",
+  "description": "Valve's Counter-Strike 2 dedicated server. SteamCMD-installed; requires a Game Server Login Token (GSLT) for public listing.",
+  "category": "shooter",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "cm2network/cs2:latest",
+    "ReFx SteamCMD": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+  },
+  "steamAppId": 730,
+  "startupCommand": "./game/bin/linuxsteamrt64/cs2 -dedicated -port {{SERVER_PORT}} +map {{MAP}} +game_type {{GAME_TYPE}} +game_mode {{GAME_MODE}} +sv_setsteamaccount {{STEAM_ACC}} -maxplayers_override {{MAX_PLAYERS}} +rcon_password \"{{RCON_PASS}}\"",
+  "startupDetect": "Connection to Steam servers successful|GC Connection established",
+  "stopCommand": "quit",
+  "installScript": {
+    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 730 validate +quit\nmkdir -p /mnt/server/game/csgo/cfg\nchmod +x ./game/bin/linuxsteamrt64/cs2 || true\necho 'CS2 install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "game/csgo/cfg/server.cfg",
+      "parser": "file",
+      "find": {}
+    }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 40960,
+  "variables": [
+    {
+      "envName": "STEAM_ACC",
+      "displayName": "GSLT (Steam Game Server Token)",
+      "description": "Game Server Login Token from steamcommunity.com/dev/managegameservers (app 730). Required for public servers.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "regex": "^[A-Fa-f0-9]{32}$" },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAP",
+      "displayName": "Starting Map",
+      "description": "Map the server boots into.",
+      "type": "STRING",
+      "defaultValue": "de_dust2",
+      "rules": { "required": true },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum player slots.",
+      "type": "NUMBER",
+      "defaultValue": "16",
+      "rules": { "required": true, "min": 2, "max": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "GAME_TYPE",
+      "displayName": "Game Type",
+      "description": "Valve game_type (0 = Classic, 1 = Competitive/Gun-game, etc.).",
+      "type": "NUMBER",
+      "defaultValue": "0",
+      "rules": { "required": true, "min": 0, "max": 4 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "GAME_MODE",
+      "displayName": "Game Mode",
+      "description": "Valve game_mode (0 = Casual, 1 = Competitive).",
+      "type": "NUMBER",
+      "defaultValue": "1",
+      "rules": { "required": true, "min": 0, "max": 2 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    },
+    {
+      "envName": "RCON_PASS",
+      "displayName": "RCON Password",
+      "description": "Password protecting the RCON interface.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 5
+    }
+  ]
+}

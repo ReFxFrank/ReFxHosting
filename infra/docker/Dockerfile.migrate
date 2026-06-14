@@ -1,0 +1,74 @@
+# syntax=docker/dockerfile:1
+# =============================================================================
+# ReFx Hosting — database migration + seed runner
+# -----------------------------------------------------------------------------
+# A tiny one-shot image whose only job is to bring the Postgres schema up to
+# date (prisma migrate deploy) and, optionally, load seed data (prisma db seed).
+#
+# Build context MUST be the repo root so that database/prisma and database/seed
+# are available:
+#     docker build -f infra/docker/Dockerfile.migrate -t refx-migrate ../../
+# (compose already does this — see the `migrate` service in docker-compose.yml)
+#
+# Runtime requires DATABASE_URL to be set (pointing at the compose `postgres`
+# service, e.g. postgresql://refx:refx@postgres:5432/refx?schema=public).
+# =============================================================================
+FROM node:20-bookworm-slim
+
+# Prisma needs OpenSSL at runtime to talk to the database / load engines.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV NODE_ENV=production
+WORKDIR /repo
+
+# Pin the same Prisma major used by panel-api (@prisma/client ^5.10).
+# ts-node + typescript let us run a TypeScript seed script (database/seed/seed.ts)
+# if/when one is added. The seed step is best-effort (see entrypoint).
+RUN npm install -g --no-audit --no-fund \
+    prisma@5 \
+    ts-node@10 \
+    typescript@5
+
+# Bring in the schema and any seed assets. Keeping these as separate COPY layers
+# means a schema-only change does not bust the seed layer and vice-versa.
+COPY database/prisma ./database/prisma
+COPY database/seed ./database/seed
+
+# ---------------------------------------------------------------------------
+# Entrypoint:
+#   1. Wait briefly for the schema engine, then apply pending migrations.
+#      `prisma migrate deploy` is the non-interactive, production-safe command
+#      (it never generates new migrations, only applies committed ones).
+#      If no migrations exist yet, fall back to `prisma db push` so a fresh
+#      local stack still gets a usable schema.
+#   2. Run the seed if a seed entrypoint is present. This is non-fatal: a
+#      missing/failed seed must not block the API from starting.
+# ---------------------------------------------------------------------------
+RUN printf '%s\n' \
+    '#!/bin/sh' \
+    'set -e' \
+    'SCHEMA=./database/prisma/schema.prisma' \
+    'echo "[migrate] applying migrations (prisma migrate deploy)"' \
+    'if [ -d ./database/prisma/migrations ]; then' \
+    '  prisma migrate deploy --schema "$SCHEMA"' \
+    'else' \
+    '  echo "[migrate] no migrations/ dir found — using prisma db push (dev fallback)"' \
+    '  prisma db push --schema "$SCHEMA" --accept-data-loss' \
+    'fi' \
+    'echo "[seed] looking for a seed entrypoint"' \
+    'if [ -f ./database/seed/seed.ts ]; then' \
+    '  echo "[seed] running database/seed/seed.ts"' \
+    '  ts-node --transpile-only ./database/seed/seed.ts || echo "[seed] seed failed (non-fatal)"' \
+    'elif [ -f ./database/seed/seed.js ]; then' \
+    '  echo "[seed] running database/seed/seed.js"' \
+    '  node ./database/seed/seed.js || echo "[seed] seed failed (non-fatal)"' \
+    'else' \
+    '  echo "[seed] no seed.ts/seed.js found (only templates present) — skipping"' \
+    'fi' \
+    'echo "[migrate] done"' \
+    > /usr/local/bin/run-migrate.sh \
+    && chmod +x /usr/local/bin/run-migrate.sh
+
+ENTRYPOINT ["/usr/local/bin/run-migrate.sh"]

@@ -1,0 +1,377 @@
+# =============================================================================
+# ReFx Hosting — local development / single-host stack
+# -----------------------------------------------------------------------------
+# Run from this directory:
+#     docker compose up -d
+#
+# Build context for the application images is the repo root (../../) so the
+# Prisma schema under database/prisma and the seed under database/seed are
+# available to the builds.
+#
+# Environment is read from the repo-root .env (../../.env). Copy ../../.env.example
+# to ../../.env first. Every value below also has a sensible ${VAR:-default}
+# fallback so the backing services come up even without a fully populated .env.
+#
+# The node-agent (Go) is intentionally NOT part of this compose file: it is
+# installed per-host on the machines that actually run game servers. See the
+# commented-out `node-agent` block at the bottom and infra/scripts/install-node.sh.
+# =============================================================================
+
+name: refx
+
+# -----------------------------------------------------------------------------
+# Reusable anchors
+# -----------------------------------------------------------------------------
+x-restart: &restart
+  restart: unless-stopped
+
+networks:
+  refx:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  opensearch-data:
+  minio-data:
+  rabbitmq-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+services:
+  # ===========================================================================
+  # Backing services
+  # ===========================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    <<: *restart
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-refx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-refx}
+      POSTGRES_DB: ${POSTGRES_DB:-refx}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready returns 0 once the server is accepting connections.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-refx} -d ${POSTGRES_DB:-refx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - refx
+
+  redis:
+    image: redis:7-alpine
+    <<: *restart
+    # Password is optional locally; if REDIS_PASSWORD is set it is enforced.
+    command: >-
+      sh -c 'if [ -n "$$REDIS_PASSWORD" ];
+             then exec redis-server --requirepass "$$REDIS_PASSWORD" --appendonly yes;
+             else exec redis-server --appendonly yes; fi'
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ${REDIS_PASSWORD:+-a $$REDIS_PASSWORD} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - refx
+
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    <<: *restart
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m"
+      # Security plugin is disabled for LOCAL development only. Do NOT do this in
+      # production — run with TLS + auth and set OPENSEARCH_USERNAME/PASSWORD.
+      - "DISABLE_SECURITY_PLUGIN=true"
+      - "DISABLE_INSTALL_DEMO_CONFIG=true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+    networks:
+      - refx
+
+  minio:
+    image: minio/minio:latest
+    <<: *restart
+    command: server /data --console-address ":9001"
+    environment:
+      # Root credentials. The app should use scoped access keys in production.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-${S3_ACCESS_KEY:-refxadmin}}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_SECRET_KEY:-refxadminsecret}}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"   # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - refx
+
+  # One-shot init job: waits for MinIO, creates buckets and sets policies, exits.
+  createbuckets:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-${S3_ACCESS_KEY:-refxadmin}}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_SECRET_KEY:-refxadminsecret}}
+    entrypoint: >-
+      /bin/sh -c '
+        set -e;
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD";
+        mc mb --ignore-existing local/refx-backups;
+        mc mb --ignore-existing local/refx-uploads;
+        # Backups stay private; uploads served via the app (keep private too).
+        mc anonymous set none local/refx-backups;
+        mc anonymous set none local/refx-uploads;
+        echo "buckets ready: refx-backups, refx-uploads";
+      '
+    networks:
+      - refx
+
+  # OPTIONAL scale-out message bus. Enable with:  docker compose --profile scale-out up -d
+  # Most deployments use Redis/BullMQ; RabbitMQ is only needed for large fan-out.
+  rabbitmq:
+    image: rabbitmq:3-management
+    <<: *restart
+    profiles: ["scale-out"]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-refx}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-refx}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"      # AMQP
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672" # Management UI
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    networks:
+      - refx
+
+  # ===========================================================================
+  # Observability
+  # ===========================================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    <<: *restart
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - refx
+
+  grafana:
+    image: grafana/grafana:latest
+    <<: *restart
+    depends_on:
+      - prometheus
+      - loki
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Datasources + dashboards are provisioned from ./grafana/provisioning.
+      GF_PATHS_PROVISIONING: /etc/grafana/provisioning
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - refx
+
+  loki:
+    image: grafana/loki:2.9.6
+    <<: *restart
+    command: -config.file=/etc/loki/loki-config.yml
+    ports:
+      - "${LOKI_PORT:-3100}:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3100/ready || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - refx
+
+  # ===========================================================================
+  # Application
+  # ===========================================================================
+
+  # One-shot DB migration + seed. Runs to completion (restart: "no") and
+  # panel-api waits for it to finish successfully before starting.
+  migrate:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.migrate
+    restart: "no"
+    env_file:
+      - ../../.env
+    environment:
+      # Fallback if .env does not define DATABASE_URL: point at the compose
+      # postgres service (host "postgres", not "localhost").
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-refx}:${POSTGRES_PASSWORD:-refx}@postgres:5432/${POSTGRES_DB:-refx}?schema=public}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - refx
+
+  panel-api:
+    build:
+      context: ../../
+      dockerfile: apps/panel-api/Dockerfile
+    <<: *restart
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: "4000"
+      API_PREFIX: ${API_PREFIX:-api/v1}
+      # Override host-based connection strings so they resolve to compose services.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-refx}:${POSTGRES_PASSWORD:-refx}@postgres:5432/${POSTGRES_DB:-refx}?schema=public}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      OPENSEARCH_NODE: ${OPENSEARCH_NODE:-http://opensearch:9200}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${PANEL_API_PORT:-4000}:4000"
+    healthcheck:
+      # The health endpoint lives under the configured API prefix.
+      # NOTE: if API_PREFIX is empty or the health module is mounted at the root,
+      #       this may instead be http://localhost:4000/health — adjust as needed.
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:4000/api/v1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - refx
+
+  web:
+    # NOTE: apps/web/Dockerfile is owned by another agent. It is referenced here
+    #       with the repo root as build context (Next.js standalone build,
+    #       EXPOSE 3000). If it does not exist yet, `docker compose build web`
+    #       will fail — comment this service out until that Dockerfile lands.
+    build:
+      context: ../../
+      dockerfile: apps/web/Dockerfile
+    <<: *restart
+    env_file:
+      - ../../.env
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      # The browser talks to panel-api via the public URL; server-side calls can
+      # use the in-network name. NEXT_PUBLIC_* are baked at build time.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    depends_on:
+      - panel-api
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - refx
+
+  # ===========================================================================
+  # node-agent (Go) — NORMALLY HOST-INSTALLED, NOT RUN IN COMPOSE
+  # ---------------------------------------------------------------------------
+  # The agent runs on each machine that hosts game servers. It manages Docker
+  # containers / processes for the game servers, exposes a signed control API on
+  # :8443 and an SFTP endpoint on :2022. Because it must drive the host's Docker
+  # daemon and bind privileged-ish ports, it is installed directly on the host
+  # via infra/scripts/install-node.sh — NOT as a normal compose service.
+  #
+  # For local development you *can* run it in a container. Uncomment and adjust:
+  #
+  # node-agent:
+  #   image: ghcr.io/refx-hosting/node-agent:latest   # or build: ../../apps/node-agent
+  #   restart: unless-stopped
+  #   privileged: true                                # needed to manage child containers
+  #   environment:
+  #     AGENT_PUBLIC_KEY: ${AGENT_PUBLIC_KEY:-}       # panel's signing pubkey
+  #     PANEL_URL: ${PANEL_URL:-http://panel-api:4000}
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock   # control the host Docker daemon
+  #     - ./agent-data:/var/lib/refx-agent
+  #   ports:
+  #     - "8443:8443"   # signed control API (HTTPS)
+  #     - "2022:2022"   # SFTP for server file access
+  #   networks:
+  #     - refx
+  # ===========================================================================
