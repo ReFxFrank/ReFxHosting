@@ -1,0 +1,84 @@
+{
+  "name": "Minecraft: Paper",
+  "slug": "minecraft-paper",
+  "author": "ops@refx.example",
+  "description": "High-performance Paper (Spigot fork) Minecraft Java Edition server. Great default for survival/SMP communities with plugin support.",
+  "category": "survival",
+  "deployMethods": ["DOCKER"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Java 21": "itzg/minecraft-server:java21",
+    "Java 17": "itzg/minecraft-server:java17",
+    "ReFx Yolk (Java 21)": "ghcr.io/refxfrank/yolks/java:21"
+  },
+  "steamAppId": null,
+  "startupCommand": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}} nogui",
+  "startupDetect": "Done \\(\\d+\\.\\d+s\\)! For help, type \"help\"",
+  "stopCommand": "stop",
+  "installScript": {
+    "container": "eclipse-temurin:21-jdk",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\napt-get update && apt-get install -y curl jq\ncd /mnt/server\nVER=\"${MINECRAFT_VERSION}\"\nif [ \"$VER\" = \"latest\" ]; then\n  VER=$(curl -fsSL https://api.papermc.io/v2/projects/paper | jq -r '.versions[-1]')\nfi\nBUILD=$(curl -fsSL \"https://api.papermc.io/v2/projects/paper/versions/${VER}/builds\" | jq -r '.builds[-1].build')\nJAR=\"paper-${VER}-${BUILD}.jar\"\ncurl -fsSL -o \"${SERVER_JARFILE}\" \"https://api.papermc.io/v2/projects/paper/versions/${VER}/builds/${BUILD}/downloads/${JAR}\"\nif [ \"${EULA}\" = \"true\" ]; then echo 'eula=true' > eula.txt; fi\necho 'Install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "server.properties",
+      "parser": "properties",
+      "find": {
+        "server-port": "{{server.build.default.port}}",
+        "query.port": "{{server.build.default.port}}",
+        "enable-query": "true"
+      }
+    }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 10240,
+  "variables": [
+    {
+      "envName": "SERVER_JARFILE",
+      "displayName": "Server JAR File",
+      "description": "The name of the server jarfile to run the server with.",
+      "type": "STRING",
+      "defaultValue": "server.jar",
+      "rules": { "required": true, "regex": "^[\\w.-]+\\.jar$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MINECRAFT_VERSION",
+      "displayName": "Minecraft Version",
+      "description": "The version of Paper to install. Use 'latest' for the newest stable release.",
+      "type": "STRING",
+      "defaultValue": "latest",
+      "rules": { "required": true, "regex": "^(latest|\\d+\\.\\d+(\\.\\d+)?)$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SERVER_MEMORY",
+      "displayName": "JVM Max Heap (MB)",
+      "description": "Maximum Java heap size in megabytes (-Xmx).",
+      "type": "NUMBER",
+      "defaultValue": "3072",
+      "rules": { "required": true, "min": 1024, "max": 32768 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "EULA",
+      "displayName": "Accept Mojang EULA",
+      "description": "You must accept the Mojang EULA to run a server.",
+      "type": "BOOLEAN",
+      "defaultValue": "true",
+      "rules": { "required": true },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    }
+  ]
+}

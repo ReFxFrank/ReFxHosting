@@ -1,0 +1,81 @@
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+/** Tailwind-aware className combiner. */
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+/** Format integer minor units (cents) into a localized currency string. */
+export function formatMoney(amountMinor: number, currency = "USD", locale = "en-US") {
+  return new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+  }).format(amountMinor / 100);
+}
+
+/** Human-readable byte size. */
+export function formatBytes(bytes: number, decimals = 1) {
+  if (!bytes || bytes < 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB", "TB", "PB"];
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(k)), sizes.length - 1);
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
+}
+
+/** Megabytes -> human size (schema stores MB ints). */
+export function formatMb(mb: number) {
+  return formatBytes(mb * 1024 * 1024, mb >= 1024 ? 1 : 0);
+}
+
+/** Relative time, e.g. "3 minutes ago". */
+export function formatRelative(date: string | Date | number, locale = "en") {
+  const d = new Date(date);
+  const diff = d.getTime() - Date.now();
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 1000 * 60 * 60 * 24 * 365],
+    ["month", 1000 * 60 * 60 * 24 * 30],
+    ["day", 1000 * 60 * 60 * 24],
+    ["hour", 1000 * 60 * 60],
+    ["minute", 1000 * 60],
+    ["second", 1000],
+  ];
+  for (const [unit, ms] of units) {
+    if (Math.abs(diff) >= ms || unit === "second") {
+      return rtf.format(Math.round(diff / ms), unit);
+    }
+  }
+  return "just now";
+}
+
+/** Absolute date-time, locale aware. */
+export function formatDateTime(date: string | Date | number, locale = "en") {
+  return new Date(date).toLocaleString(locale, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+export function formatDate(date: string | Date | number, locale = "en") {
+  return new Date(date).toLocaleDateString(locale, { dateStyle: "medium" });
+}
+
+/** Initials for avatars. */
+export function initials(name?: string | null, email?: string | null) {
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    return (parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "");
+  }
+  return (email?.[0] ?? "?").toUpperCase();
+}
+
+/** Clamp helper for sliders / gauges. */
+export function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function pct(used: number, total: number) {
+  if (!total) return 0;
+  return clamp(Math.round((used / total) * 100), 0, 100);
+}

@@ -1,0 +1,431 @@
+// Shared API types for the ReFx web panel.
+// These mirror the canonical Prisma schema (database/prisma/schema.prisma) but
+// only the fields the panel consumes over REST. In production these would be
+// generated from the OpenAPI spec in packages/shared.
+// TODO(impl): replace hand-written types with generated @refx/shared client.
+
+export type GlobalRole = "CUSTOMER" | "SUPPORT" | "ADMIN" | "OWNER";
+export type UserState = "ACTIVE" | "SUSPENDED" | "BANNED" | "PENDING_VERIFICATION";
+
+export interface User {
+  id: string;
+  email: string;
+  emailVerifiedAt: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  globalRole: GlobalRole;
+  state: UserState;
+  locale: string;
+  timezone: string;
+  avatarUrl: string | null;
+  totpEnabledAt: string | null;
+  createdAt: string;
+}
+
+export type ServerState =
+  | "INSTALLING"
+  | "OFFLINE"
+  | "STARTING"
+  | "RUNNING"
+  | "STOPPING"
+  | "CRASHED"
+  | "SUSPENDED"
+  | "REINSTALLING"
+  | "SWITCHING_GAME"
+  | "TRANSFERRING";
+
+export type PowerSignal = "start" | "stop" | "restart" | "kill";
+
+export interface Server {
+  id: string;
+  shortId: string;
+  name: string;
+  description: string | null;
+  ownerId: string;
+  nodeId: string;
+  node?: Pick<Node, "id" | "name" | "fqdn" | "regionId">;
+  templateId: string | null;
+  template?: Pick<GameTemplate, "id" | "name" | "slug"> | null;
+  templateVersion: number | null;
+  state: ServerState;
+  deployMethod: DeployMethod;
+  cpuCores: number;
+  memoryMb: number;
+  swapMb: number;
+  diskMb: number;
+  slots: number | null;
+  bandwidthMbps: number | null;
+  startupCommand: string | null;
+  dockerImage: string | null;
+  subscriptionId: string | null;
+  suspendedAt: string | null;
+  primaryAllocation?: Allocation | null;
+  createdAt: string;
+}
+
+export interface ServerStat {
+  cpuPct: number;
+  memUsedMb: number;
+  diskUsedMb: number;
+  netRxBytes: number;
+  netTxBytes: number;
+  players: number | null;
+  recordedAt: string;
+}
+
+export type DeployMethod = "DOCKER" | "NATIVE_PROCESS" | "WINDOWS_CONTAINER" | "SANDBOX";
+
+export interface Allocation {
+  id: string;
+  ip: string;
+  port: number;
+  alias: string | null;
+  isPrimary: boolean;
+}
+
+export type NodeState = "PROVISIONING" | "ONLINE" | "OFFLINE" | "MAINTENANCE" | "DEGRADED";
+export type NodeOs = "LINUX" | "WINDOWS";
+
+export interface Node {
+  id: string;
+  name: string;
+  fqdn: string;
+  regionId: string;
+  region?: { id: string; code: string; name: string };
+  os: NodeOs;
+  state: NodeState;
+  maintenance: boolean;
+  agentVersion: string | null;
+  cpuCores: number;
+  memoryMb: number;
+  diskMb: number;
+  servers?: number;
+  createdAt: string;
+}
+
+export interface NodeHeartbeat {
+  cpuPct: number;
+  memUsedMb: number;
+  diskUsedMb: number;
+  netRxBytes: number;
+  netTxBytes: number;
+  containers: number;
+  recordedAt: string;
+}
+
+export interface GameCategory {
+  id: string;
+  name: string;
+  slug: string;
+  iconUrl: string | null;
+}
+
+export type VariableType = "STRING" | "NUMBER" | "BOOLEAN" | "ENUM" | "SECRET";
+
+export interface TemplateVariable {
+  id: string;
+  envName: string;
+  displayName: string;
+  description: string | null;
+  type: VariableType;
+  defaultValue: string | null;
+  rules: Record<string, unknown>;
+  userEditable: boolean;
+  userViewable: boolean;
+  sortOrder: number;
+}
+
+export interface GameTemplate {
+  id: string;
+  categoryId: string | null;
+  category?: GameCategory | null;
+  name: string;
+  slug: string;
+  author: string;
+  description: string | null;
+  version: number;
+  deployMethods: DeployMethod[];
+  supportsLinux: boolean;
+  supportsWindows: boolean;
+  dockerImages: Record<string, string>;
+  steamAppId: number | null;
+  startupCommand: string;
+  recCpuCores: number;
+  recMemoryMb: number;
+  recDiskMb: number;
+  iconUrl?: string | null;
+  variables?: TemplateVariable[];
+}
+
+export type BackupState = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
+
+export interface Backup {
+  id: string;
+  serverId: string;
+  name: string;
+  state: BackupState;
+  storage: "LOCAL" | "S3";
+  sizeBytes: number;
+  checksum: string | null;
+  isLocked: boolean;
+  error: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export type DbEngine = "MYSQL" | "MARIADB" | "POSTGRESQL";
+
+export interface ServerDatabase {
+  id: string;
+  engine: DbEngine;
+  name: string;
+  username: string;
+  host: string;
+  port: number;
+  remoteAccess: string;
+  password?: string; // returned once on creation
+  createdAt: string;
+}
+
+export type ScheduleAction = "COMMAND" | "POWER" | "BACKUP";
+
+export interface ScheduleTask {
+  id: string;
+  action: ScheduleAction;
+  payload: string;
+  timeOffsetMs: number;
+  sortOrder: number;
+  continueOnFailure: boolean;
+}
+
+export interface Schedule {
+  id: string;
+  name: string;
+  cron: string;
+  isActive: boolean;
+  onlyWhenOnline: boolean;
+  lastRunAt: string | null;
+  nextRunAt: string | null;
+  tasks: ScheduleTask[];
+  createdAt: string;
+}
+
+export interface SubUser {
+  id: string;
+  userId: string;
+  email: string;
+  permissions: string[];
+  state: "ACTIVE" | "REVOKED";
+  createdAt: string;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  isFile: boolean;
+  isSymlink: boolean;
+  size: number;
+  mode: string;
+  modifiedAt: string;
+  mimeType?: string;
+}
+
+// Billing
+export type BillingInterval = "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";
+export type ProductType = "GAME_SERVER" | "VPS" | "DEDICATED" | "ADDON";
+
+export interface Price {
+  id: string;
+  interval: BillingInterval;
+  currency: string;
+  amountMinor: number;
+}
+
+export interface Product {
+  id: string;
+  type: ProductType;
+  name: string;
+  slug: string;
+  description: string | null;
+  isActive: boolean;
+  cpuCores: number | null;
+  memoryMb: number | null;
+  diskMb: number | null;
+  slots: number | null;
+  allowedTemplateIds: string[];
+  prices: Price[];
+}
+
+export type SubscriptionState =
+  | "TRIALING"
+  | "ACTIVE"
+  | "PAST_DUE"
+  | "CANCELED"
+  | "SUSPENDED"
+  | "EXPIRED";
+
+export interface Subscription {
+  id: string;
+  productId: string;
+  product?: Pick<Product, "id" | "name" | "type">;
+  priceId: string;
+  interval: BillingInterval;
+  state: SubscriptionState;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  autoRenew: boolean;
+  gateway: string;
+  createdAt: string;
+}
+
+export type InvoiceState = "DRAFT" | "OPEN" | "PAID" | "VOID" | "UNCOLLECTIBLE" | "REFUNDED";
+
+export interface InvoiceLineItem {
+  id: string;
+  description: string;
+  quantity: number;
+  unitMinor: number;
+  amountMinor: number;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  state: InvoiceState;
+  currency: string;
+  subtotalMinor: number;
+  taxMinor: number;
+  totalMinor: number;
+  amountPaidMinor: number;
+  dueAt: string | null;
+  paidAt: string | null;
+  pdfUrl: string | null;
+  lineItems?: InvoiceLineItem[];
+  createdAt: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  gateway: string;
+  brand: string | null;
+  last4: string | null;
+  expMonth: number | null;
+  expYear: number | null;
+  isDefault: boolean;
+  createdAt: string;
+}
+
+// Support
+export type TicketState = "OPEN" | "PENDING_CUSTOMER" | "PENDING_AGENT" | "RESOLVED" | "CLOSED";
+export type TicketPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
+
+export interface Ticket {
+  id: string;
+  number: number;
+  subject: string;
+  state: TicketState;
+  priority: TicketPriority;
+  categoryId: string | null;
+  assigneeId: string | null;
+  requester?: Pick<User, "id" | "email" | "firstName" | "lastName">;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticketId: string;
+  authorId: string;
+  author?: Pick<User, "id" | "email" | "firstName" | "lastName" | "avatarUrl" | "globalRole">;
+  body: string;
+  isInternal: boolean;
+  createdAt: string;
+}
+
+export interface KbArticle {
+  id: string;
+  slug: string;
+  title: string;
+  body: string;
+  category: string | null;
+  isPublished: boolean;
+  views: number;
+  updatedAt: string;
+}
+
+// Platform
+export interface AuditLog {
+  id: string;
+  actorId: string | null;
+  actor?: Pick<User, "id" | "email"> | null;
+  action: string;
+  targetType: string;
+  targetId: string | null;
+  metadata: Record<string, unknown>;
+  ip: string | null;
+  createdAt: string;
+}
+
+export type AlertSeverity = "INFO" | "WARNING" | "CRITICAL";
+
+export interface GlobalAlert {
+  id: string;
+  severity: AlertSeverity;
+  title: string;
+  body: string;
+  isActive: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  createdAt: string;
+}
+
+export interface Notification {
+  id: string;
+  title: string;
+  body: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  scopes: ("READ" | "WRITE" | "ADMIN")[];
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  token?: string; // returned once
+}
+
+export interface Session {
+  id: string;
+  userAgent: string | null;
+  ip: string | null;
+  expiresAt: string;
+  current?: boolean;
+  createdAt: string;
+}
+
+export interface Paginated<T> {
+  data: T[];
+  total: number;
+  page: number;
+  perPage: number;
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+export interface LoginResponse {
+  // When MFA is required the server returns a challenge instead of tokens.
+  mfaRequired?: boolean;
+  mfaToken?: string;
+  methods?: ("totp" | "webauthn" | "recovery")[];
+  tokens?: AuthTokens;
+  user?: User;
+}
