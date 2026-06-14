@@ -48,6 +48,11 @@ consistent with the canonical data model in
 - [19 — Production Deployment](19-production-deployment.md) — Kubernetes via Helm, secrets, scaling, observability, backups, upgrades.
 - [20 — Upgrade & Data Migration](20-upgrade-migration.md) — Prisma migrations, zero-downtime rollouts, agent compatibility, rollback.
 
+### Project & governance (repo root)
+- [CLAUDE.md](../CLAUDE.md) — fast orientation for assistants/humans: architecture, build/test commands, conventions, gotchas.
+- [CONTRIBUTING.md](../CONTRIBUTING.md) — setup, the per-component green-build bar, DB-change and game-template workflows.
+- [SECURITY.md](../SECURITY.md) — private vulnerability disclosure, scope, security model summary, operator hardening checklist.
+
 ## Conventions used throughout
 
 - **Identifiers** — all primary keys are UUID v7 (time-sortable, generated app-side).
