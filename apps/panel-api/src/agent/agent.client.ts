@@ -32,6 +32,29 @@ export interface ReconfigureSpec {
   limits: InstallSpec['limits'];
 }
 
+/** A single directory entry returned by the agent's jailed file manager. */
+export interface FileEntry {
+  name: string;
+  path: string;
+  isDir: boolean;
+  size: number;
+  mode: string;
+  modifiedAt: string;
+}
+
+/** Live resource usage snapshot reported by the agent for a running server. */
+export interface LiveStats {
+  state: string;
+  cpuPct: number;
+  memUsedMb: number;
+  memTotalMb: number;
+  diskUsedMb: number;
+  netRxBytes: number;
+  netTxBytes: number;
+  players?: number | null;
+  uptimeMs?: number;
+}
+
 /**
  * Talks to the Go node-agent over HTTPS. Every request is signed with an
  * HMAC-SHA256 of (timestamp + method + path + body) keyed by the node's
@@ -95,14 +118,97 @@ export class NodeAgentClient {
     return this.request(node, 'DELETE', `/api/servers/${serverId}`);
   }
 
-  // ---- files (proxied to agent) ------------------------------------------
+  // ---- files (proxied to the agent's jailed file manager) ----------------
 
-  listFiles(node: Node, serverId: string, path: string) {
+  listFiles(node: Node, serverId: string, path: string): Promise<FileEntry[]> {
     return this.request(
       node,
       'GET',
-      `/api/servers/${serverId}/files?path=${encodeURIComponent(path)}`,
+      `/api/servers/${serverId}/files/list?path=${encodeURIComponent(path)}`,
     );
+  }
+
+  readFile(node: Node, serverId: string, path: string): Promise<{ content: string }> {
+    return this.request(
+      node,
+      'GET',
+      `/api/servers/${serverId}/files/contents?path=${encodeURIComponent(path)}`,
+    );
+  }
+
+  writeFile(node: Node, serverId: string, path: string, content: string) {
+    return this.request(node, 'POST', `/api/servers/${serverId}/files/write`, {
+      path,
+      content,
+    });
+  }
+
+  deleteFiles(node: Node, serverId: string, paths: string[]) {
+    return this.request(node, 'POST', `/api/servers/${serverId}/files/delete`, {
+      paths,
+    });
+  }
+
+  renameFile(node: Node, serverId: string, from: string, to: string) {
+    return this.request(node, 'POST', `/api/servers/${serverId}/files/rename`, {
+      from,
+      to,
+    });
+  }
+
+  mkdir(node: Node, serverId: string, path: string) {
+    return this.request(node, 'POST', `/api/servers/${serverId}/files/mkdir`, {
+      path,
+    });
+  }
+
+  chmod(node: Node, serverId: string, path: string, mode: string) {
+    return this.request(node, 'POST', `/api/servers/${serverId}/files/chmod`, {
+      path,
+      mode,
+    });
+  }
+
+  compressFiles(
+    node: Node,
+    serverId: string,
+    paths: string[],
+    destination?: string,
+  ): Promise<{ path: string }> {
+    return this.request(node, 'POST', `/api/servers/${serverId}/files/compress`, {
+      paths,
+      destination,
+    });
+  }
+
+  decompressFile(node: Node, serverId: string, path: string) {
+    return this.request(node, 'POST', `/api/servers/${serverId}/files/decompress`, {
+      path,
+    });
+  }
+
+  /** Ask the agent for a short-lived, signed one-time download URL. */
+  fileDownloadUrl(
+    node: Node,
+    serverId: string,
+    path: string,
+  ): Promise<{ url: string }> {
+    return this.request(
+      node,
+      'GET',
+      `/api/servers/${serverId}/files/download-url?path=${encodeURIComponent(path)}`,
+    );
+  }
+
+  /** Ask the agent for a short-lived, signed upload URL. */
+  fileUploadUrl(
+    node: Node,
+    serverId: string,
+    path: string,
+  ): Promise<{ url: string }> {
+    return this.request(node, 'POST', `/api/servers/${serverId}/files/upload-url`, {
+      path,
+    });
   }
 
   // ---- backups ------------------------------------------------------------
@@ -120,6 +226,34 @@ export class NodeAgentClient {
       'POST',
       `/api/servers/${serverId}/backups/${backupId}/restore`,
     );
+  }
+
+  deleteBackup(node: Node, serverId: string, backupId: string) {
+    return this.request(
+      node,
+      'DELETE',
+      `/api/servers/${serverId}/backups/${backupId}`,
+    );
+  }
+
+  /** Signed one-time URL to download a completed backup archive. */
+  backupDownloadUrl(
+    node: Node,
+    serverId: string,
+    backupId: string,
+  ): Promise<{ url: string }> {
+    return this.request(
+      node,
+      'GET',
+      `/api/servers/${serverId}/backups/${backupId}/download-url`,
+    );
+  }
+
+  // ---- live stats ---------------------------------------------------------
+
+  /** Current live resource usage for a running server. */
+  fetchStats(node: Node, serverId: string): Promise<LiveStats> {
+    return this.request(node, 'GET', `/api/servers/${serverId}/stats`);
   }
 
   // ---- agent config -------------------------------------------------------

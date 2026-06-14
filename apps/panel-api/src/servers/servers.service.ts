@@ -349,6 +349,179 @@ export class ServersService {
     return updated;
   }
 
+  // ---- console command (one-shot) ----------------------------------------
+
+  async sendCommand(
+    id: string,
+    command: string,
+  ): Promise<{ accepted: true }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      include: { node: true },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    if (server.state !== 'RUNNING' && server.state !== 'STARTING') {
+      throw new ConflictException(`Server is not running (${server.state})`);
+    }
+    await this.agent.sendCommand(server.node, server.id, command);
+    return { accepted: true };
+  }
+
+  // ---- startup command ----------------------------------------------------
+
+  async getStartup(
+    id: string,
+  ): Promise<{ startupCommand: string | null; dockerImage: string | null }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      select: { startupCommand: true, dockerImage: true },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    return {
+      startupCommand: server.startupCommand,
+      dockerImage: server.dockerImage,
+    };
+  }
+
+  async setStartup(
+    id: string,
+    dto: { startupCommand?: string; dockerImage?: string },
+  ): Promise<Server> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    return this.prisma.server.update({
+      where: { id },
+      data: {
+        ...(dto.startupCommand !== undefined
+          ? { startupCommand: dto.startupCommand }
+          : {}),
+        ...(dto.dockerImage !== undefined
+          ? { dockerImage: dto.dockerImage }
+          : {}),
+      },
+    });
+  }
+
+  // ---- upgrade (resize alias + price preview) ----------------------------
+
+  /** Reuses the resize logic; `upgrade` is the web-facing name. */
+  async upgrade(
+    id: string,
+    dto: ResizeServerDto,
+  ): Promise<Server> {
+    return this.resize(id, dto);
+  }
+
+  /**
+   * Best-effort price delta for an upgrade. Compares the funding subscription's
+   * current price against the cheapest active Product matching the requested
+   * resources. Proration specifics are intentionally simplified.
+   */
+  async upgradePreview(
+    id: string,
+    dto: { cpuCores?: number; memoryMb?: number; diskMb?: number },
+  ): Promise<{
+    amountMinor: number;
+    currency: string;
+    interval: string;
+    deltaMinor: number;
+  }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        subscription: { include: { product: { include: { prices: true } } } },
+      },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    const sub = server.subscription;
+    const currentPrice = sub?.product.prices.find(
+      (p) => p.id === sub.priceId,
+    );
+    const currency = currentPrice?.currency ?? 'USD';
+    const interval = sub?.interval ?? 'MONTHLY';
+    const currentAmount = currentPrice?.amountMinor ?? 0;
+
+    // Find the cheapest active product whose resources cover the request, on the
+    // same billing interval, to estimate the new recurring amount.
+    const wantCpu = dto.cpuCores ?? server.cpuCores;
+    const wantMem = dto.memoryMb ?? server.memoryMb;
+    const wantDisk = dto.diskMb ?? server.diskMb;
+
+    const candidates = await this.prisma.product.findMany({
+      where: {
+        isActive: true,
+        type: 'GAME_SERVER',
+        cpuCores: { gte: wantCpu },
+        memoryMb: { gte: wantMem },
+        diskMb: { gte: wantDisk },
+      },
+      include: { prices: { where: { interval, isActive: true } } },
+    });
+
+    let newAmount = currentAmount;
+    for (const product of candidates) {
+      const price = product.prices.find((p) => p.currency === currency);
+      if (price && (newAmount === currentAmount || price.amountMinor < newAmount)) {
+        newAmount = price.amountMinor;
+      }
+    }
+
+    // TODO(impl): real proration (remaining-period credit + new-period charge)
+    // via the billing gateway; this returns the recurring delta only.
+    return {
+      amountMinor: newAmount,
+      currency,
+      interval,
+      deltaMinor: newAmount - currentAmount,
+    };
+  }
+
+  // ---- switchable templates ----------------------------------------------
+
+  /**
+   * Templates the server may switch to: those on the funding product's
+   * `allowedTemplateIds` whitelist (empty whitelist = all active templates).
+   */
+  async switchableTemplates(id: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      include: { subscription: { include: { product: true } } },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    const allowed = server.subscription?.product.allowedTemplateIds ?? [];
+    return this.prisma.gameTemplate.findMany({
+      where: allowed.length > 0 ? { id: { in: allowed } } : {},
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  // ---- schedule run-now ---------------------------------------------------
+
+  async runSchedule(
+    id: string,
+    scheduleId: string,
+  ): Promise<{ accepted: true }> {
+    const schedule = await this.prisma.schedule.findFirst({
+      where: { id: scheduleId, serverId: id },
+      select: { id: true },
+    });
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    // Record the manual trigger; the scheduler worker picks up due schedules.
+    await this.prisma.schedule.update({
+      where: { id: scheduleId },
+      data: { nextRunAt: new Date() },
+    });
+    // TODO(impl): enqueue an immediate schedule-execution job (run tasks now)
+    // once a dedicated schedules queue/worker exists.
+    return { accepted: true };
+  }
+
   // ---- suspend / unsuspend / delete --------------------------------------
 
   async suspend(id: string, reason?: string): Promise<{ accepted: true }> {

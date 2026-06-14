@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -25,8 +26,11 @@ import {
   CreateServerDto,
   PowerActionDto,
   ResizeServerDto,
+  SendCommandDto,
   SetVariableDto,
   SwitchGameDto,
+  UpdateStartupDto,
+  UpgradeServerDto,
 } from './dto/server.dto';
 
 @ApiTags('servers')
@@ -90,6 +94,70 @@ export class ServersController {
   @RequirePermissions('server.read')
   gameHistory(@Param('serverId') id: string) {
     return this.servers.gameHistory(id);
+  }
+
+  /** Templates this server may switch to (product whitelist; empty = all). */
+  @Get(':id/switch-game/templates')
+  @RequirePermissions('server.read')
+  switchableTemplates(@Param('id') id: string) {
+    return this.servers.switchableTemplates(id);
+  }
+
+  // ---- console (one-shot command) ----------------------------------------
+
+  @Post(':id/command')
+  @RequirePermissions('console.command')
+  @Audit({ action: 'server.command', targetType: 'Server', targetParam: 'id' })
+  command(@Param('id') id: string, @Body() dto: SendCommandDto) {
+    return this.servers.sendCommand(id, dto.command);
+  }
+
+  // ---- startup command ----------------------------------------------------
+
+  @Get(':id/startup')
+  @RequirePermissions('startup.update')
+  getStartup(@Param('id') id: string) {
+    return this.servers.getStartup(id);
+  }
+
+  @Put(':id/startup')
+  @RequirePermissions('startup.update')
+  @Audit({ action: 'server.startup', targetType: 'Server', targetParam: 'id' })
+  setStartup(@Param('id') id: string, @Body() dto: UpdateStartupDto) {
+    return this.servers.setStartup(id, dto);
+  }
+
+  /** Alias for the web client, which PATCHes startup. */
+  @Patch(':id/startup')
+  @RequirePermissions('startup.update')
+  @Audit({ action: 'server.startup', targetType: 'Server', targetParam: 'id' })
+  patchStartup(@Param('id') id: string, @Body() dto: UpdateStartupDto) {
+    return this.servers.setStartup(id, dto);
+  }
+
+  // ---- upgrade (resize alias + price preview) ----------------------------
+
+  @Post(':id/upgrade')
+  @RequirePermissions('control.resize')
+  @Audit({ action: 'server.upgrade', targetType: 'Server', targetParam: 'id' })
+  upgrade(@Param('id') id: string, @Body() dto: UpgradeServerDto) {
+    return this.servers.upgrade(id, dto);
+  }
+
+  @Post(':id/upgrade/preview')
+  @RequirePermissions('server.read')
+  upgradePreviewPost(@Param('id') id: string, @Body() dto: UpgradeServerDto) {
+    return this.servers.upgradePreview(id, dto);
+  }
+
+  @Get(':id/upgrade/preview')
+  @RequirePermissions('server.read')
+  upgradePreviewGet(@Param('id') id: string, @Query() dto: UpgradeServerDto) {
+    return this.servers.upgradePreview(id, {
+      cpuCores: dto.cpuCores ? Number(dto.cpuCores) : undefined,
+      memoryMb: dto.memoryMb ? Number(dto.memoryMb) : undefined,
+      diskMb: dto.diskMb ? Number(dto.diskMb) : undefined,
+    });
   }
 
   @Patch(':serverId/resize')
@@ -220,5 +288,15 @@ export class ServersController {
     @Param('scheduleId') scheduleId: string,
   ) {
     return this.resources.deleteSchedule(id, scheduleId);
+  }
+
+  @Post(':id/schedules/:scheduleId/run')
+  @RequirePermissions('schedule.update')
+  @Audit({ action: 'schedule.run', targetType: 'Server', targetParam: 'id' })
+  runSchedule(
+    @Param('id') id: string,
+    @Param('scheduleId') scheduleId: string,
+  ) {
+    return this.servers.runSchedule(id, scheduleId);
   }
 }

@@ -129,6 +129,44 @@ export class CreateScheduleDto {
   onlyWhenOnline?: boolean;
 }
 
+export class SendCommandDto {
+  @ApiProperty({ description: 'Console command to run once' })
+  @IsString()
+  command!: string;
+}
+
+export class UpdateStartupDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  startupCommand?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  dockerImage?: string;
+}
+
+export class UpgradeServerDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  cpuCores?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(256)
+  memoryMb?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1024)
+  diskMb?: number;
+}
+
 export class AddSubUserDto {
   @ApiProperty()
   @IsString()

@@ -17,6 +17,11 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { NodesModule } from './nodes/nodes.module';
 import { ServersModule } from './servers/servers.module';
+import { FilesModule } from './files/files.module';
+import { BackupsModule } from './backups/backups.module';
+import { DatabasesModule } from './databases/databases.module';
+import { StatsModule } from './stats/stats.module';
+import { SftpModule } from './sftp/sftp.module';
 import { BillingModule } from './billing/billing.module';
 import { SupportModule } from './support/support.module';
 import { PlatformModule } from './platform/platform.module';
@@ -81,6 +86,11 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     UsersModule,
     NodesModule,
     ServersModule,
+    FilesModule,
+    BackupsModule,
+    DatabasesModule,
+    StatsModule,
+    SftpModule,
     BillingModule,
     SupportModule,
     PlatformModule,
