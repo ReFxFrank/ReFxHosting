@@ -5,7 +5,7 @@
 # needs host PID/cgroup access (run with --privileged or appropriate caps).
 
 # --- build stage -----------------------------------------------------------
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 
 WORKDIR /src
 
