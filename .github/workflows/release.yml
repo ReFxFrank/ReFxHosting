@@ -24,7 +24,7 @@ jobs:
             context: .
             dockerfile: apps/panel-api/Dockerfile
           - image: web
-            context: .
+            context: apps/web
             dockerfile: apps/web/Dockerfile
           - image: node-agent
             context: apps/node-agent

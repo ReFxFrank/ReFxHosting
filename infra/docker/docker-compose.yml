@@ -325,8 +325,10 @@ services:
     #       EXPOSE 3000). If it does not exist yet, `docker compose build web`
     #       will fail — comment this service out until that Dockerfile lands.
     build:
-      context: ../../
-      dockerfile: apps/web/Dockerfile
+      # The web image is self-contained (installs from apps/web/package.json),
+      # so its build context is the app dir, not the repo root.
+      context: ../../apps/web
+      dockerfile: Dockerfile
     <<: *restart
     env_file:
       - ../../.env
