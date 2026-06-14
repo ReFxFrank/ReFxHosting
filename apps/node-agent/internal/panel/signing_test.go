@@ -42,3 +42,42 @@ func TestVerifyRejectsStaleTimestamp(t *testing.T) {
 		t.Error("stale timestamp accepted (replay window not enforced)")
 	}
 }
+
+func TestVerifyReplayWindowEdges(t *testing.T) {
+	key := "k"
+	method, path := "POST", "/edge"
+	body := []byte(`{"x":1}`)
+
+	sign := func(offset time.Duration) (ts, sig string) {
+		ts = strconv.FormatInt(time.Now().Add(offset).Unix(), 10)
+		return ts, Sign(key, method, path, ts, body)
+	}
+
+	cases := []struct {
+		name   string
+		offset time.Duration
+		accept bool
+	}{
+		{"within past window", -(maxClockSkew - 30*time.Second), true},
+		{"just past window", -(maxClockSkew + 30*time.Second), false},
+		{"future within window (clock drift)", maxClockSkew - 30*time.Second, true},
+		{"future beyond window", maxClockSkew + 30*time.Second, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ts, sig := sign(tc.offset)
+			got := Verify(key, method, path, ts, sig, body)
+			if got != tc.accept {
+				t.Fatalf("Verify(offset=%s) = %v, want %v", tc.offset, got, tc.accept)
+			}
+		})
+	}
+}
+
+func TestVerifyRejectsMalformedTimestamp(t *testing.T) {
+	key := "k"
+	sig := Sign(key, "POST", "/x", "not-a-number", nil)
+	if Verify(key, "POST", "/x", "not-a-number", sig, nil) {
+		t.Error("non-numeric timestamp accepted")
+	}
+}

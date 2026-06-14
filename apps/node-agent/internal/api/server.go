@@ -16,10 +16,19 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/backup"
+	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
 	"github.com/refxfrank/refxhosting/node-agent/internal/runtime"
 	"github.com/refxfrank/refxhosting/node-agent/internal/server"
 	"github.com/refxfrank/refxhosting/node-agent/internal/ws"
 )
+
+// PanelReporter is the subset of the panel client the handlers use to forward
+// install/backup progress and lifecycle events back to the panel. Keeping it an
+// interface lets the API package be tested without a live panel.
+type PanelReporter interface {
+	PushLogs(ctx context.Context, lines []panel.LogLine) error
+	BackupProgress(ctx context.Context, payload any) error
+}
 
 // Deps are the collaborators the API handlers operate against.
 type Deps struct {
@@ -28,6 +37,9 @@ type Deps struct {
 	Installer *server.Installer
 	Backups   *backup.Manager
 	Hub       *ws.Hub
+	// Panel forwards install/backup progress + events to the panel. May be nil in
+	// tests, in which case forwarding is skipped.
+	Panel PanelReporter
 	// SigningKey verifies inbound panel request signatures.
 	SigningKey string
 	// MetricsHandler is the Prometheus handler mounted at /metrics.

@@ -98,9 +98,18 @@ registers, receives its node id + signing key, and persists them.
 
 ## Status
 
-This is a working foundation. Genuine external integration points are marked with
-`// TODO(impl):` — e.g. wiring panel-pushed server specs / SFTP credentials on
-registration, a real cross-platform host-CPU sampler, Windows container/HCS
-mechanics, and SteamCMD bootstrap. The `Runtime` abstraction, Docker and native
+This is a working foundation. The `Runtime` abstraction, Docker and native
 backends, control API, WebSocket hub, file manager, backups, SFTP, and stats are
-implemented.
+implemented, along with:
+
+- a real cross-platform **host CPU/memory sampler** (`internal/stats/host_*.go`:
+  `/proc/stat` + `/proc/meminfo` on Linux, `GetSystemTimes` +
+  `GlobalMemoryStatusEx` on Windows, portable fallback elsewhere), wired into the
+  node heartbeat;
+- **panel-pushed server specs + SFTP credentials** applied on registration
+  (`panel.ServerInstallSpec` → `server.Spec`, see `cmd/refx-agent/main.go`);
+- **install/backup progress forwarding** to the panel (`PushLogs` /
+  `BackupProgress`) and to attached WebSocket clients (`install.output`).
+
+Remaining genuine integration points are still marked `// TODO(impl):` — e.g.
+Windows container/HCS mechanics and SteamCMD bootstrap.

@@ -16,6 +16,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/osabstraction"
+	"github.com/refxfrank/refxhosting/node-agent/internal/server"
 )
 
 // Client talks to the panel API.
@@ -76,8 +77,61 @@ type RegisterRequest struct {
 type RegisterResponse struct {
 	NodeID     string `json:"nodeId"`
 	SigningKey string `json:"signingKey"`
-	// Servers is the initial set of servers assigned to this node.
-	Servers json.RawMessage `json:"servers"`
+	// Servers is the initial set of servers assigned to this node, in the
+	// panel's ServerInstallSpec shape (see ServerInstallSpec).
+	Servers []ServerInstallSpec `json:"servers"`
+}
+
+// ServerInstallSpec is the panel's wire representation of a server assigned to
+// this node. It is the payload of both the register/assign response and the
+// per-server assign push. It mirrors the panel's ServerInstallSpec DTO and is
+// converted to the agent's internal server.Spec via ToSpec.
+//
+// SFTP credentials travel alongside the spec so the agent can populate its SFTP
+// authenticator without a second round-trip.
+type ServerInstallSpec struct {
+	ServerID       string               `json:"serverId"`
+	ShortID        string               `json:"shortId"`
+	DeployMethod   string               `json:"deployMethod"`
+	DockerImage    string               `json:"dockerImage"`
+	StartupCommand string               `json:"startupCommand"`
+	StartupDetect  string               `json:"startupDetect,omitempty"`
+	StopCommand    string               `json:"stopCommand,omitempty"`
+	Environment    map[string]string    `json:"environment"`
+	Limits         server.Limits        `json:"limits"`
+	Allocations    []server.Allocation  `json:"allocations"`
+	InstallScript  server.InstallScript `json:"installScript"`
+	ConfigFiles    []server.ConfigFile  `json:"configFiles,omitempty"`
+	// PreserveData asks a reinstall to keep existing files (skip wipe).
+	PreserveData bool `json:"preserveData"`
+
+	// SFTP credentials the panel issues for this server.
+	SFTPUsername string `json:"sftpUsername"`
+	SFTPPassword string `json:"sftpPassword"`
+}
+
+// ToSpec converts the panel DTO into the agent's internal server.Spec. The SFTP
+// credentials are intentionally left out of the Spec (they live in the SFTP
+// authenticator); callers read them directly off the DTO.
+func (s ServerInstallSpec) ToSpec() server.Spec {
+	env := s.Environment
+	if env == nil {
+		env = map[string]string{}
+	}
+	return server.Spec{
+		ID:             s.ServerID,
+		ShortID:        s.ShortID,
+		DeployMethod:   server.DeployMethod(s.DeployMethod),
+		Image:          s.DockerImage,
+		StartupCommand: s.StartupCommand,
+		StartupDetect:  s.StartupDetect,
+		StopCommand:    s.StopCommand,
+		Env:            env,
+		Limits:         s.Limits,
+		Allocations:    s.Allocations,
+		Install:        s.InstallScript,
+		ConfigFiles:    s.ConfigFiles,
+	}
 }
 
 // Register completes the handshake. On success the client adopts the returned

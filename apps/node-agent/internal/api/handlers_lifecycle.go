@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
 	"github.com/refxfrank/refxhosting/node-agent/internal/server"
 )
 
@@ -60,13 +63,37 @@ func (s *Server) runInstall(srv *server.Server) {
 			srv.SetError(p.Err.Error())
 			srv.SetState(server.StateCrashed)
 			s.log.Error().Err(p.Err).Str("server", srv.ID()).Msg("install error")
-			// TODO(impl): forward install error to panel via panel.Client.PushLogs.
+			line := "install error: " + p.Err.Error()
+			s.forwardInstall(srv.ID(), line, true)
 			return
 		}
 		if p.Line != "" {
 			s.log.Debug().Str("server", srv.ID()).Msg(p.Line)
-			// TODO(impl): broadcast install lines over the ws hub + push to panel.
+			s.forwardInstall(srv.ID(), p.Line, p.Done)
 		}
+	}
+}
+
+// forwardInstall fans an install log line out to any attached WS clients and
+// pushes it to the panel for persistence. Both sinks are best-effort: a slow or
+// unreachable consumer never blocks or fails the install.
+func (s *Server) forwardInstall(serverID, line string, done bool) {
+	if s.deps.Hub != nil {
+		s.deps.Hub.BroadcastInstall(serverID, line, done)
+	}
+	if s.deps.Panel == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	err := s.deps.Panel.PushLogs(ctx, []panel.LogLine{{
+		ServerID: serverID,
+		Line:     line,
+		Stream:   "install",
+		At:       time.Now().UnixMilli(),
+	}})
+	if err != nil {
+		s.log.Debug().Err(err).Str("server", serverID).Msg("push install log to panel failed")
 	}
 }
 

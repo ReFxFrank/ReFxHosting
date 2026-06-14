@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -30,10 +32,22 @@ func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 		ctx := contextForServer()
 		res, err := s.deps.Backups.Create(ctx, req.BackupID, srv.DataDir, req.IgnoredFiles, func(pct float64, msg string) {
 			s.log.Debug().Str("server", srv.ID()).Float64("pct", pct).Msg(msg)
-			// TODO(impl): forward progress to the panel via panel.Client.BackupProgress.
+			s.reportBackup(map[string]any{
+				"serverId": srv.ID(),
+				"backupId": req.BackupID,
+				"status":   "running",
+				"progress": pct,
+				"message":  msg,
+			})
 		})
 		if err != nil {
 			s.log.Error().Err(err).Str("backup", req.BackupID).Msg("backup failed")
+			s.reportBackup(map[string]any{
+				"serverId": srv.ID(),
+				"backupId": req.BackupID,
+				"status":   "failed",
+				"error":    err.Error(),
+			})
 			return
 		}
 		s.log.Info().Str("backup", req.BackupID).
@@ -41,7 +55,14 @@ func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 			Int64("size", res.SizeBytes).
 			Str("checksum", res.Checksum).
 			Msg("backup completed")
-		// TODO(impl): report completion (location/size/checksum) to the panel.
+		s.reportBackup(map[string]any{
+			"serverId":  srv.ID(),
+			"backupId":  req.BackupID,
+			"status":    "completed",
+			"location":  res.Location,
+			"sizeBytes": res.SizeBytes,
+			"checksum":  res.Checksum,
+		})
 	}()
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "backup started", "backupId": req.BackupID})
@@ -66,13 +87,36 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 		ctx := contextForServer()
 		if err := s.deps.Backups.Restore(ctx, req.Location, srv.DataDir, nil); err != nil {
 			s.log.Error().Err(err).Str("backup", backupID).Msg("restore failed")
+			s.reportBackup(map[string]any{
+				"serverId": srv.ID(),
+				"backupId": backupID,
+				"status":   "restore_failed",
+				"error":    err.Error(),
+			})
 			return
 		}
 		s.log.Info().Str("backup", backupID).Msg("restore completed")
-		// TODO(impl): report restore completion to the panel.
+		s.reportBackup(map[string]any{
+			"serverId": srv.ID(),
+			"backupId": backupID,
+			"status":   "restored",
+		})
 	}()
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "restore started", "backupId": backupID})
+}
+
+// reportBackup forwards a backup progress/completion payload to the panel. It is
+// best-effort and never blocks the backup goroutine for long.
+func (s *Server) reportBackup(payload map[string]any) {
+	if s.deps.Panel == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := s.deps.Panel.BackupProgress(ctx, payload); err != nil {
+		s.log.Debug().Err(err).Msg("report backup progress to panel failed")
+	}
 }
 
 // handleBackupDelete removes a stored backup.

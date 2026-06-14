@@ -100,6 +100,9 @@ func run(ctx context.Context, cfgPath string) error {
 		SkipTLSVerify: cfg.Panel.SkipTLSVerify,
 	})
 
+	// assigned holds the server specs the panel hands us at registration so we
+	// can apply them onto the Manager and SFTP authenticator once both exist.
+	var assigned []panel.ServerInstallSpec
 	if !cfg.IsRegistered() {
 		log.Info().Msg("node not registered; performing handshake")
 		resp, regErr := pc.Register(ctx, panel.RegisterRequest{
@@ -116,7 +119,7 @@ func run(ctx context.Context, cfgPath string) error {
 		if err := cfg.SaveState(); err != nil {
 			log.Warn().Err(err).Msg("failed to persist node identity")
 		}
-		// TODO(impl): unmarshal resp.Servers and Register() each onto the Manager.
+		assigned = resp.Servers
 	}
 
 	// Reconcile any surviving Docker containers with the (now-known) servers.
@@ -136,7 +139,9 @@ func run(ctx context.Context, cfgPath string) error {
 
 	// --- SFTP server -------------------------------------------------------
 	sftpAuth := sftp.NewMemoryAuthenticator()
-	// TODO(impl): populate sftpAuth from panel-pushed per-server credentials.
+	// Apply panel-assigned server specs: register each onto the Manager and
+	// populate its SFTP credential from the same payload.
+	applyAssignedServers(log, mgr, sftpAuth, assigned)
 	hostKey, err := loadOrGenerateHostKey(filepath.Join(cfg.DataDir, "sftp_host_key"))
 	if err != nil {
 		return err
@@ -153,6 +158,7 @@ func run(ctx context.Context, cfgPath string) error {
 		Installer:      server.NewInstaller(log),
 		Backups:        backups,
 		Hub:            hub,
+		Panel:          pc,
 		SigningKey:     cfg.SigningKey,
 		MetricsHandler: promhttp.Handler(),
 	})
@@ -174,6 +180,28 @@ func run(ctx context.Context, cfgPath string) error {
 		{"sftp", sftpSrv.Start},
 		{"stats", func(c context.Context) error { collector.Run(c); return nil }},
 	})
+}
+
+// applyAssignedServers registers each panel-assigned server spec onto the
+// Manager and seeds the SFTP authenticator with its credential. It is safe to
+// call with an empty slice (e.g. an already-registered node that boots without a
+// fresh assign payload).
+func applyAssignedServers(log zerolog.Logger, mgr *runtime.Manager, auth *sftp.MemoryAuthenticator, specs []panel.ServerInstallSpec) {
+	for _, s := range specs {
+		if s.ServerID == "" || s.ShortID == "" {
+			log.Warn().Str("server", s.ServerID).Msg("skipping assigned server with missing id/shortId")
+			continue
+		}
+		srv := mgr.Register(s.ToSpec())
+		if s.SFTPUsername != "" {
+			auth.Upsert(sftp.Credential{
+				Username: s.SFTPUsername,
+				Password: s.SFTPPassword,
+				JailDir:  srv.DataDir,
+			})
+		}
+		log.Info().Str("server", s.ServerID).Str("short", s.ShortID).Msg("applied panel-assigned server")
+	}
 }
 
 // buildManager constructs the runtime Manager with the backends available on the

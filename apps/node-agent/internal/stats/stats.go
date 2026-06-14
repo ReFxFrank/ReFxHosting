@@ -4,7 +4,6 @@ package stats
 
 import (
 	"context"
-	"runtime"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -21,6 +20,8 @@ type Collector struct {
 	client  *panel.Client
 	nodeID  string
 	version string
+
+	host *HostSampler
 
 	statInterval time.Duration
 	hbInterval   time.Duration
@@ -57,6 +58,7 @@ func New(opts Options) *Collector {
 		client:       opts.Client,
 		nodeID:       opts.NodeID,
 		version:      opts.Version,
+		host:         NewHostSampler(),
 		statInterval: opts.StatInterval,
 		hbInterval:   opts.HeartbeatInterval,
 	}
@@ -70,6 +72,9 @@ func (c *Collector) Run(ctx context.Context) {
 	defer hbTicker.Stop()
 
 	c.log.Info().Dur("stat_interval", c.statInterval).Dur("hb_interval", c.hbInterval).Msg("stats collector started")
+	// Prime the host CPU sampler so the first heartbeat reports a real delta
+	// rather than 0% (CPU% is computed between successive samples).
+	c.host.Sample()
 	for {
 		select {
 		case <-ctx.Done():
@@ -129,9 +134,16 @@ func (c *Collector) heartbeat(ctx context.Context) {
 		}
 	}
 
+	// Host-level CPU is sampled from /proc/stat (Linux) or GetSystemTimes
+	// (Windows); memory falls back to the host figure when no servers report.
+	host := c.host.Sample()
+	if memUsed == 0 {
+		memUsed = host.MemUsedMB
+	}
+
 	hb := panel.Heartbeat{
 		NodeID:       c.nodeID,
-		CPUPct:       hostCPUPercent(),
+		CPUPct:       host.CPUPercent,
 		MemUsedMB:    memUsed,
 		DiskUsedMB:   diskUsed,
 		NetRxBytes:   rx,
@@ -142,13 +154,4 @@ func (c *Collector) heartbeat(ctx context.Context) {
 	if err := c.client.SendHeartbeat(ctx, hb); err != nil {
 		c.log.Warn().Err(err).Msg("heartbeat failed")
 	}
-}
-
-// hostCPUPercent returns a coarse host CPU utilisation figure.
-//
-// TODO(impl): replace with a real cross-platform CPU sampler (e.g.
-// github.com/shirou/gopsutil) reading /proc/stat on Linux and PDH counters on
-// Windows. The goroutine count is a cheap, OS-agnostic liveness proxy meanwhile.
-func hostCPUPercent() float64 {
-	return float64(runtime.NumGoroutine()) // placeholder signal
 }

@@ -45,6 +45,13 @@ type ConsoleLine struct {
 	Line string `json:"line"`
 }
 
+// InstallLine is the payload of a TypeInstallOutput message: a single install
+// log line plus a flag marking the final line of the run.
+type InstallLine struct {
+	Line string `json:"line"`
+	Done bool   `json:"done,omitempty"`
+}
+
 type CommandPayload struct {
 	Command string `json:"command"`
 }

@@ -172,6 +172,19 @@ func (h *Hub) pumpConsole(rm *room, con *runtime.Console) {
 	}
 }
 
+// BroadcastInstall fans an install progress line out to any clients currently
+// attached to the given server's room. It is a no-op when nobody is watching, so
+// the installer can call it unconditionally. done marks the terminal line.
+func (h *Hub) BroadcastInstall(serverID, line string, done bool) {
+	h.mu.Lock()
+	rm, ok := h.rooms[serverID]
+	h.mu.Unlock()
+	if !ok {
+		return
+	}
+	rm.broadcast(mustMsg(TypeInstallOutput, InstallLine{Line: line, Done: done}))
+}
+
 func (rm *room) broadcast(msg Message) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
