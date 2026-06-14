@@ -5,7 +5,7 @@
 # needs host PID/cgroup access (run with --privileged or appropriate caps).
 
 # --- build stage -----------------------------------------------------------
-FROM golang:1.25-alpine AS build
+FROM golang:1.26-alpine AS build
 
 WORKDIR /src
 
@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
     -o /out/refx-agent ./cmd/refx-agent
 
 # --- runtime stage ---------------------------------------------------------
-FROM alpine:3.20
+FROM alpine:3.24
 
 # ca-certificates for outbound TLS to the panel/S3; tzdata for log timestamps.
 RUN apk add --no-cache ca-certificates tzdata && \
