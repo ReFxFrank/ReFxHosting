@@ -182,10 +182,10 @@ Re-run if needed: `docker compose run --rm createbuckets`.
 
 Every service defines a healthcheck. Notable detail:
 
-- **panel-api** is probed at `http://localhost:4000/api/v1/health` (the
-  configured `API_PREFIX`). If the health module is mounted at the root instead
-  (`/health`), update the healthcheck in `docker-compose.yml` and the
-  `metrics_path` note in `prometheus/prometheus.yml` accordingly.
+- **panel-api** is probed at `http://localhost:4000/health`. `health` and
+  `metrics` are excluded from the global `API_PREFIX` in `main.ts`
+  (see `src/platform/health.controller.ts`), so they live at the root —
+  Prometheus scrapes `/metrics` likewise.
 
 Check status with `docker compose ps` (the `STATUS` column shows
 `healthy`/`unhealthy`).

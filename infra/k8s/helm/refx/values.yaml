@@ -29,8 +29,9 @@ panelApi:
     minReplicas: 3
     maxReplicas: 20
     targetCPUUtilizationPercentage: 70
-  livenessPath: /api/v1/health
-  readinessPath: /api/v1/health
+  # health/metrics are excluded from the API prefix in main.ts.
+  livenessPath: /health
+  readinessPath: /health
   # Extra env injected verbatim (non-secret).
   env: {}
 

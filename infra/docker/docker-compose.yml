@@ -314,10 +314,9 @@ services:
     ports:
       - "${PANEL_API_PORT:-4000}:4000"
     healthcheck:
-      # The health endpoint lives under the configured API prefix.
-      # NOTE: if API_PREFIX is empty or the health module is mounted at the root,
-      #       this may instead be http://localhost:4000/health — adjust as needed.
-      test: ["CMD-SHELL", "wget -q -O- http://localhost:4000/api/v1/health || exit 1"]
+      # health is excluded from the global API prefix in main.ts, so it is at
+      # /health (not /api/v1/health). See platform/health.controller.ts.
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:4000/health || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 5
