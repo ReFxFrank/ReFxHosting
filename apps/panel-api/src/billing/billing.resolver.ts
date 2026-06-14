@@ -1,5 +1,5 @@
 import { UseGuards } from '@nestjs/common';
-import { Args, Query, Resolver } from '@nestjs/graphql';
+import { Args, Int, Query, Resolver } from '@nestjs/graphql';
 import { Invoice, Product, Subscription } from '@prisma/client';
 import { BillingService } from './billing.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -37,13 +37,12 @@ export class BillingResolver {
   @Query(() => [InvoiceModel], { name: 'myInvoices' })
   async myInvoices(
     @CurrentUser() user: AuthUser,
-    @Args('pagination', { nullable: true }) pagination?: PaginationDto,
+    @Args('page', { type: () => Int, nullable: true }) page = 1,
+    @Args('pageSize', { type: () => Int, nullable: true }) pageSize = 25,
   ): Promise<InvoiceModel[]> {
-    const page = await this.billing.listInvoices(
-      user.id,
-      pagination ?? new PaginationDto(),
-    );
-    return page.data.map(BillingResolver.toInvoice);
+    const pagination = Object.assign(new PaginationDto(), { page, pageSize });
+    const result = await this.billing.listInvoices(user.id, pagination);
+    return result.data.map(BillingResolver.toInvoice);
   }
 
   // ---- mappers -----------------------------------------------------------

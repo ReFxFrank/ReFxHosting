@@ -68,8 +68,11 @@ src/
   support/                tickets, messages, SLA, canned responses, KB
   platform/               audit query, notifications, alerts, health, metrics
   queues/                 BullMQ queue definitions + processors
-  graphql/                GraphQL aggregation (scalars)
 ```
+
+GraphQL is code-first: each feature module ships its own `*.resolver.ts` and
+`models/`, and Nest aggregates them into `src/schema.gql` (auto-generated at
+boot via `autoSchemaFile`).
 
 ## Notes
 
