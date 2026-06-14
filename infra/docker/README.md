@@ -1,9 +1,30 @@
 # ReFx Hosting — Docker Stack
 
-Local development / single-host stack for **ReFx Hosting**. It brings up the
-panel API, web frontend, all backing services (PostgreSQL, Redis, OpenSearch,
-MinIO, optional RabbitMQ) and the observability stack (Prometheus, Grafana,
-Loki).
+Local development / single-host stack for **ReFx Hosting**. The **default
+(core)** profile is intentionally lean so it runs on a modest VPS; heavier
+components are opt-in via Compose profiles.
+
+| Profile | Brings up | Approx. extra RAM |
+|---------|-----------|-------------------|
+| _(default)_ | postgres, redis, minio (+createbuckets), migrate, **panel-api**, **web** | baseline (~1.5–2 GB) |
+| `--profile search` | + opensearch | ~1–2 GB |
+| `--profile observability` | + prometheus, grafana, loki | ~0.5–1 GB |
+| `--profile scale-out` | + rabbitmq | ~0.3 GB |
+| `--profile full` | everything above | ~6–8 GB total |
+
+```bash
+# Lean default (good for a first VPS smoke test):
+docker compose -f infra/docker/docker-compose.yml up -d
+# Everything:
+docker compose -f infra/docker/docker-compose.yml --profile full up -d
+```
+
+> **OpenSearch note:** if you enable `search`/`full` and OpenSearch crashes on
+> boot, the host needs `vm.max_map_count`:
+> ```bash
+> sudo sysctl -w vm.max_map_count=262144
+> echo 'vm.max_map_count=262144' | sudo tee /etc/sysctl.d/99-refx.conf
+> ```
 
 > The **node-agent** (Go) is *not* part of this stack — it is installed per-host
 > on the machines that actually run game servers. See

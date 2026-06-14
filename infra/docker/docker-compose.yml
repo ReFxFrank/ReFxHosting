@@ -90,6 +90,9 @@ services:
 
   opensearch:
     image: opensearchproject/opensearch:2.13.0
+    # Opt-in: search is not on the core request path (indexing is TODO(impl)).
+    # Enable with `--profile search`. Omitting it saves ~1-2 GB RAM.
+    profiles: ["search", "full"]
     <<: *restart
     environment:
       - discovery.type=single-node
@@ -170,7 +173,7 @@ services:
   rabbitmq:
     image: rabbitmq:3-management
     <<: *restart
-    profiles: ["scale-out"]
+    profiles: ["scale-out", "full"]
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-refx}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-refx}
@@ -193,6 +196,7 @@ services:
   # ===========================================================================
 
   prometheus:
+    profiles: ["observability", "full"]
     image: prom/prometheus:latest
     <<: *restart
     command:
@@ -214,6 +218,7 @@ services:
       - refx
 
   grafana:
+    profiles: ["observability", "full"]
     image: grafana/grafana:latest
     <<: *restart
     depends_on:
@@ -240,6 +245,7 @@ services:
       - refx
 
   loki:
+    profiles: ["observability", "full"]
     image: grafana/loki:2.9.6
     <<: *restart
     command: -config.file=/etc/loki/loki-config.yml

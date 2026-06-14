@@ -34,8 +34,10 @@ if [[ ! -f "${ROOT}/.env" ]]; then
 fi
 
 # ---- bring up infra services first ------------------------------------------
-log "Starting datastores (postgres, redis, minio, opensearch)..."
-$COMPOSE up -d postgres redis minio createbuckets opensearch
+# Core datastores only (observability + opensearch are opt-in profiles to keep
+# the default footprint small — see infra/docker/README.md).
+log "Starting core datastores (postgres, redis, minio)..."
+$COMPOSE up -d postgres redis minio createbuckets
 
 log "Waiting for Postgres to be healthy..."
 for i in $(seq 1 30); do
@@ -53,8 +55,10 @@ $COMPOSE run --rm migrate sh -lc "npm run db:seed" || \
   log "Seed step skipped/failed (non-fatal) — run 'npm run db:seed' manually if needed."
 
 # ---- app tier ---------------------------------------------------------------
-log "Starting application tier (panel-api, web) and observability..."
+log "Starting application tier (panel-api, web)..."
 $COMPOSE up -d
+# For metrics/logs UI and search add the optional profiles:
+#   $COMPOSE --profile full up -d
 
 log "Done."
 log "  Panel:   http://localhost:${WEB_PORT:-3000}"
