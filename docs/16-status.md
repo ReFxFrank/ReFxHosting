@@ -23,7 +23,7 @@ Legend:
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `database` (Prisma schema) | **Done** | Full canonical schema across all domains; validates. Seed script + 8 game templates present. No committed `migrations/` yet (generate with `prisma migrate dev`). |
+| `database` (Prisma schema) | **Done** | Full canonical schema across all domains; validates. Initial migration (`0_init`) committed. Seed script + 11 game templates (Minecraft, Rust, ARK, DayZ, Valheim, Palworld, CS2, FiveM, Satisfactory, Terraria, Project Zomboid). |
 | `packages/shared` | **Done** | Enums mirroring the schema, panel↔agent WS protocol, per-server permission strings + `hasPermission`, common DTOs. Typechecks clean. (Apps still carry local copies pending migration onto it.) |
 | `panel-api` (NestJS) | **Done (foundation)** | 118 TS files across auth, users, servers, nodes, billing, support, platform, agent, queues, common, prisma. Compiles clean and boots. |
 | `node-agent` (Go) | **Done (foundation)** | 43 Go files. `Runtime` interface with real Docker + native-process backends, build-tagged limits, WS hub, signed control API, file jail, backups, SFTP, stats. Cross-compiles + tests pass. |

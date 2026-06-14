@@ -1,0 +1,78 @@
+{
+  "name": "DayZ",
+  "slug": "dayz",
+  "author": "ops@refx.example",
+  "description": "Bohemia Interactive's open-world zombie survival. SteamCMD-installed dedicated server; runs well as a native process for mod loading.",
+  "category": "survival",
+  "deployMethods": ["NATIVE_PROCESS", "DOCKER"],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+  },
+  "steamAppId": 223350,
+  "startupCommand": "./DayZServer -config=serverDZ.cfg -port={{SERVER_PORT}} -profiles=profiles -dologs -adminlog -netlog -freezecheck {{MODS}}",
+  "startupDetect": "Server is now listening",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 223350 validate +quit\nif [ ! -f /mnt/server/serverDZ.cfg ]; then cp /mnt/server/serverDZ.server.cfg /mnt/server/serverDZ.cfg 2>/dev/null || true; fi\necho 'DayZ install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "serverDZ.cfg",
+      "parser": "file",
+      "find": {}
+    }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 8192,
+  "recDiskMb": 20480,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Hostname shown in the DayZ server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting DayZ Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "60",
+      "rules": { "required": true, "min": 1, "max": 127 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "MODS",
+      "displayName": "Mod List",
+      "description": "Semicolon-separated -mod= arguments (Workshop mod folders). Leave blank for vanilla.",
+      "type": "STRING",
+      "defaultValue": "",
+      "rules": { "maxLength": 2048 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "ADMIN_PASS",
+      "displayName": "RCON / Admin Password",
+      "description": "Password protecting BattlEye RCON admin access.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 3
+    }
+  ]
+}

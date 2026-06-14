@@ -1,0 +1,100 @@
+{
+  "name": "ARK: Survival Evolved",
+  "slug": "ark-survival-evolved",
+  "author": "ops@refx.example",
+  "description": "Studio Wildcard's dinosaur survival sandbox. SteamCMD-installed dedicated server with map and rate configuration.",
+  "category": "survival",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+  },
+  "steamAppId": 376030,
+  "startupCommand": "./ShooterGame/Binaries/Linux/ShooterGameServer {{MAP}}?listen?SessionName=\"{{SERVER_NAME}}\"?Port={{SERVER_PORT}}?QueryPort={{QUERY_PORT}}?RCONPort={{RCON_PORT}}?RCONEnabled=True?ServerAdminPassword=\"{{ADMIN_PASS}}\"?MaxPlayers={{MAX_PLAYERS}} -server -log",
+  "startupDetect": "Server has completed startup",
+  "stopCommand": "DoExit",
+  "installScript": {
+    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 376030 validate +quit\necho 'ARK install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "ShooterGame/Saved/Config/LinuxServer/GameUserSettings.ini",
+      "parser": "ini",
+      "find": {}
+    }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 12288,
+  "recDiskMb": 61440,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting ARK Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAP",
+      "displayName": "Map",
+      "description": "The world map to load.",
+      "type": "ENUM",
+      "defaultValue": "TheIsland",
+      "rules": { "required": true, "options": ["TheIsland", "Ragnarok", "TheCenter", "ScorchedEarth_P", "Aberration_P", "Extinction", "Valguero_P", "CrystalIsles", "Fjordur", "Genesis"] },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "70",
+      "rules": { "required": true, "min": 1, "max": 255 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query Port",
+      "description": "Steam query port.",
+      "type": "NUMBER",
+      "defaultValue": "27015",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "RCON_PORT",
+      "displayName": "RCON Port",
+      "description": "TCP port for the RCON interface.",
+      "type": "NUMBER",
+      "defaultValue": "27020",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 4
+    },
+    {
+      "envName": "ADMIN_PASS",
+      "displayName": "Server Admin Password",
+      "description": "Password granting in-game admin and RCON access.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 5
+    }
+  ]
+}
