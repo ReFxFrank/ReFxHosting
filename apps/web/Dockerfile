@@ -12,6 +12,11 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_* are inlined into the client bundle at build time, so the public
+# API URL the browser will use MUST be supplied here (not just at runtime).
+# On a remote host set this to e.g. http://<vps-ip>:4000 before building.
+ARG NEXT_PUBLIC_API_URL=http://localhost:4000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN npm run build
 
 FROM node:20-alpine AS runner

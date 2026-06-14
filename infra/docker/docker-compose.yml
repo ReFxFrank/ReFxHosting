@@ -325,22 +325,21 @@ services:
       - refx
 
   web:
-    # NOTE: apps/web/Dockerfile is owned by another agent. It is referenced here
-    #       with the repo root as build context (Next.js standalone build,
-    #       EXPOSE 3000). If it does not exist yet, `docker compose build web`
-    #       will fail — comment this service out until that Dockerfile lands.
     build:
       # The web image is self-contained (installs from apps/web/package.json),
       # so its build context is the app dir, not the repo root.
       context: ../../apps/web
       dockerfile: Dockerfile
+      args:
+        # Baked into the client bundle at build time — set NEXT_PUBLIC_API_URL in
+        # .env to the URL the *browser* will hit (e.g. http://<vps-ip>:4000)
+        # BEFORE `docker compose build web`.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     <<: *restart
     env_file:
       - ../../.env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
-      # The browser talks to panel-api via the public URL; server-side calls can
-      # use the in-network name. NEXT_PUBLIC_* are baked at build time.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     depends_on:
       - panel-api
