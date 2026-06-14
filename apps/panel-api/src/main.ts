@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory, HttpAdapterHost, Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -41,7 +41,11 @@ async function bootstrap(): Promise<void> {
   app.setGlobalPrefix(apiPrefix, {
     exclude: ['health', 'metrics', 'graphql', 'docs'],
   });
-  app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
+  // NOTE: the API version lives in the `api/v1` prefix. We deliberately do NOT
+  // also call app.enableVersioning(URI) — that would double the segment to
+  // `/api/v1/v1/...`. To introduce real per-route versioning later, switch the
+  // prefix to `api`, enable URI versioning, and mark health/metrics
+  // VERSION_NEUTRAL.
 
   app.useGlobalPipes(
     new ValidationPipe({
