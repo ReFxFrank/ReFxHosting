@@ -1,0 +1,39 @@
+# =============================================================================
+# ReFx Hosting — Grafana datasource provisioning
+# -----------------------------------------------------------------------------
+# Auto-provisions the Prometheus (metrics) and Loki (logs) datasources so a
+# fresh Grafana comes up wired to the stack with no manual clicking.
+# Targets use compose service names (resolved on the `refx` network).
+# =============================================================================
+apiVersion: 1
+
+# Remove stale provisioned datasources if they are renamed/removed here.
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+  - name: Loki
+    orgId: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    uid: refx-prometheus
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 15s
+
+  - name: Loki
+    type: loki
+    access: proxy
+    uid: refx-loki
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+      # Link log lines that carry a `traceID` label to the metrics view.
+      # (Adjust/remove if you are not emitting trace IDs yet.)
+      derivedFields: []

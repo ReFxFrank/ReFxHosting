@@ -1,0 +1,25 @@
+# =============================================================================
+# ReFx Hosting — Grafana dashboard provider
+# -----------------------------------------------------------------------------
+# Tells Grafana to load any dashboard JSON files found under the provisioning
+# dashboards directory. The whole ./grafana/provisioning tree is mounted into
+# the container at /etc/grafana/provisioning (see docker-compose.yml).
+# Drop additional *.json dashboards next to refx-overview.json and they will be
+# picked up automatically (updateIntervalSeconds controls the rescan cadence).
+# =============================================================================
+apiVersion: 1
+
+providers:
+  - name: refx
+    orgId: 1
+    folder: ReFx Hosting
+    folderUid: refx
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      # Directory inside the container where dashboard JSON models live.
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

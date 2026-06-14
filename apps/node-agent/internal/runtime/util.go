@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,6 +11,27 @@ import (
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/server"
 )
+
+// decodeJSON decodes a single JSON value from r.
+func decodeJSON(r io.Reader, v any) error {
+	return json.NewDecoder(r).Decode(v)
+}
+
+// dirSizeMB returns the total size of a directory tree in megabytes. Errors are
+// swallowed so stats collection never fails on a transient FS race.
+func dirSizeMB(dir string) int64 {
+	var total int64
+	_ = filepath.Walk(dir, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !info.IsDir() {
+			total += info.Size()
+		}
+		return nil
+	})
+	return total / (1024 * 1024)
+}
 
 func secondsDur(s, fallback int) time.Duration {
 	if s <= 0 {

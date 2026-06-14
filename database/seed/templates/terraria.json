@@ -1,0 +1,104 @@
+{
+  "name": "Terraria (TShock)",
+  "slug": "terraria",
+  "author": "ops@refx.example",
+  "description": "Re-Logic's 2D sandbox adventure. Runs the TShock server mod for plugins, permissions, and REST/console administration. No SteamCMD required.",
+  "category": "sandbox",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "TShock (Mono)": "ghcr.io/refxfrank/yolks/mono:latest",
+    "ReFx Yolk (Dotnet)": "ghcr.io/refxfrank/yolks/dotnet:8"
+  },
+  "steamAppId": null,
+  "startupCommand": "./TShock.Server -port {{SERVER_PORT}} -maxplayers {{MAX_PLAYERS}} -world \"/mnt/server/worlds/{{WORLD_NAME}}.wld\" -autocreate {{WORLD_SIZE}} -worldname \"{{WORLD_NAME}}\" -difficulty {{DIFFICULTY}} -password \"{{SERVER_PASS}}\"",
+  "startupDetect": "Server started|Type 'help' for a list of commands",
+  "stopCommand": "exit",
+  "installScript": {
+    "container": "debian:bookworm-slim",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\napt-get update && apt-get install -y curl jq unzip\ncd /mnt/server\nVER=\"${TSHOCK_VERSION}\"\nif [ \"$VER\" = \"latest\" ]; then\n  VER=$(curl -fsSL https://api.github.com/repos/Pryaxis/TShock/releases/latest | jq -r '.tag_name')\nfi\nURL=$(curl -fsSL \"https://api.github.com/repos/Pryaxis/TShock/releases/tags/${VER}\" | jq -r '.assets[] | select(.name | test(\"linux-x64\")) | .browser_download_url' | head -n1)\ncurl -fsSL -o tshock.zip \"$URL\"\nunzip -o tshock.zip -d /mnt/server && rm -f tshock.zip\nchmod +x TShock.Server || true\nmkdir -p /mnt/server/worlds\necho 'Terraria (TShock) install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "tshock/config.json",
+      "parser": "json",
+      "find": {
+        "ServerPort": "{{server.build.default.port}}",
+        "MaxSlots": "{{MAX_PLAYERS}}"
+      }
+    }
+  ],
+  "recCpuCores": 1,
+  "recMemoryMb": 2048,
+  "recDiskMb": 4096,
+  "variables": [
+    {
+      "envName": "TSHOCK_VERSION",
+      "displayName": "TShock Version",
+      "description": "TShock release tag to install. Use 'latest' for the newest stable release.",
+      "type": "STRING",
+      "defaultValue": "latest",
+      "rules": { "required": true, "regex": "^(latest|v?\\d+\\.\\d+(\\.\\d+)?)$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "WORLD_NAME",
+      "displayName": "World Name",
+      "description": "Name of the world file to load or auto-create.",
+      "type": "STRING",
+      "defaultValue": "world",
+      "rules": { "required": true, "regex": "^[\\w-]+$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "WORLD_SIZE",
+      "displayName": "World Size",
+      "description": "Size used when auto-creating a world (1 = Small, 2 = Medium, 3 = Large).",
+      "type": "ENUM",
+      "defaultValue": "2",
+      "rules": { "required": true, "options": ["1", "2", "3"] },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "DIFFICULTY",
+      "displayName": "Difficulty",
+      "description": "World difficulty (0 = Classic, 1 = Expert, 2 = Master, 3 = Journey).",
+      "type": "ENUM",
+      "defaultValue": "0",
+      "rules": { "required": true, "options": ["0", "1", "2", "3"] },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "16",
+      "rules": { "required": true, "min": 1, "max": 255 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    },
+    {
+      "envName": "SERVER_PASS",
+      "displayName": "Server Password",
+      "description": "Optional join password. Leave blank for an open server.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": false, "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 5
+    }
+  ]
+}
