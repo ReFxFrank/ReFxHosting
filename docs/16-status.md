@@ -68,6 +68,17 @@ Legend:
 | Embedded SFTP | **Done** | Per-server creds, jailed sessions. |
 | Stats reporter | **Done** | Per-server + node heartbeat. |
 
+## Frontend ↔ backend integration
+
+The `web` panel and `panel-api` were built against slightly different API
+designs. The **core slice is wired end-to-end** (auth, server list/detail/power/
+reinstall/**game-switch**/variables/sub-users/schedules, ticket browse/reply,
+billing invoice/subscription browse, and the WebSocket console). A number of UI
+features call routes the backend does not yet serve (server `files`/`backups`/
+`databases`/`stats`/`sftp`, the admin `templates` editor, and the `catalog`/
+`orders`/`dashboard` storefront surface). The complete route-by-route map and
+convergence plan is in **[17 — Integration Map](17-integration-map.md)**.
+
 ## What is deliberately *not* done
 
 These require live infrastructure, external accounts, or sustained hardening
