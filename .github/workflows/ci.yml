@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  prisma:
+    name: Prisma schema validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci || npm install
+      - run: npx prisma validate --schema database/prisma/schema.prisma
+      - run: npx prisma generate --schema database/prisma/schema.prisma
+
+  # ---------------------------------------------------------------------------
+  node-apps:
+    name: ${{ matrix.app }} (lint · typecheck · build · test)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [panel-api, web, shared]
+        include:
+          - app: panel-api
+            dir: apps/panel-api
+          - app: web
+            dir: apps/web
+          - app: shared
+            dir: packages/shared
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install workspace deps
+        run: npm ci || npm install
+      - name: Generate Prisma client (panel-api)
+        if: matrix.app == 'panel-api'
+        run: npx prisma generate --schema database/prisma/schema.prisma
+      - name: Lint
+        working-directory: ${{ matrix.dir }}
+        run: npm run lint --if-present
+      - name: Typecheck
+        working-directory: ${{ matrix.dir }}
+        run: npm run typecheck --if-present
+      - name: Build
+        working-directory: ${{ matrix.dir }}
+        run: npm run build --if-present
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:4000
+      - name: Test
+        working-directory: ${{ matrix.dir }}
+        run: npm run test --if-present -- --passWithNoTests
+
+  # ---------------------------------------------------------------------------
+  node-agent:
+    name: node-agent (vet · build · test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/node-agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: apps/node-agent/go.sum
+      - run: go mod download
+      - run: go vet ./...
+      - name: Build (host)
+        run: go build ./...
+      - name: Cross-compile matrix
+        run: |
+          GOOS=linux   GOARCH=amd64 go build -o /dev/null ./cmd/refx-agent
+          GOOS=linux   GOARCH=arm64 go build -o /dev/null ./cmd/refx-agent
+          GOOS=windows GOARCH=amd64 go build -o /dev/null ./cmd/refx-agent
+      - run: go test ./...
+
+  # ---------------------------------------------------------------------------
+  docker-build:
+    name: Docker image build (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    needs: [node-apps, node-agent]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: panel-api
+            context: .
+            dockerfile: apps/panel-api/Dockerfile
+          - image: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+          - image: node-agent
+            context: apps/node-agent
+            dockerfile: apps/node-agent/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

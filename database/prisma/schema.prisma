@@ -15,7 +15,9 @@
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = ["fullTextSearchPostgres", "metrics"]
+  // Full-text search is handled by OpenSearch (see docs/09-infrastructure.md),
+  // so no Postgres FTS preview feature is required here.
+  previewFeatures = ["metrics"]
 }
 
 datasource db {
