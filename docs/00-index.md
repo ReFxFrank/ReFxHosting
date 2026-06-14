@@ -26,6 +26,7 @@ consistent with the canonical data model in
 - [01 — System Architecture](01-architecture.md) — component diagram, request/data flows, panel↔agent protocol, multi-region topology, scaling model.
 - [02 — Database Schema](02-database.md) — schema by domain, ER diagram, design decisions (UUID v7, money minor units, soft deletes, game-switch identity).
 - [03 — API Specification](03-api.md) — REST + GraphQL: auth, versioning, pagination, errors, rate limits, webhooks, endpoint tables, examples.
+- [17 — Integration Map](17-integration-map.md) — authoritative web↔panel-api route mapping and the frontend/backend convergence plan.
 
 ### Application tiers
 - [04 — Frontend Architecture](04-frontend.md) — Next.js App Router, route groups, data fetching, design system, websocket console.

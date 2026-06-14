@@ -37,7 +37,30 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 | 📦 **Migrate in** | Importers for **Pterodactyl** (live), AMP & TCAdmin (scaffolded). |
 
 > [!NOTE]
-> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (96 unit tests green, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**.
+> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (96 unit + 41 e2e tests green, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
+
+---
+
+## 🆚 How it compares
+
+| | **ReFx** | Pterodactyl | AMP | GPortal |
+|---|:---:|:---:|:---:|:---:|
+| Open source | ✅ AGPL-3.0 | ✅ MIT | ❌ commercial | ❌ proprietary |
+| **Game switching** (keep server, swap game) | ✅ | ❌ | ⚠️ reinstall | ✅ |
+| **Native process hosting** (non-Docker) | ✅ | ❌ Docker-only | ✅ | ✅ |
+| Docker hosting | ✅ | ✅ | ✅ | ✅ |
+| Runs on **Windows** nodes | ✅ | ❌ | ✅ | ✅ |
+| Runs on **Linux** nodes | ✅ | ✅ | ✅ | ✅ |
+| Single-binary agent | ✅ Go | ✅ Go (Wings) | ⚠️ .NET | n/a |
+| **Billing built in** | ✅ | ❌ (add-on) | ⚠️ basic | ✅ |
+| **Helpdesk built in** | ✅ | ❌ | ❌ | ✅ |
+| REST **+ GraphQL** API | ✅ | ⚠️ REST | ⚠️ RPC | ❌ |
+| Self-hostable | ✅ | ✅ | ✅ | ❌ |
+
+ReFx aims to combine **Pterodactyl's open, container-first panel**, **AMP's
+native-process flexibility**, and **GPortal's game-switching + billing** in one
+self-hostable platform. _(Comparison reflects typical out-of-the-box capabilities;
+all four evolve.)_
 
 ---
 
