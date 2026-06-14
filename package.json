@@ -36,11 +36,11 @@
     "stack:logs": "docker compose -f infra/docker/docker-compose.yml logs -f"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
+    "@types/node": "^25.9.3",
     "prettier": "^3.2.5",
     "prisma": "^6.19.3",
     "ts-node": "^10.9.2",
     "turbo": "^2.0.6",
-    "typescript": "^5.4.0"
+    "typescript": "^6.0.3"
   }
 }
