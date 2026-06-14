@@ -4,8 +4,30 @@ package osabstraction
 
 import (
 	"os"
+	"os/exec"
 	"strings"
+	"syscall"
 )
+
+func shell() (string, string) { return "cmd", "/C" }
+
+// setProcessGroup creates a new process group so the runtime's Job Object can
+// own the whole tree. CREATE_NEW_PROCESS_GROUP == 0x00000200.
+func setProcessGroup(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.CreationFlags |= 0x00000200
+}
+
+// killProcessGroup terminates the process. Child cleanup is enforced by the
+// Job Object (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) at the runtime layer.
+func killProcessGroup(p *os.Process) error {
+	if p == nil {
+		return os.ErrProcessDone
+	}
+	return p.Kill()
+}
 
 func defaultDataDir() string {
 	if pd := os.Getenv("ProgramData"); pd != "" {

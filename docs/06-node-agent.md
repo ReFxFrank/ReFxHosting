@@ -1,241 +1,198 @@
 # Node Agent Architecture
 
-The **`node-agent`** is the workload plane of ReFx Hosting: a single, statically
-linked **Go** binary that runs on every host (Linux **and** Windows) and is
-responsible for actually running game servers — containers, native processes,
-console streaming, file management, backups, SFTP, and resource telemetry.
+The `node-agent` is the per-host daemon that actually runs game servers. It is a
+**single statically-linked Go binary** that cross-compiles unchanged for
+**Linux and Windows**, ships with no runtime dependencies, and is installed on
+every machine registered as a [`Node`](../database/prisma/schema.prisma). The
+panel (`panel-api`) is the brain; the agent is the hands: it creates and controls
+containers/processes, streams console I/O, manages files, takes backups, serves
+SFTP, and reports stats.
 
-It is deliberately the *only* component that touches a node's kernel, container
-runtime, and disk. The control plane (`panel-api`, NestJS) is the brain; the
-agent is the hands. The two communicate exclusively over a mutually
-authenticated TLS channel — the **agent API** — described below.
+The agent's defining constraint is the **trust boundary**: it **never touches
+PostgreSQL**. It receives a denormalized, per-server *spec* (resolved variables,
+secrets, image refs, allocations) over the agent API and reports state back. A
+compromised node therefore cannot read the global data model — see
+[08 — Security](08-security.md#node-trust-model--token-rotation).
 
-> **Trust boundary.** The agent **never connects to PostgreSQL**. It holds no
-> business logic, no billing, no user table. It receives a *denormalized, scoped
-> server spec* (resolved variables, secrets, image refs, allocations) from
-> `panel-api` and acts only on that. This is what keeps a compromised node from
-> becoming a compromised platform — see
-> [08 — Security](08-security.md#node-trust-model--token-rotation).
-
-| Property            | Value |
-|---------------------|-------|
-| Language / build    | Go, single static binary, cross-compiled `linux/amd64`, `linux/arm64`, `windows/amd64` |
-| Daemon port         | `:8443` — HTTPS + WebSocket, **TLS 1.3** (matches `Node.daemonPort`, `Node.scheme`) |
-| SFTP port           | `:2022` (matches `Node.sftpPort`) |
-| State store         | Local only: a small embedded KV (BoltBdb) for runtime bookkeeping; **no Postgres** |
-| Persisted by panel  | `Node.tokenHash`, `Node.agentVersion`, `Node.daemonPort`, `Node.sftpPort`, `Node.scheme`, capacity, overcommit |
-| OS abstraction      | `linux` build tag → cgroups v2 + namespaces; `windows` build tag → Job Objects + Windows containers |
-
-Related reading: [01 — System Architecture](01-architecture.md),
-[02 — Database Schema](02-database.md#2-infrastructure-nodes--allocations),
-[05 — Backend Architecture](05-backend.md),
-[08 — Security Architecture](08-security.md).
+| Property | Value |
+|----------|-------|
+| Language / build | Go, single static binary (`CGO_ENABLED=0`), cross-compiled per `docs/12-cicd.md` |
+| OS targets | `NodeOs.LINUX`, `NodeOs.WINDOWS` |
+| Daemon port | `Node.daemonPort` (default **`8443`**), `Node.scheme` `https`, TLS 1.3 + WebSocket |
+| SFTP port | `Node.sftpPort` (default **`2022`**) |
+| Identity | `Node.tokenHash` (hash of per-node bootstrap token), `Node.agentVersion` |
+| Persistence | none in Postgres; local on-disk state only (server data volumes, ring buffers, cert) |
 
 ---
 
-## 1. Component overview
+## Component overview
 
 ```mermaid
 flowchart TB
-  subgraph Panel[Control plane]
-    API[panel-api - NestJS]
-    DB[(PostgreSQL)]
-    S3[(S3 / object store)]
-    API --- DB
+  subgraph Panel[panel-api]
+    AGW[Agent gateway<br/>TLS 1.3 WS :8443]
   end
 
-  subgraph Agent[node-agent - Go static binary]
-    GW[Agent API server :8443<br/>TLS 1.3 + WebSocket]
-    SUP[Supervisor / server registry]
-    RT{{Runtime interface}}
-    CON[Console multiplexer<br/>ring buffer + RCON]
-    FM[File manager - jailed]
-    BK[Backup engine - tar + S3]
-    SFTP[SFTP server :2022 - jailed]
-    STAT[Stats collector]
-    GW --> SUP --> RT
-    RT --> CON
-    SUP --> FM
-    SUP --> BK
-    SUP --> SFTP
-    SUP --> STAT
+  subgraph Agent[node-agent · Go static binary]
+    WS[WS protocol<br/>+ frame codec]
+    SUP[Supervisor<br/>server registry]
+    RT[Runtime interface]
+    CON[Console mux<br/>ring buffer + RCON]
+    FM[File manager<br/>chroot/jail]
+    BK[Backup engine]
+    SFTP[SFTP server :2022]
+    STATS[Stats collector]
+    OS[OS abstraction]
   end
 
-  API <-->|"agent API + WS (mTLS)"| GW
-  BK -->|upload backups| S3
-  RT -->|Docker / process / job objects| OS[(Host OS kernel)]
+  AGW <==>|denormalized server spec,<br/>commands / events| WS
+  WS --> SUP
+  SUP --> RT
+  RT --> CON
+  RT --> STATS
+  SUP --> FM
+  SUP --> BK
+  SFTP --> FM
+  RT --> OS
+  FM --> OS
+  BK -->|tar + checksum| S3[(S3-compatible<br/>object storage)]
+  OS -->|cgroups/namespaces<br/>· job objects/containers| HOST[(Host kernel)]
 ```
 
-The **Supervisor** is the in-memory authority on a node: it holds one record per
-server it manages (keyed by `Server.shortId`), each bound to a concrete
-`Runtime` implementation chosen from `Server.deployMethod`. Everything else
-(console, files, backups, SFTP, stats) hangs off that registry.
+The **Supervisor** owns the in-memory registry of servers the panel has assigned
+to this node, each fronted by a `Runtime`. The **WS protocol** layer is the only
+ingress for control; **SFTP** is a separate listener that reuses the file
+manager. Everything resource-related funnels through the **OS abstraction** so
+the same control code runs on both platforms.
 
 ---
 
-## 2. Registration & bootstrap handshake
+## Registration & bootstrap handshake
 
-A node joins the fleet through a one-time bootstrap that exchanges a short-lived
-secret for a verified identity and a TLS keypair. No node is ever pre-trusted.
+A node joins the fleet in two phases: an **admin-side provisioning step** that
+mints a one-time bootstrap token, and an **agent-side handshake** that exchanges
+that token for a long-lived TLS client identity and an authenticated session.
 
-### 2.1 The flow
-
-1. **Admin creates the `Node`** in the panel (region, OS, capacity overrides).
-   `panel-api` generates a high-entropy **bootstrap token**, stores only its
-   hash in `Node.tokenHash` (Argon2id), and shows the cleartext token *once*.
-2. **Operator runs the installer** on the host —
-   `infra/scripts/install-node.sh` (Linux) or `install-node.ps1` (Windows) —
-   passing the panel URL and bootstrap token. The installer drops the binary,
-   creates a service unit (systemd / Windows Service), and writes a config file.
-3. **Agent registers.** On first start the agent calls
-   `POST /agent/v1/register` with the bootstrap token and a freshly generated
-   **CSR**. `panel-api` re-hashes the presented token and compares it to
-   `Node.tokenHash`; a mismatch is rejected and audited.
-4. **TLS cert provisioning.** On success the panel signs the CSR with the
-   platform's internal CA and returns the **node certificate** + CA chain. The
-   agent persists the keypair locally (file perms `0600`, OS keystore on
-   Windows). All subsequent agent-API calls use this cert for **mTLS** — the
-   bootstrap token is never sent again.
-5. **Capacity advertisement.** The agent probes the host (CPU cores, total
-   memory, free disk) and reports it; the panel records it into
-   `Node.cpuCores` / `Node.memoryMb` / `Node.diskMb` (admin overrides win).
-6. **Version + readiness.** The agent reports its build string into
-   `Node.agentVersion`, the panel flips `Node.state`
-   `PROVISIONING → ONLINE`, and steady-state heartbeats begin.
-
-### 2.2 Handshake sequence
+1. **Admin creates the `Node`** in the panel (name, `fqdn`, `regionId`, `os`,
+   capacity, overcommit). The panel generates a high-entropy **per-node bootstrap
+   token**, stores only its hash in `Node.tokenHash`, sets `NodeState =
+   PROVISIONING`, and shows the plaintext token once.
+2. **Operator runs the installer** — `infra/scripts/install-node.sh` (Linux) or
+   `install-node.ps1` (Windows) — passing the panel URL and bootstrap token. The
+   installer drops the binary, registers a service (`systemd` unit / Windows
+   service), and writes a minimal config (panel endpoint + token).
+3. **Agent connects** outbound to the panel agent gateway over **TLS 1.3** and
+   presents the bootstrap token. The panel hashes it and matches `Node.tokenHash`.
+4. **TLS cert provisioning** — on first successful bootstrap the panel issues the
+   agent a short-lived **client certificate / signed agent token** (see
+   [token rotation](08-security.md#node-trust-model--token-rotation)); subsequent
+   reconnects use **mTLS**, not the bootstrap token.
+5. **Agent advertises capacity** — it probes the host and `register`s its
+   `agentVersion`, `os`, and measured `cpuCores`/`memoryMb`/`diskMb`. The panel
+   records `agentVersion` and reconciles advertised vs. admin-set capacity
+   (admin values win; mismatches raise an alert).
+6. **Node goes live** — the panel flips `NodeState` to `ONLINE`, and the agent
+   enters steady state: heartbeats, stats, and command handling.
 
 ```mermaid
 sequenceDiagram
-  autonumber
-  participant Admin
+  participant Adm as Admin (panel)
   participant API as panel-api
-  participant DB as PostgreSQL
   participant Inst as install-node.sh/.ps1
-  participant Agent as node-agent
+  participant N as node-agent
 
-  Admin->>API: Create Node (region, os, capacity)
-  API->>API: generate bootstrap token
-  API->>DB: store Argon2id(token) -> Node.tokenHash
-  API-->>Admin: show cleartext token (once)
-
-  Admin->>Inst: run installer(panelUrl, token)
-  Inst->>Agent: install binary + service + config
-  Agent->>Agent: generate keypair + CSR
-  Agent->>API: POST /agent/v1/register {token, CSR, probedCapacity}
-  API->>DB: verify Argon2id(token) == Node.tokenHash
-  alt token valid
-    API->>API: CA signs CSR -> node cert
-    API->>DB: set agentVersion, capacity, state=ONLINE
-    API-->>Agent: {nodeCert, caChain, config}
-    Agent->>Agent: persist keypair (0600)
-    loop steady state (mTLS)
-      Agent->>API: heartbeat / stats (WS)
-      API-->>Agent: power / file / spec.update commands
-    end
-  else token invalid
-    API->>DB: AuditLog node.register.denied
-    API-->>Agent: 401 Unauthorized
+  Adm->>API: create Node {fqdn, regionId, os, capacity}
+  API->>API: mint bootstrap token, store Node.tokenHash<br/>NodeState=PROVISIONING
+  API-->>Adm: one-time token + install command
+  Adm->>Inst: run installer (panel URL + token)
+  Inst->>N: install binary + service + config
+  N->>API: TLS 1.3 connect + bootstrap token
+  API->>API: hash token, match Node.tokenHash
+  API-->>N: issue client cert / signed agent token
+  N->>API: register {agentVersion, os, cpuCores, memoryMb, diskMb}
+  API->>API: record agentVersion, reconcile capacity<br/>NodeState=ONLINE
+  API-->>N: session accepted + assigned server specs
+  loop steady state (mTLS reconnects)
+    N->>API: heartbeat / stats.report
+    API->>N: commands
   end
 ```
 
-After bootstrap, the cleartext bootstrap token has no further use; it can be
-rotated by an admin at any time (see
-[08 — Security § token rotation](08-security.md#node-trust-model--token-rotation)).
+If the bootstrap token is invalid, already consumed, or the `Node` is deleted,
+the handshake is rejected and the connection closed; the agent retries with
+backoff. Bootstrap tokens are single-use and may be rotated by an admin
+(invalidating the old `tokenHash`).
 
 ---
 
-## 3. Panel ↔ Agent protocol
+## Panel ↔ agent protocol
 
-Two transports share the `:8443` endpoint:
+The agent holds a persistent, mutually-authenticated **TLS 1.3 WebSocket** to the
+panel agent gateway on `:8443`. The protocol is **message-based**: typed,
+asynchronous JSON frames (binary frames for bulk file/console payloads),
+bidirectional and correlated by an `id` for request/response pairs. The panel
+issues **commands**; the agent emits **events**. Every frame carries
+`{id, type, serverId?, ts, payload}`.
 
-- **Request/response (HTTPS, mTLS)** — idempotent operations and queries the
-  panel initiates: fetch server status, push a `server.spec.update`, list files,
-  trigger a backup. JSON bodies, conventional status codes.
-- **WebSocket (over the same TLS 1.3 channel)** — the long-lived bidirectional
-  stream used for everything real-time and high-volume: console I/O, live stats,
-  install logs, backup progress, heartbeats. The panel multiplexes per-server
-  subscriptions over one connection per node.
+| Type | Direction | Payload sketch | Notes |
+|------|-----------|----------------|-------|
+| `server.spec.update` | panel → agent | denormalized spec: `deployMethod`, `dockerImage`, `startupCommand`, resolved `environment`, limits (`cpuCores`/`memoryMb`/`swapMb`/`diskMb`/`ioWeight`), `allocations[]` | assign/update a `Server`; idempotent upsert into the registry |
+| `server.remove` | panel → agent | `{serverId}` | deassign + tear down (used on transfer/delete) |
+| `power.start` | panel → agent | `{serverId}` | `ServerState` → `STARTING` → `RUNNING` |
+| `power.stop` | panel → agent | `{serverId}` | graceful via `stopCommand` (signal / RCON / stdin) |
+| `power.restart` | panel → agent | `{serverId}` | stop then start |
+| `power.kill` | panel → agent | `{serverId}` | force SIGKILL / terminate job object |
+| `console.command` | panel → agent | `{serverId, command}` | write a line to stdin or RCON |
+| `console.output` | agent → panel | `{serverId, stream:"stdout"\|"stderr", data, seq}` | streamed chunks; relayed to browser |
+| `state` | agent → panel | `{serverId, state: ServerState, exitCode?}` | authoritative lifecycle transitions |
+| `install.begin` | panel → agent | `{serverId, installScript, dockerImage, steamAppId?}` | runs the template install lifecycle |
+| `install.log` | agent → panel | `{serverId, line}` | install output (surfaced in UI) |
+| `install.complete` | agent → panel | `{serverId, success, error?}` | `ServerState` → `OFFLINE` on success |
+| `backup.create` | panel → agent | `{serverId, backupId, ignoredFiles[], storage}` | archive + upload |
+| `backup.progress` | agent → panel | `{backupId, pct, bytes}` | progress ticks |
+| `backup.complete` | agent → panel | `{backupId, location, sizeBytes, checksum}` | drives `Backup` → `COMPLETED` |
+| `backup.restore` | panel → agent | `{serverId, backupId, location}` | download + extract into volume |
+| `file.list` | panel → agent | `{serverId, path}` | dir entries (name, size, mode, mtime) |
+| `file.read` | panel → agent | `{serverId, path}` → binary | jailed read |
+| `file.write` | panel → agent | `{serverId, path, data}` | jailed write |
+| `file.delete` / `file.rename` / `file.mkdir` | panel → agent | `{serverId, path[, dest]}` | jailed mutations |
+| `file.upload` / `file.download` | panel ↔ agent | streamed binary frames | chunked transfer with checksum |
+| `file.archive` / `file.unarchive` | panel → agent | `{serverId, paths[], dest}` | tar/zip within jail |
+| `stats.report` | agent → panel | per-server `{cpuPct, memUsedMb, diskUsedMb, netRxBytes, netTxBytes, players?}` | feeds `ServerStat` |
+| `heartbeat` | agent → panel | node-level `{cpuPct, memUsedMb, diskUsedMb, netRxBytes, netTxBytes, containers, agentVersion}` | feeds `NodeHeartbeat`; liveness |
+| `ack` / `error` | both | `{id, ok}` / `{id, code, message}` | correlated to a prior frame's `id` |
 
-Every message is an envelope:
+**Liveness.** Missed `heartbeat`s within the grace window flip `NodeState` to
+`OFFLINE`/`DEGRADED`. The agent reconnects with exponential backoff and replays
+its current state on resume; commands are idempotent and safe to retry.
 
-```jsonc
-{
-  "id": "018f...",          // UUID v7, correlates request/response
-  "type": "power.start",    // see table below
-  "server": "a1b2c3d4",     // Server.shortId, omitted for node-scoped msgs
-  "ts": "2026-06-14T10:00:00Z",
-  "payload": { /* type-specific */ }
-}
-```
-
-### 3.1 Message types
-
-Direction is **P→A** (panel → agent, a command/query) or **A→P** (agent →
-panel, an event/result).
-
-| Type                  | Dir | Purpose | Payload sketch |
-|-----------------------|-----|---------|----------------|
-| `heartbeat`           | A→P | Liveness + node telemetry → `NodeHeartbeat` | `{cpuPct, memUsedMb, diskUsedMb, netRxBytes, netTxBytes, containers}` |
-| `server.spec.update`  | P→A | Push/refresh the denormalized scoped spec (after provision, edit, or game switch) | `{shortId, deployMethod, image, startupCommand, env, limits, allocations[], sftpPasswordEnc}` |
-| `power.start`         | P→A | Start a server | `{shortId}` |
-| `power.stop`          | P→A | Graceful stop (template `stopCommand`) | `{shortId, timeoutSec}` |
-| `power.restart`       | P→A | Stop then start | `{shortId}` |
-| `power.kill`          | P→A | Force SIGKILL / terminate | `{shortId}` |
-| `power.state`         | A→P | State transition notice → `Server.state` | `{shortId, state}` |
-| `console.command`     | P→A | Write a line to stdin / RCON | `{shortId, line}` |
-| `console.output`      | A→P | Streamed stdout/stderr line(s) | `{shortId, stream, data}` |
-| `console.subscribe`   | P→A | Begin streaming + replay ring buffer | `{shortId, replay}` |
-| `install.begin`       | P→A | Run the template install script | `{shortId, installScript, env}` |
-| `install.log`         | A→P | Live install output | `{shortId, data}` |
-| `install.complete`    | A→P | Install finished → `Server.state` | `{shortId, ok, error?}` |
-| `stats.report`        | A→P | Per-server sample → `ServerStat` | `{shortId, cpuPct, memUsedMb, diskUsedMb, netRxBytes, netTxBytes, players?}` |
-| `backup.create`       | P→A | Create + upload a backup | `{shortId, backupId, storage, ignoredFiles[]}` |
-| `backup.progress`     | A→P | Backup progress | `{backupId, pct, bytes}` |
-| `backup.complete`     | A→P | Backup finished → `Backup` | `{backupId, location, sizeBytes, checksum, ok, error?}` |
-| `backup.restore`      | P→A | Restore an archive over server volume | `{shortId, backupId, location}` |
-| `file.list`           | P→A | Directory listing (jailed) | `{shortId, path}` |
-| `file.read`           | P→A | Read a file (size-capped) | `{shortId, path}` |
-| `file.write`          | P→A | Write/replace a file | `{shortId, path, contentB64}` |
-| `file.delete`         | P→A | Delete path(s) | `{shortId, paths[]}` |
-| `file.archive`        | P→A | Create/extract archive | `{shortId, paths[], dest, op}` |
-| `file.upload.url`     | A→P | Issue a signed upload ticket | `{shortId, path, token}` |
-| `file.download.url`   | A→P | Issue a signed download ticket | `{shortId, path, token}` |
-| `server.reinstall`    | P→A | Wipe + rerun install (game switch / repair) | `{shortId, preserveData}` |
-| `server.destroy`      | P→A | Stop + remove container/process + volume | `{shortId, purge}` |
-| `sftp.rotate`         | P→A | Re-derive SFTP password from `sftpPasswordEnc` | `{shortId}` |
-| `ack` / `error`       | A→P | Generic correlated result | `{id, ok, error?}` |
-
-Power-state and stat events are the agent's authoritative reports; the panel
-treats `Server.state` and `ServerStat`/`NodeHeartbeat` as **agent-driven**,
-never optimistically guessed.
+**Relay path.** Browser console/stats arrive over a *separate* scoped-JWT
+WebSocket to `panel-api`, which authorizes `Server` access and relays to/from the
+agent link — the browser never talks to `:8443` directly. The end-to-end flow is
+diagrammed in [01 — Architecture](01-architecture.md#panel--agent-protocol);
+authorization of the relay is covered in
+[05 — Backend](05-backend.md) and [08 — Security](08-security.md#authorization).
 
 ---
 
-## 4. The `Runtime` interface
+## The `Runtime` abstraction
 
-Every deployment method implements one Go interface, so the Supervisor, console,
-files, backups, and stats code paths are identical regardless of how a server
-actually runs. `Server.deployMethod` (`DeployMethod` enum) selects the
-implementation at spec-apply time.
+All deploy methods sit behind one Go interface so the protocol layer, console,
+stats, and supervisor are deployment-agnostic. The Supervisor selects an
+implementation from the spec's `deployMethod`
+([`DeployMethod`](../database/prisma/schema.prisma)).
 
 ```go
-// Runtime is the contract every deploy method satisfies. All methods are
-// context-aware and safe for concurrent calls across distinct servers.
+// Runtime is the deploy-method-agnostic contract for one Server on this node.
 type Runtime interface {
-    // Lifecycle
-    Install(ctx context.Context, spec ServerSpec, log io.Writer) error
-    Start(ctx context.Context, spec ServerSpec) error
-    Stop(ctx context.Context, shortID string, timeout time.Duration) error
-    Kill(ctx context.Context, shortID string) error
-    Destroy(ctx context.Context, shortID string, purge bool) error
-
-    // Interaction
-    Console(ctx context.Context, shortID string) (ConsoleStream, error)
-    Stats(ctx context.Context, shortID string) (ResourceSample, error)
-
-    // Introspection
-    State(ctx context.Context, shortID string) (ServerState, error)
+    Install(ctx context.Context, spec ServerSpec) error // run install lifecycle
+    Start(ctx context.Context) error                    // -> STARTING/RUNNING
+    Stop(ctx context.Context) error                     // graceful via stopCommand
+    Kill(ctx context.Context) error                     // force terminate
+    Console() (io.ReadWriteCloser, error)               // stdin/stdout/stderr mux
+    Stats(ctx context.Context) (ResourceSample, error)  // cpu/mem/disk/net/players
+    State() ServerState                                 // current lifecycle state
+    Destroy(ctx context.Context) error                  // remove container/files
 }
 ```
 
@@ -243,192 +200,170 @@ type Runtime interface {
 classDiagram
   class Runtime {
     <<interface>>
-    +Install(ctx, spec, log) error
-    +Start(ctx, spec) error
-    +Stop(ctx, shortID, timeout) error
-    +Kill(ctx, shortID) error
-    +Destroy(ctx, shortID, purge) error
-    +Console(ctx, shortID) ConsoleStream
-    +Stats(ctx, shortID) ResourceSample
-    +State(ctx, shortID) ServerState
+    +Install(spec) error
+    +Start() error
+    +Stop() error
+    +Kill() error
+    +Console() ReadWriteCloser
+    +Stats() ResourceSample
+    +State() ServerState
+    +Destroy() error
   }
-
   class DockerRuntime {
-    -client *docker.Client
-    +cgroup limits via HostConfig
+    -client DockerSDK
+    +Install() error
+    +Start() error
+    +Stats() ResourceSample
   }
   class NativeProcessRuntime {
-    -procs map[string]*exec.Cmd
-    +SteamCMD install (steamAppId)
-    +cgroup/job-object limits
+    -cmd exec.Cmd
+    -steamAppId int
+    +Install() error
+    +Start() error
   }
   class WindowsContainerRuntime {
-    -hcs HostComputeService
-    +Windows container image
+    -hcs HCSClient
+    +Install() error
+    +Start() error
   }
   class SandboxRuntime {
-    -isolate bubblewrap/firecracker
-    +hardened seccomp + netns
+    -namespaces NsConfig
+    +Install() error
+    +Start() error
   }
-
   Runtime <|.. DockerRuntime
   Runtime <|.. NativeProcessRuntime
   Runtime <|.. WindowsContainerRuntime
   Runtime <|.. SandboxRuntime
 ```
 
-| Implementation             | `DeployMethod`      | How it runs the workload | Resource enforcement |
-|----------------------------|---------------------|--------------------------|----------------------|
-| `DockerRuntime` *(preferred)* | `DOCKER`         | One container per server from `Server.dockerImage` (resolved from `GameTemplate.dockerImages`) | Docker `HostConfig` → cgroups (CPU quota, memory + `swapMb`, `ioWeight`, pids) |
-| `NativeProcessRuntime`     | `NATIVE_PROCESS`    | Direct process; installs via **SteamCMD** using `GameTemplate.steamAppId`. For games without a viable container image | Linux cgroups v2 / Windows Job Object |
-| `WindowsContainerRuntime`  | `WINDOWS_CONTAINER` | Windows Server containers via the Host Compute Service | Job Object limits per container |
-| `SandboxRuntime`           | `SANDBOX`           | Extra-hardened isolation (seccomp, dedicated netns, optional microVM) for untrusted/arbitrary code | Same cgroup/job-object limits + tightened syscall + network policy |
+| Implementation | `DeployMethod` | Mechanism | Typical use |
+|----------------|----------------|-----------|-------------|
+| `DockerRuntime` | `DOCKER` *(preferred)* | First-party Docker SDK; one container per server using the resolved `dockerImage`, with cgroup limits, a bind-mounted data volume, and allocation port maps | Linux game servers with published images |
+| `NativeProcessRuntime` | `NATIVE_PROCESS` | Direct child process; installs via **SteamCMD** using the template `steamAppId`; supervised with cgroup/job-object limits | Steam dedicated servers without a usable image |
+| `WindowsContainerRuntime` | `WINDOWS_CONTAINER` | Windows Host Compute Service (HCS) containers | Windows-only games packaged as containers |
+| `SandboxRuntime` | `SANDBOX` | Hardened native process inside dedicated user + network/PID/mount namespaces with a tightened seccomp/syscall profile | Untrusted or experimental workloads needing extra isolation |
 
-The `ServerSpec` passed to `Install`/`Start` is exactly the denormalized scoped
-spec delivered by `server.spec.update` — fully resolved limits
-(`cpuCores`, `memoryMb`, `swapMb`, `diskMb`, `ioWeight`), `environment`, image,
-startup command, and allocations. The runtime never resolves templates or
-variables itself.
-
----
-
-## 5. Console streaming
-
-Console is the agent's most latency-sensitive path.
-
-- **Multiplexing.** stdout and stderr are read concurrently and tagged with a
-  `stream` field, then framed into `console.output` envelopes over the WebSocket.
-- **Ring buffer.** Each running server keeps a bounded in-memory ring buffer
-  (last *N* KB) of recent output. A new `console.subscribe` with `replay: true`
-  first drains the buffer so a freshly opened browser console shows scrollback
-  instantly, then tails live.
-- **Input.** `console.command` lines are written to the process/container stdin.
-  Where the template defines RCON (or `stopCommand` is an RCON verb), the runtime
-  routes commands and graceful stops through **RCON** instead of stdin.
-- **State detection.** The runtime watches output against
-  `GameTemplate.startupDetect` to promote `STARTING → RUNNING`, emitting
-  `power.state`.
-- **Backpressure.** Slow consumers never block the workload: the buffer drops
-  oldest frames rather than stalling the game server's I/O.
-
-Authorization for console actions (e.g. the `console.command` SubUser
-permission) is enforced **upstream in `panel-api`**; the agent trusts the
-mTLS-authenticated panel as the sole client.
+The Supervisor handles spec changes (`server.spec.update`) by diffing the desired
+state against the live runtime — resizing limits, swapping the image on a game
+switch, or rebuilding the container — without disturbing the persistent data
+volume, mirroring the game-switch identity model in
+[02 — Database](02-database.md#key-design-decisions-explained).
 
 ---
 
-## 6. File manager
+## Console streaming
 
-The agent exposes per-server file operations (`file.*` messages), all confined
-to the server's data directory.
+Each running server exposes its **stdout/stderr multiplexed** over the runtime's
+`Console()`. The agent:
 
-- **Jail.** Every operation is resolved against the server's root and rejected
-  if it escapes via `..`, symlinks, or absolute paths — a strict chroot/jail per
-  `Server.shortId`. Linux uses bind-mounted/`openat2`-style containment; Windows
-  uses an ACL-scoped directory root.
-- **Operations.** `list`, `read` (size-capped, returned inline), `write`,
-  `delete`, and `archive` (zip/tar create + extract).
-- **Large transfers.** Bulk upload/download is not streamed inline over the
-  control WebSocket. The agent issues a **signed, single-use ticket**
-  (`file.upload.url` / `file.download.url`) the browser uses directly against the
-  agent's HTTPS endpoint, keeping big transfers off the panel.
-- **Limits.** Writes respect the server's `diskMb` quota; the runtime reports
-  disk usage so the panel can surface and enforce it.
-
----
-
-## 7. Backups
-
-`backup.create` drives a tar-and-ship pipeline:
-
-1. **Archive.** The server's data directory is streamed into a `tar` (gzip),
-   skipping every glob in `Backup.ignoredFiles`. Where the runtime supports it,
-   a brief quiesce/flush avoids torn files.
-2. **Checksum.** A streaming **SHA-256** is computed during archiving and stored
-   in `Backup.checksum`.
-3. **Upload.** For `BackupStorage.S3` the archive is multipart-uploaded straight
-   to object storage; `LOCAL` keeps it on the node. The resulting object key/path
-   lands in `Backup.location`, byte size in `Backup.sizeBytes`.
-4. **Progress + completion.** The agent streams `backup.progress` and finally
-   `backup.complete`, flipping `Backup.state` `IN_PROGRESS → COMPLETED`/`FAILED`
-   with `error` on failure.
-
-Restores (`backup.restore`) stream the archive back over the (verified) server
-volume. Locked backups (`Backup.isLocked`) are exempt from rotation but the
-agent itself is stateless about retention — rotation policy lives in the panel.
+- Tags each chunk with `stream` and a monotonic `seq`, emitting `console.output`
+  frames that the panel relays to subscribed browsers.
+- Maintains a per-server **ring buffer** (fixed-size, in memory) so a newly
+  attaching client immediately receives the recent scrollback without replaying
+  the entire log.
+- Accepts `console.command` frames and writes them to the process **stdin**, or —
+  when the template defines it — issues them via **RCON** (e.g. Minecraft/Source
+  servers), which is also how graceful `stopCommand`s like `stop`/`save` are
+  delivered.
+- Watches output against the template `startupDetect` regex to promote
+  `ServerState` from `STARTING` to `RUNNING`.
 
 ---
 
-## 8. Embedded SFTP server
+## File manager
 
-The agent runs its own SFTP server on `:2022` (`Node.sftpPort`) — there is no
-system OpenSSH dependency, which keeps the binary self-contained and the jail
-under the agent's control.
-
-- **Per-server jailed user.** The SFTP username is **derived from
-  `Server.shortId`**; on auth the agent maps it to that server's data directory
-  as the SFTP root. There is no shell, only file transfer, and no path can
-  escape the jail.
-- **Credentials.** The per-server password is stored encrypted by the panel in
-  `Server.sftpPasswordEnc` (AES-256-GCM) and delivered to the agent inside the
-  scoped spec; the agent decrypts it only in memory to verify logins. Rotation
-  (`sftp.rotate`) re-derives credentials without disturbing the server identity.
-- **Isolation.** Each session is confined to one server; one customer can never
-  traverse to another's files even on a shared node.
+File operations (`file.*` frames and SFTP) run through one jailed file manager.
+Every path is resolved **relative to the server's data volume root and confined
+to it** — a `chroot`/jail on Linux and an equivalent rooted-path guard on
+Windows — so traversal outside the server's directory is impossible regardless of
+input. Operations: `list`, `read`, `write`, `delete`, `rename`, `mkdir`,
+`upload`, `download` (chunked binary frames), and `archive`/`unarchive` (tar/zip).
+Reads/writes honor the server's `diskMb` quota and reject paths that escape the
+jail.
 
 ---
 
-## 9. Stats reporting
+## Backups
 
-Two telemetry streams flow to the panel:
+The backup engine implements `backup.create`:
 
-- **Per-server** — the stats collector samples each running server (CPU %,
-  memory, disk, network rx/tx, and player count where the template/RCON exposes
-  it) and emits `stats.report`, which the panel persists as **`ServerStat`**.
-- **Per-node** — the agent rolls host-level utilization into `heartbeat`, which
-  the panel persists as **`NodeHeartbeat`** (`cpuPct`, `memUsedMb`,
-  `diskUsedMb`, `netRxBytes`, `netTxBytes`, `containers`) and uses for liveness,
-  scheduling, and the `NodeState` health model (`ONLINE` / `DEGRADED` /
-  `OFFLINE`).
+1. Quiesce as needed and **`tar`** the server's data volume, skipping
+   `Backup.ignoredFiles` glob patterns.
+2. Stream the archive to the configured `BackupStorage` — **S3-compatible object
+   storage** (preferred) or `LOCAL` — emitting `backup.progress` ticks.
+3. Compute a **SHA-256 `checksum`** and report `location`, `sizeBytes`, and
+   `checksum` via `backup.complete`; the panel marks the `Backup`
+   `COMPLETED`/`FAILED`.
 
-Both are append-only and rotated downstream into Prometheus/OpenSearch rather
-than bloating OLTP tables (see
-[02 — Database § time-series separation](02-database.md#key-design-decisions-explained)).
-
----
-
-## 10. OS abstraction layer
-
-The same `Runtime` contract sits over two very different kernels. A thin,
-build-tagged platform package (`platform_linux.go` / `platform_windows.go`)
-hides the difference.
-
-| Concern              | Linux                                          | Windows |
-|----------------------|------------------------------------------------|---------|
-| Resource limits      | **cgroups v2** (CPU quota, memory + swap, IO weight, pids) | **Job Objects** (CPU rate, memory, process caps) |
-| Isolation            | namespaces (PID/net/mount/user), seccomp       | Windows containers / silo objects |
-| Containers           | Docker / OCI                                    | Windows Server containers via Host Compute Service |
-| Native install       | SteamCMD + ELF process                          | SteamCMD + PE process under Job Object |
-| Filesystem jail      | bind mount / `openat2`                          | ACL-scoped directory root |
-| Service integration  | systemd unit                                    | Windows Service (SCM) |
-
-`GameTemplate.supportsLinux` / `supportsWindows` and the template's
-`deployMethods` matrix determine which combinations are valid; the panel refuses
-to place a server on a node whose `NodeOs` the template doesn't support.
+Restores download the object and extract it back into the jailed volume.
+`Backup.isLocked` rows are exempt from rotation; the panel owns retention policy.
+Object keys are written by the agent but **scoped, time-limited URLs are issued by
+the panel** — the agent holds no long-lived bucket credentials beyond its scoped
+upload grant.
 
 ---
 
-## 11. Operational notes
+## Embedded SFTP server
 
-- **Versioning.** Agents report `Node.agentVersion`; the panel negotiates
-  protocol compatibility and refuses commands to an agent below the minimum
-  supported version (rollout rules in
-  [20 — Upgrade & Data Migration](20-upgrade-migration.md)).
-- **Crash recovery.** On restart the agent reconciles its local registry against
-  live runtime state (running containers/processes) and re-establishes the
-  WebSocket; the panel re-pushes specs via `server.spec.update` as needed.
-- **Fail-safe.** Loss of the panel connection does **not** kill running servers —
-  workloads keep running; only control actions pause until reconnect.
-- **Firewalling.** Only `:8443` and `:2022` need be reachable, and `:8443`
-  should be restricted to the panel's address range (see
-  [08 — Security § network isolation](08-security.md#network-isolation--sandboxing)).
+The agent runs its own SFTP listener on `Node.sftpPort` (`2022`), independent of
+the WebSocket. It does **not** use system accounts:
+
+- Each connection authenticates as a **per-server jailed user** whose username is
+  derived from `Server.shortId`, with the password taken from the decrypted
+  `Server.sftpPasswordEnc` (rotated on demand by the owner).
+- The session is **jailed to the server's data volume** by the same file-manager
+  guard, so SFTP cannot read other servers or the host filesystem.
+- Auth maps the connection to the right server in the registry and applies the
+  same quota/permission checks as the `file.*` API.
+
+This gives every server a stable SFTP identity that **survives game switching**
+(the `shortId` and credentials persist while the game underneath changes).
+
+---
+
+## Stats reporting
+
+Two independent sampling loops feed the time-series tables:
+
+- **Per-server** — each `Runtime.Stats()` yields a `ResourceSample`
+  (`cpuPct`, `memUsedMb`, `diskUsedMb`, `netRxBytes`, `netTxBytes`, and `players`
+  when the template can parse a player count). These ship as `stats.report`
+  frames and land in [`ServerStat`](../database/prisma/schema.prisma).
+- **Node-level** — host CPU/mem/disk/net plus running `containers` and
+  `agentVersion` ship as `heartbeat` frames into
+  [`NodeHeartbeat`](../database/prisma/schema.prisma), which also gates node
+  liveness and the scheduler's capacity view.
+
+Both streams are append-only and rotated; long-term aggregation flows to
+Prometheus rather than bloating OLTP — consistent with the
+[time-series separation](02-database.md#key-design-decisions-explained) decision.
+
+---
+
+## OS abstraction layer
+
+A thin abstraction hides platform differences so the runtimes and file manager
+share one code path. Implementations are selected at build/runtime by `NodeOs`.
+
+| Concern | Linux | Windows |
+|---------|-------|---------|
+| Resource limits | **cgroups v2** (`cpu`, `memory`, `io` ← `ioWeight`, `pids`) | **Job objects** (CPU rate, memory, process caps) |
+| Isolation | **namespaces** (mount/PID/net/user) + seccomp for `SANDBOX` | container isolation / restricted tokens |
+| Process supervision | `exec` + signals; `systemd` for the agent itself | `CreateProcess` + job objects; Windows service |
+| Filesystem jail | `chroot` / bind mounts | rooted-path enforcement |
+| Containers | Docker / OCI | Host Compute Service (HCS) |
+
+The abstraction normalizes limits (e.g. mapping `cpuCores` to a cgroup CPU quota
+or a job-object CPU rate) and surfaces a single `ResourceSample` shape, so the
+panel sees uniform stats and limits regardless of the node's OS.
+
+---
+
+## Related documents
+
+- [01 — System Architecture](01-architecture.md) — where the agent sits and the relay path.
+- [02 — Database Schema](02-database.md) — `Node`, `NodeHeartbeat`, `Allocation`, `Server`, `ServerStat`, `DeployMethod`.
+- [05 — Backend Architecture](05-backend.md) — the panel side of the agent gateway and the console relay.
+- [08 — Security Architecture](08-security.md) — node trust model, token rotation, scoped specs, SFTP jail.
+- [10 — Game Templates](10-game-templates.md) — install scripts, `startupCommand`, `startupDetect`, `configFiles` the agent executes.

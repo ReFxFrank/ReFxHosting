@@ -4,8 +4,29 @@ package osabstraction
 
 import (
 	"os"
+	"os/exec"
 	"syscall"
 )
+
+func shell() (string, string) { return "/bin/sh", "-c" }
+
+// setProcessGroup puts the child in its own process group so signals can target
+// the whole tree (negative PID).
+func setProcessGroup(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Setpgid = true
+}
+
+// killProcessGroup sends SIGKILL to the entire process group.
+func killProcessGroup(p *os.Process) error {
+	if p == nil {
+		return os.ErrProcessDone
+	}
+	// Negative pid targets the process group led by p.Pid.
+	return syscall.Kill(-p.Pid, syscall.SIGKILL)
+}
 
 func defaultDataDir() string { return "/var/lib/refx-agent" }
 

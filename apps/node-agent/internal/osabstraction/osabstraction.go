@@ -5,7 +5,10 @@
 // osabstraction_linux.go and osabstraction_windows.go behind build tags.
 package osabstraction
 
-import "os"
+import (
+	"os"
+	"os/exec"
+)
 
 // StopSignal is an OS-portable description of how to ask a process to stop
 // gracefully before resorting to a hard kill.
@@ -42,3 +45,15 @@ func IsExecutable(info os.FileInfo) bool { return isExecutable(info) }
 
 // DetectCapabilities probes the host for available resource-control facilities.
 func DetectCapabilities() Capabilities { return detectCapabilities() }
+
+// Shell returns the platform's shell binary and the flag that runs a command
+// string (e.g. "/bin/sh","-c" on Linux; "cmd","/C" on Windows).
+func Shell() (string, string) { return shell() }
+
+// SetProcessGroup configures a command so the agent can signal/kill the process
+// and all of its children as a unit (a new process group on Linux; handled via
+// Job Objects at the runtime layer on Windows).
+func SetProcessGroup(cmd *exec.Cmd) { setProcessGroup(cmd) }
+
+// KillProcessGroup terminates a process and its descendants.
+func KillProcessGroup(p *os.Process) error { return killProcessGroup(p) }
