@@ -1,18 +1,13 @@
 import Link from "next/link";
-import { Boxes } from "lucide-react";
-
-const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
+import { LogoWordmark } from "@/components/brand/logo";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
       <div className="flex flex-col justify-center px-6 py-12 sm:px-12">
         <div className="mx-auto w-full max-w-sm">
-          <Link href="/" className="mb-8 flex items-center gap-2">
-            <div className="flex size-8 items-center justify-center rounded-md bg-primary text-primary-foreground">
-              <Boxes className="size-5" />
-            </div>
-            <span className="text-lg font-semibold">{BRAND}</span>
+          <Link href="/" className="mb-8 flex items-center">
+            <LogoWordmark height={30} />
           </Link>
           {children}
         </div>

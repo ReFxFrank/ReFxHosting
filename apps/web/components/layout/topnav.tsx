@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  Boxes,
   LogOut,
   Menu,
   Moon,
@@ -13,6 +12,7 @@ import {
   CreditCard,
   Shield,
 } from "lucide-react";
+import { LogoMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -48,9 +48,7 @@ export function TopNav() {
       </Button>
 
       <Link href="/dashboard" className="flex items-center gap-2 md:hidden">
-        <div className="flex size-6 items-center justify-center rounded bg-primary text-primary-foreground">
-          <Boxes className="size-3.5" />
-        </div>
+        <LogoMark size={24} />
         <span className="font-semibold">{BRAND}</span>
       </Link>
 

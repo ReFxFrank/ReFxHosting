@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LogoMark } from "@/components/brand/logo";
 
 const BRAND_NAME = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
@@ -16,7 +17,8 @@ export default function StoreLayout({ children }: { children: React.ReactNode })
     <div className="flex min-h-svh flex-col bg-background">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
-          <Link href="/dashboard" className="text-base font-semibold tracking-tight">
+          <Link href="/dashboard" className="flex items-center gap-2 text-base font-semibold tracking-tight">
+            <LogoMark size={26} />
             {BRAND_NAME}
           </Link>
           <Button variant="ghost" size="sm" asChild>

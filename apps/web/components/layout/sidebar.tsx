@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, ChevronLeft } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LogoMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
@@ -61,9 +62,7 @@ export function Sidebar() {
           sidebarCollapsed && "justify-center px-2",
         )}
       >
-        <div className="flex size-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Boxes className="size-4" />
-        </div>
+        <LogoMark size={28} />
         {!sidebarCollapsed && <span className="truncate font-semibold">{BRAND}</span>}
       </div>
 
