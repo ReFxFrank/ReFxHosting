@@ -837,8 +837,6 @@ export class ServersService {
    * TODO(impl): multi-IP nodes (currently binds the single node.fqdn).
    * TODO(impl): resolve a hostname fqdn to a concrete bind IP (works today
    *   because our node fqdn is an IP).
-   * TODO(impl): additional (non-primary) allocations per game (e.g. query/RCON
-   *   ports declared by the template).
    */
   private async assignPrimaryAllocation(
     nodeId: string,
@@ -896,37 +894,85 @@ export class ServersService {
       throw new ConflictException('No free port available on the node');
     }
 
-    // Wire the port into the startup env so {{SERVER_PORT}} resolves.
+    // Wire the primary port into the startup env so {{SERVER_PORT}} resolves.
     const server = await this.prisma.server.findUniqueOrThrow({
       where: { id: serverId },
       select: { environment: true, templateId: true },
     });
-    const environment = {
+    const environment: Record<string, unknown> = {
       ...((server.environment as Record<string, unknown>) ?? {}),
       SERVER_PORT: String(port),
       SERVER_PORT_PRIMARY: String(port),
     };
-    await this.prisma.server.update({
-      where: { id: serverId },
-      data: { environment },
-    });
 
-    // Also set a ServerVariable override for any port-like template variable so
-    // games whose template names the port differently still get the right value.
+    // Each port-like template variable (RCON_PORT, QUERY_PORT, UDP_PORT,
+    // BEACON_PORT, …) needs its OWN distinct port: games like ARK, Satisfactory,
+    // Palworld and Project Zomboid bind game + query + RCON simultaneously and
+    // fail if those collide. Reserve a separate free port (and a non-primary
+    // Allocation, so the agent forwards it) for each, and override its variable.
     const portVars = server.templateId
       ? await this.prisma.templateVariable.findMany({
           where: { templateId: server.templateId },
           select: { envName: true },
         })
       : [];
+    const taken = new Set<number>(
+      (
+        await this.prisma.allocation.findMany({
+          where: { nodeId, port: { gte: PORT_RANGE_START, lte: PORT_RANGE_END } },
+          select: { port: true },
+        })
+      ).map((a) => a.port),
+    );
     for (const v of portVars) {
       if (!isPortEnvName(v.envName)) continue;
+      let assigned = 0;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const candidate = pickFreePort(taken, PORT_RANGE_START, PORT_RANGE_END);
+        if (taken.has(candidate)) break; // pool exhausted → fall back to primary
+        try {
+          await this.prisma.allocation.create({
+            data: {
+              id: uuidv7(),
+              nodeId,
+              ip: node.fqdn,
+              port: candidate,
+              serverId,
+              isPrimary: false,
+            },
+          });
+          taken.add(candidate);
+          assigned = candidate;
+          break;
+        } catch (e) {
+          if (
+            e instanceof Prisma.PrismaClientKnownRequestError &&
+            e.code === 'P2002'
+          ) {
+            taken.add(candidate); // someone grabbed it; mark taken and retry
+            continue;
+          }
+          throw e;
+        }
+      }
+      if (!assigned) assigned = port; // no free port left: reuse the primary
+      environment[v.envName] = String(assigned);
       await this.prisma.serverVariable.upsert({
         where: { serverId_envName: { serverId, envName: v.envName } },
-        create: { id: uuidv7(), serverId, envName: v.envName, value: String(port) },
-        update: { value: String(port) },
+        create: {
+          id: uuidv7(),
+          serverId,
+          envName: v.envName,
+          value: String(assigned),
+        },
+        update: { value: String(assigned) },
       });
     }
+
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { environment: environment as Prisma.InputJsonValue },
+    });
 
     return port;
   }
