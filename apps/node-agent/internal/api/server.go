@@ -100,8 +100,10 @@ func (s *Server) routes() chi.Router {
 			r.Route("/{id}", func(r chi.Router) {
 				r.Use(s.loadServer)
 				r.Get("/", s.handleGetServer)
+				r.Get("/stats", s.handleStats)
 				r.Delete("/", s.handleDestroy)
 				r.Post("/power", s.handlePower)
+				r.Post("/command", s.handleCommand)
 				r.Post("/reinstall", s.handleReinstall)
 				r.Patch("/reconfigure", s.handleReconfigure)
 
@@ -110,15 +112,20 @@ func (s *Server) routes() chi.Router {
 					r.Get("/read", s.handleFileRead)
 					r.Post("/write", s.handleFileWrite)
 					r.Delete("/", s.handleFileDelete)
+					r.Post("/rename", s.handleFileRename)
+					r.Post("/mkdir", s.handleFileMkdir)
 					r.Post("/compress", s.handleFileCompress)
 					r.Post("/extract", s.handleFileExtract)
 					r.Post("/chmod", s.handleFileChmod)
+					r.Get("/download-url", s.handleFileDownloadURL)
+					r.Post("/upload-url", s.handleFileUploadURL)
 				})
 
 				r.Route("/backups", func(r chi.Router) {
 					r.Post("/", s.handleBackupCreate)
 					r.Post("/{backupId}/restore", s.handleBackupRestore)
 					r.Delete("/{backupId}", s.handleBackupDelete)
+					r.Get("/{backupId}/download-url", s.handleBackupDownloadURL)
 				})
 			})
 		})

@@ -17,7 +17,7 @@ type ServerWithRelations = Prisma.ServerGetPayload<{
 
 export function buildInstallSpec(
   server: ServerWithRelations,
-  opts: { wipe?: boolean } = {},
+  opts: { wipe?: boolean; sftpPassword?: string } = {},
 ): InstallSpec {
   const template = server.template!;
 
@@ -35,12 +35,18 @@ export function buildInstallSpec(
 
   return {
     serverId: server.id,
+    shortId: server.shortId,
     dockerImage: server.dockerImage ?? undefined,
     deployMethod: server.deployMethod,
     startupCommand: server.startupCommand ?? template.startupCommand,
+    startupDetect: template.startupDetect ?? '',
+    stopCommand: template.stopCommand ?? '^C',
     environment: env,
     installScript: template.installScript,
     configFiles: template.configFiles,
+    sftp: opts.sftpPassword
+      ? { username: server.shortId, password: opts.sftpPassword }
+      : undefined,
     wipe: opts.wipe ?? false,
     limits: {
       cpuCores: server.cpuCores,

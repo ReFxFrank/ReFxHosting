@@ -43,7 +43,13 @@ export class ProvisioningProcessor extends WorkerHost {
       return;
     }
 
-    const spec: InstallSpec = buildInstallSpec(server, { wipe: true });
+    const sftpPassword = server.sftpPasswordEnc
+      ? this.crypto.decrypt(server.sftpPasswordEnc)
+      : undefined;
+    const spec: InstallSpec = buildInstallSpec(server, {
+      wipe: true,
+      sftpPassword,
+    });
     await this.agent.install(server.node, spec);
 
     await this.prisma.server.update({

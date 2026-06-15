@@ -24,7 +24,17 @@ async function bootstrap(): Promise<void> {
   // Stripe webhooks need the raw body for signature verification; everything
   // else uses parsed JSON.
   app.use('/api/v1/billing/webhooks/stripe', raw({ type: '*/*' }));
-  app.use(json({ limit: '5mb' }));
+  app.use(
+    json({
+      limit: '5mb',
+      // Stash the exact raw bytes so signed agent callbacks can be verified
+      // against SHA256(body) without re-serialization drift (the Go agent's
+      // json.Encoder appends a trailing newline that JSON.stringify would not).
+      verify: (req: any, _res, buf: Buffer) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
 
   app.use(
     helmet({

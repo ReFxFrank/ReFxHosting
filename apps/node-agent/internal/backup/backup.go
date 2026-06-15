@@ -225,6 +225,17 @@ func (m *Manager) Delete(ctx context.Context, location string) error {
 	return m.storage.Delete(ctx, location)
 }
 
+// DownloadURL returns a short-lived URL the panel/browser can use to fetch a
+// completed backup archive identified by its storage location.
+//
+// TODO(impl): for S3-backed storage return a presigned GET URL (add a Presign
+// method to the Storage interface); for local storage mint a signed single-use
+// token served from an unauthenticated transfer route on the agent. For now the
+// contract exists and echoes the storage location so the route is wired.
+func (m *Manager) DownloadURL(_ context.Context, location string) (string, error) {
+	return location, nil
+}
+
 // --- helpers ---------------------------------------------------------------
 
 func countFiles(dir string) int {

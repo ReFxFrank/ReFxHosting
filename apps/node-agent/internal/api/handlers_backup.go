@@ -106,6 +106,21 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "restore started", "backupId": backupID})
 }
 
+// handleBackupDownloadURL returns a short-lived URL to fetch a backup archive.
+//
+// TODO(impl): for S3-backed storage, return a presigned GET URL; for local
+// storage, mint a signed single-use token served from an unauthenticated
+// transfer route. For now the contract exists and returns the storage location.
+func (s *Server) handleBackupDownloadURL(w http.ResponseWriter, r *http.Request) {
+	backupID := chi.URLParam(r, "backupId")
+	url, err := s.deps.Backups.DownloadURL(r.Context(), backupID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+}
+
 // reportBackup forwards a backup progress/completion payload to the panel. It is
 // best-effort and never blocks the backup goroutine for long.
 func (s *Server) reportBackup(payload map[string]any) {

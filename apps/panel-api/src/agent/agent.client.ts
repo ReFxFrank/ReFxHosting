@@ -1,20 +1,34 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac, randomUUID } from 'crypto';
 import { Node } from '@prisma/client';
 import { AppConfig } from '../config/configuration';
 import { CryptoService } from '../common/crypto/crypto.service';
+import {
+  SIGN_HEADER_NODE,
+  SIGN_HEADER_SIGNATURE,
+  SIGN_HEADER_TIMESTAMP,
+  deriveSigningKey,
+  signRequest,
+} from './agent.signing';
 
 export type PowerSignal = 'start' | 'stop' | 'restart' | 'kill';
 
 export interface InstallSpec {
   serverId: string;
+  /** Short, user-facing id — also the SFTP username. Required by the agent. */
+  shortId: string;
   dockerImage?: string;
   deployMethod: string;
   startupCommand: string;
+  /** Stdout pattern the agent watches to mark the server "running". */
+  startupDetect?: string;
+  /** How the agent stops the server (RCON cmd, signal, or "^C"). */
+  stopCommand?: string;
   environment: Record<string, string>;
   installScript: unknown;
   configFiles: unknown;
+  /** Per-server SFTP credentials (username defaults to shortId). */
+  sftp?: { username: string; password: string };
   /** Wipe the data volume before install (game switch with no data preserve). */
   wipe?: boolean;
   limits: {
@@ -70,52 +84,62 @@ export interface LiveStats {
 export class NodeAgentClient {
   private readonly logger = new Logger(NodeAgentClient.name);
   private readonly timeoutMs: number;
+  private readonly secretsEncKey: string;
 
   constructor(
     config: ConfigService,
     private readonly crypto: CryptoService,
   ) {
     this.timeoutMs = config.get<AppConfig['agent']>('agent')!.requestTimeoutMs;
+    this.secretsEncKey = config.get<string>('secretsEncKey')!;
   }
 
   // ---- power & lifecycle --------------------------------------------------
 
+  /**
+   * Server creation + install. The agent serves this at the collection root
+   * (`POST /api/v1/servers`) and reads the id from the spec body.
+   */
+  install(node: Node, spec: InstallSpec) {
+    return this.request(node, 'POST', `/api/v1/servers`, spec);
+  }
+
   power(node: Node, serverId: string, signal: PowerSignal) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/power`, {
-      signal,
+    // The agent's power handler expects { action, timeout }.
+    return this.request(node, 'POST', `/api/v1/servers/${serverId}/power`, {
+      action: signal,
     });
   }
 
   sendCommand(node: Node, serverId: string, command: string) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/command`, {
+    return this.request(node, 'POST', `/api/v1/servers/${serverId}/command`, {
       command,
     });
   }
 
-  install(node: Node, spec: InstallSpec) {
-    return this.request(node, 'POST', `/api/servers/${spec.serverId}/install`, spec);
-  }
-
   reinstall(node: Node, spec: InstallSpec) {
+    // The agent triggers a wipe via ?wipe=true rather than a body flag.
+    const wipe = spec.wipe ? '?wipe=true' : '';
     return this.request(
       node,
       'POST',
-      `/api/servers/${spec.serverId}/reinstall`,
+      `/api/v1/servers/${spec.serverId}/reinstall${wipe}`,
       spec,
     );
   }
 
   reconfigure(node: Node, spec: ReconfigureSpec) {
+    // The agent's reconfigure handler decodes a bare Limits object.
     return this.request(
       node,
       'PATCH',
-      `/api/servers/${spec.serverId}/limits`,
-      spec,
+      `/api/v1/servers/${spec.serverId}/reconfigure`,
+      spec.limits,
     );
   }
 
   deleteServer(node: Node, serverId: string) {
-    return this.request(node, 'DELETE', `/api/servers/${serverId}`);
+    return this.request(node, 'DELETE', `/api/v1/servers/${serverId}`);
   }
 
   // ---- files (proxied to the agent's jailed file manager) ----------------
@@ -124,7 +148,7 @@ export class NodeAgentClient {
     return this.request(
       node,
       'GET',
-      `/api/servers/${serverId}/files/list?path=${encodeURIComponent(path)}`,
+      `/api/v1/servers/${serverId}/files/list?path=${encodeURIComponent(path)}`,
     );
   }
 
@@ -132,41 +156,57 @@ export class NodeAgentClient {
     return this.request(
       node,
       'GET',
-      `/api/servers/${serverId}/files/contents?path=${encodeURIComponent(path)}`,
+      `/api/v1/servers/${serverId}/files/read?path=${encodeURIComponent(path)}`,
     );
   }
 
   writeFile(node: Node, serverId: string, path: string, content: string) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/files/write`, {
-      path,
+    // The agent writes the raw request body to ?path=.
+    return this.request(
+      node,
+      'POST',
+      `/api/v1/servers/${serverId}/files/write?path=${encodeURIComponent(path)}`,
       content,
-    });
+      { rawBody: true },
+    );
   }
 
   deleteFiles(node: Node, serverId: string, paths: string[]) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/files/delete`, {
-      paths,
-    });
+    // The agent deletes one path per call via DELETE /files/?path=.
+    return Promise.all(
+      paths.map((p) =>
+        this.request(
+          node,
+          'DELETE',
+          `/api/v1/servers/${serverId}/files/?path=${encodeURIComponent(p)}`,
+        ),
+      ),
+    );
   }
 
   renameFile(node: Node, serverId: string, from: string, to: string) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/files/rename`, {
+    return this.request(node, 'POST', `/api/v1/servers/${serverId}/files/rename`, {
       from,
       to,
     });
   }
 
   mkdir(node: Node, serverId: string, path: string) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/files/mkdir`, {
-      path,
-    });
+    return this.request(
+      node,
+      'POST',
+      `/api/v1/servers/${serverId}/files/mkdir?path=${encodeURIComponent(path)}`,
+    );
   }
 
   chmod(node: Node, serverId: string, path: string, mode: string) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/files/chmod`, {
-      path,
-      mode,
-    });
+    return this.request(
+      node,
+      'POST',
+      `/api/v1/servers/${serverId}/files/chmod?path=${encodeURIComponent(
+        path,
+      )}&mode=${encodeURIComponent(mode)}`,
+    );
   }
 
   compressFiles(
@@ -174,16 +214,22 @@ export class NodeAgentClient {
     serverId: string,
     paths: string[],
     destination?: string,
-  ): Promise<{ path: string }> {
-    return this.request(node, 'POST', `/api/servers/${serverId}/files/compress`, {
-      paths,
-      destination,
+  ): Promise<{ dest: string }> {
+    // The agent expects { dest, sources }.
+    return this.request(node, 'POST', `/api/v1/servers/${serverId}/files/compress`, {
+      dest: destination,
+      sources: paths,
     });
   }
 
-  decompressFile(node: Node, serverId: string, path: string) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/files/decompress`, {
-      path,
+  /**
+   * Extract an archive. Canonical name on BOTH sides is "extract" (the agent
+   * serves /files/extract; the panel formerly called /files/decompress).
+   */
+  decompressFile(node: Node, serverId: string, path: string, destination?: string) {
+    return this.request(node, 'POST', `/api/v1/servers/${serverId}/files/extract`, {
+      source: path,
+      dest: destination ?? '.',
     });
   }
 
@@ -196,7 +242,7 @@ export class NodeAgentClient {
     return this.request(
       node,
       'GET',
-      `/api/servers/${serverId}/files/download-url?path=${encodeURIComponent(path)}`,
+      `/api/v1/servers/${serverId}/files/download-url?path=${encodeURIComponent(path)}`,
     );
   }
 
@@ -206,33 +252,47 @@ export class NodeAgentClient {
     serverId: string,
     path: string,
   ): Promise<{ url: string }> {
-    return this.request(node, 'POST', `/api/servers/${serverId}/files/upload-url`, {
-      path,
-    });
+    return this.request(
+      node,
+      'POST',
+      `/api/v1/servers/${serverId}/files/upload-url?path=${encodeURIComponent(path)}`,
+    );
   }
 
   // ---- backups ------------------------------------------------------------
 
   createBackup(node: Node, serverId: string, backupId: string, ignored: string[]) {
-    return this.request(node, 'POST', `/api/servers/${serverId}/backups`, {
+    return this.request(node, 'POST', `/api/v1/servers/${serverId}/backups`, {
       backupId,
       ignoredFiles: ignored,
     });
   }
 
-  restoreBackup(node: Node, serverId: string, backupId: string) {
+  restoreBackup(
+    node: Node,
+    serverId: string,
+    backupId: string,
+    location?: string,
+  ) {
     return this.request(
       node,
       'POST',
-      `/api/servers/${serverId}/backups/${backupId}/restore`,
+      `/api/v1/servers/${serverId}/backups/${backupId}/restore`,
+      { location: location ?? '' },
     );
   }
 
-  deleteBackup(node: Node, serverId: string, backupId: string) {
+  deleteBackup(
+    node: Node,
+    serverId: string,
+    backupId: string,
+    location?: string,
+  ) {
     return this.request(
       node,
       'DELETE',
-      `/api/servers/${serverId}/backups/${backupId}`,
+      `/api/v1/servers/${serverId}/backups/${backupId}`,
+      { location: location ?? '' },
     );
   }
 
@@ -245,7 +305,7 @@ export class NodeAgentClient {
     return this.request(
       node,
       'GET',
-      `/api/servers/${serverId}/backups/${backupId}/download-url`,
+      `/api/v1/servers/${serverId}/backups/${backupId}/download-url`,
     );
   }
 
@@ -253,13 +313,13 @@ export class NodeAgentClient {
 
   /** Current live resource usage for a running server. */
   fetchStats(node: Node, serverId: string): Promise<LiveStats> {
-    return this.request(node, 'GET', `/api/servers/${serverId}/stats`);
+    return this.request(node, 'GET', `/api/v1/servers/${serverId}/stats`);
   }
 
   // ---- agent config -------------------------------------------------------
 
   fetchAgentStatus(node: Node) {
-    return this.request(node, 'GET', `/api/system`);
+    return this.request(node, 'GET', `/api/v1/system`);
   }
 
   // ---- internals ----------------------------------------------------------
@@ -269,21 +329,11 @@ export class NodeAgentClient {
   }
 
   /**
-   * Sign a request. The signing key is the per-node bootstrap token. We do not
-   * persist the plaintext token, so callers pass nodes whose `tokenHash` we use
-   * as the HMAC key — the agent is provisioned with the same hash as its shared
-   * signing secret during bootstrap (see NodesService.generateBootstrap).
+   * Per-node signing key, derived deterministically (see agent.signing.ts).
+   * The agent received the identical value at register time.
    */
-  private sign(
-    node: Node,
-    method: string,
-    path: string,
-    body: string,
-    timestamp: string,
-    nonce: string,
-  ): string {
-    const payload = `${timestamp}.${nonce}.${method}.${path}.${body}`;
-    return createHmac('sha256', node.tokenHash).update(payload).digest('hex');
+  signingKey(node: Node): string {
+    return deriveSigningKey(this.secretsEncKey, node.id);
   }
 
   private async request<T = any>(
@@ -291,12 +341,23 @@ export class NodeAgentClient {
     method: string,
     path: string,
     body?: unknown,
+    opts?: { rawBody?: boolean },
   ): Promise<T> {
     const url = `${this.baseUrl(node)}${path}`;
-    const serialized = body ? JSON.stringify(body) : '';
-    const timestamp = Date.now().toString();
-    const nonce = randomUUID();
-    const signature = this.sign(node, method, path, serialized, timestamp, nonce);
+    const serialized =
+      body === undefined || body === null
+        ? ''
+        : opts?.rawBody
+          ? String(body)
+          : JSON.stringify(body);
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = signRequest(
+      this.signingKey(node),
+      method,
+      path,
+      timestamp,
+      serialized,
+    );
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -305,11 +366,12 @@ export class NodeAgentClient {
       const res = await fetch(url, {
         method,
         headers: {
-          'content-type': 'application/json',
-          'x-refx-node': node.id,
-          'x-refx-timestamp': timestamp,
-          'x-refx-nonce': nonce,
-          'x-refx-signature': signature,
+          'content-type': opts?.rawBody
+            ? 'application/octet-stream'
+            : 'application/json',
+          [SIGN_HEADER_NODE]: node.id,
+          [SIGN_HEADER_TIMESTAMP]: timestamp,
+          [SIGN_HEADER_SIGNATURE]: signature,
         },
         body: serialized || undefined,
         signal: controller.signal,

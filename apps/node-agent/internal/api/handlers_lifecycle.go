@@ -12,18 +12,23 @@ import (
 
 // handleInstall registers a server from a panel-supplied spec and kicks off the
 // install in the background, streaming progress over the WebSocket.
+//
+// The body is the panel's ServerInstallSpec (serverId / environment /
+// dockerImage / installScript ...), converted to the agent's internal
+// server.Spec via ToSpec, so the wire contract matches the panel's
+// NodeAgentClient and packages/shared ServerInstallSpec exactly.
 func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {
-	var spec server.Spec
-	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
+	var dto panel.ServerInstallSpec
+	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid spec: "+err.Error())
 		return
 	}
-	if spec.ID == "" || spec.ShortID == "" {
-		writeError(w, http.StatusBadRequest, "id and shortId are required")
+	if dto.ServerID == "" || dto.ShortID == "" {
+		writeError(w, http.StatusBadRequest, "serverId and shortId are required")
 		return
 	}
 
-	srv := s.deps.Manager.Register(spec)
+	srv := s.deps.Manager.Register(dto.ToSpec())
 	if err := s.deps.Installer.Prepare(srv); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -37,6 +42,12 @@ func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {
 // server. The query param wipe=true requests a clean reinstall.
 func (s *Server) handleReinstall(w http.ResponseWriter, r *http.Request) {
 	srv := serverFrom(r.Context())
+	// If the panel sends a fresh spec (e.g. a game switch), apply it so the
+	// reinstall runs against the new template. An empty/garbage body is ignored.
+	var dto panel.ServerInstallSpec
+	if err := json.NewDecoder(r.Body).Decode(&dto); err == nil && dto.ServerID != "" {
+		srv = s.deps.Manager.Register(dto.ToSpec())
+	}
 	srv.SetState(server.StateReinstalling)
 	if r.URL.Query().Get("wipe") == "true" {
 		if err := s.deps.Installer.Wipe(r.Context(), srv); err != nil {
@@ -131,6 +142,50 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"state": string(srv.State())})
+}
+
+// commandRequest is the body of a console command.
+type commandRequest struct {
+	Command string `json:"command"`
+}
+
+// handleCommand writes a single line to a running server's stdin.
+func (s *Server) handleCommand(w http.ResponseWriter, r *http.Request) {
+	srv := serverFrom(r.Context())
+	var req commandRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	con, err := s.deps.Manager.AttachConsole(r.Context(), srv)
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if _, err := con.Write([]byte(req.Command + "\n")); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+// handleStats returns a one-shot live resource snapshot for a server.
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	srv := serverFrom(r.Context())
+	st, err := s.deps.Manager.Stats(r.Context(), srv)
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"state":      string(srv.State()),
+		"cpuPct":     st.CPUPercent,
+		"memUsedMb":  st.MemUsedMB,
+		"memTotalMb": st.MemLimitMB,
+		"diskUsedMb": st.DiskUsedMB,
+		"netRxBytes": st.NetRxBytes,
+		"netTxBytes": st.NetTxBytes,
+	})
 }
 
 // handleReconfigure applies new resource limits.

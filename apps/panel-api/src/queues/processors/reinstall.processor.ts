@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NodeAgentClient } from '../../agent/agent.client';
+import { CryptoService } from '../../common/crypto/crypto.service';
 import { JOB, QUEUE, ReinstallJob } from '../queue.constants';
 import { buildInstallSpec } from './install-spec.util';
 
@@ -19,6 +20,7 @@ export class ReinstallProcessor extends WorkerHost {
   constructor(
     private readonly prisma: PrismaService,
     private readonly agent: NodeAgentClient,
+    private readonly crypto: CryptoService,
   ) {
     super();
   }
@@ -45,7 +47,13 @@ export class ReinstallProcessor extends WorkerHost {
       return;
     }
 
-    const spec = buildInstallSpec(server, { wipe: !preserveData });
+    const sftpPassword = server.sftpPasswordEnc
+      ? this.crypto.decrypt(server.sftpPasswordEnc)
+      : undefined;
+    const spec = buildInstallSpec(server, {
+      wipe: !preserveData,
+      sftpPassword,
+    });
 
     try {
       await this.agent.reinstall(server.node, spec);

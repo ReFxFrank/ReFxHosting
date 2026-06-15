@@ -107,6 +107,23 @@ export class ConsoleGateway
     if (node) await this.agent.sendCommand(node, serverId, body.command);
   }
 
+  // ---- inbound relay from agent callbacks ---------------------------------
+
+  /** Push a console/log line to every browser subscribed to this server. */
+  emitConsole(serverId: string, frame: unknown): void {
+    this.server.to(this.room(serverId)).emit('console', frame);
+  }
+
+  /** Push a live stats frame to every browser subscribed to this server. */
+  emitStats(serverId: string, frame: unknown): void {
+    this.server.to(this.room(serverId)).emit('stats', frame);
+  }
+
+  /** Push a power/state-change event to every browser subscribed to this server. */
+  emitPower(serverId: string, frame: unknown): void {
+    this.server.to(this.room(serverId)).emit('power', frame);
+  }
+
   // ---- upstream management ------------------------------------------------
 
   private acquire(serverId: string): void {

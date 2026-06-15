@@ -138,7 +138,7 @@ func (s ServerInstallSpec) ToSpec() server.Spec {
 // node id + signing key for all subsequent signed calls.
 func (c *Client) Register(ctx context.Context, req RegisterRequest) (*RegisterResponse, error) {
 	var resp RegisterResponse
-	if err := c.do(ctx, http.MethodPost, "/api/agent/register", req, &resp, false); err != nil {
+	if err := c.do(ctx, http.MethodPost, "/api/v1/agent/register", req, &resp, false); err != nil {
 		return nil, fmt.Errorf("panel: register: %w", err)
 	}
 	c.nodeID = resp.NodeID
@@ -163,7 +163,7 @@ type Heartbeat struct {
 
 // SendHeartbeat pushes a node heartbeat.
 func (c *Client) SendHeartbeat(ctx context.Context, hb Heartbeat) error {
-	return c.do(ctx, http.MethodPost, "/api/agent/heartbeat", hb, nil, true)
+	return c.do(ctx, http.MethodPost, "/api/v1/agent/heartbeat", hb, nil, true)
 }
 
 // ServerStat is a single per-server stat sample pushed to the panel.
@@ -179,7 +179,7 @@ type ServerStat struct {
 
 // PushStats batches per-server stats to the panel.
 func (c *Client) PushStats(ctx context.Context, stats []ServerStat) error {
-	return c.do(ctx, http.MethodPost, "/api/agent/stats", map[string]any{"stats": stats}, nil, true)
+	return c.do(ctx, http.MethodPost, "/api/v1/agent/stats", map[string]any{"stats": stats}, nil, true)
 }
 
 // LogLine is a console line forwarded to the panel for persistence/streaming.
@@ -192,18 +192,18 @@ type LogLine struct {
 
 // PushLogs forwards a batch of console lines.
 func (c *Client) PushLogs(ctx context.Context, lines []LogLine) error {
-	return c.do(ctx, http.MethodPost, "/api/agent/logs", map[string]any{"lines": lines}, nil, true)
+	return c.do(ctx, http.MethodPost, "/api/v1/agent/logs", map[string]any{"lines": lines}, nil, true)
 }
 
 // PowerEvent notifies the panel of a server state transition.
 func (c *Client) PowerEvent(ctx context.Context, serverID, state string) error {
-	return c.do(ctx, http.MethodPost, "/api/agent/power-event",
+	return c.do(ctx, http.MethodPost, "/api/v1/agent/power-event",
 		map[string]string{"serverId": serverID, "state": state}, nil, true)
 }
 
 // BackupProgress reports backup status/progress to the panel.
 func (c *Client) BackupProgress(ctx context.Context, payload any) error {
-	return c.do(ctx, http.MethodPost, "/api/agent/backup-progress", payload, nil, true)
+	return c.do(ctx, http.MethodPost, "/api/v1/agent/backup-progress", payload, nil, true)
 }
 
 // --- transport -------------------------------------------------------------

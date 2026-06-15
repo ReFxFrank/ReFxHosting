@@ -3,9 +3,11 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Node } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
+import { deriveSigningKey } from '../agent/agent.signing';
 import { uuidv7 } from '../common/util/uuid';
 import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
 import {
@@ -17,10 +19,15 @@ import {
 
 @Injectable()
 export class NodesService {
+  private readonly secretsEncKey: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.secretsEncKey = config.get<string>('secretsEncKey')!;
+  }
 
   async create(dto: CreateNodeDto): Promise<{ node: Node; bootstrapToken: string }> {
     const bootstrapToken = this.crypto.token(32);
@@ -185,6 +192,127 @@ export class NodesService {
   }
 
   // ---- agent-facing endpoints --------------------------------------------
+
+  /**
+   * Token-only registration: the agent presents its bootstrap token (no node id
+   * in the URL). We resolve the Node by tokenHash, mark it ONLINE, and hand back
+   * the durable identity, the per-node signing key, and the install specs for
+   * every server already assigned to this node.
+   *
+   * The signing key is derived deterministically (sha256hex(SECRETS_ENC_KEY +
+   * ":" + nodeId)) so it never has to be persisted — the panel recomputes it on
+   * every signed callback (see AgentSignatureGuard / agent.signing.ts).
+   */
+  async registerAgentByToken(dto: {
+    bootstrapToken: string;
+    agentVersion?: string;
+    capabilities?: unknown;
+  }) {
+    const tokenHash = this.crypto.hash(dto.bootstrapToken);
+    const node = await this.prisma.node.findFirst({
+      where: { tokenHash, deletedAt: null },
+    });
+    if (!node) throw new BadRequestException('Invalid bootstrap token');
+
+    await this.prisma.node.update({
+      where: { id: node.id },
+      data: {
+        state: 'ONLINE',
+        agentVersion: dto.agentVersion ?? node.agentVersion,
+      },
+    });
+
+    const servers = await this.buildServerInstallSpecs(node.id);
+
+    return {
+      nodeId: node.id,
+      signingKey: this.deriveSigningKey(node.id),
+      servers,
+      settings: {
+        name: node.name,
+        os: node.os,
+        sftpPort: node.sftpPort,
+        daemonPort: node.daemonPort,
+        // TODO(impl): include S3 backup creds, network config, log shipping URL.
+      },
+    };
+  }
+
+  /**
+   * Per-node signing key, derived deterministically from the global secrets key.
+   * Mirrors deriveSigningKey() in agent.signing.ts byte-for-byte (the panel and
+   * agent must agree); kept here so callers without the crypto util can reuse it.
+   */
+  deriveSigningKey(nodeId: string): string {
+    return deriveSigningKey(this.secretsEncKey, nodeId);
+  }
+
+  /**
+   * Build the wire-format ServerInstallSpec list for every (non-deleted) server
+   * assigned to a node. Shape matches packages/shared ServerInstallSpec and the
+   * Go agent's panel.ServerInstallSpec (camelCase JSON).
+   */
+  async buildServerInstallSpecs(nodeId: string) {
+    const servers = await this.prisma.server.findMany({
+      where: { nodeId, deletedAt: null },
+      include: {
+        template: { include: { variables: true } },
+        allocations: true,
+        variables: true,
+      },
+    });
+
+    return servers.map((server) => {
+      const template = server.template;
+
+      const env: Record<string, string> = {};
+      if (template) {
+        for (const v of template.variables) {
+          if (v.defaultValue != null) env[v.envName] = v.defaultValue;
+        }
+      }
+      const serverEnv = (server.environment ?? {}) as Record<string, unknown>;
+      for (const [k, val] of Object.entries(serverEnv)) env[k] = String(val);
+      for (const ov of server.variables) env[ov.envName] = ov.value;
+
+      let sftpPassword = '';
+      if (server.sftpPasswordEnc) {
+        try {
+          sftpPassword = this.crypto.decrypt(server.sftpPasswordEnc);
+        } catch {
+          sftpPassword = '';
+        }
+      }
+
+      return {
+        serverId: server.id,
+        shortId: server.shortId,
+        deployMethod: server.deployMethod,
+        dockerImage: server.dockerImage ?? '',
+        startupCommand: server.startupCommand ?? template?.startupCommand ?? '',
+        startupDetect: template?.startupDetect ?? '',
+        stopCommand: template?.stopCommand ?? '',
+        environment: env,
+        limits: {
+          cpuCores: server.cpuCores,
+          memoryMb: server.memoryMb,
+          swapMb: server.swapMb,
+          diskMb: server.diskMb,
+          ioWeight: server.ioWeight,
+        },
+        allocations: server.allocations.map((a) => ({
+          ip: a.ip,
+          port: a.port,
+          isPrimary: a.isPrimary,
+        })),
+        installScript: template?.installScript ?? {},
+        configFiles: template?.configFiles ?? [],
+        preserveData: true,
+        sftpUsername: server.shortId,
+        sftpPassword,
+      };
+    });
+  }
 
   /** The agent calls this with its bootstrap token to register & get config. */
   async registerAgent(nodeId: string, dto: NodeRegisterDto) {
