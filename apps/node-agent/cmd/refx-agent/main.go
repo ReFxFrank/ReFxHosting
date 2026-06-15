@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -62,6 +63,14 @@ func main() {
 
 // run wires the agent together and blocks until shutdown.
 func run(ctx context.Context, cfgPath string) error {
+	// A restarting agent (Windows path) spawns its replacement with a short delay
+	// so the old process can release its listeners first; honor it before we bind.
+	if ms := os.Getenv("REFX_RESTART_DELAY_MS"); ms != "" {
+		if d, perr := strconv.Atoi(ms); perr == nil && d > 0 {
+			time.Sleep(time.Duration(d) * time.Millisecond)
+		}
+	}
+
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return err

@@ -2,16 +2,34 @@
 
 package api
 
-import "errors"
+import (
+	"os"
+	"os/exec"
+)
 
-// agentRestartSupported is false on Windows: there's no execve equivalent that
-// preserves the listener sockets, so in-place self-restart is unsupported. The
-// panel surfaces a clear "not supported on this platform" message and admins
-// restart the Windows service via the SCM instead.
-const agentRestartSupported = false
+// agentRestartSupported is true on Windows via a delayed re-launch (below).
+const agentRestartSupported = true
 
-// reExecAgent is unreachable on Windows (guarded by agentRestartSupported) but
-// must exist so the package compiles for windows/amd64.
+// reExecAgent restarts the agent on Windows, where there's no execve. It spawns
+// a fresh copy of the binary that waits briefly before binding (via
+// REFX_RESTART_DELAY_MS, honored in main) and then exits this process so the
+// listeners (:8443/:2022) are released for the child to claim — avoiding an
+// "address already in use" race. Running game containers are untouched and get
+// re-adopted when the new process boots.
 func reExecAgent() error {
-	return errors.New("agent self-restart is not supported on windows")
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(exe, os.Args[1:]...)
+	cmd.Env = append(os.Environ(), "REFX_RESTART_DELAY_MS=1500")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	// Release this process so the delayed child can bind the listeners.
+	os.Exit(0)
+	return nil // unreachable
 }
