@@ -87,6 +87,7 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     PrismaModule,
     CryptoModule,
     AgentModule,
+    EmailModule,
 
     // Features
     AuthModule,
