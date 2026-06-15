@@ -327,6 +327,9 @@ services:
       NODE_ENV: ${NODE_ENV:-production}
       PORT: "4000"
       API_PREFIX: ${API_PREFIX:-api/v1}
+      # Accept the node-agent's self-signed TLS cert on panel->agent calls.
+      # TEST-ONLY: production should pin the agent cert fingerprint instead.
+      NODE_TLS_REJECT_UNAUTHORIZED: ${NODE_TLS_REJECT_UNAUTHORIZED:-0}
       # Override host-based connection strings so they resolve to compose services.
       DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-refx}:${POSTGRES_PASSWORD:-refx}@postgres:5432/${POSTGRES_DB:-refx}?schema=public}
       REDIS_HOST: ${REDIS_HOST:-redis}
