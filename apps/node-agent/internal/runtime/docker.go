@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
@@ -175,7 +174,7 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 	}
 	// Make /mnt/server writable by the install image's (non-root) user before it
 	// runs, so `cd /mnt/server` / writes succeed without running as root.
-	d.prepareDataDir(s.DataDir)
+	d.prepareDataDir(ctx, s, image)
 	host := &container.HostConfig{
 		Mounts: []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/mnt/server"}},
 		// NOTE: deliberately NOT AutoRemove. With auto-remove the daemon deletes
@@ -261,25 +260,64 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 	return host, ports, bindings
 }
 
-// prepareDataDir makes a server's data dir writable by the non-root container
-// user (uid 1000), regardless of host OS:
-//   - Linux: chown the tree to 1000:1000.
-//   - Windows: Docker Desktop's WSL2 bind mount derives access from the Windows
-//     ACL and chown is a no-op, so grant the dir broad write via icacls. The dir
-//     is already per-server and jailed under the data root.
+// prepareDataDir makes a server's data dir owned by the non-root container user
+// (uid 1000) before an install or runtime container runs, so the game never has
+// to run as root yet can still write its files:
+//   - Linux: the agent (root) chowns the host tree directly.
+//   - Windows: the agent is a Windows process and can't chown the Docker-mounted
+//     path, and Docker Desktop presents root-created files (e.g. those written by
+//     a root install image) as root-owned. So run a throwaway root container that
+//     chowns the mount to 1000:1000 — the Wings pattern, just containerized. The
+//     game server itself still runs strictly non-root.
 // Both are best-effort; failures are logged, not fatal.
-func (d *DockerRuntime) prepareDataDir(dir string) {
-	if goruntime.GOOS == "windows" {
-		// *S-1-1-0 = Everyone; (OI)(CI)F = full control, inherited by files/dirs.
-		cmd := exec.Command("icacls", dir, "/grant", "*S-1-1-0:(OI)(CI)F", "/T", "/C", "/Q")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			d.log.Warn().Err(err).Str("out", strings.TrimSpace(string(out))).
-				Str("dir", dir).Msg("icacls grant on data dir failed")
+func (d *DockerRuntime) prepareDataDir(ctx context.Context, s *server.Server, image string) {
+	if goruntime.GOOS != "windows" {
+		if err := chownTree(s.DataDir, containerUID, containerGID); err != nil {
+			d.log.Warn().Err(err).Str("dir", s.DataDir).Msg("chown data dir failed")
 		}
 		return
 	}
-	if err := chownTree(dir, containerUID, containerGID); err != nil {
-		d.log.Warn().Err(err).Str("dir", dir).Msg("chown data dir failed")
+	d.chownViaContainer(ctx, s, image)
+}
+
+// chownViaContainer runs a short-lived root container that chowns the server's
+// data dir to the non-root runtime user. Used on Windows where the agent can't
+// chown the bind mount itself. The image is reused from the install/runtime step
+// (it's already present and has coreutils `chown`).
+func (d *DockerRuntime) chownViaContainer(ctx context.Context, s *server.Server, image string) {
+	name := containerName(s) + "-chown"
+	_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+	cfg := &container.Config{
+		Image:      image,
+		User:       "0:0",
+		Entrypoint: []string{"chown"},
+		Cmd:        []string{"-R", "1000:1000", "/data"},
+		Labels:     map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
+	}
+	host := &container.HostConfig{
+		Mounts: []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/data"}},
+	}
+	created, err := d.cli.ContainerCreate(ctx, cfg, host, &network.NetworkingConfig{}, nil, name)
+	if err != nil {
+		d.log.Warn().Err(err).Str("server", s.ID()).Msg("windows chown: create failed")
+		return
+	}
+	defer func() {
+		_ = d.cli.ContainerRemove(context.Background(), created.ID, container.RemoveOptions{Force: true})
+	}()
+	if err := d.cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
+		d.log.Warn().Err(err).Str("server", s.ID()).Msg("windows chown: start failed")
+		return
+	}
+	waitCh, errCh := d.cli.ContainerWait(ctx, created.ID, container.WaitConditionNotRunning)
+	select {
+	case <-waitCh:
+	case e := <-errCh:
+		if e != nil {
+			d.log.Warn().Err(e).Str("server", s.ID()).Msg("windows chown: wait failed")
+		}
+	case <-time.After(2 * time.Minute):
+		d.log.Warn().Str("server", s.ID()).Msg("windows chown: timed out")
 	}
 }
 
@@ -319,8 +357,9 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 		Labels:       map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
 
-	// Make the data dir writable by the non-root container user before launching.
-	d.prepareDataDir(s.DataDir)
+	// Hand the data dir to the non-root container user before launching (fixes
+	// root-owned files created by a root install image, e.g. Minecraft's).
+	d.prepareDataDir(ctx, s, s.Spec.Image)
 
 	name := containerName(s)
 	// Always (re)create the container from the current config so changes to the
