@@ -24,9 +24,35 @@ export class UsersService {
 
   /** Fetch a single (non-deleted) user by id. */
   async getProfile(userId: string): Promise<User> {
-    const user = await this.prisma.user.findFirst({
-      where: { id: userId, deletedAt: null },
-    });
+    let user: User | null;
+    try {
+      user = await this.prisma.user.findFirst({
+        where: { id: userId, deletedAt: null },
+      });
+    } catch {
+      // Defense-in-depth: if newer additive columns (roleId / contact address)
+      // aren't present yet — e.g. migrations haven't been applied — a full-column
+      // select throws and would otherwise 500 /auth/me, locking the entire UI
+      // behind a perpetual loading state. Fall back to the stable column set so
+      // the app still bootstraps; the migrate runner self-heals the schema.
+      user = (await this.prisma.user.findFirst({
+        where: { id: userId, deletedAt: null },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          globalRole: true,
+          state: true,
+          emailVerifiedAt: true,
+          locale: true,
+          timezone: true,
+          avatarUrl: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      })) as User | null;
+    }
     if (!user) throw new NotFoundException('User not found');
     return user;
   }

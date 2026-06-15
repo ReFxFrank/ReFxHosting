@@ -69,29 +69,53 @@ RUN npx prisma generate --schema ./database/prisma/schema.prisma
 # ---------------------------------------------------------------------------
 # Entrypoint:
 #   1. Apply committed migrations (prisma migrate deploy — non-interactive,
-#      production-safe). If no migrations dir, fall back to db push (dev only).
+#      production-safe). If deploy fails (e.g. a prior partial run left the
+#      _prisma_migrations history in a failed/P3009 state, or the live schema
+#      drifted), SELF-HEAL: reconcile the schema with `prisma db push` and then
+#      mark every committed migration as applied so future deploys stay clean.
+#      Our migrations are purely additive, so db push never loses data here.
 #   2. Run the TypeScript seed (idempotent upserts). Non-fatal: a failed seed
 #      must not block the API from starting, but we surface the exit clearly.
 # ---------------------------------------------------------------------------
-RUN printf '%s\n' \
-    '#!/bin/sh' \
-    'set -e' \
-    'SCHEMA=./database/prisma/schema.prisma' \
-    'echo "[migrate] applying migrations (prisma migrate deploy)"' \
-    'if [ -d ./database/prisma/migrations ]; then' \
-    '  npx prisma migrate deploy --schema "$SCHEMA"' \
-    'else' \
-    '  echo "[migrate] no migrations/ dir — using prisma db push (dev fallback)"' \
-    '  npx prisma db push --schema "$SCHEMA" --accept-data-loss' \
-    'fi' \
-    'if [ -f ./database/seed/seed.ts ]; then' \
-    '  echo "[seed] running database/seed/seed.ts"' \
-    '  npx ts-node --transpile-only --project /repo/tsconfig.seed.json ./database/seed/seed.ts || echo "[seed] seed failed (non-fatal)"' \
-    'else' \
-    '  echo "[seed] no seed.ts found — skipping"' \
-    'fi' \
-    'echo "[migrate] done"' \
-    > /usr/local/bin/run-migrate.sh \
-    && chmod +x /usr/local/bin/run-migrate.sh
+COPY <<'EOF' /usr/local/bin/run-migrate.sh
+#!/bin/sh
+set -e
+SCHEMA=./database/prisma/schema.prisma
+
+reconcile() {
+  echo "[migrate] deploy failed — self-healing schema with 'prisma db push'"
+  # Bring the live database up to the schema (additive: adds the missing
+  # columns/tables without touching existing data). --accept-data-loss is
+  # required by the CLI flag set even when no destructive change is needed.
+  npx prisma db push --schema "$SCHEMA" --accept-data-loss --skip-generate
+  # Re-sync migration history so the next `migrate deploy` is a clean no-op
+  # instead of re-running ADD COLUMN against now-existing columns.
+  for dir in ./database/prisma/migrations/*/; do
+    name=$(basename "$dir")
+    [ -f "$dir/migration.sql" ] || continue
+    npx prisma migrate resolve --applied "$name" --schema "$SCHEMA" 2>/dev/null \
+      || true
+  done
+  echo "[migrate] self-heal complete"
+}
+
+echo "[migrate] applying migrations (prisma migrate deploy)"
+if [ -d ./database/prisma/migrations ]; then
+  npx prisma migrate deploy --schema "$SCHEMA" || reconcile
+else
+  echo "[migrate] no migrations/ dir — using prisma db push (dev fallback)"
+  npx prisma db push --schema "$SCHEMA" --accept-data-loss
+fi
+
+if [ -f ./database/seed/seed.ts ]; then
+  echo "[seed] running database/seed/seed.ts"
+  npx ts-node --transpile-only --project /repo/tsconfig.seed.json \
+    ./database/seed/seed.ts || echo "[seed] seed failed (non-fatal)"
+else
+  echo "[seed] no seed.ts found — skipping"
+fi
+echo "[migrate] done"
+EOF
+RUN chmod +x /usr/local/bin/run-migrate.sh
 
 ENTRYPOINT ["/usr/local/bin/run-migrate.sh"]

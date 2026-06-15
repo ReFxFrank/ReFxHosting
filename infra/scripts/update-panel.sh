@@ -23,7 +23,14 @@ git pull origin main
 # panel-api starts (panel-api depends_on migrate: service_completed_successfully).
 echo "==> Rebuilding migrate image + applying migrations/seed"
 "${COMPOSE[@]}" build migrate
-"${COMPOSE[@]}" run --rm migrate || echo "WARNING: migrate/seed reported an error — check the output above"
+# The migrate runner self-heals the schema (falls back to db push if a deploy
+# fails), so a non-zero exit here is a genuine, fatal problem worth stopping for
+# rather than silently starting panel-api against a half-migrated database.
+if ! "${COMPOSE[@]}" run --rm migrate; then
+  echo "ERROR: migrations failed to apply — see the output above." >&2
+  echo "       panel-api was NOT rebuilt to avoid running against a stale schema." >&2
+  exit 1
+fi
 
 echo "==> Rebuilding web + panel-api"
 "${COMPOSE[@]}" up -d --build panel-api web
