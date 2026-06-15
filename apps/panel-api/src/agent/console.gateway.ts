@@ -11,7 +11,6 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { WebSocket as WsClient } from 'ws';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfig } from '../config/configuration';
 import { NodeAgentClient } from './agent.client';
@@ -20,10 +19,11 @@ import { NodeAgentClient } from './agent.client';
  * Bridges browser <-> node-agent live console + stats.
  *
  * Browser clients connect via Socket.IO at namespace /ws/console, authenticate
- * with a JWT, then join a server room. For each authorized server we open one
- * upstream WebSocket to the node-agent and fan its frames out to all room
- * members; console input from clients (with the control.console permission) is
- * forwarded upstream.
+ * with a JWT, then join a server room. The agent pushes console/stats/power
+ * frames to the panel via signed REST callbacks (POST /agent/logs|stats|
+ * power-event), which fan out to room members through emitConsole/emitStats/
+ * emitPower. Console input from clients (with the control.console permission) is
+ * forwarded to the agent over the signed REST control API.
  */
 @WebSocketGateway({ namespace: '/ws/console', cors: { origin: true } })
 export class ConsoleGateway
@@ -33,11 +33,6 @@ export class ConsoleGateway
 
   @WebSocketServer()
   server!: Server;
-
-  /** serverId -> upstream agent socket (one per active server). */
-  private upstream = new Map<string, WsClient>();
-  /** serverId -> count of subscribed browser sockets. */
-  private refCount = new Map<string, number>();
 
   constructor(
     private readonly jwt: JwtService,
@@ -60,14 +55,15 @@ export class ConsoleGateway
       client.data.userId = payload.sub;
       client.data.role = payload.role;
     } catch {
+      this.logger.debug('console client rejected: invalid token');
       client.emit('error', { message: 'unauthorized' });
       client.disconnect(true);
     }
   }
 
-  handleDisconnect(client: Socket): void {
-    const serverId: string | undefined = client.data.serverId;
-    if (serverId) this.release(serverId);
+  handleDisconnect(): void {
+    // Socket.IO removes the client from its rooms automatically on disconnect;
+    // there is no per-server upstream to tear down.
   }
 
   @SubscribeMessage('subscribe')
@@ -82,7 +78,6 @@ export class ConsoleGateway
     }
     client.data.serverId = body.serverId;
     await client.join(this.room(body.serverId));
-    this.acquire(body.serverId);
     client.emit('subscribed', { serverId: body.serverId });
   }
 
@@ -122,58 +117,6 @@ export class ConsoleGateway
   /** Push a power/state-change event to every browser subscribed to this server. */
   emitPower(serverId: string, frame: unknown): void {
     this.server.to(this.room(serverId)).emit('power', frame);
-  }
-
-  // ---- upstream management ------------------------------------------------
-
-  private acquire(serverId: string): void {
-    this.refCount.set(serverId, (this.refCount.get(serverId) ?? 0) + 1);
-    if (!this.upstream.has(serverId)) {
-      void this.openUpstream(serverId);
-    }
-  }
-
-  private release(serverId: string): void {
-    const n = (this.refCount.get(serverId) ?? 1) - 1;
-    if (n <= 0) {
-      this.refCount.delete(serverId);
-      this.upstream.get(serverId)?.close();
-      this.upstream.delete(serverId);
-    } else {
-      this.refCount.set(serverId, n);
-    }
-  }
-
-  private async openUpstream(serverId: string): Promise<void> {
-    const node = await this.nodeForServer(serverId);
-    if (!node) return;
-    const url = `${node.scheme === 'https' ? 'wss' : 'ws'}://${node.fqdn}:${
-      node.daemonPort
-    }/api/servers/${serverId}/ws`;
-    try {
-      const ws = new WsClient(url, {
-        headers: { 'x-refx-node': node.id, 'x-refx-token': node.tokenHash },
-        // TODO(impl): mTLS / cert pinning as in NodeAgentClient.
-      });
-      ws.on('message', (raw) => {
-        let frame: any;
-        try {
-          frame = JSON.parse(raw.toString());
-        } catch {
-          frame = { type: 'console', line: raw.toString() };
-        }
-        this.server
-          .to(this.room(serverId))
-          .emit(frame.type === 'stats' ? 'stats' : 'console', frame);
-      });
-      ws.on('close', () => this.upstream.delete(serverId));
-      ws.on('error', (e) =>
-        this.logger.warn(`upstream ${serverId} error: ${e.message}`),
-      );
-      this.upstream.set(serverId, ws);
-    } catch (e: any) {
-      this.logger.error(`failed to open upstream for ${serverId}: ${e.message}`);
-    }
   }
 
   // ---- authorization ------------------------------------------------------
