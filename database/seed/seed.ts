@@ -124,12 +124,11 @@ async function seedOwner() {
 
   const owner = await prisma.user.upsert({
     where: { email },
-    update: {
-      passwordHash,
-      globalRole: 'OWNER',
-      state: 'ACTIVE',
-      emailVerifiedAt: new Date(),
-    },
+    // Do NOT clobber an existing owner on re-seed: the seed runs on every
+    // deploy, and rewriting passwordHash here would silently reset the owner's
+    // password (and undo any role/state change) every time. Leave an existing
+    // account entirely as-is; only seed credentials on first creation.
+    update: {},
     create: {
       id: uuidv7(),
       email,
