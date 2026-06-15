@@ -34,6 +34,7 @@ import {
   pickFreePort,
   isPortEnvName,
 } from './allocation-port.util';
+import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
@@ -74,11 +75,15 @@ export class ServersService {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { createdAt: 'desc' },
-        include: { template: true, node: { select: { name: true, fqdn: true } } },
+        include: {
+          template: true,
+          node: { select: { name: true, fqdn: true } },
+          allocations: true,
+        },
       }),
       this.prisma.server.count({ where }),
     ]);
-    return paginate(data, total, pagination);
+    return paginate(data.map((s) => this.withPrimaryAllocation(s)), total, pagination);
   }
 
   async get(id: string): Promise<Server> {
@@ -92,7 +97,7 @@ export class ServersService {
       },
     });
     if (!server) throw new NotFoundException('Server not found');
-    return server;
+    return this.withPrimaryAllocation(server);
   }
 
   // ---- create / provision ------------------------------------------------
@@ -113,6 +118,11 @@ export class ServersService {
     if (!template) throw new NotFoundException('Template not found');
     this.assertTemplateAllowed(subscription.product.allowedTemplateIds, dto.templateId);
 
+    const dockerImage = this.resolveDockerImage(
+      template.dockerImages,
+      dto.environment,
+    );
+
     const limits = {
       cpuCores: subscription.product.cpuCores ?? template.recCpuCores,
       memoryMb: subscription.product.memoryMb ?? template.recMemoryMb,
@@ -126,8 +136,6 @@ export class ServersService {
       if (!node) throw new ConflictException('No node has capacity for this plan');
       nodeId = node.id;
     }
-
-    const dockerImage = this.firstDockerImage(template.dockerImages);
 
     const server = await this.prisma.server.create({
       data: {
@@ -188,7 +196,10 @@ export class ServersService {
     });
     if (!template) throw new NotFoundException('Template not found');
 
-    const dockerImage = this.firstDockerImage(template.dockerImages);
+    const dockerImage = this.resolveDockerImage(
+      template.dockerImages,
+      dto.environment,
+    );
 
     const server = await this.prisma.server.create({
       data: {
@@ -241,11 +252,12 @@ export class ServersService {
           template: { select: { id: true, name: true, slug: true } },
           node: { select: { id: true, name: true, fqdn: true } },
           owner: { select: { id: true, email: true, firstName: true, lastName: true } },
+          allocations: true,
         },
       }),
       this.prisma.server.count({ where }),
     ]);
-    return paginate(data, total, pagination);
+    return paginate(data.map((s) => this.withPrimaryAllocation(s)), total, pagination);
   }
 
   // ---- power -------------------------------------------------------------
@@ -330,7 +342,10 @@ export class ServersService {
       );
     }
 
-    const dockerImage = this.firstDockerImage(target.dockerImages);
+    const dockerImage = this.resolveDockerImage(
+      target.dockerImages,
+      dto.environment,
+    );
     const gameSwitchLogId = uuidv7();
 
     // (3)+(4) atomic record + repoint.
@@ -779,6 +794,19 @@ export class ServersService {
     return port;
   }
 
+  /**
+   * Surface the server's connection address by flattening its allocations into a
+   * single `primaryAllocation` (the one flagged primary, else the first). The web
+   * panel renders {ip}:{port} from this; without it the address never shows.
+   */
+  private withPrimaryAllocation<
+    T extends { allocations?: { isPrimary: boolean }[] | null },
+  >(server: T) {
+    const allocations = server.allocations ?? [];
+    const primary = allocations.find((a) => a.isPrimary) ?? allocations[0] ?? null;
+    return { ...server, primaryAllocation: primary };
+  }
+
   private assertTemplateAllowed(allowed: string[], templateId: string): void {
     // Empty whitelist = all templates permitted.
     if (allowed.length > 0 && !allowed.includes(templateId)) {
@@ -786,6 +814,28 @@ export class ServersService {
         'This game is not available on your current plan',
       );
     }
+  }
+
+  /**
+   * Pick the runtime image for a server, auto-selecting the right JVM for
+   * Minecraft templates. For a Java image the eclipse-temurin tag is chosen from
+   * the requested MINECRAFT_VERSION (falling back to "latest" → newest Java when
+   * the customer didn't pin one); non-Java templates keep their configured image.
+   * The agent also runs the install script in this image, so install + runtime
+   * stay on one compatible JVM.
+   */
+  private resolveDockerImage(
+    images: Prisma.JsonValue,
+    environment?: Record<string, unknown> | null,
+  ): string | undefined {
+    const base = this.firstDockerImage(images);
+    if (!isJavaImage(base)) return base;
+    const env = (environment ?? {}) as Record<string, unknown>;
+    const mc =
+      env['MINECRAFT_VERSION'] != null
+        ? String(env['MINECRAFT_VERSION'])
+        : 'latest';
+    return resolveJavaImage(base, mc, 'jre');
   }
 
   private firstDockerImage(images: Prisma.JsonValue): string | undefined {

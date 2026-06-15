@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🎮 ReFx Hosting
+<img src="apps/web/public/brand/refx-wordmark.png" alt="ReFx Hosting" width="380" />
+
+# ReFx Hosting
 
 ### The open game-server hosting platform with **GPortal-style game switching**
 
@@ -15,7 +17,7 @@ A production-grade alternative to **Pterodactyl**, **AMP**, and **GPortal**, wit
 [![Next.js](https://img.shields.io/badge/Next.js%2014-000?logo=next.js&logoColor=white)](#-web-panel--apps-web)
 [![NestJS](https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white)](#-panel-api--apps-panel-api)
 
-[Quick start](#-quick-start) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
+[Quick start](#-quick-start) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
 
 </div>
 
@@ -34,6 +36,10 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 | 🛟 **Helpdesk built in** | Tickets, internal notes, canned responses, SLA tracking, knowledge base. |
 | 🔐 **Enterprise auth** | Argon2id, TOTP + WebAuthn, RBAC + per-server sub-user permissions, scoped API keys, audit logs. |
 | 🧱 **Eggs, evolved** | JSON-driven game templates — admins add new games with **zero code changes**. |
+| ⛏️ **Minecraft, done right** | Version picker (live Mojang manifest), **Paper + Fabric / Forge / NeoForge** loaders, and **automatic JVM selection** per Minecraft version — no more `UnsupportedClassVersionError` boot crashes. |
+| 🔌 **Auto networking** | Every new server reserves a free port and wires it into the game's startup automatically; players connect at the **IP:port** shown right on the server page (one-click copy). |
+| 🛠️ **Admin power tools** | Create servers straight from an egg (no SSH), manage & delete nodes, and watch **live node CPU / RAM / disk / ping graphs** from heartbeats. |
+| 🎨 **ReFx Glassy UI** | Dark, premium control-panel design (`#0072ff`) with a live `xterm.js` console, real-time resource gauges, and the blue ReFx brand throughout. |
 | 📦 **Migrate in** | Importers for **Pterodactyl** (live), AMP & TCAdmin (scaffolded). |
 
 > [!NOTE]
@@ -135,11 +141,14 @@ The orchestration lives in [`apps/panel-api/src/servers/`](apps/panel-api/src/se
 
 | | | | |
 |---|---|---|---|
-| ⛏️ Minecraft (Paper) | 🔫 Rust | 🦖 ARK: Survival Evolved | 🧟 DayZ |
-| 🪓 Valheim | 🐾 Palworld | 💥 Counter-Strike 2 | 🚗 FiveM (GTA V) |
-| 🏭 Satisfactory | 🌳 Terraria | 🧠 Project Zomboid | _+ add your own_ |
+| ⛏️ Minecraft: Paper | 🧵 Minecraft: Fabric | 🔨 Minecraft: Forge | 🆕 Minecraft: NeoForge |
+| 🔫 Rust | 🦖 ARK: Survival Evolved | 🧟 DayZ | 🪓 Valheim |
+| 🐾 Palworld | 💥 Counter-Strike 2 | 🚗 FiveM (GTA V) | 🏭 Satisfactory |
+| 🌳 Terraria | 🧠 Project Zomboid | | _+ add your own_ |
 
 Each is a JSON template in [`database/seed/templates/`](database/seed/templates) — no code required to add a game. See **[docs/10-game-templates.md](docs/10-game-templates.md)**.
+
+> **Minecraft niceties:** all four Minecraft templates expose a **version selector** (resolved live from Mojang's manifest, `GET /api/v1/catalog/minecraft-versions`) and the panel **auto-picks the right `eclipse-temurin` JVM** for the chosen version (Java 11 → 25), so newer releases like the `26.x` line boot without manual image fiddling. Fabric/Forge/NeoForge loader versions can be pinned or left as `latest`/`recommended` (auto-resolved at install).
 
 ---
 
@@ -237,14 +246,226 @@ The default Compose profile is lean (~2 GB); add `--profile full` for OpenSearch
 
 > Deploying remotely? Set `NEXT_PUBLIC_API_URL=http://<host>:4000` in `.env` **before** building the web image (it's baked at build time). See **[docs/18-installation.md](docs/18-installation.md)**.
 
-### Add a game node
+---
+
+## 🧠 Setting up the panel (production & hybrid)
+
+The **panel** is the central brain — `panel-api` (NestJS) + `web` (Next.js) backed
+by PostgreSQL, Redis, and S3/MinIO. [Quick start](#-quick-start) gets it running
+locally; this is the production-grade path plus the **single-box hybrid** layout.
+
+### Step 1 — configure `.env`
+
+`bootstrap.sh` generates a working `.env`, or copy `.env.example` and set at least:
 
 ```bash
-# Linux (Ubuntu/Debian/AlmaLinux/Rocky)
-sudo ./infra/scripts/install-node.sh --panel-url https://api.example.com --token <NODE_TOKEN>
-# Windows Server 2022/2025
-.\infra\scripts\install-node.ps1 -PanelUrl https://api.example.com -Token <NODE_TOKEN>
+# Secrets (generate strong values!)
+SECRETS_ENC_KEY=<64 hex chars>          # openssl rand -hex 32  — AES-256-GCM key for secrets at rest
+JWT_ACCESS_SECRET=<random>              # openssl rand -hex 48
+JWT_REFRESH_SECRET=<random>
+
+# Data stores (Compose service names work inside the network)
+DATABASE_URL=postgresql://refx:refx@postgres:5432/refx
+REDIS_URL=redis://redis:6379
+
+# Object storage (MinIO ships in Compose; or point at real S3)
+S3_ENDPOINT=http://minio:9000
+S3_BUCKET=refx-backups
+S3_ACCESS_KEY=...           S3_SECRET_KEY=...
+
+# IMPORTANT: baked into the web bundle at BUILD time, not runtime.
+# Set this to the URL browsers use to reach panel-api before building web.
+NEXT_PUBLIC_API_URL=https://panel.example.com:4000
+
+# Optional: SMTP (email), STRIPE_*/PAYPAL_* (live billing)
 ```
+
+> ⚠️ `NEXT_PUBLIC_API_URL` is **compiled into the web image**. If you change it you
+> must **rebuild** `web`, not just restart it.
+
+### Step 2 — build, migrate, seed, run
+
+```bash
+# Lean profile (panel-api + web + postgres + redis + minio):
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build
+
+# Full profile adds OpenSearch + Prometheus/Grafana/Loki:
+docker compose -f infra/docker/docker-compose.yml --env-file .env --profile full up -d --build
+```
+
+The `migrate` service applies Prisma migrations and seeds regions, game templates,
+and a default **owner** login (printed in its logs — change the password on first
+sign-in). Always pass `--env-file .env` so Compose uses *your* secrets, not the
+built-in dev defaults.
+
+### Step 3 — put it behind TLS
+
+Run a reverse proxy (Caddy / nginx / Traefik) terminating HTTPS and routing:
+
+| Public host | → | Upstream |
+|-------------|---|----------|
+| `panel.example.com` | → | `web:3000` |
+| `panel.example.com:4000` (or `/api`) | → | `panel-api:4000` |
+
+Then browse to your domain and sign in as the seeded owner. `/health` and
+`/metrics` are served at the **root** (not under `/api/v1`).
+
+See **[docs/18-installation.md](docs/18-installation.md)** and
+**[docs/19-production-deployment.md](docs/19-production-deployment.md)** for managed
+databases, Helm/Kubernetes, and scaling.
+
+### Hybrid: panel **and** a node on one box
+
+For a single VPS that hosts both the panel and game servers, run the panel stack
+above, then install the agent **on the same machine**:
+
+1. Create the node in **Admin → Nodes → Add** with **FQDN = the box's public IP**
+   (so the panel can reach the agent's `:8443` *and* players can reach game ports).
+2. Install the agent (see [node setup](#️-setting-up-game-nodes)) pointing at the
+   panel over loopback:
+
+   ```bash
+   sudo bash install-node.sh --panel-url http://127.0.0.1:4000 --token <BOOTSTRAP_TOKEN>
+   ```
+
+   The agent → panel calls go over loopback (`127.0.0.1:4000`); the panel → agent
+   calls use the node FQDN you set (`<public-ip>:8443`).
+3. The Compose panel already runs with `NODE_TLS_REJECT_UNAUTHORIZED=0`, so it
+   accepts the agent's self-signed control-API cert. Open ports **8443**, **2022**,
+   and the game range **25565–25999** on the host firewall.
+
+This is the lightest way to self-host — one machine, full platform — and scales
+out later by simply adding more nodes.
+
+---
+
+## 🖥️ Setting up game nodes
+
+A **node** is any Linux or Windows box that actually runs game servers. The panel
+is the brain; nodes are the muscle. They never share a database — a node only ever
+talks to the panel over a signed HTTPS control API, so a node can live anywhere
+the panel can reach (same host, another VPS, another continent).
+
+### How registration works (the short version)
+
+The agent registers with a **one-time bootstrap token**. On first boot it calls
+`POST /api/v1/agent/register` with the token, and the panel returns the node's
+durable `nodeId` + a derived HMAC **signing key**. The agent persists those to
+`<data_dir>/agent.state` and signs every subsequent request — so **the bootstrap
+token is only needed once** and can be removed afterwards. (The signing key is
+derived as `sha256(SECRETS_ENC_KEY + ":" + nodeId)`, never stored on the panel.)
+
+### Step 1 — create the node in the panel
+
+In the web panel go to **Admin → Nodes → Add node** and fill in:
+
+| Field | Notes |
+|------|-------|
+| **Name** | Friendly label, e.g. `eu-frankfurt-01`. |
+| **FQDN / IP** | A hostname or IP the **panel** can reach the node on. Players also connect here. |
+| **Region** | One of the seeded regions (`us-east`, `us-west`, `eu-central`, …). |
+| **OS** | `LINUX` or `WINDOWS`. |
+| **CPU / RAM / Disk capacity** | What the node may hand out (used by the scheduler for placement). |
+| **Daemon port** | Control API, default **8443**. |
+| **SFTP port** | Per-server SFTP, default **2022**. |
+
+Save it and **copy the bootstrap token** shown once. (Lost it? **Admin → Nodes →
+⋯ → Regenerate token**.)
+
+> Prefer the API? `POST /api/v1/admin/nodes` returns `{ node, bootstrapToken }`.
+
+### Step 2 — install the agent on the node
+
+**Linux** (Ubuntu / Debian / AlmaLinux / Rocky, systemd, x86_64 / arm64):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/refxfrank/refxhosting/main/infra/scripts/install-node.sh -o install-node.sh
+sudo bash install-node.sh \
+  --panel-url https://panel.example.com \
+  --token <BOOTSTRAP_TOKEN>
+# add --skip-docker if you only run native_process servers
+```
+
+**Windows Server 2022 / 2025** (PowerShell as Administrator):
+
+```powershell
+.\infra\scripts\install-node.ps1 -PanelUrl https://panel.example.com -Token <BOOTSTRAP_TOKEN>
+```
+
+The installer:
+1. installs Docker Engine (unless `--skip-docker` / already present),
+2. creates a `refx` system user + data dirs (`/var/lib/refx`),
+3. downloads the matching `refx-agent` release binary (and verifies its checksum),
+4. writes `/etc/refx/config.yaml` (schema = [`apps/node-agent/config.example.yaml`](apps/node-agent/config.example.yaml)),
+5. opens firewall ports **8443** + **2022**,
+6. installs and starts the `refx-agent` systemd service (Windows: a service).
+
+### Step 3 — verify
+
+```bash
+systemctl status refx-agent          # should be active (running)
+journalctl -u refx-agent -f          # watch it register + heartbeat
+```
+
+In **Admin → Nodes** the node flips to **ONLINE** within a few seconds and starts
+streaming **CPU / RAM / disk / container** gauges. Use the **Ping** button to
+measure panel→agent latency, and open a node to see its live heartbeat graphs.
+
+### Manual install (no release binary yet)
+
+Releases aren't published? Build the binary and run it yourself:
+
+```bash
+cd apps/node-agent
+go build -o refx-agent ./cmd/refx-agent          # cross-compile: GOOS=windows GOARCH=amd64 …
+cp config.example.yaml config.yaml               # then edit panel.url + panel.bootstrap_token
+./refx-agent --config config.yaml
+```
+
+Minimum viable `config.yaml`:
+
+```yaml
+data_dir: /var/lib/refx-agent
+panel:
+  url: https://panel.example.com
+  bootstrap_token: "<BOOTSTRAP_TOKEN>"   # one-time; safe to delete after first boot
+  skip_tls_verify: false                  # true only for a self-signed panel cert
+api:
+  bind_addr: 0.0.0.0:8443
+sftp:
+  bind_addr: 0.0.0.0:2022
+runtime:
+  default: docker                         # docker | native_process | windows_container
+```
+
+Every value can also be set via env (`REFX_PANEL_URL`, `REFX_PANEL_BOOTSTRAP_TOKEN`, …).
+
+### Ports & networking
+
+| Port | Direction | Purpose |
+|------|-----------|---------|
+| **8443/tcp** | panel → node | Signed HTTPS control API + console WebSocket. |
+| **2022/tcp** | clients → node | Per-server SFTP. |
+| **25565–25999/tcp+udp** | players → node | Game server ports, **auto-allocated** per server. |
+
+The node self-signs its control-API TLS cert on first boot. If the **panel** runs
+behind a self-signed cert, set `panel.skip_tls_verify: true` on the agent; if the
+**agent** uses a self-signed cert, run the panel with
+`NODE_TLS_REJECT_UNAUTHORIZED=0` (already set in the Compose file for local/dev).
+
+### Create a server on the node
+
+- **Admins:** **Admin → Servers → Create** — pick an owner, the node, a game egg
+  (and Minecraft version/loader), set limits, and provision directly (no SSH). The
+  panel reserves a free port and the server's **IP:port** appears on its page.
+- **Customers:** buy a plan in the storefront → the scheduler places it on the
+  least-loaded node with capacity.
+
+### Remove a node
+
+Migrate or delete its servers first, then **Admin → Nodes → ⋯ → Delete**
+(soft-delete; the panel refuses if servers are still attached). Stop the agent on
+the box with `systemctl disable --now refx-agent`.
 
 ---
 
