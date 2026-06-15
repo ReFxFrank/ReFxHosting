@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users, Globe, Copy } from "lucide-react";
 import { api } from "@/lib/api";
-import { ConsoleSocket, type ConsoleEvent, type ConsoleStats } from "@/lib/ws";
+import { type ConsoleEvent, type ConsoleStats } from "@/lib/ws";
+import { getConsole, type ConsoleHandle } from "@/lib/console-hub";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -21,7 +22,7 @@ export default function ConsolePage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const termRef = useRef<HTMLDivElement>(null);
-  const socketRef = useRef<ConsoleSocket | null>(null);
+  const consoleRef = useRef<ConsoleHandle | null>(null);
   // xterm instances are loaded dynamically (browser-only).
   const xtermRef = useRef<{ term: import("xterm").Terminal; fit: () => void } | null>(null);
 
@@ -84,6 +85,7 @@ export default function ConsolePage() {
   useEffect(() => {
     let disposed = false;
     let resizeObserver: ResizeObserver | null = null;
+    let unsubscribe: (() => void) | null = null;
 
     (async () => {
       const [{ Terminal }, { FitAddon }] = await Promise.all([
@@ -121,17 +123,23 @@ export default function ConsolePage() {
       });
       resizeObserver.observe(termRef.current);
 
-      // Connect websocket.
-      const socket = new ConsoleSocket({ serverId: id, onEvent });
-      socketRef.current = socket;
-      void socket.connect();
+      // Attach to the shared, persistent console for this server: replay the
+      // buffered history, sync current state, then subscribe to new events. The
+      // socket lives in the hub and survives tab switches.
+      const con = getConsole(id);
+      consoleRef.current = con;
+      for (const line of con.lines) writeLine(line);
+      setConnected(con.connected);
+      if (con.state) setLiveState(con.state);
+      if (con.stats) setStats(con.stats);
+      unsubscribe = con.subscribe(onEvent);
     })();
 
     return () => {
       disposed = true;
       resizeObserver?.disconnect();
-      socketRef.current?.close();
-      socketRef.current = null;
+      unsubscribe?.();
+      consoleRef.current = null;
       xtermRef.current?.term.dispose();
       xtermRef.current = null;
     };
@@ -152,9 +160,11 @@ export default function ConsolePage() {
   function sendCommand() {
     const cmd = command.trim();
     if (!cmd) return;
-    if (socketRef.current && connected) {
-      socketRef.current.sendCommand(cmd);
-      writeLine(`\x1b[36m> ${cmd}\x1b[0m`);
+    const echo = `\x1b[36m> ${cmd}\x1b[0m`;
+    if (consoleRef.current && connected) {
+      consoleRef.current.sendCommand(cmd);
+      consoleRef.current.echo(echo); // persist the echo in the shared buffer
+      writeLine(echo);
     } else {
       api.servers.command(id, cmd).catch(() => toast.error("Failed to send command"));
     }
@@ -194,8 +204,10 @@ export default function ConsolePage() {
   }
 
   const running = state === "RUNNING" || state === "STARTING";
-  const memLimit = stats?.memLimitMb ?? server?.memoryMb ?? 0;
-  const diskLimit = stats?.diskLimitMb ?? server?.diskMb ?? 0;
+  // Use `||` so a 0/absent agent-reported limit falls back to the plan limit
+  // (nullish `??` would keep a 0 and show "/0B" + 0%).
+  const memLimit = stats?.memLimitMb || server?.memoryMb || 0;
+  const diskLimit = stats?.diskLimitMb || server?.diskMb || 0;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
