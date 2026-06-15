@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"time"
 
@@ -277,8 +278,6 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 		Env:          append(envSlice(s.Spec.Env), "HOME=/home/container"),
 		ExposedPorts: ports,
 		WorkingDir:   "/home/container",
-		// Run the game as a non-root user (its data dir is chowned below).
-		User:         containerUser,
 		Tty:          false,
 		OpenStdin:    true,
 		AttachStdin:  true,
@@ -287,10 +286,18 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 		Labels:       map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
 
-	// The install step runs as root; make the data dir writable by the non-root
-	// runtime user before launching.
-	if err := chownTree(s.DataDir, containerUID, containerGID); err != nil {
-		d.log.Warn().Err(err).Str("server", s.ID()).Msg("chown data dir failed")
+	// Run the game as a non-root user on Linux nodes (the data dir is chowned to
+	// match below). This is deliberately skipped on Windows: Docker Desktop's
+	// WSL2 bind mounts don't honor Linux file ownership, so a uid:1000 process
+	// can't write the mounted data dir and the server crashes immediately — there
+	// the image's default user (root) is correct.
+	if goruntime.GOOS != "windows" {
+		cfg.User = containerUser
+		// The install step runs as root; make the data dir writable by the
+		// non-root runtime user before launching.
+		if err := chownTree(s.DataDir, containerUID, containerGID); err != nil {
+			d.log.Warn().Err(err).Str("server", s.ID()).Msg("chown data dir failed")
+		}
 	}
 
 	name := containerName(s)
