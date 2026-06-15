@@ -12,8 +12,10 @@ import type { ServerState } from "@/lib/types";
 
 const MAX_LINES = 2000;
 const IDLE_CLOSE_MS = 5 * 60 * 1000;
+const PERSIST_MS = 700;
 
 interface Entry {
+  serverId: string;
   socket: ConsoleSocket;
   lines: string[];
   connected: boolean;
@@ -21,15 +23,59 @@ interface Entry {
   stats: ConsoleStats | null;
   listeners: Set<(ev: ConsoleEvent) => void>;
   idleTimer: ReturnType<typeof setTimeout> | null;
+  saveTimer: ReturnType<typeof setTimeout> | null;
 }
 
 const hub = new Map<string, Entry>();
+
+// sessionStorage persistence so a full page refresh (new JS context, where the
+// in-memory hub is gone) still restores recent console output. Cleared when the
+// tab/session closes.
+const persistKey = (serverId: string) => `refx.console.${serverId}`;
+
+function loadPersisted(serverId: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.sessionStorage.getItem(persistKey(serverId));
+    const arr = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(arr) ? (arr as string[]).slice(-MAX_LINES) : [];
+  } catch {
+    return [];
+  }
+}
+
+function flush(entry: Entry) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(persistKey(entry.serverId), JSON.stringify(entry.lines));
+  } catch {
+    /* quota / unavailable — ignore */
+  }
+}
+
+function schedulePersist(entry: Entry) {
+  if (entry.saveTimer) return;
+  entry.saveTimer = setTimeout(() => {
+    entry.saveTimer = null;
+    flush(entry);
+  }, PERSIST_MS);
+}
+
+// A full page refresh discards the in-memory hub before any debounced write
+// fires, so flush every buffer synchronously as the page unloads. This keeps
+// the most recent lines available for replay in the next JS context.
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    hub.forEach((entry) => flush(entry));
+  });
+}
 
 function push(entry: Entry, line: string) {
   entry.lines.push(line);
   if (entry.lines.length > MAX_LINES) {
     entry.lines.splice(0, entry.lines.length - MAX_LINES);
   }
+  schedulePersist(entry);
 }
 
 function ensure(serverId: string): Entry {
@@ -37,13 +83,15 @@ function ensure(serverId: string): Entry {
   if (existing) return existing;
 
   const entry: Entry = {
+    serverId,
     socket: undefined as unknown as ConsoleSocket,
-    lines: [],
+    lines: loadPersisted(serverId),
     connected: false,
     state: null,
     stats: null,
     listeners: new Set(),
     idleTimer: null,
+    saveTimer: null,
   };
   entry.socket = new ConsoleSocket({
     serverId,
