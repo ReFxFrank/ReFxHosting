@@ -844,9 +844,13 @@ export class ServersService {
   ): Promise<number> {
     const node = await this.prisma.node.findUnique({
       where: { id: nodeId },
-      select: { fqdn: true },
+      select: { fqdn: true, allocationPortStart: true, allocationPortEnd: true },
     });
     if (!node) throw new NotFoundException('Node not found');
+
+    // Per-node configurable range (falls back to the global default).
+    const rangeStart = node.allocationPortStart || PORT_RANGE_START;
+    const rangeEnd = node.allocationPortEnd || PORT_RANGE_END;
 
     const MAX_ATTEMPTS = 5;
     let port = 0;
@@ -854,13 +858,13 @@ export class ServersService {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       // Re-query taken ports each attempt so a concurrent allocation is observed.
       const taken = await this.prisma.allocation.findMany({
-        where: { nodeId, port: { gte: PORT_RANGE_START, lte: PORT_RANGE_END } },
+        where: { nodeId, port: { gte: rangeStart, lte: rangeEnd } },
         select: { port: true },
       });
       const candidate = pickFreePort(
         taken.map((a) => a.port),
-        PORT_RANGE_START,
-        PORT_RANGE_END,
+        rangeStart,
+        rangeEnd,
       );
 
       try {
@@ -919,7 +923,7 @@ export class ServersService {
     const taken = new Set<number>(
       (
         await this.prisma.allocation.findMany({
-          where: { nodeId, port: { gte: PORT_RANGE_START, lte: PORT_RANGE_END } },
+          where: { nodeId, port: { gte: rangeStart, lte: rangeEnd } },
           select: { port: true },
         })
       ).map((a) => a.port),
@@ -928,7 +932,7 @@ export class ServersService {
       if (!isPortEnvName(v.envName)) continue;
       let assigned = 0;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-        const candidate = pickFreePort(taken, PORT_RANGE_START, PORT_RANGE_END);
+        const candidate = pickFreePort(taken, rangeStart, rangeEnd);
         if (taken.has(candidate)) break; // pool exhausted → fall back to primary
         try {
           await this.prisma.allocation.create({

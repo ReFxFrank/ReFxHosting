@@ -112,6 +112,9 @@ export interface Node {
   cpuCores: number;
   memoryMb: number;
   diskMb: number;
+  /** Public port range the panel auto-assigns to servers on this node. */
+  allocationPortStart?: number;
+  allocationPortEnd?: number;
   servers?: number;
   /** Most-recent heartbeat for live gauges (null until the agent reports). */
   latestHeartbeat?: NodeHeartbeat | null;

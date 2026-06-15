@@ -51,6 +51,18 @@ export class CreateNodeDto {
   @IsOptional()
   @IsInt()
   sftpPort?: number;
+
+  @ApiPropertyOptional({ default: 25565, description: 'Start of the public port range allocated to servers on this node.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  allocationPortStart?: number;
+
+  @ApiPropertyOptional({ default: 25999, description: 'End of the public port range allocated to servers on this node.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  allocationPortEnd?: number;
 }
 
 export class UpdateNodeDto {
@@ -88,6 +100,18 @@ export class UpdateNodeDto {
   @IsOptional()
   @IsNumber()
   memOvercommit?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  allocationPortStart?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  allocationPortEnd?: number;
 }
 
 export class HeartbeatDto {

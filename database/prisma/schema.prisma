@@ -223,6 +223,12 @@ model Node {
   sftpPort      Int        @default(2022)
   scheme        String     @default("https")
 
+  // Public port range the panel auto-assigns from for this node's server
+  // allocations (primary game port + per-game query/RCON/etc.). Configurable per
+  // node so operators can match their firewall / port-forwarding rules.
+  allocationPortStart Int   @default(25565)
+  allocationPortEnd   Int   @default(25999)
+
   // Capacity (advertised by agent, overridable by admin)
   cpuCores      Int
   memoryMb      Int

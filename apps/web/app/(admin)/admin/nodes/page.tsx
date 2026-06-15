@@ -192,6 +192,8 @@ const emptyForm = {
   cpuCores: 8,
   memoryMb: 16384,
   diskMb: 512000,
+  allocationPortStart: 25565,
+  allocationPortEnd: 25999,
 };
 
 export default function AdminNodesPage() {
@@ -229,6 +231,8 @@ export default function AdminNodesPage() {
         cpuCores: form.cpuCores,
         memoryMb: form.memoryMb,
         diskMb: form.diskMb,
+        allocationPortStart: form.allocationPortStart,
+        allocationPortEnd: form.allocationPortEnd,
       }),
     onSuccess: (node) => {
       toast.success("Node created");
@@ -504,6 +508,39 @@ export default function AdminNodesPage() {
                 />
               </div>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="node-port-start">Allocation port range — start</Label>
+                <Input
+                  id="node-port-start"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={form.allocationPortStart}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, allocationPortStart: Number(e.target.value) }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="node-port-end">Allocation port range — end</Label>
+                <Input
+                  id="node-port-end"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={form.allocationPortEnd}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, allocationPortEnd: Number(e.target.value) }))
+                  }
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Servers on this node get their game + query/RCON ports from this range.
+              Open it on the node&apos;s firewall / security group.
+            </p>
           </div>
 
           <DialogFooter>

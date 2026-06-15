@@ -13,6 +13,10 @@ import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util'
 import { uuidv7 } from '../common/util/uuid';
 import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
 import {
+  PORT_RANGE_START,
+  PORT_RANGE_END,
+} from '../servers/allocation-port.util';
+import {
   CreateNodeDto,
   HeartbeatDto,
   NodeRegisterDto,
@@ -68,6 +72,13 @@ export class NodesService {
   async create(dto: CreateNodeDto): Promise<{ node: Node; bootstrapToken: string }> {
     const bootstrapToken = this.crypto.token(32);
     const regionId = await this.resolveRegionId(dto.regionId);
+    const portStart = dto.allocationPortStart ?? PORT_RANGE_START;
+    const portEnd = dto.allocationPortEnd ?? PORT_RANGE_END;
+    if (portStart > portEnd) {
+      throw new BadRequestException(
+        'allocationPortStart must be <= allocationPortEnd',
+      );
+    }
     const node = await this.prisma.node.create({
       data: {
         id: uuidv7(),
@@ -83,6 +94,8 @@ export class NodesService {
         diskMb: dto.diskMb,
         daemonPort: dto.daemonPort ?? 8443,
         sftpPort: dto.sftpPort ?? 2022,
+        allocationPortStart: portStart,
+        allocationPortEnd: portEnd,
         state: 'PROVISIONING',
       },
     });
@@ -167,6 +180,15 @@ export class NodesService {
   }
 
   update(id: string, dto: UpdateNodeDto): Promise<Node> {
+    if (
+      dto.allocationPortStart != null &&
+      dto.allocationPortEnd != null &&
+      dto.allocationPortStart > dto.allocationPortEnd
+    ) {
+      throw new BadRequestException(
+        'allocationPortStart must be <= allocationPortEnd',
+      );
+    }
     return this.prisma.node.update({ where: { id }, data: dto });
   }
 

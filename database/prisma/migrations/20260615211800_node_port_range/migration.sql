@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Node" ADD COLUMN     "allocationPortEnd" INTEGER NOT NULL DEFAULT 25999,
+ADD COLUMN     "allocationPortStart" INTEGER NOT NULL DEFAULT 25565;
