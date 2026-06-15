@@ -344,12 +344,10 @@ export interface SubUser {
 export interface FileEntry {
   name: string;
   path: string;
-  isFile: boolean;
-  isSymlink: boolean;
+  isDir: boolean;
   size: number;
   mode: string;
-  modifiedAt: string;
-  mimeType?: string;
+  modified: string;
 }
 
 // Billing

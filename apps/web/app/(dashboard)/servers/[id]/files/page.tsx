@@ -70,10 +70,7 @@ const TEXT_EXT =
   /\.(txt|log|json|ya?ml|toml|ini|cfg|conf|properties|env|md|xml|html?|css|js|ts|jsx|tsx|sh|bash|py|lua|sql|csv|gitignore|dockerfile)$/i;
 
 function isEditable(entry: FileEntry) {
-  if (!entry.isFile) return false;
-  if (entry.mimeType?.startsWith("text/")) return true;
-  if (entry.mimeType === "application/json" || entry.mimeType === "application/xml")
-    return true;
+  if (entry.isDir) return false;
   return TEXT_EXT.test(entry.name);
 }
 
@@ -359,9 +356,9 @@ export default function FilesPage() {
             </TableHeader>
             <TableBody>
               {entries.map((entry) => {
-                const isDir = !entry.isFile;
+                const isDir = entry.isDir;
                 const editable = isEditable(entry);
-                const archive = entry.isFile && isArchive(entry.name);
+                const archive = !entry.isDir && isArchive(entry.name);
                 return (
                   <TableRow
                     key={entry.path}
@@ -408,7 +405,7 @@ export default function FilesPage() {
                       {entry.mode}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground md:table-cell">
-                      {formatRelative(entry.modifiedAt)}
+                      {formatRelative(entry.modified)}
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>
@@ -426,7 +423,7 @@ export default function FilesPage() {
                           >
                             <Pencil /> Rename
                           </DropdownMenuItem>
-                          {entry.isFile && (
+                          {!entry.isDir && (
                             <DropdownMenuItem
                               onSelect={() => downloadMutation.mutate(entry.path)}
                             >

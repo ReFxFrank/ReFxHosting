@@ -148,12 +148,18 @@ export class NodeAgentClient {
 
   // ---- files (proxied to the agent's jailed file manager) ----------------
 
-  listFiles(node: Node, serverId: string, path: string): Promise<FileEntry[]> {
-    return this.request(
+  async listFiles(
+    node: Node,
+    serverId: string,
+    path: string,
+  ): Promise<FileEntry[]> {
+    // The agent responds with { entries: [...] }; unwrap to the bare array.
+    const res = await this.request<{ entries?: FileEntry[] } | FileEntry[]>(
       node,
       'GET',
       `/api/v1/servers/${serverId}/files/list?path=${encodeURIComponent(path)}`,
     );
+    return Array.isArray(res) ? res : (res?.entries ?? []);
   }
 
   readFile(node: Node, serverId: string, path: string): Promise<{ content: string }> {
