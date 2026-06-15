@@ -9,11 +9,16 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request } from 'express';
-import type Stripe from 'stripe';
 import { Public } from '../../common/decorators/public.decorator';
 import { RawResponse } from '../../common/decorators/raw-response.decorator';
 import { BillingService } from '../billing.service';
-import { StripeGateway } from '../gateways/stripe.gateway';
+import {
+  StripeGateway,
+  StripeEvent,
+  StripeInvoice,
+  StripeCharge,
+  StripeMetadata,
+} from '../gateways/stripe.gateway';
 
 /**
  * Receives Stripe webhook callbacks. The route is mounted with `express.raw`
@@ -43,7 +48,7 @@ export class StripeWebhookController {
       throw new BadRequestException('Missing stripe-signature header');
     }
 
-    let event: Stripe.Event;
+    let event: StripeEvent;
     try {
       // req.body is a Buffer because main.ts mounts express.raw on this path.
       event = this.stripe.verifyWebhook(req.body as Buffer, signature);
@@ -67,13 +72,13 @@ export class StripeWebhookController {
   }
 
   /** Route a verified event to the appropriate billing action. */
-  private async dispatch(event: Stripe.Event): Promise<void> {
+  private async dispatch(event: StripeEvent): Promise<void> {
     switch (event.type) {
       case 'invoice.payment_succeeded': {
         // TODO(impl): the Stripe Invoice object shape carries our linkage via
         // metadata.invoiceId (set in createCheckoutSession/charge) or the
         // `number`/`id`. Here we resolve our invoice by gatewayInvoiceId.
-        const obj = event.data.object as Stripe.Invoice & {
+        const obj = event.data.object as StripeInvoice & {
           payment_intent?: string;
         };
         const invoice = await this.resolveInvoice(obj);
@@ -96,8 +101,8 @@ export class StripeWebhookController {
         // TODO(impl): for charge.failed the object is a Charge, not an Invoice;
         // map via charge.invoice / metadata. Both branches resolve our invoice.
         const obj = event.data.object as
-          | Stripe.Invoice
-          | (Stripe.Charge & { invoice?: string });
+          | StripeInvoice
+          | (StripeCharge & { invoice?: string });
         const invoice = await this.resolveInvoice(obj);
         if (!invoice) return;
         const reason =
@@ -125,7 +130,7 @@ export class StripeWebhookController {
   private async resolveInvoice(obj: {
     id?: string;
     invoice?: string;
-    metadata?: Stripe.Metadata | null;
+    metadata?: StripeMetadata | null;
   }): Promise<{ id: string } | null> {
     const metadataInvoiceId = obj.metadata?.invoiceId;
     if (metadataInvoiceId) {

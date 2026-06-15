@@ -2,6 +2,27 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { Invoice } from '@prisma/client';
+
+/**
+ * Stripe v22 ships its rich namespace types (Event, Invoice, errors, …) only
+ * through the ESM type-condition of its `exports` map. Under CommonJS
+ * resolution the default import resolves to the bare constructor, so the
+ * `Stripe.Event`-style namespace access no longer type-checks. We derive the
+ * shapes we need from the client instance type / static members, which is
+ * resolution-independent and tracks the SDK without internal path imports.
+ */
+type StripeClient = InstanceType<typeof Stripe>;
+export type StripeEvent = ReturnType<StripeClient['webhooks']['constructEvent']>;
+export type StripeInvoice = Awaited<
+  ReturnType<StripeClient['invoices']['retrieve']>
+>;
+export type StripeCharge = Awaited<
+  ReturnType<StripeClient['charges']['retrieve']>
+>;
+export type StripeMetadata = StripeInvoice['metadata'];
+export type StripeError = InstanceType<typeof Stripe.errors.StripeError> & {
+  payment_intent?: { id?: string };
+};
 import { AppConfig } from '../../config/configuration';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import {
@@ -21,15 +42,16 @@ import {
 export class StripeGateway implements PaymentGateway {
   readonly name = 'stripe';
   private readonly logger = new Logger(StripeGateway.name);
-  private readonly stripe: Stripe;
+  private readonly stripe: StripeClient;
   private readonly webhookSecret: string;
 
   constructor(private readonly config: ConfigService) {
     const cfg = this.config.get<AppConfig['stripe']>('stripe')!;
     this.webhookSecret = cfg.webhookSecret;
     this.stripe = new Stripe(cfg.secretKey, {
-      // Pin a recent API version; bump deliberately when upgrading the SDK.
-      apiVersion: '2023-10-16',
+      // Pin the API version the SDK major targets; bump deliberately when
+      // upgrading the SDK (stripe-node v22 → 2026-05-27.dahlia).
+      apiVersion: '2026-05-27.dahlia',
       typescript: true,
     });
   }
@@ -86,7 +108,7 @@ export class StripeGateway implements PaymentGateway {
       };
     } catch (err) {
       // Stripe surfaces declines as StripeCardError (an exception in confirm).
-      const e = err as Stripe.errors.StripeError;
+      const e = err as StripeError;
       this.logger.warn(
         `Stripe charge failed for invoice ${invoice.id}: ${e.message}`,
       );
@@ -132,7 +154,7 @@ export class StripeGateway implements PaymentGateway {
    * Verify and decode a Stripe webhook using the raw request body and the
    * `stripe-signature` header. Throws on invalid signatures.
    */
-  verifyWebhook(rawBody: Buffer, signature: string): Stripe.Event {
+  verifyWebhook(rawBody: Buffer, signature: string): StripeEvent {
     return this.stripe.webhooks.constructEvent(
       rawBody,
       signature,
