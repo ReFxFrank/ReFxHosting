@@ -144,6 +144,17 @@ export const AlertSeverity = {
 } as const;
 export type AlertSeverity = (typeof AlertSeverity)[keyof typeof AlertSeverity];
 
+/** Public storefront homepage notices (separate from the internal AlertSeverity). */
+export const HomepageAlertType = {
+  INFO: 'INFO',
+  SUCCESS: 'SUCCESS',
+  WARNING: 'WARNING',
+  DANGER: 'DANGER',
+  PROMO: 'PROMO',
+} as const;
+export type HomepageAlertType =
+  (typeof HomepageAlertType)[keyof typeof HomepageAlertType];
+
 export const ApiKeyScope = {
   READ: 'READ',
   WRITE: 'WRITE',

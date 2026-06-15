@@ -331,6 +331,18 @@ model GameTemplate {
   recMemoryMb     Int            @default(1024)
   recDiskMb       Int            @default(5120)
 
+  // ---- Public storefront metadata ----------------------------------------
+  // Opt-in: a template is hidden from the public storefront until an admin
+  // publishes it (it always remains visible/usable in the admin panel).
+  isPublished     Boolean        @default(false)
+  featured        Boolean        @default(false)
+  sortOrder       Int            @default(0)
+  longDescription String?        // marketing copy for the game detail page
+  cardImageUrl    String?        // homepage/catalog card art
+  heroImageUrl    String?        // detail-page hero/background
+  iconUrl         String?        // small logo/icon
+  tags            String[]       @default([]) // free-form storefront tags
+
   variables       TemplateVariable[]
   servers         Server[]
 
@@ -934,4 +946,31 @@ model GlobalAlert {
   startsAt  DateTime?
   endsAt    DateTime?
   createdAt DateTime      @default(now())
+}
+
+// Public, marketing/status notices shown on the customer-facing storefront.
+// Deliberately separate from GlobalAlert (which targets the internal dashboard)
+// so the two surfaces never interfere.
+enum HomepageAlertType {
+  INFO
+  SUCCESS
+  WARNING
+  DANGER
+  PROMO
+}
+
+model HomepageAlert {
+  id          String            @id @db.Uuid
+  type        HomepageAlertType @default(INFO)
+  title       String
+  body        String
+  isActive    Boolean           @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  ctaLabel    String?
+  ctaUrl      String?
+  dismissible Boolean           @default(true)
+  priority    Int               @default(0) // higher shows first
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 }

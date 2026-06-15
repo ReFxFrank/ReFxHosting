@@ -94,6 +94,7 @@ interface TemplateFile {
   slug: string;
   author: string;
   description?: string;
+  longDescription?: string;
   category?: string; // GameCategory slug
   deployMethods: string[]; // DeployMethod enum strings
   supportsLinux?: boolean;
@@ -424,11 +425,43 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
       recDiskMb: tpl.recDiskMb ?? 5120,
     };
 
+    // Public storefront defaults. Seeded (first-party) templates are published
+    // so the storefront has content out of the box. These are applied on CREATE
+    // and backfilled onto pre-storefront rows below — but never on plain UPDATE,
+    // so admin edits (publish toggles, custom art) made in the panel persist.
+    const FEATURED = new Set([
+      'minecraft-paper',
+      'minecraft-fabric',
+      'rust',
+      'valheim',
+      'palworld',
+    ]);
+    const preset = `/games/presets/${tpl.category ?? 'default'}.svg`;
+    const storefront = {
+      isPublished: true,
+      featured: FEATURED.has(tpl.slug),
+      sortOrder: FEATURED.has(tpl.slug) ? 0 : 100,
+      longDescription: tpl.longDescription ?? tpl.description ?? null,
+      cardImageUrl: preset,
+      heroImageUrl: preset,
+      tags: tpl.category ? [tpl.category] : [],
+    };
+
     const template = await prisma.gameTemplate.upsert({
       where: { slug: tpl.slug },
       update: data,
-      create: { id: uuidv7(), slug: tpl.slug, ...data },
+      create: { id: uuidv7(), slug: tpl.slug, ...data, ...storefront },
     });
+
+    // Backfill storefront metadata for rows created before storefront fields
+    // existed — only when no card art has ever been set, so we don't clobber
+    // any admin customisation.
+    if (!template.cardImageUrl) {
+      await prisma.gameTemplate.update({
+        where: { id: template.id },
+        data: storefront,
+      });
+    }
 
     // Upsert each variable on the composite unique (templateId, envName).
     for (const v of tpl.variables ?? []) {
