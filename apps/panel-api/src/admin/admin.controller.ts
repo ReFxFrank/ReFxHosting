@@ -17,6 +17,7 @@ import { NodesService } from '../nodes/nodes.service';
 import { UsersService } from '../users/users.service';
 import { BillingService } from '../billing/billing.service';
 import { TemplatesService } from '../templates/templates.service';
+import { ServersService } from '../servers/servers.service';
 import { AlertsService } from '../platform/alerts.service';
 import { AuditService } from '../platform/audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -32,7 +33,12 @@ import {
   CreateTemplateDto,
   UpdateTemplateDto,
 } from '../templates/dto/template.dto';
-import { UpdateAlertDto, UpdateProductDto, UpdateUserDto } from './dto/admin.dto';
+import {
+  AdminCreateServerDto,
+  UpdateAlertDto,
+  UpdateProductDto,
+  UpdateUserDto,
+} from './dto/admin.dto';
 
 /**
  * Admin surface (`/admin/*`). Mostly thin aliases over existing feature services;
@@ -51,6 +57,7 @@ export class AdminController {
     private readonly users: UsersService,
     private readonly billing: BillingService,
     private readonly templates: TemplatesService,
+    private readonly servers: ServersService,
     private readonly alerts: AlertsService,
     private readonly audit: AuditService,
   ) {}
@@ -172,6 +179,26 @@ export class AdminController {
   @Audit({ action: 'admin.template.delete', targetType: 'GameTemplate', targetParam: 'id' })
   deleteTemplate(@Param('id') id: string) {
     return this.templates.delete(id);
+  }
+
+  // ---- Servers (admin create-from-egg) -----------------------------------
+
+  @Get('servers')
+  listServers(@Query() pagination: PaginationDto) {
+    return this.servers.adminList(pagination);
+  }
+
+  @Post('servers')
+  @Audit({ action: 'admin.server.create', targetType: 'Server' })
+  createServer(@Body() dto: AdminCreateServerDto) {
+    return this.servers.adminCreate(dto);
+  }
+
+  @Delete('servers/:id')
+  @HttpCode(204)
+  @Audit({ action: 'admin.server.delete', targetType: 'Server', targetParam: 'id' })
+  deleteServer(@Param('id') id: string) {
+    return this.servers.delete(id);
   }
 
   // ---- Alerts ------------------------------------------------------------

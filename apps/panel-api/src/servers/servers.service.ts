@@ -27,6 +27,7 @@ import {
   ResizeServerDto,
   SwitchGameDto,
 } from './dto/server.dto';
+import { AdminCreateServerDto } from '../admin/dto/admin.dto';
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
@@ -151,6 +152,88 @@ export class ServersService {
     } satisfies ProvisionJob);
 
     return server;
+  }
+
+  /**
+   * Admin-driven server creation (Pterodactyl-style): provisions a server from
+   * an egg directly for any owner, WITHOUT a billing subscription. Validates the
+   * owner/node/template, writes the Server row (subscriptionId = null), and
+   * enqueues provisioning identically to the customer `create()` path so the node
+   * agent installs it.
+   */
+  async adminCreate(dto: AdminCreateServerDto): Promise<Server> {
+    const owner = await this.prisma.user.findFirst({
+      where: { id: dto.ownerId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!owner) throw new NotFoundException('Owner not found');
+
+    const node = await this.prisma.node.findFirst({
+      where: { id: dto.nodeId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!node) throw new NotFoundException('Node not found');
+
+    const template = await this.prisma.gameTemplate.findUnique({
+      where: { id: dto.templateId },
+    });
+    if (!template) throw new NotFoundException('Template not found');
+
+    const dockerImage = this.firstDockerImage(template.dockerImages);
+
+    const server = await this.prisma.server.create({
+      data: {
+        id: uuidv7(),
+        shortId: shortId(),
+        name: dto.name,
+        ownerId: dto.ownerId,
+        nodeId: dto.nodeId,
+        templateId: template.id,
+        templateVersion: template.version,
+        state: 'INSTALLING',
+        deployMethod: (template.deployMethods[0] as any) ?? 'DOCKER',
+        cpuCores: dto.cpuCores,
+        memoryMb: dto.memoryMb,
+        diskMb: dto.diskMb,
+        swapMb: dto.swapMb ?? 0,
+        startupCommand: template.startupCommand,
+        dockerImage,
+        environment: dto.environment ?? {},
+        subscriptionId: null,
+        sftpPasswordEnc: this.crypto.encrypt(this.crypto.token(16)),
+      },
+    });
+
+    await this.provisionQueue.add(JOB.PROVISION, {
+      serverId: server.id,
+    } satisfies ProvisionJob);
+
+    return server;
+  }
+
+  /** Admin list of every (non-deleted) server with node/owner/template names. */
+  async adminList(pagination: PaginationDto): Promise<Paginated<Server>> {
+    const where: Prisma.ServerWhereInput = {
+      deletedAt: null,
+      ...(pagination.q
+        ? { name: { contains: pagination.q, mode: 'insensitive' } }
+        : {}),
+    };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.server.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          template: { select: { id: true, name: true, slug: true } },
+          node: { select: { id: true, name: true, fqdn: true } },
+          owner: { select: { id: true, email: true, firstName: true, lastName: true } },
+        },
+      }),
+      this.prisma.server.count({ where }),
+    ]);
+    return paginate(data, total, pagination);
   }
 
   // ---- power -------------------------------------------------------------

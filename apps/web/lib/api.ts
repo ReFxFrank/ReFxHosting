@@ -31,6 +31,7 @@ import type {
   FileEntry,
   AuditLog,
   GlobalAlert,
+  AdminServer,
 } from "@/lib/types";
 
 export const API_URL =
@@ -445,6 +446,7 @@ export const api = {
       http.post<Node & { bootstrapToken: string }>("/admin/nodes", input),
     setNodeMaintenance: (id: string, maintenance: boolean) =>
       http.patch<Node>(`/admin/nodes/${id}`, { maintenance }),
+    deleteNode: (id: string) => http.delete<void>(`/admin/nodes/${id}`),
 
     users: (query?: { search?: string; state?: string }) =>
       http.get<Paginated<User>>("/admin/users", { query }),
@@ -456,6 +458,20 @@ export const api = {
       input.id
         ? http.patch<Product>(`/admin/products/${input.id}`, input)
         : http.post<Product>("/admin/products", input),
+
+    servers: () => getList<AdminServer>("/admin/servers"),
+    createServer: (input: {
+      name: string;
+      ownerId: string;
+      nodeId: string;
+      templateId: string;
+      cpuCores: number;
+      memoryMb: number;
+      diskMb: number;
+      swapMb?: number;
+      environment?: Record<string, string>;
+    }) => http.post<Server>("/admin/servers", input),
+    deleteServer: (id: string) => http.delete<void>(`/admin/servers/${id}`),
 
     templates: () => getList<GameTemplate>("/admin/templates"),
     saveTemplate: (input: Partial<GameTemplate>) =>

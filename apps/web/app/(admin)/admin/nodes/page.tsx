@@ -18,6 +18,7 @@ import {
   Copy,
   Check,
   TriangleAlert,
+  Trash2,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -98,6 +99,7 @@ export default function AdminNodesPage() {
   const [form, setForm] = useState(emptyForm);
   const [bootstrapToken, setBootstrapToken] = useState<string | null>(null);
   const [detailNode, setDetailNode] = useState<Node | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Node | null>(null);
 
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["admin", "nodes"],
@@ -138,6 +140,17 @@ export default function AdminNodesPage() {
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to update node"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.admin.deleteNode(id),
+    onSuccess: () => {
+      toast.success("Node deleted");
+      invalidate();
+      setDeleteTarget(null);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to delete node"),
   });
 
   return (
@@ -200,13 +213,23 @@ export default function AdminNodesPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => setDetailNode(node)}
-                      >
-                        <Activity className="size-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => setDetailNode(node)}
+                        >
+                          <Activity className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(node)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -391,6 +414,30 @@ export default function AdminNodesPage() {
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDetailNode(null)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete node confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete node</DialogTitle>
+            <DialogDescription>
+              Delete node {deleteTarget?.name}? This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              Delete node
             </Button>
           </DialogFooter>
         </DialogContent>

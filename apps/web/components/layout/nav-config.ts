@@ -6,6 +6,7 @@ import {
   UserCog,
   ShoppingCart,
   Shield,
+  ServerCog,
   type LucideIcon,
 } from "lucide-react";
 import type { GlobalRole } from "@/lib/types";
@@ -28,6 +29,7 @@ export const mainNav: NavItem[] = [
 
 export const adminNav: NavItem[] = [
   { label: "Admin", href: "/admin", icon: Shield, roles: ["ADMIN", "OWNER"] },
+  { label: "Servers", href: "/admin/servers", icon: ServerCog, roles: ["ADMIN", "OWNER"] },
 ];
 
 export const serverTabs = (id: string) => [

@@ -5,6 +5,7 @@ import { NodesModule } from '../nodes/nodes.module';
 import { TemplatesModule } from '../templates/templates.module';
 import { UsersModule } from '../users/users.module';
 import { BillingModule } from '../billing/billing.module';
+import { ServersModule } from '../servers/servers.module';
 
 /**
  * Admin module. Aggregates the admin-only surface and imports the feature
@@ -12,7 +13,13 @@ import { BillingModule } from '../billing/billing.module';
  * exported by the @Global PlatformModule, so they need no explicit import.
  */
 @Module({
-  imports: [NodesModule, TemplatesModule, UsersModule, BillingModule],
+  imports: [
+    NodesModule,
+    TemplatesModule,
+    UsersModule,
+    BillingModule,
+    ServersModule,
+  ],
   controllers: [AdminController],
   providers: [AdminService],
 })

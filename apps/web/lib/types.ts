@@ -63,6 +63,11 @@ export interface Server {
   createdAt: string;
 }
 
+/** Server shape returned by the admin list (adds the owner relation). */
+export interface AdminServer extends Server {
+  owner?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+}
+
 export interface ServerStat {
   cpuPct: number;
   memUsedMb: number;
