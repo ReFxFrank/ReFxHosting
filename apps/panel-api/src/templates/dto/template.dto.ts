@@ -163,6 +163,49 @@ export class CreateTemplateDto {
   @ValidateNested({ each: true })
   @Type(() => TemplateVariableDto)
   variables?: TemplateVariableDto[];
+
+  // ---- Public storefront metadata ----------------------------------------
+
+  @ApiPropertyOptional({ description: 'Show this game on the public storefront.' })
+  @IsOptional()
+  @IsBoolean()
+  isPublished?: boolean;
+
+  @ApiPropertyOptional({ description: 'Highlight in featured sections.' })
+  @IsOptional()
+  @IsBoolean()
+  featured?: boolean;
+
+  @ApiPropertyOptional({ description: 'Storefront ordering (lower shows first).' })
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
+
+  @ApiPropertyOptional({ description: 'Marketing copy for the game detail page.' })
+  @IsOptional()
+  @IsString()
+  longDescription?: string;
+
+  @ApiPropertyOptional({ description: 'Homepage/catalog card image URL.' })
+  @IsOptional()
+  @IsString()
+  cardImageUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Detail-page hero/background image URL.' })
+  @IsOptional()
+  @IsString()
+  heroImageUrl?: string;
+
+  @ApiPropertyOptional({ description: 'Small logo/icon URL.' })
+  @IsOptional()
+  @IsString()
+  iconUrl?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Free-form storefront tags.' })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  tags?: string[];
 }
 
 /** Update payload — every field optional (PATCH semantics). */

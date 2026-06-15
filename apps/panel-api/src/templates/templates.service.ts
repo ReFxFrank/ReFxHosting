@@ -60,6 +60,14 @@ export class TemplatesService {
         recCpuCores: dto.recCpuCores ?? 1,
         recMemoryMb: dto.recMemoryMb ?? 1024,
         recDiskMb: dto.recDiskMb ?? 5120,
+        isPublished: dto.isPublished ?? false,
+        featured: dto.featured ?? false,
+        sortOrder: dto.sortOrder ?? 0,
+        longDescription: dto.longDescription ?? null,
+        cardImageUrl: dto.cardImageUrl ?? null,
+        heroImageUrl: dto.heroImageUrl ?? null,
+        iconUrl: dto.iconUrl ?? null,
+        tags: dto.tags ?? [],
         variables: dto.variables?.length
           ? { create: dto.variables.map((v) => this.variableCreate(v)) }
           : undefined,
@@ -104,6 +112,15 @@ export class TemplatesService {
     if (dto.recCpuCores !== undefined) data.recCpuCores = dto.recCpuCores;
     if (dto.recMemoryMb !== undefined) data.recMemoryMb = dto.recMemoryMb;
     if (dto.recDiskMb !== undefined) data.recDiskMb = dto.recDiskMb;
+    // Storefront metadata.
+    if (dto.isPublished !== undefined) data.isPublished = dto.isPublished;
+    if (dto.featured !== undefined) data.featured = dto.featured;
+    if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;
+    if (dto.longDescription !== undefined) data.longDescription = dto.longDescription;
+    if (dto.cardImageUrl !== undefined) data.cardImageUrl = dto.cardImageUrl;
+    if (dto.heroImageUrl !== undefined) data.heroImageUrl = dto.heroImageUrl;
+    if (dto.iconUrl !== undefined) data.iconUrl = dto.iconUrl;
+    if (dto.tags !== undefined) data.tags = dto.tags;
 
     // Replacing variables changes the runtime definition → bump version.
     if (dto.variables !== undefined) data.version = { increment: 1 };

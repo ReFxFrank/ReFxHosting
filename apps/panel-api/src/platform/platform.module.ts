@@ -4,6 +4,7 @@ import { MetricsInterceptor } from './metrics.interceptor';
 import { AuditService } from './audit.service';
 import { NotificationsService } from './notifications.service';
 import { AlertsService } from './alerts.service';
+import { HomepageAlertsService } from './homepage-alerts.service';
 import { PlatformResolver } from './platform.resolver';
 import { HealthController } from './health.controller';
 import { MetricsController } from './metrics.controller';
@@ -35,8 +36,15 @@ import { AlertsController } from './alerts.controller';
     AuditService,
     NotificationsService,
     AlertsService,
+    HomepageAlertsService,
     PlatformResolver,
   ],
-  exports: [MetricsService, NotificationsService, AlertsService, AuditService],
+  exports: [
+    MetricsService,
+    NotificationsService,
+    AlertsService,
+    HomepageAlertsService,
+    AuditService,
+  ],
 })
 export class PlatformModule {}

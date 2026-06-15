@@ -19,6 +19,7 @@ import { BillingService } from '../billing/billing.service';
 import { TemplatesService } from '../templates/templates.service';
 import { ServersService } from '../servers/servers.service';
 import { AlertsService } from '../platform/alerts.service';
+import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 import { AuditService } from '../platform/audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -28,6 +29,10 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateNodeDto, UpdateNodeDto } from '../nodes/dto/node.dto';
 import { CreateProductDto } from '../billing/dto/create-product.dto';
 import { CreateAlertDto } from '../platform/dto/create-alert.dto';
+import {
+  CreateHomepageAlertDto,
+  UpdateHomepageAlertDto,
+} from '../platform/dto/homepage-alert.dto';
 import { AuditQueryDto } from '../platform/dto/audit-query.dto';
 import {
   CreateTemplateDto,
@@ -59,6 +64,7 @@ export class AdminController {
     private readonly templates: TemplatesService,
     private readonly servers: ServersService,
     private readonly alerts: AlertsService,
+    private readonly homepageAlerts: HomepageAlertsService,
     private readonly audit: AuditService,
   ) {}
 
@@ -230,6 +236,43 @@ export class AdminController {
   @Audit({ action: 'admin.alert.delete', targetType: 'GlobalAlert', targetParam: 'id' })
   deleteAlert(@Param('id') id: string) {
     return this.alerts.deleteAlert(id);
+  }
+
+  // ---- Homepage alerts (public storefront notices) -----------------------
+
+  @Get('homepage-alerts')
+  listHomepageAlerts() {
+    return this.homepageAlerts.listAll();
+  }
+
+  @Post('homepage-alerts')
+  @Audit({ action: 'admin.homepage-alert.create', targetType: 'HomepageAlert' })
+  createHomepageAlert(@Body() dto: CreateHomepageAlertDto) {
+    return this.homepageAlerts.create(dto);
+  }
+
+  @Patch('homepage-alerts/:id')
+  @Audit({
+    action: 'admin.homepage-alert.update',
+    targetType: 'HomepageAlert',
+    targetParam: 'id',
+  })
+  updateHomepageAlert(
+    @Param('id') id: string,
+    @Body() dto: UpdateHomepageAlertDto,
+  ) {
+    return this.homepageAlerts.update(id, dto);
+  }
+
+  @Delete('homepage-alerts/:id')
+  @HttpCode(204)
+  @Audit({
+    action: 'admin.homepage-alert.delete',
+    targetType: 'HomepageAlert',
+    targetParam: 'id',
+  })
+  deleteHomepageAlert(@Param('id') id: string) {
+    return this.homepageAlerts.delete(id);
   }
 
   // ---- Audit logs --------------------------------------------------------

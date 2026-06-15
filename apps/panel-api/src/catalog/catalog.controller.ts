@@ -3,11 +3,13 @@ import { ApiTags } from '@nestjs/swagger';
 import { BillingService } from '../billing/billing.service';
 import { TemplatesService } from '../templates/templates.service';
 import { MinecraftVersionsService } from './minecraft-versions.service';
+import { StorefrontService } from './storefront.service';
+import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 
 /**
  * Public storefront catalog. No auth — these feed the unauthenticated buy flow.
  * Products are resolved by slug (active only); templates/categories drive the
- * game picker.
+ * game picker; `games`/`homepage-alerts` power the public marketing storefront.
  */
 @ApiTags('catalog')
 @Controller('catalog')
@@ -16,7 +18,29 @@ export class CatalogController {
     private readonly billing: BillingService,
     private readonly templates: TemplatesService,
     private readonly minecraftVersions: MinecraftVersionsService,
+    private readonly storefront: StorefrontService,
+    private readonly homepageAlerts: HomepageAlertsService,
   ) {}
+
+  // ---- public storefront --------------------------------------------------
+
+  /** Published games for the public homepage/catalog (safe fields + price). */
+  @Get('games')
+  games() {
+    return this.storefront.listGames();
+  }
+
+  /** One published game with its orderable plans + locations (404 if hidden). */
+  @Get('games/:slug')
+  game(@Param('slug') slug: string) {
+    return this.storefront.getGame(slug);
+  }
+
+  /** Active, in-window public homepage notices (separate from dashboard alerts). */
+  @Get('homepage-alerts')
+  homepageAlertsList() {
+    return this.homepageAlerts.listActive();
+  }
 
   @Get('products')
   products() {
