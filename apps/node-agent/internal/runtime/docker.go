@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -21,6 +24,15 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/server"
+)
+
+// Game processes run as this non-root uid:gid inside the container (the data dir
+// is chowned to match on start), so servers never run as root — avoiding the
+// "running as root is not advised" warnings and the associated risk.
+const (
+	containerUID  = 1000
+	containerGID  = 1000
+	containerUser = "1000:1000"
 )
 
 // DockerRuntime hosts servers as Docker containers. It is the preferred backend
@@ -239,6 +251,18 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 	return host, ports, bindings
 }
 
+// chownTree recursively sets ownership of root to uid:gid (best-effort). Used to
+// hand a server's data dir to the non-root container user after a root install.
+func chownTree(root string, uid, gid int) error {
+	return filepath.WalkDir(root, func(p string, _ fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries; ownership is best-effort
+		}
+		_ = os.Lchown(p, uid, gid)
+		return nil
+	})
+}
+
 // Start creates (if needed) and starts the runtime container.
 func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 	if s.State() == server.StateRunning {
@@ -250,15 +274,23 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 	cfg := &container.Config{
 		Image:        s.Spec.Image,
 		Cmd:          strings.Fields(renderTemplate(s.Spec.StartupCommand, s.Spec.Env)),
-		Env:          envSlice(s.Spec.Env),
+		Env:          append(envSlice(s.Spec.Env), "HOME=/home/container"),
 		ExposedPorts: ports,
 		WorkingDir:   "/home/container",
+		// Run the game as a non-root user (its data dir is chowned below).
+		User:         containerUser,
 		Tty:          false,
 		OpenStdin:    true,
 		AttachStdin:  true,
 		AttachStdout: true,
 		AttachStderr: true,
 		Labels:       map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
+	}
+
+	// The install step runs as root; make the data dir writable by the non-root
+	// runtime user before launching.
+	if err := chownTree(s.DataDir, containerUID, containerGID); err != nil {
+		d.log.Warn().Err(err).Str("server", s.ID()).Msg("chown data dir failed")
 	}
 
 	name := containerName(s)
