@@ -370,6 +370,10 @@ services:
       - ../../.env
     environment:
       NODE_ENV: ${NODE_ENV:-production}
+      # Pin the Next.js listen port to 3000 — the shared .env sets PORT=4000 for
+      # panel-api, and env_file would otherwise leak it into this container.
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     depends_on:
       - panel-api
