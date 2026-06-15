@@ -9,6 +9,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { NodeAgentClient } from '../agent/agent.client';
 import { deriveSigningKey } from '../agent/agent.signing';
+import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
 import { uuidv7 } from '../common/util/uuid';
 import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
 import {
@@ -328,11 +329,22 @@ export class NodesService {
         }
       }
 
+      // Auto-correct the JVM for Minecraft servers from the resolved
+      // MINECRAFT_VERSION (handles servers created before this image, and
+      // "latest" pins). The agent runs the install script in this image too, so
+      // install + runtime share one compatible JVM. Non-Java images untouched.
+      let dockerImage = server.dockerImage ?? '';
+      if (isJavaImage(dockerImage)) {
+        dockerImage =
+          resolveJavaImage(dockerImage, env['MINECRAFT_VERSION'], 'jre') ??
+          dockerImage;
+      }
+
       return {
         serverId: server.id,
         shortId: server.shortId,
         deployMethod: server.deployMethod,
-        dockerImage: server.dockerImage ?? '',
+        dockerImage,
         startupCommand: server.startupCommand ?? template?.startupCommand ?? '',
         startupDetect: template?.startupDetect ?? '',
         stopCommand: template?.stopCommand ?? '',

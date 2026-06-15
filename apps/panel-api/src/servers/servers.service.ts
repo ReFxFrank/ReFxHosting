@@ -34,6 +34,7 @@ import {
   pickFreePort,
   isPortEnvName,
 } from './allocation-port.util';
+import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
@@ -113,6 +114,11 @@ export class ServersService {
     if (!template) throw new NotFoundException('Template not found');
     this.assertTemplateAllowed(subscription.product.allowedTemplateIds, dto.templateId);
 
+    const dockerImage = this.resolveDockerImage(
+      template.dockerImages,
+      dto.environment,
+    );
+
     const limits = {
       cpuCores: subscription.product.cpuCores ?? template.recCpuCores,
       memoryMb: subscription.product.memoryMb ?? template.recMemoryMb,
@@ -126,8 +132,6 @@ export class ServersService {
       if (!node) throw new ConflictException('No node has capacity for this plan');
       nodeId = node.id;
     }
-
-    const dockerImage = this.firstDockerImage(template.dockerImages);
 
     const server = await this.prisma.server.create({
       data: {
@@ -188,7 +192,10 @@ export class ServersService {
     });
     if (!template) throw new NotFoundException('Template not found');
 
-    const dockerImage = this.firstDockerImage(template.dockerImages);
+    const dockerImage = this.resolveDockerImage(
+      template.dockerImages,
+      dto.environment,
+    );
 
     const server = await this.prisma.server.create({
       data: {
@@ -330,7 +337,10 @@ export class ServersService {
       );
     }
 
-    const dockerImage = this.firstDockerImage(target.dockerImages);
+    const dockerImage = this.resolveDockerImage(
+      target.dockerImages,
+      dto.environment,
+    );
     const gameSwitchLogId = uuidv7();
 
     // (3)+(4) atomic record + repoint.
@@ -786,6 +796,28 @@ export class ServersService {
         'This game is not available on your current plan',
       );
     }
+  }
+
+  /**
+   * Pick the runtime image for a server, auto-selecting the right JVM for
+   * Minecraft templates. For a Java image the eclipse-temurin tag is chosen from
+   * the requested MINECRAFT_VERSION (falling back to "latest" → newest Java when
+   * the customer didn't pin one); non-Java templates keep their configured image.
+   * The agent also runs the install script in this image, so install + runtime
+   * stay on one compatible JVM.
+   */
+  private resolveDockerImage(
+    images: Prisma.JsonValue,
+    environment?: Record<string, unknown> | null,
+  ): string | undefined {
+    const base = this.firstDockerImage(images);
+    if (!isJavaImage(base)) return base;
+    const env = (environment ?? {}) as Record<string, unknown>;
+    const mc =
+      env['MINECRAFT_VERSION'] != null
+        ? String(env['MINECRAFT_VERSION'])
+        : 'latest';
+    return resolveJavaImage(base, mc, 'jre');
   }
 
   private firstDockerImage(images: Prisma.JsonValue): string | undefined {
