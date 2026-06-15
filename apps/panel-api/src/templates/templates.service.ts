@@ -165,7 +165,8 @@ export class TemplatesService {
    * and (for now) any non-deleted template; returns the buyer-relevant fields.
    */
   listActive(filter: { categoryId?: string; search?: string }) {
-    const where: Prisma.GameTemplateWhereInput = {};
+    // Public catalog: published games only (admins use list() for everything).
+    const where: Prisma.GameTemplateWhereInput = { isPublished: true };
     if (filter.categoryId) where.categoryId = filter.categoryId;
     if (filter.search) {
       where.OR = [

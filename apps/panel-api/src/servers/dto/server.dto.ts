@@ -143,6 +143,22 @@ export class ChangeMinecraftVersionDto {
   version!: string;
 }
 
+export class SetMinecraftConfigDto {
+  @ApiProperty({ description: 'vanilla | paper | fabric | forge | neoforge' })
+  @IsString()
+  loader!: string;
+
+  @ApiPropertyOptional({ description: "Minecraft version ('latest' or e.g. '1.21.1')." })
+  @IsOptional()
+  @IsString()
+  version?: string;
+
+  @ApiPropertyOptional({ description: "Loader build ('latest'/'recommended' or explicit)." })
+  @IsOptional()
+  @IsString()
+  loaderVersion?: string;
+}
+
 export class UpdateStartupDto {
   @ApiPropertyOptional()
   @IsOptional()

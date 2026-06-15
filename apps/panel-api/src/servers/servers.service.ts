@@ -36,6 +36,10 @@ import {
 } from './allocation-port.util';
 import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
 import { MinecraftResolverService } from './minecraft-resolver.service';
+import {
+  LOADER_STARTUP,
+  isMinecraftLoader,
+} from './minecraft-loader.util';
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
@@ -473,6 +477,77 @@ export class ServersService {
     return { accepted: true, version: concrete };
   }
 
+  /**
+   * Set the loader + version for a unified `minecraft` server: resolve the
+   * version, swap the startup command to the loader's launch invocation, re-pick
+   * the JVM image, persist LOADER/MINECRAFT_VERSION/LOADER_VERSION, then reinstall
+   * with data preserved. This is how the single Minecraft egg becomes vanilla /
+   * paper / fabric / forge / neoforge after purchase.
+   */
+  async setMinecraftConfig(
+    id: string,
+    dto: { loader: string; version?: string; loaderVersion?: string },
+  ): Promise<{ accepted: true; loader: string; version: string }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      include: { template: true },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    if (server.template?.slug !== 'minecraft') {
+      throw new BadRequestException('This server is not a Minecraft server');
+    }
+    if (!isMinecraftLoader(dto.loader)) {
+      throw new BadRequestException(`Unknown loader: ${dto.loader}`);
+    }
+    if (!STOPPED_STATES.includes(server.state) && server.state !== 'RUNNING') {
+      throw new ConflictException(`Cannot reconfigure while ${server.state}`);
+    }
+
+    const loaderVersion = dto.loaderVersion?.trim() || 'latest';
+    const concrete = await this.mcResolver.resolveByLoader(
+      dto.loader,
+      dto.version ?? 'latest',
+    );
+    const environment = {
+      ...((server.environment as Record<string, unknown>) ?? {}),
+      LOADER: dto.loader,
+      MINECRAFT_VERSION: concrete,
+      LOADER_VERSION: loaderVersion,
+    } as Prisma.InputJsonObject;
+    const startupCommand = LOADER_STARTUP[dto.loader];
+    const dockerImage = this.resolveDockerImage(
+      server.template.dockerImages,
+      environment,
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.server.update({
+        where: { id },
+        data: { environment, startupCommand, dockerImage, state: 'REINSTALLING' },
+      }),
+      // Keep any explicit per-server variable overrides in sync.
+      this.prisma.serverVariable.updateMany({
+        where: { serverId: id, envName: 'LOADER' },
+        data: { value: dto.loader },
+      }),
+      this.prisma.serverVariable.updateMany({
+        where: { serverId: id, envName: 'MINECRAFT_VERSION' },
+        data: { value: concrete },
+      }),
+      this.prisma.serverVariable.updateMany({
+        where: { serverId: id, envName: 'LOADER_VERSION' },
+        data: { value: loaderVersion },
+      }),
+    ]);
+
+    await this.reinstallQueue.add(JOB.REINSTALL, {
+      serverId: id,
+      preserveData: true,
+    } satisfies ReinstallJob);
+
+    return { accepted: true, loader: dto.loader, version: concrete };
+  }
+
   // ---- resize (upgrade/downgrade) ----------------------------------------
 
   async resize(id: string, dto: ResizeServerDto): Promise<Server> {
@@ -896,11 +971,17 @@ export class ServersService {
     environment?: Record<string, unknown> | null,
   ): Promise<Prisma.InputJsonObject> {
     const env = { ...((environment ?? {}) as Record<string, string>) };
-    if (templateSlug?.startsWith('minecraft-')) {
-      const requested =
-        env['MINECRAFT_VERSION'] != null
-          ? String(env['MINECRAFT_VERSION'])
-          : 'latest';
+    const requested =
+      env['MINECRAFT_VERSION'] != null
+        ? String(env['MINECRAFT_VERSION'])
+        : 'latest';
+    if (templateSlug === 'minecraft') {
+      // Unified egg: loader is per-server (LOADER env), not in the slug.
+      env['MINECRAFT_VERSION'] = await this.mcResolver.resolveByLoader(
+        String(env['LOADER'] ?? 'paper'),
+        requested,
+      );
+    } else if (templateSlug?.startsWith('minecraft-')) {
       env['MINECRAFT_VERSION'] = await this.mcResolver.resolve(
         templateSlug,
         requested,

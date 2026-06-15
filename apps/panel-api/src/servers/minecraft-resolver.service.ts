@@ -51,6 +51,39 @@ export class MinecraftResolverService {
     }
   }
 
+  /**
+   * Resolve "latest" for the unified `minecraft` egg, where the loader is chosen
+   * per-server (not encoded in the slug). Non-"latest" passes through.
+   */
+  async resolveByLoader(
+    loader: string,
+    requested: string | null | undefined,
+  ): Promise<string> {
+    const v = (requested ?? '').trim();
+    if (!v || v.toLowerCase() !== 'latest') return v || 'latest';
+    try {
+      switch (loader) {
+        case 'paper':
+          return await this.paperLatest();
+        case 'forge':
+          return await this.forgeLatestMc();
+        case 'neoforge':
+          return await this.neoforgeLatestMc();
+        case 'vanilla':
+        case 'fabric':
+        default:
+          return await this.mojangLatestRelease();
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Could not resolve latest for loader ${loader}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return 'latest';
+    }
+  }
+
   // ---- per-loader resolvers ----------------------------------------------
 
   private async paperLatest(): Promise<string> {

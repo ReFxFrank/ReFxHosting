@@ -214,7 +214,9 @@ function StartupTab({ server }: { server: Server }) {
     startupCommand !== (server.startupCommand ?? "") ||
     dockerImage !== (server.dockerImage ?? "");
 
-  const isMinecraft = !!server.template?.slug?.startsWith("minecraft-");
+  const slug = server.template?.slug ?? "";
+  const isUnifiedMinecraft = slug === "minecraft";
+  const isMinecraft = isUnifiedMinecraft || slug.startsWith("minecraft-");
 
   return (
     <div className="space-y-6">
@@ -265,12 +267,29 @@ function StartupTab({ server }: { server: Server }) {
 }
 
 // ---------------------------------------------------------------------------
-// Minecraft version (resolve + reinstall, preserving data)
+// Minecraft loader + version (resolve + reinstall, preserving data)
 // ---------------------------------------------------------------------------
+const MC_LOADERS = [
+  { value: "vanilla", label: "Vanilla" },
+  { value: "paper", label: "Paper" },
+  { value: "fabric", label: "Fabric" },
+  { value: "forge", label: "Forge" },
+  { value: "neoforge", label: "NeoForge" },
+] as const;
+
+const LOADER_NEEDS_BUILD = new Set(["fabric", "forge", "neoforge"]);
+
 function MinecraftVersionCard({ server }: { server: Server }) {
   const queryClient = useQueryClient();
-  const current = server.environment?.MINECRAFT_VERSION ?? "latest";
-  const [version, setVersion] = useState(current);
+  const unified = server.template?.slug === "minecraft";
+
+  const currentLoader = server.environment?.LOADER ?? "paper";
+  const currentVersion = server.environment?.MINECRAFT_VERSION ?? "latest";
+  const currentLoaderVersion = server.environment?.LOADER_VERSION ?? "latest";
+
+  const [loader, setLoader] = useState(currentLoader);
+  const [version, setVersion] = useState(currentVersion);
+  const [loaderVersion, setLoaderVersion] = useState(currentLoaderVersion);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const { data: mcVersions } = useQuery({
@@ -279,34 +298,60 @@ function MinecraftVersionCard({ server }: { server: Server }) {
   });
 
   const changeMutation = useMutation({
-    mutationFn: () => api.servers.changeMinecraftVersion(server.id, version),
-    onSuccess: (res) => {
-      toast.success(`Reinstalling on Minecraft ${res.version}`);
+    mutationFn: () =>
+      unified
+        ? api.servers.setMinecraft(server.id, { loader, version, loaderVersion })
+        : api.servers.changeMinecraftVersion(server.id, version),
+    onSuccess: () => {
+      toast.success("Reinstalling — your world is preserved");
       queryClient.invalidateQueries({ queryKey: ["server", server.id] });
       setConfirmOpen(false);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to change version"),
+      toast.error(e instanceof ApiError ? e.message : "Failed to apply changes"),
   });
 
-  const dirty = version !== current;
+  const dirty = unified
+    ? loader !== currentLoader ||
+      version !== currentVersion ||
+      loaderVersion !== currentLoaderVersion
+    : version !== currentVersion;
   const versionList = mcVersions?.versions ?? [];
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Blocks className="size-4 text-primary" /> Minecraft version
+          <Blocks className="size-4 text-primary" />{" "}
+          {unified ? "Minecraft loader & version" : "Minecraft version"}
         </CardTitle>
         <CardDescription>
-          Change the installed version. This reinstalls the server (your world and
-          files are preserved) and auto-selects the matching Java runtime.
+          {unified
+            ? "Switch loader (Vanilla, Paper, Fabric, Forge, NeoForge) or version. Reinstalls the server (world & files preserved) and auto-selects the matching Java runtime."
+            : "Change the installed version. Reinstalls the server (world & files preserved) and auto-selects the matching Java runtime."}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+      <CardContent className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {unified && (
+            <div className="space-y-1.5">
+              <Label>Loader</Label>
+              <Select value={loader} onValueChange={setLoader}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MC_LOADERS.map((l) => (
+                    <SelectItem key={l.value} value={l.value}>
+                      {l.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
-            <Label>Version</Label>
+            <Label>Minecraft version</Label>
             <Select value={version} onValueChange={setVersion}>
               <SelectTrigger>
                 <SelectValue placeholder="Select version" />
@@ -324,24 +369,45 @@ function MinecraftVersionCard({ server }: { server: Server }) {
               </SelectContent>
             </Select>
           </div>
+          {unified && LOADER_NEEDS_BUILD.has(loader) && (
+            <div className="space-y-1.5">
+              <Label>{MC_LOADERS.find((l) => l.value === loader)?.label} build</Label>
+              <Input
+                value={loaderVersion}
+                onChange={(e) => setLoaderVersion(e.target.value)}
+                placeholder="latest"
+                className="font-mono text-sm"
+              />
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between">
+          <p className="text-xs text-muted-foreground">
+            Current:{" "}
+            <span className="font-mono">
+              {unified ? `${currentLoader} · ` : ""}
+              {currentVersion}
+            </span>
+          </p>
           <Button disabled={!dirty} onClick={() => setConfirmOpen(true)}>
-            Change &amp; reinstall
+            Apply &amp; reinstall
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
-          Currently installed: <span className="font-mono">{current}</span>
-        </p>
       </CardContent>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Change Minecraft version</DialogTitle>
+            <DialogTitle>Apply Minecraft changes</DialogTitle>
             <DialogDescription>
               The server will reinstall on{" "}
-              <span className="font-mono">{version}</span> and be briefly offline.
-              Your world and files are preserved, but taking a backup first is
-              always wise.
+              <span className="font-mono">
+                {unified ? `${loader} ` : ""}
+                {version}
+              </span>{" "}
+              and be briefly offline. Your world and files are preserved, but a
+              backup first is always wise.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -352,7 +418,7 @@ function MinecraftVersionCard({ server }: { server: Server }) {
               loading={changeMutation.isPending}
               onClick={() => changeMutation.mutate()}
             >
-              Change &amp; reinstall
+              Apply &amp; reinstall
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -369,22 +435,23 @@ function VariablesCard({ id }: { id: string }) {
 
   const [values, setValues] = useState<Record<string, string>>({});
 
-  // MINECRAFT_VERSION is managed by the dedicated card above (it resolves +
-  // reinstalls), so don't surface it as a raw, no-op variable here.
-  const editableVariables = variables?.filter(
-    (v) => v.envName !== "MINECRAFT_VERSION",
-  );
+  // LOADER / MINECRAFT_VERSION / LOADER_VERSION are managed by the dedicated
+  // Minecraft card above (it resolves + reinstalls), so don't surface them as
+  // raw, no-op variables here.
+  const HIDDEN = ["MINECRAFT_VERSION", "LOADER", "LOADER_VERSION"];
+  const editableVariables = variables?.filter((v) => !HIDDEN.includes(v.envName));
 
   useEffect(() => {
     if (variables) {
       setValues(
         Object.fromEntries(
           variables
-            .filter((v) => v.envName !== "MINECRAFT_VERSION")
+            .filter((v) => !HIDDEN.includes(v.envName))
             .map((v) => [v.envName, v.value]),
         ),
       );
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variables]);
 
   const queryClient = useQueryClient();

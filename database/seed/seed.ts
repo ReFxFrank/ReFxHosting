@@ -433,12 +433,15 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
     // so the storefront has content out of the box. These are applied on CREATE
     // and backfilled onto pre-storefront rows below — but never on plain UPDATE,
     // so admin edits (publish toggles, custom art) made in the panel persist.
-    const FEATURED = new Set([
+    const FEATURED = new Set(['minecraft', 'rust', 'valheim', 'palworld']);
+    // Old per-loader Minecraft eggs are superseded by the unified `minecraft`
+    // egg (loader chosen per-server). Keep them for existing servers but hide
+    // them from the public storefront.
+    const DEPRECATED = new Set([
       'minecraft-paper',
       'minecraft-fabric',
-      'rust',
-      'valheim',
-      'palworld',
+      'minecraft-forge',
+      'minecraft-neoforge',
     ]);
     // Per-game art (apps/web/public/games/<slug>.svg); the web GameImage falls
     // back to a default placeholder if a file is missing.
@@ -474,6 +477,14 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
       await prisma.gameTemplate.update({
         where: { id: template.id },
         data: { cardImageUrl: preset, heroImageUrl: preset, tags: storefront.tags },
+      });
+    }
+
+    // Hide superseded per-loader Minecraft eggs from the public storefront.
+    if (DEPRECATED.has(tpl.slug)) {
+      await prisma.gameTemplate.update({
+        where: { id: template.id },
+        data: { isPublished: false },
       });
     }
 

@@ -283,6 +283,14 @@ export const api = {
         `/servers/${id}/minecraft-version`,
         { version },
       ),
+    setMinecraft: (
+      id: string,
+      input: { loader: string; version?: string; loaderVersion?: string },
+    ) =>
+      http.patch<{ accepted: true; loader: string; version: string }>(
+        `/servers/${id}/minecraft`,
+        input,
+      ),
     sftp: (id: string) =>
       http.get<{ host: string; port: number; username: string }>(`/servers/${id}/sftp`),
     rotateSftp: (id: string) =>

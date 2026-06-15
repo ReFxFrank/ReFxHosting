@@ -22,6 +22,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   AddSubUserDto,
   ChangeMinecraftVersionDto,
+  SetMinecraftConfigDto,
   CreateAllocationDto,
   CreateScheduleDto,
   CreateServerDto,
@@ -150,6 +151,18 @@ export class ServersController {
     @Body() dto: ChangeMinecraftVersionDto,
   ) {
     return this.servers.changeMinecraftVersion(id, dto.version);
+  }
+
+  /** Unified Minecraft egg: set loader + version (+ loader build), then reinstall. */
+  @Patch(':id/minecraft')
+  @RequirePermissions('startup.update')
+  @Audit({
+    action: 'server.minecraft-config',
+    targetType: 'Server',
+    targetParam: 'id',
+  })
+  setMinecraft(@Param('id') id: string, @Body() dto: SetMinecraftConfigDto) {
+    return this.servers.setMinecraftConfig(id, dto);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

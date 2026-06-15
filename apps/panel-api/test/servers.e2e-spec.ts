@@ -29,7 +29,7 @@ describe('Servers (e2e)', () => {
         { provide: ServerResourcesService, useValue: {} },
         {
           provide: MinecraftResolverService,
-          useValue: { resolve: jest.fn(async (_s: unknown, v: string) => v ?? 'latest') },
+          useValue: { resolve: jest.fn(async (_s: unknown, v: string) => v ?? 'latest'), resolveByLoader: jest.fn(async (_l: unknown, v: string) => v ?? 'latest') },
         },
         { provide: NodesService, useValue: {} },
         { provide: NodeAgentClient, useValue: { power: jest.fn() } },
