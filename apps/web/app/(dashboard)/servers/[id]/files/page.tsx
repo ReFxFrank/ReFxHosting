@@ -19,6 +19,7 @@ import {
   HardDrive,
   ArrowLeft,
   Save,
+  TriangleAlert,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -100,10 +101,12 @@ export default function FilesPage() {
     data: entries,
     isLoading,
     isFetching,
+    error,
     refetch,
   } = useQuery({
     queryKey: ["files", id, path],
     queryFn: () => api.servers.files.list(id, path),
+    retry: false,
   });
 
   const segments = useMemo(() => {
@@ -333,6 +336,21 @@ export default function FilesPage() {
 
       {isLoading ? (
         <ListSkeleton rows={6} />
+      ) : error ? (
+        <EmptyState
+          icon={TriangleAlert}
+          title="Couldn’t load files"
+          description={
+            error instanceof ApiError
+              ? `${error.message}${error.status ? ` (HTTP ${error.status})` : ""}`
+              : "The node agent could not be reached. Check that the node is online."
+          }
+          action={
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              <RefreshCw className="size-4" /> Retry
+            </Button>
+          }
+        />
       ) : entries?.length ? (
         <Card className="overflow-hidden">
           <Table>
