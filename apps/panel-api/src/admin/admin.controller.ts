@@ -151,6 +151,7 @@ export class AdminController {
   // ---- Users -------------------------------------------------------------
 
   @Get('users')
+  @Roles(GlobalRole.SUPPORT) // support staff may look up customer accounts (read-only)
   listUsers(
     @Query() pagination: PaginationDto,
     @Query('role') role?: string,
@@ -163,6 +164,7 @@ export class AdminController {
   }
 
   @Get('users/:id')
+  @Roles(GlobalRole.SUPPORT) // read-only account view; mutations below stay ADMIN+
   getUser(@Param('id') id: string) {
     // Full account view (profile + billing + servers), secrets stripped.
     return this.admin.userDetail(id);
@@ -282,6 +284,7 @@ export class AdminController {
   // ---- Servers (admin create-from-egg) -----------------------------------
 
   @Get('servers')
+  @Roles(GlobalRole.SUPPORT) // support staff may look up servers (read-only)
   listServers(@Query() pagination: PaginationDto) {
     return this.servers.adminList(pagination);
   }
@@ -372,6 +375,7 @@ export class AdminController {
   // ---- Metrics summary ---------------------------------------------------
 
   @Get('metrics')
+  @Roles(GlobalRole.SUPPORT) // overview dashboard is read-only aggregate data
   metrics() {
     return this.admin.adminSummary();
   }

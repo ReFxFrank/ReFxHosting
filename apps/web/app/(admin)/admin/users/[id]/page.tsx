@@ -42,6 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
+import { useAuthStore } from "@/store/auth";
 import { formatDate, formatMoney } from "@/lib/utils";
 import type { UserState } from "@/lib/types";
 
@@ -61,6 +62,8 @@ export default function AdminUserDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // SUPPORT staff see a read-only account view; account actions are ADMIN+.
+  const canManage = useAuthStore((s) => s.hasRole("ADMIN"));
 
   const { data: user, isLoading } = useQuery({
     queryKey: ["admin", "user", id],
@@ -111,6 +114,7 @@ export default function AdminUserDetailPage() {
         title={fullName(user) || user.email}
         description={user.email}
         actions={
+          !canManage ? undefined : (
           <div className="flex flex-wrap items-center gap-2">
             {user.state !== "ACTIVE" && (
               <Button
@@ -140,6 +144,7 @@ export default function AdminUserDetailPage() {
               <Trash2 className="size-4" /> Delete
             </Button>
           </div>
+          )
         }
       />
 

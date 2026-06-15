@@ -15,6 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { useAuthStore } from "@/store/auth";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -84,6 +85,9 @@ export default function AdminUsersPage() {
         page?: number;
       }),
   });
+
+  // SUPPORT staff get a read-only list; account actions are ADMIN+.
+  const canManage = useAuthStore((s) => s.hasRole("ADMIN"));
 
   const setStateMutation = useMutation({
     mutationFn: ({ id, state }: { id: string; state: UserState }) =>
@@ -177,29 +181,33 @@ export default function AdminUsersPage() {
                                 <Eye /> View account
                               </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              disabled={user.state === "ACTIVE"}
-                              onSelect={() =>
-                                setStateMutation.mutate({ id: user.id, state: "ACTIVE" })
-                              }
-                            >
-                              <ShieldCheck /> Activate
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              disabled={user.state === "SUSPENDED"}
-                              onSelect={() => setConfirm({ user, state: "SUSPENDED" })}
-                            >
-                              <ShieldOff /> Suspend
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              destructive
-                              disabled={user.state === "BANNED"}
-                              onSelect={() => setConfirm({ user, state: "BANNED" })}
-                            >
-                              <Ban /> Ban
-                            </DropdownMenuItem>
+                            {canManage && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  disabled={user.state === "ACTIVE"}
+                                  onSelect={() =>
+                                    setStateMutation.mutate({ id: user.id, state: "ACTIVE" })
+                                  }
+                                >
+                                  <ShieldCheck /> Activate
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={user.state === "SUSPENDED"}
+                                  onSelect={() => setConfirm({ user, state: "SUSPENDED" })}
+                                >
+                                  <ShieldOff /> Suspend
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  destructive
+                                  disabled={user.state === "BANNED"}
+                                  onSelect={() => setConfirm({ user, state: "BANNED" })}
+                                >
+                                  <Ban /> Ban
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

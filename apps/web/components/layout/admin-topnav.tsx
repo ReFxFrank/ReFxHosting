@@ -31,7 +31,12 @@ export function AdminTopNav() {
     router.replace("/login");
   }
 
-  const roleLabel = user?.globalRole === "OWNER" ? "Owner" : "Admin";
+  const roleLabel =
+    user?.globalRole === "OWNER"
+      ? "Owner"
+      : user?.globalRole === "SUPPORT"
+        ? "Support"
+        : "Admin";
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-white/[0.08] bg-[rgba(5,8,16,0.8)] px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-[rgba(5,8,16,0.6)]">

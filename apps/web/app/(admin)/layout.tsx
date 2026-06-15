@@ -12,7 +12,9 @@ import { Skeleton } from "@/components/ui/skeleton";
  * RolesGuard; non-admins are redirected to /dashboard by the hook.
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { authorized } = useRequireAuth({ roles: ["ADMIN", "OWNER"] });
+  // SUPPORT staff get a read-only subset (nav is role-gated; write endpoints stay
+  // ADMIN/OWNER and are enforced server-side).
+  const { authorized } = useRequireAuth({ roles: ["SUPPORT", "ADMIN", "OWNER"] });
 
   return (
     <div className="admin-scope flex min-h-svh bg-[hsl(var(--background))]">
