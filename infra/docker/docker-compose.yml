@@ -263,6 +263,21 @@ services:
     networks:
       - refx
 
+  # Ships all container logs into Loki (Grafana's Loki datasource is provisioned).
+  promtail:
+    profiles: ["observability", "full"]
+    image: grafana/promtail:2.9.6
+    <<: *restart
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - ./loki/promtail-config.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    depends_on:
+      - loki
+    networks:
+      - refx
+
   # Host metrics for the Grafana "node CPU / memory" panels.
   node-exporter:
     profiles: ["observability", "full"]
