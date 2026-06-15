@@ -87,11 +87,10 @@ export class MinecraftResolverService {
   // ---- per-loader resolvers ----------------------------------------------
 
   private async paperLatest(): Promise<string> {
-    const json = await this.getJson<{ versions?: string[] }>(
-      'https://api.papermc.io/v2/projects/paper',
-    );
-    const versions = json.versions ?? [];
-    return versions[versions.length - 1] || 'latest';
+    // Paper tracks Mojang's release closely; use Mojang's latest release as the
+    // source of truth (the deprecated Paper v2 API returns a stale version list).
+    // Only used for JVM selection here — the egg downloads the actual jar.
+    return this.mojangLatestRelease();
   }
 
   private async mojangLatestRelease(): Promise<string> {
