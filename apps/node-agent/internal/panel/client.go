@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -114,9 +115,21 @@ type ServerInstallSpec struct {
 // credentials are intentionally left out of the Spec (they live in the SFTP
 // authenticator); callers read them directly off the DTO.
 func (s ServerInstallSpec) ToSpec() server.Spec {
-	env := s.Environment
-	if env == nil {
-		env = map[string]string{}
+	env := map[string]string{}
+	for k, v := range s.Environment {
+		env[k] = v
+	}
+	// Always derive SERVER_IP / SERVER_PORT from the primary allocation (the port
+	// the agent actually binds), so {{SERVER_PORT}} resolves and the install /
+	// startup never sees an unbound var — even if the panel omitted it. This is
+	// the Pterodactyl/Wings convention and keeps the listen port authoritative.
+	for _, a := range s.Allocations {
+		if a.IsPrimary || len(s.Allocations) == 1 {
+			env["SERVER_IP"] = a.IP
+			env["SERVER_PORT"] = strconv.Itoa(a.Port)
+			env["SERVER_PORT_PRIMARY"] = strconv.Itoa(a.Port)
+			break
+		}
 	}
 	return server.Spec{
 		ID:             s.ServerID,
