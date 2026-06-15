@@ -6,12 +6,14 @@ import {
   HttpCode,
   Post,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { WebAuthnService } from './webauthn.service';
 import { ApiKeyService } from './api-key.service';
 import { UsersService } from '../users/users.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 import {
   CurrentUser,
@@ -34,6 +36,11 @@ import {
 
 @ApiTags('auth')
 @Controller('auth')
+// Protect the controller by default; @Public() opts the login/register/refresh/
+// password-reset/email-verify/mfa-challenge routes back out. Without this guard
+// the authenticated routes (me, totp, webauthn, api-keys) would run with no
+// principal attached and dereferencing @CurrentUser() 500s.
+@UseGuards(JwtAuthGuard)
 export class AuthController {
   constructor(
     private readonly auth: AuthService,

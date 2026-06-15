@@ -196,4 +196,41 @@ describe('Auth (e2e)', () => {
       expect(res.body.success).toBe(true);
     });
   });
+
+  // Regression: AuthController must be guarded. It previously lacked
+  // @UseGuards(JwtAuthGuard), so /auth/me ran with no principal and 500'd on
+  // `user.id` — which manifested as the whole panel hanging on a loading shell.
+  describe('GET /api/v1/auth/me', () => {
+    it('rejects an unauthenticated request with 401 (not 500)', async () => {
+      const res = await request(h.app.getHttpServer()).get(`${PREFIX}/auth/me`);
+      expect(res.status).toBe(401);
+    });
+
+    it('returns the profile + permissions for a valid token (200)', async () => {
+      // 1st findFirst → JwtStrategy.validate; 2nd → UsersService.getProfile.
+      h.prisma.user.findFirst
+        .mockResolvedValueOnce({
+          id: 'u-1',
+          email: 'user@example.com',
+          globalRole: 'CUSTOMER',
+          state: 'ACTIVE',
+        })
+        .mockResolvedValueOnce({
+          id: 'u-1',
+          email: 'user@example.com',
+          globalRole: 'CUSTOMER',
+          state: 'ACTIVE',
+        });
+
+      const token = await h.signAccess({ sub: 'u-1', email: 'user@example.com' });
+      const res = await request(h.app.getHttpServer())
+        .get(`${PREFIX}/auth/me`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.id).toBe('u-1');
+      expect(Array.isArray(res.body.data.permissions)).toBe(true);
+    });
+  });
 });
