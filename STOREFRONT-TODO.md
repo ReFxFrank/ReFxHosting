@@ -53,7 +53,8 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
 - [ ] **Live browser pass on the VPS**: homepage → game → `/order` (preselected)
       → register-at-checkout → server provisions → shows in `/servers`.
       (Couldn't run a real browser in the build container — needs the live stack.)
-- [ ] Mobile/responsive pass (homepage hero, game grid, detail two-column).
+- [x] Mobile/responsive pass (scrollable category tabs, touch-visible card CTA,
+      full-width hero/detail CTAs, plans-before-about on mobile). tsc + build green.
 - [ ] Optionally add more `GameCategory` rows (currently survival/sandbox/shooter)
       + matching preset SVGs for richer category tabs.
 
