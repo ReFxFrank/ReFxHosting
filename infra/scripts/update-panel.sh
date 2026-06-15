@@ -17,11 +17,16 @@ COMPOSE=(docker compose -f infra/docker/docker-compose.yml --env-file .env)
 echo "==> Pulling latest (git)"
 git pull origin main
 
+# Apply migrations FIRST, and crucially REBUILD the migrate image — it bakes in
+# database/prisma (migrations) + database/seed at build time, so without --build
+# a stale image would silently skip new migrations. Runs to completion before
+# panel-api starts (panel-api depends_on migrate: service_completed_successfully).
+echo "==> Rebuilding migrate image + applying migrations/seed"
+"${COMPOSE[@]}" build migrate
+"${COMPOSE[@]}" run --rm migrate || echo "WARNING: migrate/seed reported an error — check the output above"
+
 echo "==> Rebuilding web + panel-api"
 "${COMPOSE[@]}" up -d --build panel-api web
-
-echo "==> Applying any new database migrations"
-"${COMPOSE[@]}" up -d migrate || true
 
 echo "==> Current status"
 "${COMPOSE[@]}" ps
