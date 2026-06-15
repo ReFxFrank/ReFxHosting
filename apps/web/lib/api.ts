@@ -529,6 +529,8 @@ export const api = {
     userDetail: (id: string) => http.get<AdminUserDetail>(`/admin/users/${id}`),
     setUserState: (id: string, state: User["state"]) =>
       http.patch<User>(`/admin/users/${id}`, { state }),
+    setUserRole: (id: string, role: User["globalRole"]) =>
+      http.patch<User>(`/admin/users/${id}/role`, { role }),
     deleteUser: (id: string) => http.delete<void>(`/admin/users/${id}`),
 
     // Locations (regions) — full CRUD; new locations feed the node-create picker.

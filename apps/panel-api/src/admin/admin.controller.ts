@@ -41,6 +41,7 @@ import {
 } from '../templates/dto/template.dto';
 import {
   AdminCreateServerDto,
+  SetUserRoleDto,
   UpdateAlertDto,
   UpdateProductDto,
   UpdateUserDto,
@@ -177,6 +178,13 @@ export class AdminController {
     if (dto.state === 'SUSPENDED') return this.users.suspendUser(id);
     if (dto.state === 'ACTIVE') return this.users.reactivateUser(id);
     return this.users.getProfile(id);
+  }
+
+  @Patch('users/:id/role')
+  @Roles(GlobalRole.OWNER) // assigning staff roles is owner-only
+  @Audit({ action: 'admin.user.role', targetType: 'User', targetParam: 'id' })
+  setUserRole(@Param('id') id: string, @Body() dto: SetUserRoleDto) {
+    return this.users.setRole(id, dto.role);
   }
 
   @Delete('users/:id')

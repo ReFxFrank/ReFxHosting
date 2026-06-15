@@ -103,6 +103,33 @@ export class UsersService {
     return this.setState(id, UserState.ACTIVE);
   }
 
+  /**
+   * Set a user's global role (OWNER-only operation, gated at the controller).
+   * Refuses to remove the last OWNER so the platform can't be locked out.
+   */
+  async setRole(id: string, role: GlobalRole): Promise<User> {
+    if (!Object.values(GlobalRole).includes(role)) {
+      throw new BadRequestException('Invalid role');
+    }
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, globalRole: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    if (user.globalRole === GlobalRole.OWNER && role !== GlobalRole.OWNER) {
+      const owners = await this.prisma.user.count({
+        where: { globalRole: GlobalRole.OWNER, deletedAt: null },
+      });
+      if (owners <= 1) {
+        throw new BadRequestException(
+          'Cannot demote the last owner — promote another owner first',
+        );
+      }
+    }
+    return this.prisma.user.update({ where: { id }, data: { globalRole: role } });
+  }
+
   private async setState(id: string, state: UserState): Promise<User> {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },

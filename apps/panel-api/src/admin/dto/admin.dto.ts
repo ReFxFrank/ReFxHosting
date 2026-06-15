@@ -9,7 +9,7 @@ import {
   IsString,
   Min,
 } from 'class-validator';
-import { UserState } from '@prisma/client';
+import { GlobalRole, UserState } from '@prisma/client';
 import { CreateProductDto } from '../../billing/dto/create-product.dto';
 import { CreateAlertDto } from '../../platform/dto/create-alert.dto';
 
@@ -30,6 +30,12 @@ export class UpdateUserDto {
   @IsOptional()
   @IsEnum(UserState)
   state?: UserState;
+}
+
+export class SetUserRoleDto {
+  @ApiProperty({ enum: GlobalRole })
+  @IsEnum(GlobalRole)
+  role!: GlobalRole;
 }
 
 /**

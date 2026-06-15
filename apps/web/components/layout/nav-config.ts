@@ -17,6 +17,7 @@ import {
   Settings,
   ReceiptText,
   Wallet,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import type { GlobalRole } from "@/lib/types";
@@ -91,6 +92,7 @@ export const adminNav: NavSection[] = [
   {
     title: "System",
     items: [
+      { label: "Roles & Permissions", href: "/admin/roles", icon: ShieldCheck, roles: ["OWNER"] },
       { label: "Audit Logs", href: "/admin/audit", icon: ScrollText, roles: ["ADMIN"] },
       { label: "Settings", href: "/admin/settings", icon: Settings, roles: ["ADMIN"] },
     ],
