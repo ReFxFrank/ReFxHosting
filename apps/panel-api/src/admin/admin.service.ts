@@ -22,8 +22,15 @@ export class AdminService {
    * normalized to a monthly amount in minor units, per currency).
    */
   async adminSummary() {
-    const [users, serversByState, nodesOnline, openTickets, activeSubs, servers] =
-      await Promise.all([
+    const [
+      users,
+      serversByState,
+      nodesOnline,
+      openTickets,
+      activeSubs,
+      servers,
+      nodeRows,
+    ] = await Promise.all([
         this.prisma.user.count({ where: { deletedAt: null } }),
         this.prisma.server.groupBy({
           by: ['state'],
@@ -53,7 +60,37 @@ export class AdminService {
           include: { product: { include: { prices: true } } },
         }),
         this.prisma.server.count({ where: { deletedAt: null } }),
+        this.prisma.node.findMany({
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            name: true,
+            memoryMb: true,
+            diskMb: true,
+            heartbeats: {
+              orderBy: { recordedAt: 'desc' },
+              take: 1,
+              select: { cpuPct: true, memUsedMb: true, diskUsedMb: true },
+            },
+          },
+        }),
       ]);
+
+    // Per-node health for the admin overview, derived from the latest heartbeat
+    // against advertised capacity (0% when a node hasn't reported yet).
+    const pct = (used: number, total: number) =>
+      total > 0 ? Math.min(100, Math.round((used / total) * 100)) : 0;
+    const nodes = nodeRows.map((n) => {
+      const hb = n.heartbeats[0];
+      return {
+        id: n.id,
+        name: n.name,
+        cpuPct: Math.min(100, Math.round(hb?.cpuPct ?? 0)),
+        memPct: pct(hb?.memUsedMb ?? 0, n.memoryMb),
+        diskPct: pct(hb?.diskUsedMb ?? 0, n.diskMb),
+      };
+    });
 
     const states = Object.fromEntries(
       Object.values(ServerState).map((s) => [s, 0]),
@@ -83,10 +120,13 @@ export class AdminService {
         openTickets,
         activeSubscriptions: activeSubs.length,
         mrrMinor: mrrByCurrency[primaryCurrency] ?? 0,
+        // Alias consumed by the web "Revenue" card.
+        revenueMinor: mrrByCurrency[primaryCurrency] ?? 0,
         mrrCurrency: primaryCurrency,
         mrrByCurrency,
       },
       serversByState: states,
+      nodes,
     };
   }
 }

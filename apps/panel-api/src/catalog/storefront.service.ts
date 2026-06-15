@@ -92,7 +92,9 @@ export class StorefrontService {
     const plans = products
       .filter((p) => this.productAllows(p, game.id))
       .map((p) => this.toPublicPlan(p));
+    // Only advertise locations we can actually deploy to (regions with a node).
     const regions = await this.prisma.region.findMany({
+      where: { nodes: { some: { deletedAt: null } } },
       orderBy: { name: 'asc' },
       select: { id: true, code: true, name: true, country: true },
     });
