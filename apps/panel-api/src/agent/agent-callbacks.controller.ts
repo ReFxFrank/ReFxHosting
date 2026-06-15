@@ -14,6 +14,7 @@ import {
   ServerState,
 } from '@prisma/client';
 import { Public } from '../common/decorators/public.decorator';
+import { RawResponse } from '../common/decorators/raw-response.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodesService } from '../nodes/nodes.service';
 import { ConsoleGateway } from './console.gateway';
@@ -83,6 +84,9 @@ type ReqWithNode = Request & { refxNodeId?: string };
  */
 @ApiTags('agent-callbacks')
 @SkipThrottle()
+// The agent parses bare JSON (e.g. { nodeId, signingKey, servers }); bypass the
+// global { success, data } envelope for the whole agent callback surface.
+@RawResponse()
 @Controller('agent')
 export class AgentCallbacksController {
   constructor(
