@@ -18,9 +18,11 @@ const MODELS = [
   'server',
   'subUser',
   'gameTemplate',
+  'gameCategory',
   'gameSwitchLog',
   'serverVariable',
   'allocation',
+  'region',
   'subscription',
   'product',
   'price',
@@ -28,6 +30,8 @@ const MODELS = [
   'payment',
   'paymentMethod',
   'auditLog',
+  'globalAlert',
+  'homepageAlert',
   'node',
 ] as const;
 

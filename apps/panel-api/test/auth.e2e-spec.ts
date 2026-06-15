@@ -8,6 +8,7 @@ import { WebAuthnService } from '../src/auth/webauthn.service';
 import { ServersController } from '../src/servers/servers.controller';
 import { ServersService } from '../src/servers/servers.service';
 import { ServerResourcesService } from '../src/servers/server-resources.service';
+import { MinecraftResolverService } from '../src/servers/minecraft-resolver.service';
 import { NodesService } from '../src/nodes/nodes.service';
 import { NodeAgentClient } from '../src/agent/agent.client';
 import { QUEUE } from '../src/queues/queue.constants';
@@ -36,6 +37,10 @@ describe('Auth (e2e)', () => {
         { provide: WebAuthnService, useValue: {} },
         ServersService,
         { provide: ServerResourcesService, useValue: {} },
+        {
+          provide: MinecraftResolverService,
+          useValue: { resolve: jest.fn(async (_s: unknown, v: string) => v ?? 'latest') },
+        },
         { provide: NodesService, useValue: {} },
         { provide: NodeAgentClient, useValue: { power: jest.fn() } },
       ],
