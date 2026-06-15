@@ -135,6 +135,14 @@ export class SendCommandDto {
   command!: string;
 }
 
+export class ChangeMinecraftVersionDto {
+  @ApiProperty({
+    description: "Minecraft version to install ('latest' or e.g. '1.21.1').",
+  })
+  @IsString()
+  version!: string;
+}
+
 export class UpdateStartupDto {
   @ApiPropertyOptional()
   @IsOptional()

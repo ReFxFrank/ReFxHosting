@@ -21,6 +21,7 @@ import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   AddSubUserDto,
+  ChangeMinecraftVersionDto,
   CreateAllocationDto,
   CreateScheduleDto,
   CreateServerDto,
@@ -133,6 +134,22 @@ export class ServersController {
   @Audit({ action: 'server.startup', targetType: 'Server', targetParam: 'id' })
   patchStartup(@Param('id') id: string, @Body() dto: UpdateStartupDto) {
     return this.servers.setStartup(id, dto);
+  }
+
+  // ---- Minecraft version --------------------------------------------------
+
+  @Patch(':id/minecraft-version')
+  @RequirePermissions('startup.update')
+  @Audit({
+    action: 'server.minecraft-version',
+    targetType: 'Server',
+    targetParam: 'id',
+  })
+  changeMinecraftVersion(
+    @Param('id') id: string,
+    @Body() dto: ChangeMinecraftVersionDto,
+  ) {
+    return this.servers.changeMinecraftVersion(id, dto.version);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

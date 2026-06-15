@@ -416,6 +416,63 @@ export class ServersService {
     return { accepted: true };
   }
 
+  // ---- change Minecraft version ------------------------------------------
+
+  /**
+   * Change the Minecraft version of a Minecraft server: resolve "latest" to a
+   * concrete version (per loader), re-pick the JVM image for that version, persist
+   * it to the server env (and any matching variable override), then reinstall with
+   * data preserved so the world/config survive.
+   */
+  async changeMinecraftVersion(
+    id: string,
+    version: string,
+  ): Promise<{ accepted: true; version: string }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      include: { template: true },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+
+    const slug = server.template?.slug;
+    if (!slug?.startsWith('minecraft-')) {
+      throw new BadRequestException('This server is not a Minecraft server');
+    }
+    if (!STOPPED_STATES.includes(server.state) && server.state !== 'RUNNING') {
+      throw new ConflictException(`Cannot change version while ${server.state}`);
+    }
+
+    const concrete = await this.mcResolver.resolve(slug, version);
+    const environment = {
+      ...((server.environment as Record<string, unknown>) ?? {}),
+      MINECRAFT_VERSION: concrete,
+    } as Prisma.InputJsonObject;
+    const dockerImage = this.resolveDockerImage(
+      server.template!.dockerImages,
+      environment,
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.server.update({
+        where: { id },
+        data: { environment, dockerImage, state: 'REINSTALLING' },
+      }),
+      // Keep an explicit per-server override (if one exists) in sync so it can't
+      // shadow the new value in the install spec.
+      this.prisma.serverVariable.updateMany({
+        where: { serverId: id, envName: 'MINECRAFT_VERSION' },
+        data: { value: concrete },
+      }),
+    ]);
+
+    await this.reinstallQueue.add(JOB.REINSTALL, {
+      serverId: id,
+      preserveData: true,
+    } satisfies ReinstallJob);
+
+    return { accepted: true, version: concrete };
+  }
+
   // ---- resize (upgrade/downgrade) ----------------------------------------
 
   async resize(id: string, dto: ResizeServerDto): Promise<Server> {

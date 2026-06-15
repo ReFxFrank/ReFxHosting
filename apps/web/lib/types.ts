@@ -57,6 +57,7 @@ export interface Server {
   bandwidthMbps: number | null;
   startupCommand: string | null;
   dockerImage: string | null;
+  environment?: Record<string, string> | null;
   subscriptionId: string | null;
   suspendedAt: string | null;
   primaryAllocation?: Allocation | null;

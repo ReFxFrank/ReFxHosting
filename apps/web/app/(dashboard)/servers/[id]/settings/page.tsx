@@ -16,6 +16,7 @@ import {
   Trash2,
   Pencil,
   ShieldAlert,
+  Blocks,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
@@ -213,8 +214,12 @@ function StartupTab({ server }: { server: Server }) {
     startupCommand !== (server.startupCommand ?? "") ||
     dockerImage !== (server.dockerImage ?? "");
 
+  const isMinecraft = !!server.template?.slug?.startsWith("minecraft-");
+
   return (
     <div className="space-y-6">
+      {isMinecraft && <MinecraftVersionCard server={server} />}
+
       <Card>
         <CardHeader>
           <CardTitle>Startup</CardTitle>
@@ -259,6 +264,103 @@ function StartupTab({ server }: { server: Server }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Minecraft version (resolve + reinstall, preserving data)
+// ---------------------------------------------------------------------------
+function MinecraftVersionCard({ server }: { server: Server }) {
+  const queryClient = useQueryClient();
+  const current = server.environment?.MINECRAFT_VERSION ?? "latest";
+  const [version, setVersion] = useState(current);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const { data: mcVersions } = useQuery({
+    queryKey: ["catalog", "minecraft-versions"],
+    queryFn: () => api.catalog.minecraftVersions(),
+  });
+
+  const changeMutation = useMutation({
+    mutationFn: () => api.servers.changeMinecraftVersion(server.id, version),
+    onSuccess: (res) => {
+      toast.success(`Reinstalling on Minecraft ${res.version}`);
+      queryClient.invalidateQueries({ queryKey: ["server", server.id] });
+      setConfirmOpen(false);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to change version"),
+  });
+
+  const dirty = version !== current;
+  const versionList = mcVersions?.versions ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Blocks className="size-4 text-primary" /> Minecraft version
+        </CardTitle>
+        <CardDescription>
+          Change the installed version. This reinstalls the server (your world and
+          files are preserved) and auto-selects the matching Java runtime.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="space-y-1.5">
+            <Label>Version</Label>
+            <Select value={version} onValueChange={setVersion}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select version" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="latest">Latest (recommended)</SelectItem>
+                {version !== "latest" && !versionList.includes(version) && (
+                  <SelectItem value={version}>{version} (current)</SelectItem>
+                )}
+                {versionList.map((ver) => (
+                  <SelectItem key={ver} value={ver}>
+                    {ver}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button disabled={!dirty} onClick={() => setConfirmOpen(true)}>
+            Change &amp; reinstall
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Currently installed: <span className="font-mono">{current}</span>
+        </p>
+      </CardContent>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Change Minecraft version</DialogTitle>
+            <DialogDescription>
+              The server will reinstall on{" "}
+              <span className="font-mono">{version}</span> and be briefly offline.
+              Your world and files are preserved, but taking a backup first is
+              always wise.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={changeMutation.isPending}
+              onClick={() => changeMutation.mutate()}
+            >
+              Change &amp; reinstall
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 function VariablesCard({ id }: { id: string }) {
   const { data: variables, isLoading } = useQuery({
     queryKey: ["server-variables", id],
@@ -267,21 +369,23 @@ function VariablesCard({ id }: { id: string }) {
 
   const [values, setValues] = useState<Record<string, string>>({});
 
+  // MINECRAFT_VERSION is managed by the dedicated card above (it resolves +
+  // reinstalls), so don't surface it as a raw, no-op variable here.
+  const editableVariables = variables?.filter(
+    (v) => v.envName !== "MINECRAFT_VERSION",
+  );
+
   useEffect(() => {
     if (variables) {
-      setValues(Object.fromEntries(variables.map((v) => [v.envName, v.value])));
+      setValues(
+        Object.fromEntries(
+          variables
+            .filter((v) => v.envName !== "MINECRAFT_VERSION")
+            .map((v) => [v.envName, v.value]),
+        ),
+      );
     }
   }, [variables]);
-
-  // Surface MINECRAFT_VERSION as a dropdown when the server exposes it.
-  const hasMinecraftVersion = !!variables?.some(
-    (v) => v.envName === "MINECRAFT_VERSION",
-  );
-  const { data: mcVersions } = useQuery({
-    queryKey: ["catalog", "minecraft-versions"],
-    queryFn: () => api.catalog.minecraftVersions(),
-    enabled: hasMinecraftVersion,
-  });
 
   const queryClient = useQueryClient();
   const saveMutation = useMutation({
@@ -308,48 +412,18 @@ function VariablesCard({ id }: { id: string }) {
               <Skeleton key={i} className="h-9 w-full" />
             ))}
           </div>
-        ) : variables?.length ? (
-          variables.map((v) => {
+        ) : editableVariables?.length ? (
+          editableVariables.map((v) => {
             const dirty = (values[v.envName] ?? "") !== v.value;
-            const isMcVersion = v.envName === "MINECRAFT_VERSION";
             return (
               <div key={v.envName} className="grid gap-2 sm:grid-cols-[12rem_1fr_auto] sm:items-center">
                 <Label className="font-mono text-xs">{v.envName}</Label>
-                {isMcVersion ? (
-                  <Select
-                    value={values[v.envName] ?? ""}
-                    onValueChange={(val) =>
-                      setValues((s) => ({ ...s, [v.envName]: val }))
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select version" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="latest">Latest (recommended)</SelectItem>
-                      {/* Keep the current value selectable even if not in the list. */}
-                      {values[v.envName] &&
-                        values[v.envName] !== "latest" &&
-                        !(mcVersions?.versions ?? []).includes(values[v.envName]) && (
-                          <SelectItem value={values[v.envName]}>
-                            {values[v.envName]}
-                          </SelectItem>
-                        )}
-                      {(mcVersions?.versions ?? []).map((ver) => (
-                        <SelectItem key={ver} value={ver}>
-                          {ver}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    value={values[v.envName] ?? ""}
-                    onChange={(e) =>
-                      setValues((s) => ({ ...s, [v.envName]: e.target.value }))
-                    }
-                  />
-                )}
+                <Input
+                  value={values[v.envName] ?? ""}
+                  onChange={(e) =>
+                    setValues((s) => ({ ...s, [v.envName]: e.target.value }))
+                  }
+                />
                 <Button
                   variant="outline"
                   size="sm"

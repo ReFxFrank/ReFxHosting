@@ -275,6 +275,11 @@ export const api = {
     setVariable: (id: string, envName: string, value: string) =>
       http.put<void>(`/servers/${id}/variables/${envName}`, { value }),
     reinstall: (id: string) => http.post<void>(`/servers/${id}/reinstall`),
+    changeMinecraftVersion: (id: string, version: string) =>
+      http.patch<{ accepted: true; version: string }>(
+        `/servers/${id}/minecraft-version`,
+        { version },
+      ),
     sftp: (id: string) =>
       http.get<{ host: string; port: number; username: string }>(`/servers/${id}/sftp`),
     rotateSftp: (id: string) =>
