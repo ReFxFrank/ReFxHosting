@@ -13,6 +13,7 @@ import { TransformInterceptor } from '../../src/common/interceptors/transform.in
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { CryptoService } from '../../src/common/crypto/crypto.service';
 import { ApiKeyService } from '../../src/auth/api-key.service';
+import { UsersService } from '../../src/users/users.service';
 import { JwtStrategy } from '../../src/auth/strategies/jwt.strategy';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/auth/guards/roles.guard';
@@ -84,6 +85,7 @@ export async function buildTestApp(
       // Infra (real implementations, with Prisma mocked below).
       CryptoService,
       ApiKeyService,
+      UsersService,
       JwtStrategy,
       // Auth guards (real).
       JwtAuthGuard,
