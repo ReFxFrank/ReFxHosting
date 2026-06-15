@@ -2,6 +2,7 @@ import {
   NEWEST_JAVA,
   isJavaImage,
   javaImage,
+  latestJavaDefault,
   requiredJavaMajor,
   resolveJavaImage,
 } from './java-version.util';
@@ -37,6 +38,24 @@ describe('java-version util', () => {
       expect(requiredJavaMajor(undefined)).toBe(NEWEST_JAVA);
       expect(requiredJavaMajor('')).toBe(NEWEST_JAVA);
       expect(requiredJavaMajor('snapshot')).toBe(NEWEST_JAVA);
+    });
+
+    it('honors a capped latestDefault for latest/unknown (Forge/NeoForge)', () => {
+      expect(requiredJavaMajor('latest', 21)).toBe(21);
+      expect(requiredJavaMajor(undefined, 21)).toBe(21);
+      // A concrete version ignores the cap and uses the real requirement.
+      expect(requiredJavaMajor('1.20.4', 21)).toBe(17);
+      expect(requiredJavaMajor('1.21.1', 21)).toBe(21);
+    });
+  });
+
+  describe('latestJavaDefault', () => {
+    it('caps Forge and NeoForge at 21, others newest', () => {
+      expect(latestJavaDefault('minecraft-forge')).toBe(21);
+      expect(latestJavaDefault('minecraft-neoforge')).toBe(21);
+      expect(latestJavaDefault('minecraft-fabric')).toBe(NEWEST_JAVA);
+      expect(latestJavaDefault('minecraft-paper')).toBe(NEWEST_JAVA);
+      expect(latestJavaDefault(undefined)).toBe(NEWEST_JAVA);
     });
   });
 

@@ -25,15 +25,22 @@ export const NEWEST_JAVA = 25;
 /**
  * Minimum Java major version for a Minecraft (Java Edition) version string.
  * Accepts "1.20.4", "1.21", calendar-style "26.1.2", "latest", or junk.
+ *
+ * `latestDefault` is what we assume for "latest"/unknown versions. It defaults to
+ * the newest Java (right for vanilla/Paper/Fabric, which track the bleeding edge),
+ * but Forge/NeoForge lag vanilla and refuse too-new JVMs, so callers pass a lower
+ * cap for them via {@link latestJavaDefault}.
  */
-export function requiredJavaMajor(mcVersion?: string | null): number {
+export function requiredJavaMajor(
+  mcVersion?: string | null,
+  latestDefault: number = NEWEST_JAVA,
+): number {
   const t = (mcVersion ?? '').trim().toLowerCase();
-  // Unknown / "latest" → newest (forward-safe: under-provisioning the JVM is the
-  // only failure mode, so default high).
-  if (!t || t === 'latest') return NEWEST_JAVA;
+  // Unknown / "latest" → caller's default (newest unless capped).
+  if (!t || t === 'latest') return latestDefault;
 
   const m = t.match(/^(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
-  if (!m) return NEWEST_JAVA;
+  if (!m) return latestDefault;
 
   const major = Number(m[1]);
   const minor = m[2] ? Number(m[2]) : 0;
@@ -47,6 +54,16 @@ export function requiredJavaMajor(mcVersion?: string | null): number {
   if (minor <= 19) return 17; // 1.17 – 1.19.x
   if (minor === 20) return patch >= 5 ? 21 : 17; // 1.20.5 raised the floor to 21
   return 21; // 1.21.x (until a future 1.x bumps it)
+}
+
+/**
+ * The Java major to assume for a "latest"/unknown Minecraft version on a given
+ * template. Forge & NeoForge trail vanilla and are strict about too-new JVMs, so
+ * cap them at 21 (current modded-stable); everything else gets the newest.
+ */
+export function latestJavaDefault(templateSlug?: string | null): number {
+  if (templateSlug && /forge/i.test(templateSlug)) return 21; // forge + neoforge
+  return NEWEST_JAVA;
 }
 
 /** Build an eclipse-temurin image ref for a Java major version. */
@@ -68,7 +85,8 @@ export function resolveJavaImage(
   currentImage: string | undefined | null,
   mcVersion?: string | null,
   kind: 'jre' | 'jdk' = 'jre',
+  latestDefault: number = NEWEST_JAVA,
 ): string | undefined {
   if (!isJavaImage(currentImage)) return currentImage ?? undefined;
-  return javaImage(requiredJavaMajor(mcVersion), kind);
+  return javaImage(requiredJavaMajor(mcVersion, latestDefault), kind);
 }
