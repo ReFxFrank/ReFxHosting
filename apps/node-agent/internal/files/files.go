@@ -44,9 +44,13 @@ func (m *Manager) resolve(rel string) (string, error) {
 		return "", ErrTraversal
 	}
 	// Defend against symlink escapes: the real parent must stay within the jail.
-	if parent, err := filepath.EvalSymlinks(filepath.Dir(abs)); err == nil {
-		if parent != m.root && !strings.HasPrefix(parent, m.root+string(os.PathSeparator)) {
-			return "", ErrTraversal
+	// Skip this for the jail root itself — its parent legitimately lives *above*
+	// the jail, so checking Dir(root) would wrongly reject listing "/".
+	if abs != m.root {
+		if parent, err := filepath.EvalSymlinks(filepath.Dir(abs)); err == nil {
+			if parent != m.root && !strings.HasPrefix(parent, m.root+string(os.PathSeparator)) {
+				return "", ErrTraversal
+			}
 		}
 	}
 	return abs, nil

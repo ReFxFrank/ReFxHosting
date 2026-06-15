@@ -39,6 +39,28 @@ func TestResolveAllowsInside(t *testing.T) {
 	}
 }
 
+func TestListJailRoot(t *testing.T) {
+	root := t.TempDir()
+	m, _ := New(root)
+	if err := m.Write("server.jar", strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Mkdir("world"); err != nil {
+		t.Fatal(err)
+	}
+	// Listing the jail root must succeed (regression: the symlink-parent check
+	// used to reject "/" because Dir(root) lives above the jail).
+	for _, p := range []string{"/", "", "."} {
+		entries, err := m.List(p)
+		if err != nil {
+			t.Fatalf("List(%q) at jail root: %v", p, err)
+		}
+		if len(entries) != 2 {
+			t.Errorf("List(%q): got %d entries, want 2", p, len(entries))
+		}
+	}
+}
+
 func TestWriteReadDelete(t *testing.T) {
 	root := t.TempDir()
 	m, _ := New(root)
