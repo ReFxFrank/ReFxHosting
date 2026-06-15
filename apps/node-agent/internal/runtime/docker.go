@@ -34,6 +34,10 @@ const (
 	containerUID  = 1000
 	containerGID  = 1000
 	containerUser = "1000:1000"
+	// windowsContainerUser forces root on Windows nodes: Docker Desktop's WSL2
+	// bind mounts ignore Linux ownership and aren't writable by an image's default
+	// non-root user, so install/runtime containers must run as root there.
+	windowsContainerUser = "0:0"
 )
 
 // DockerRuntime hosts servers as Docker containers. It is the preferred backend
@@ -172,6 +176,12 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 		WorkingDir: "/mnt/server",
 		Labels:     map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
+	// On Windows the WSL2 bind mount isn't writable by the install image's default
+	// non-root user (e.g. yolks runs as uid 1000), so `cd /mnt/server` fails with
+	// "Permission denied". Run the install as root there.
+	if goruntime.GOOS == "windows" {
+		cfg.User = windowsContainerUser
+	}
 	host := &container.HostConfig{
 		Mounts: []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/mnt/server"}},
 		// NOTE: deliberately NOT AutoRemove. With auto-remove the daemon deletes
@@ -292,11 +302,13 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 	}
 
 	// Run the game as a non-root user on Linux nodes (the data dir is chowned to
-	// match below). This is deliberately skipped on Windows: Docker Desktop's
-	// WSL2 bind mounts don't honor Linux file ownership, so a uid:1000 process
-	// can't write the mounted data dir and the server crashes immediately — there
-	// the image's default user (root) is correct.
-	if goruntime.GOOS != "windows" {
+	// match below). On Windows, Docker Desktop's WSL2 bind mounts ignore Linux
+	// ownership and aren't writable by the image's default user (many images,
+	// e.g. the yolks/steamcmd ones, default to uid 1000) — so force root, or the
+	// server can't write its data dir and crashes.
+	if goruntime.GOOS == "windows" {
+		cfg.User = windowsContainerUser
+	} else {
 		cfg.User = containerUser
 		// The install step runs as root; make the data dir writable by the
 		// non-root runtime user before launching.
