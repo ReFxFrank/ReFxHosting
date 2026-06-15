@@ -34,19 +34,13 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
 - Then open `/` — the public storefront. (Admins can't edit storefront metadata from the
   UI yet — that's Phase 4 below; until then it's editable via the API or DB.)
 
-## ⏭️ Next — Phase 4: admin UI (NOT built yet)
-- [ ] **Admin → Templates**: storefront section to toggle `isPublished`/`featured`, set
-      `sortOrder`, pick `cardImageUrl`/`heroImageUrl`/`iconUrl` (preset picker from
-      `/games/presets/*` + custom URL field), edit `longDescription`, `tags`.
-      Use `api.admin.saveTemplate(...)` (already supports these fields). Add a live card preview.
-- [ ] **Admin → Homepage alerts**: new page `app/(admin)/admin/homepage-alerts/page.tsx`
-      to manage `HomepageAlert`s (type/title/body/schedule/cta/dismissible/priority/active).
-      Use `api.admin.homepageAlerts() / saveHomepageAlert() / deleteHomepageAlert()` (already added).
-      Link it from the admin hub: add a tile to `QUICK_LINKS` in
-      `app/(admin)/admin/page.tsx` (lines ~37–43) labelled "Homepage Alerts" — keep it
-      distinct from the existing "Alerts" tile (that one = internal dashboard `GlobalAlert`).
-      Nav definitions live in `components/layout/nav-config.ts` (`adminNav`) if you also
-      want a sidebar entry.
+## ⏭️ Next — Phase 4: admin UI ✅ DONE (commit pending push)
+- [x] **Admin → Templates**: storefront section (publish/feature/sort, long
+      description, tags, card/hero/icon images w/ preset picker + custom URL, live
+      card preview) + inline Publish toggle & Featured badge in the table.
+- [x] **Admin → Homepage alerts**: full CRUD page at `/admin/homepage-alerts`
+      (type incl. PROMO, schedule, CTA, dismissible, priority, active) linked from
+      the admin hub `QUICK_LINKS`, distinct from the internal "Alerts" tile.
 
 ## 🧪 Testing / polish
 - [ ] E2E: homepage → game → `/order` (preselected) → register-at-checkout → server provisions → shows in `/servers`.
