@@ -291,6 +291,163 @@ export class BillingService {
     return paginate(data, total, pagination);
   }
 
+  // ---- admin (platform-wide, ADMIN/OWNER-gated by the controller) --------
+
+  /** Selects a minimal, non-sensitive user shape for admin list joins. */
+  private static readonly userSelect = {
+    select: { id: true, email: true, firstName: true, lastName: true },
+  };
+
+  /** All invoices across the platform, with the owning customer. */
+  async listAllInvoices(
+    pagination: PaginationDto,
+    state?: InvoiceState,
+  ): Promise<Paginated<Invoice>> {
+    const where: Prisma.InvoiceWhereInput = {};
+    if (state && Object.values(InvoiceState).includes(state)) {
+      where.state = state;
+    }
+    if (pagination.q) {
+      where.OR = [
+        { number: { contains: pagination.q, mode: 'insensitive' } },
+        { user: { email: { contains: pagination.q, mode: 'insensitive' } } },
+      ];
+    }
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.invoice.findMany({
+        where,
+        include: { user: BillingService.userSelect },
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+      this.prisma.invoice.count({ where }),
+    ]);
+    return paginate(data, total, pagination);
+  }
+
+  /** All subscriptions ("orders") across the platform, with customer + product. */
+  async listAllSubscriptions(
+    pagination: PaginationDto,
+  ): Promise<Paginated<Subscription>> {
+    const where: Prisma.SubscriptionWhereInput = {};
+    if (pagination.q) {
+      where.OR = [
+        { user: { email: { contains: pagination.q, mode: 'insensitive' } } },
+        { product: { name: { contains: pagination.q, mode: 'insensitive' } } },
+      ];
+    }
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.subscription.findMany({
+        where,
+        include: {
+          user: BillingService.userSelect,
+          product: { select: { id: true, name: true, type: true } },
+          _count: { select: { servers: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+      this.prisma.subscription.count({ where }),
+    ]);
+    return paginate(data, total, pagination);
+  }
+
+  /** Headline billing figures for the admin Billing view (money in minor units). */
+  async adminBillingSummary(): Promise<{
+    currency: string;
+    revenueMinor: number;
+    outstandingMinor: number;
+    activeSubscriptions: number;
+    openInvoices: number;
+    paidInvoices: number;
+  }> {
+    const [paid, open, activeSubscriptions, openInvoices, paidInvoices] =
+      await this.prisma.$transaction([
+        this.prisma.invoice.aggregate({
+          _sum: { amountPaidMinor: true },
+          where: { state: InvoiceState.PAID },
+        }),
+        this.prisma.invoice.aggregate({
+          _sum: { totalMinor: true, amountPaidMinor: true },
+          where: { state: InvoiceState.OPEN },
+        }),
+        this.prisma.subscription.count({
+          where: { state: SubscriptionState.ACTIVE },
+        }),
+        this.prisma.invoice.count({ where: { state: InvoiceState.OPEN } }),
+        this.prisma.invoice.count({ where: { state: InvoiceState.PAID } }),
+      ]);
+    return {
+      currency: 'USD',
+      revenueMinor: paid._sum.amountPaidMinor ?? 0,
+      outstandingMinor:
+        (open._sum.totalMinor ?? 0) - (open._sum.amountPaidMinor ?? 0),
+      activeSubscriptions,
+      openInvoices,
+      paidInvoices,
+    };
+  }
+
+  /** All payments across the platform (OWNER-only view), with invoice + customer. */
+  async listAllPayments(pagination: PaginationDto) {
+    const where: Prisma.PaymentWhereInput = {};
+    if (pagination.q) {
+      where.OR = [
+        { invoice: { number: { contains: pagination.q, mode: 'insensitive' } } },
+        {
+          invoice: {
+            user: { email: { contains: pagination.q, mode: 'insensitive' } },
+          },
+        },
+      ];
+    }
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.payment.findMany({
+        where,
+        select: {
+          id: true,
+          gateway: true,
+          amountMinor: true,
+          currency: true,
+          state: true,
+          failureReason: true,
+          createdAt: true,
+          invoice: {
+            select: {
+              id: true,
+              number: true,
+              user: BillingService.userSelect,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.take,
+      }),
+      this.prisma.payment.count({ where }),
+    ]);
+    return paginate(data, total, pagination);
+  }
+
+  /** Whether each payment gateway is configured (no secrets returned). */
+  gatewayStatus(): {
+    stripe: { configured: boolean; publishableKey: string | null };
+    paypal: { configured: boolean };
+  } {
+    const stripe = this.config.get<AppConfig['stripe']>('stripe');
+    const paypal = this.config.get<AppConfig['paypal']>('paypal');
+    return {
+      stripe: {
+        configured: !!stripe?.secretKey,
+        // The publishable key is not a secret; safe to expose to the admin UI.
+        publishableKey: stripe?.publishableKey || null,
+      },
+      paypal: { configured: !!paypal?.clientId && !!paypal?.clientSecret },
+    };
+  }
+
   async getInvoice(userId: string, id: string): Promise<Invoice> {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, userId },

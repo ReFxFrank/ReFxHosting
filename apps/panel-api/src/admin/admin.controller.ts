@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { GlobalRole } from '@prisma/client';
+import { GlobalRole, InvoiceState, UserState } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { NodesService } from '../nodes/nodes.service';
 import { UsersService } from '../users/users.service';
@@ -27,6 +27,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateNodeDto, UpdateNodeDto } from '../nodes/dto/node.dto';
+import { CreateLocationDto, UpdateLocationDto } from '../nodes/dto/location.dto';
 import { CreateProductDto } from '../billing/dto/create-product.dto';
 import { CreateAlertDto } from '../platform/dto/create-alert.dto';
 import {
@@ -121,16 +122,50 @@ export class AdminController {
     return this.nodes.delete(id);
   }
 
+  // ---- Locations (regions) ----------------------------------------------
+
+  @Get('locations')
+  listLocations() {
+    return this.nodes.listRegions();
+  }
+
+  @Post('locations')
+  @Audit({ action: 'admin.location.create', targetType: 'Region' })
+  createLocation(@Body() dto: CreateLocationDto) {
+    return this.nodes.createRegion(dto);
+  }
+
+  @Patch('locations/:id')
+  @Audit({ action: 'admin.location.update', targetType: 'Region', targetParam: 'id' })
+  updateLocation(@Param('id') id: string, @Body() dto: UpdateLocationDto) {
+    return this.nodes.updateRegion(id, dto);
+  }
+
+  @Delete('locations/:id')
+  @HttpCode(204)
+  @Audit({ action: 'admin.location.delete', targetType: 'Region', targetParam: 'id' })
+  deleteLocation(@Param('id') id: string) {
+    return this.nodes.deleteRegion(id);
+  }
+
   // ---- Users -------------------------------------------------------------
 
   @Get('users')
-  listUsers(@Query() pagination: PaginationDto) {
-    return this.users.listUsers(pagination);
+  listUsers(
+    @Query() pagination: PaginationDto,
+    @Query('role') role?: string,
+    @Query('state') state?: string,
+  ) {
+    return this.users.listUsers(pagination, {
+      role: role as GlobalRole | undefined,
+      state: state as UserState | undefined,
+    });
   }
 
   @Get('users/:id')
   getUser(@Param('id') id: string) {
-    return this.users.getProfile(id);
+    // Full account view (profile + billing + servers), secrets stripped.
+    return this.admin.userDetail(id);
   }
 
   @Patch('users/:id')
@@ -140,6 +175,46 @@ export class AdminController {
     if (dto.state === 'SUSPENDED') return this.users.suspendUser(id);
     if (dto.state === 'ACTIVE') return this.users.reactivateUser(id);
     return this.users.getProfile(id);
+  }
+
+  @Delete('users/:id')
+  @HttpCode(204)
+  @Audit({ action: 'admin.user.delete', targetType: 'User', targetParam: 'id' })
+  deleteUser(@Param('id') id: string) {
+    return this.users.deleteUser(id);
+  }
+
+  // ---- Billing, orders & invoices ---------------------------------------
+
+  @Get('billing/summary')
+  billingSummary() {
+    return this.billing.adminBillingSummary();
+  }
+
+  /** "Orders" = subscriptions (each is a customer's plan purchase). */
+  @Get('orders')
+  listOrders(@Query() pagination: PaginationDto) {
+    return this.billing.listAllSubscriptions(pagination);
+  }
+
+  @Get('invoices')
+  listInvoices(@Query() pagination: PaginationDto, @Query('state') state?: string) {
+    return this.billing.listAllInvoices(pagination, state as InvoiceState | undefined);
+  }
+
+  // ---- Payments (OWNER only) --------------------------------------------
+  // Raw payment ledger + gateway config are restricted to the highest rank.
+
+  @Get('payments')
+  @Roles(GlobalRole.OWNER)
+  listPayments(@Query() pagination: PaginationDto) {
+    return this.billing.listAllPayments(pagination);
+  }
+
+  @Get('payments/gateways')
+  @Roles(GlobalRole.OWNER)
+  paymentGateways() {
+    return this.billing.gatewayStatus();
   }
 
   // ---- Products ----------------------------------------------------------

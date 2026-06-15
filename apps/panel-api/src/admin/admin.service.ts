@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   BillingInterval,
   ServerState,
@@ -15,6 +15,80 @@ import { intervalMonths } from '../billing/interval.util';
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Full account view for the admin user-detail page: profile + contact, billing
+   * (subscriptions, recent invoices, payment methods) and owned servers. Strips
+   * every secret (password hash, TOTP seed, gateway refs) — staff never see those.
+   */
+  async userDetail(id: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        ownedServers: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            shortId: true,
+            name: true,
+            state: true,
+            node: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        subscriptions: {
+          select: {
+            id: true,
+            state: true,
+            interval: true,
+            currentPeriodEnd: true,
+            cancelAtPeriodEnd: true,
+            gateway: true,
+            createdAt: true,
+            product: { select: { id: true, name: true, type: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        invoices: {
+          select: {
+            id: true,
+            number: true,
+            state: true,
+            currency: true,
+            totalMinor: true,
+            amountPaidMinor: true,
+            createdAt: true,
+            paidAt: true,
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 20,
+        },
+        paymentMethods: {
+          select: {
+            id: true,
+            gateway: true,
+            brand: true,
+            last4: true,
+            expMonth: true,
+            expYear: true,
+            isDefault: true,
+          },
+        },
+        _count: {
+          select: { ownedServers: true, subscriptions: true, tickets: true },
+        },
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    // Drop sensitive columns before returning to the staff UI.
+    const {
+      passwordHash: _ph,
+      totpSecretEnc: _ts,
+      ...safe
+    } = user as typeof user & { passwordHash?: string; totpSecretEnc?: string };
+    return safe;
+  }
 
   /**
    * High-level platform summary: user/server/node counts, server breakdown by

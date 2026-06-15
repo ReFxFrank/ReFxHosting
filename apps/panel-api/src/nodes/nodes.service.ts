@@ -43,12 +43,72 @@ export class NodesService {
     this.secretsEncKey = config.get<string>('secretsEncKey')!;
   }
 
-  /** All regions, for the admin node-create picker. */
+  private readonly regionSelect = {
+    id: true,
+    code: true,
+    name: true,
+    country: true,
+  } as const;
+
+  /** All regions (locations), for the admin Locations view + node-create picker. */
   listRegions() {
     return this.prisma.region.findMany({
-      select: { id: true, code: true, name: true, country: true },
+      select: this.regionSelect,
       orderBy: { name: 'asc' },
     });
+  }
+
+  /** Create a location/region. Codes are unique (used as the human handle). */
+  async createRegion(dto: { code: string; name: string; country: string }) {
+    const code = dto.code.trim().toLowerCase();
+    const existing = await this.prisma.region.findUnique({ where: { code } });
+    if (existing) {
+      throw new BadRequestException(`A location with code "${code}" already exists`);
+    }
+    return this.prisma.region.create({
+      data: { id: uuidv7(), code, name: dto.name.trim(), country: dto.country.trim() },
+      select: this.regionSelect,
+    });
+  }
+
+  async updateRegion(
+    id: string,
+    dto: { code?: string; name?: string; country?: string },
+  ) {
+    const region = await this.prisma.region.findUnique({ where: { id } });
+    if (!region) throw new NotFoundException('Location not found');
+    const data: { code?: string; name?: string; country?: string } = {};
+    if (dto.name !== undefined) data.name = dto.name.trim();
+    if (dto.country !== undefined) data.country = dto.country.trim();
+    if (dto.code !== undefined) {
+      const code = dto.code.trim().toLowerCase();
+      const clash = await this.prisma.region.findFirst({
+        where: { code, id: { not: id } },
+      });
+      if (clash) {
+        throw new BadRequestException(`A location with code "${code}" already exists`);
+      }
+      data.code = code;
+    }
+    return this.prisma.region.update({
+      where: { id },
+      data,
+      select: this.regionSelect,
+    });
+  }
+
+  async deleteRegion(id: string): Promise<void> {
+    const nodes = await this.prisma.node.count({
+      where: { regionId: id, deletedAt: null },
+    });
+    if (nodes > 0) {
+      throw new BadRequestException(
+        'Cannot delete a location that still has nodes; move or delete them first',
+      );
+    }
+    const region = await this.prisma.region.findUnique({ where: { id } });
+    if (!region) throw new NotFoundException('Location not found');
+    await this.prisma.region.delete({ where: { id } });
   }
 
   /**

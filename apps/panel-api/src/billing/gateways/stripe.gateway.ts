@@ -48,7 +48,17 @@ export class StripeGateway implements PaymentGateway {
   constructor(private readonly config: ConfigService) {
     const cfg = this.config.get<AppConfig['stripe']>('stripe')!;
     this.webhookSecret = cfg.webhookSecret;
-    this.stripe = new Stripe(cfg.secretKey, {
+    if (!cfg.secretKey) {
+      // No key configured yet (common in dev / before going live). Use a
+      // placeholder so the SDK constructs and the app still boots; any live call
+      // returns a clear auth error rather than crashing startup. Set
+      // STRIPE_SECRET_KEY (+ STRIPE_WEBHOOK_SECRET) to start accepting payments.
+      this.logger.warn(
+        'STRIPE_SECRET_KEY is not set — Stripe is inert (no live charges). ' +
+          'Set the Stripe env vars to enable payments.',
+      );
+    }
+    this.stripe = new Stripe(cfg.secretKey || 'sk_test_unconfigured', {
       // Pin the API version the SDK major targets; bump deliberately when
       // upgrading the SDK (stripe-node v22 → 2026-05-27.dahlia).
       apiVersion: '2026-05-27.dahlia',

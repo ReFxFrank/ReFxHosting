@@ -1,9 +1,10 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, SubUser, User, UserState } from '@prisma/client';
+import { GlobalRole, Prisma, SubUser, User, UserState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   Paginated,
@@ -47,8 +48,17 @@ export class UsersService {
   // ---- Admin: listing & lifecycle ---------------------------------------
 
   /** Admin-facing paginated user list with optional free-text filter. */
-  async listUsers(pagination: PaginationDto): Promise<Paginated<User>> {
+  async listUsers(
+    pagination: PaginationDto,
+    filter?: { role?: GlobalRole; state?: UserState },
+  ): Promise<Paginated<User>> {
     const where: Prisma.UserWhereInput = { deletedAt: null };
+    if (filter?.role && Object.values(GlobalRole).includes(filter.role)) {
+      where.globalRole = filter.role;
+    }
+    if (filter?.state && Object.values(UserState).includes(filter.state)) {
+      where.state = filter.state;
+    }
     if (pagination.q) {
       where.OR = [
         { email: { contains: pagination.q, mode: 'insensitive' } },
@@ -95,6 +105,30 @@ export class UsersService {
     return this.prisma.user.update({ where: { id }, data: { state } });
     // TODO(impl): emit a notification / lifecycle event so the user (and any
     // running servers) react to the state change (suspend servers on ban, etc.).
+  }
+
+  /**
+   * Soft-delete a user account. Refuses while the user still owns servers (those
+   * must be deleted/transferred first, so we never orphan a running server).
+   */
+  async deleteUser(id: string): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, _count: { select: { ownedServers: true } } },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    const servers = await this.prisma.server.count({
+      where: { ownerId: id, deletedAt: null },
+    });
+    if (servers > 0) {
+      throw new BadRequestException(
+        'Cannot delete a user who still owns servers; delete or transfer their servers first',
+      );
+    }
+    await this.prisma.user.update({
+      where: { id },
+      data: { deletedAt: new Date(), state: UserState.BANNED },
+    });
   }
 
   // ---- Sub-users (per-server collaborators) -----------------------------
