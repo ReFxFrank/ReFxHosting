@@ -166,6 +166,17 @@ func (c *Client) SendHeartbeat(ctx context.Context, hb Heartbeat) error {
 	return c.do(ctx, http.MethodPost, "/api/v1/agent/heartbeat", hb, nil, true)
 }
 
+// FetchServers returns the server specs currently assigned to this node. The
+// agent calls this on every boot (the register handshake only runs once) so the
+// runtime Manager + SFTP credentials survive restarts.
+func (c *Client) FetchServers(ctx context.Context) ([]ServerInstallSpec, error) {
+	var resp []ServerInstallSpec
+	if err := c.do(ctx, http.MethodGet, "/api/v1/agent/servers", nil, &resp, true); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 // ServerStat is a single per-server stat sample pushed to the panel.
 type ServerStat struct {
 	ServerID   string  `json:"serverId"`

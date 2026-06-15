@@ -120,12 +120,22 @@ func run(ctx context.Context, cfgPath string) error {
 			log.Warn().Err(err).Msg("failed to persist node identity")
 		}
 		assigned = resp.Servers
+	} else {
+		// Already registered: reload the assigned servers so the Manager and
+		// SFTP credentials survive restarts (the register handshake, which
+		// carries the server list, only runs on first boot).
+		servers, ferr := pc.FetchServers(ctx)
+		if ferr != nil {
+			log.Warn().Err(ferr).Msg("failed to reload assigned servers")
+		} else {
+			assigned = servers
+			log.Info().Int("count", len(servers)).Msg("reloaded assigned servers")
+		}
 	}
 
-	// Reconcile any surviving Docker containers with the (now-known) servers.
+	// Ensure the network exists before servers are applied/adopted below.
 	if dockerRT != nil {
 		_ = dockerRT.EnsureNetwork(ctx)
-		_ = dockerRT.Reconcile(ctx, mgr.Get)
 	}
 
 	// --- WebSocket hub -----------------------------------------------------
@@ -142,6 +152,14 @@ func run(ctx context.Context, cfgPath string) error {
 	// Apply panel-assigned server specs: register each onto the Manager and
 	// populate its SFTP credential from the same payload.
 	applyAssignedServers(log, mgr, sftpAuth, assigned)
+
+	// Now that the Manager knows the assigned servers, adopt any surviving
+	// Docker containers (e.g. a server that kept running across an agent
+	// restart) so their state/stats/console reattach.
+	if dockerRT != nil {
+		_ = dockerRT.Reconcile(ctx, mgr.Get)
+	}
+
 	hostKey, err := loadOrGenerateHostKey(filepath.Join(cfg.DataDir, "sftp_host_key"))
 	if err != nil {
 		return err

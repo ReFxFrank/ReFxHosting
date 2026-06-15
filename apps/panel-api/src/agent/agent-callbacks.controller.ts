@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Post,
   Req,
   UseGuards,
@@ -105,6 +106,18 @@ export class AgentCallbacksController {
       agentVersion: body.agentVersion,
       capabilities: body.capabilities,
     });
+  }
+
+  // ---- signed: reload this node's assigned servers on (re)boot ------------
+
+  @Public()
+  @UseGuards(AgentSignatureGuard)
+  @Get('servers')
+  listServers(@Req() req: ReqWithNode) {
+    // The agent calls this on every boot so its runtime Manager + SFTP creds
+    // survive restarts (it only receives `servers` in the register response on
+    // first boot). Same ServerInstallSpec shape as register.
+    return this.nodes.buildServerInstallSpecs(req.refxNodeId!);
   }
 
   // ---- signed telemetry ---------------------------------------------------
