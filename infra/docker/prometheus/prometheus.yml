@@ -41,7 +41,13 @@ scrape_configs:
   #       labels:
   #         role: game-node
   #
-  # - job_name: node-exporter
+  # Local host metrics (the node-exporter service in the observability profile).
+  # Drives the Grafana "node CPU / memory" panels.
+  - job_name: node-exporter
+    static_configs:
+      - targets: ["node-exporter:9100"]
+  # For real game nodes, add their node-exporters here too, e.g.:
+  # - job_name: game-nodes
   #   static_configs:
   #     - targets: ["10.0.0.11:9100", "10.0.0.12:9100"]
   #       labels:
