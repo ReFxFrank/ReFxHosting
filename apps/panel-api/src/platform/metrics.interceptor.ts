@@ -36,8 +36,11 @@ export class MetricsInterceptor implements NestInterceptor {
     const route =
       req.route?.path ?? req.originalUrl ?? req.url ?? 'unknown';
 
-    const record = (status: number) =>
-      this.metrics.incHttp(method, route, status);
+    const start = process.hrtime.bigint();
+    const record = (status: number) => {
+      const durationSeconds = Number(process.hrtime.bigint() - start) / 1e9;
+      this.metrics.recordHttp(method, route, status, durationSeconds);
+    };
 
     return next.handle().pipe(
       tap({
