@@ -114,6 +114,24 @@ export default function ConsolePage() {
       term.writeln("\x1b[90mReFx Hosting console — connecting…\x1b[0m");
       xtermRef.current = { term, fit: () => fit.fit() };
 
+      // Ctrl/Cmd+C copies the current selection (like a desktop terminal). With
+      // no selection it falls through so the keystroke still reaches the server.
+      term.attachCustomKeyEventHandler((e) => {
+        if (
+          e.type === "keydown" &&
+          (e.ctrlKey || e.metaKey) &&
+          !e.altKey &&
+          e.key.toLowerCase() === "c"
+        ) {
+          const sel = term.getSelection();
+          if (sel) {
+            void copyToClipboard(sel);
+            return false;
+          }
+        }
+        return true;
+      });
+
       resizeObserver = new ResizeObserver(() => {
         try {
           fit.fit();
