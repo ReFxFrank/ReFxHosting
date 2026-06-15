@@ -13,20 +13,30 @@ import { Button } from "@/components/ui/button";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
-/** Hero/splash with headline, CTAs and a glassy beam backdrop. */
+/**
+ * Ambient glow backdrop for the top of the homepage. Rendered once by the page
+ * around BOTH the alert banner and the hero so the glow is seamless whether or
+ * not an alert is shown (otherwise the banner pushes the hero down and exposes a
+ * seam at the hero's top edge).
+ */
+export function HeroBackdrop() {
+  return (
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0"
+      style={{
+        background:
+          "radial-gradient(60% 55% at 50% 0%, rgba(0,114,255,0.18), transparent 70%), radial-gradient(40% 40% at 85% 25%, rgba(34,211,238,0.10), transparent 70%)",
+      }}
+    />
+  );
+}
+
+/** Hero/splash with headline + CTAs (backdrop supplied by the page wrapper). */
 export function HeroSplash() {
   return (
-    <section className="relative overflow-hidden">
-      {/* Ambient glow backdrop */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(60% 50% at 50% 0%, rgba(0,114,255,0.18), transparent 70%), radial-gradient(40% 40% at 85% 30%, rgba(34,211,238,0.10), transparent 70%)",
-        }}
-      />
-      <div className="relative mx-auto w-full max-w-6xl px-4 pb-12 pt-16 text-center sm:px-6 sm:pt-24">
+    <section className="relative">
+      <div className="relative mx-auto w-full max-w-6xl px-4 pb-12 pt-12 text-center sm:px-6 sm:pt-20">
         <p className="refx-eyebrow mx-auto mb-4 inline-flex items-center gap-2">
           <span className="size-1.5 animate-pulse rounded-full bg-primary" />
           Multi-game hosting, one platform

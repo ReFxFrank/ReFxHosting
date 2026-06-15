@@ -3,7 +3,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { HeroSplash, HostingFeatureCards } from "@/components/public/home-sections";
+import {
+  HeroSplash,
+  HeroBackdrop,
+  HostingFeatureCards,
+} from "@/components/public/home-sections";
 import { HomepageAlertBanner } from "@/components/public/homepage-alert-banner";
 import {
   GameGrid,
@@ -51,11 +55,16 @@ export default function HomePage() {
 
   return (
     <>
-      {alerts.data && alerts.data.length > 0 && (
-        <HomepageAlertBanner alerts={alerts.data} />
-      )}
-
-      <HeroSplash />
+      {/* One shared glow behind the alert banner + hero so the top never seams. */}
+      <div className="relative overflow-hidden">
+        <HeroBackdrop />
+        <div className="relative">
+          {alerts.data && alerts.data.length > 0 && (
+            <HomepageAlertBanner alerts={alerts.data} />
+          )}
+          <HeroSplash />
+        </div>
+      </div>
 
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

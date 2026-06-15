@@ -440,7 +440,9 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
       'valheim',
       'palworld',
     ]);
-    const preset = `/games/presets/${tpl.category ?? 'default'}.svg`;
+    // Per-game art (apps/web/public/games/<slug>.svg); the web GameImage falls
+    // back to a default placeholder if a file is missing.
+    const preset = `/games/${tpl.slug}.svg`;
     const storefront = {
       isPublished: true,
       featured: FEATURED.has(tpl.slug),
@@ -465,9 +467,9 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
         where: { id: template.id },
         data: storefront,
       });
-    } else if (template.cardImageUrl.startsWith('/games/presets/')) {
-      // Seed-managed preset art (not an admin custom URL): keep it in sync with
-      // the template's current category + tags so re-seeds reflect taxonomy
+    } else if (template.cardImageUrl.startsWith('/games/')) {
+      // Seed-managed art (bundled /games/* — not an admin custom URL): keep it in
+      // sync with the current per-game art + tags so re-seeds reflect taxonomy/art
       // changes without overwriting admin customisation or publish state.
       await prisma.gameTemplate.update({
         where: { id: template.id },
