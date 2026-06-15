@@ -45,6 +45,33 @@ done
 [[ -n "$PANEL_URL" ]] || die "--panel-url is required."
 [[ -n "$NODE_TOKEN" ]] || die "--token is required."
 
+# ---- preflight: ensure --panel-url points at panel-api, not the web UI ------
+# The #1 setup mistake is pointing the agent at the website instead of the API.
+# The agent registers at <panel-url>/api/v1/agent/register; panel-api serves a
+# JSON liveness probe at /health, whereas the web UI returns its HTML 404 there.
+preflight_panel_url() {
+  local base="${PANEL_URL%/}"
+  # The agent appends /api/v1 itself — strip it if the user included it.
+  case "$base" in
+    */api/v1|*/api)
+      warn "panel-url should not include /api or /api/v1 (the agent adds it) — trimming."
+      base="${base%/api*}"; PANEL_URL="$base";;
+  esac
+  local body
+  if ! body="$(curl -fsS --max-time 8 "${base}/health" 2>/dev/null)"; then
+    warn "Could not reach ${base}/health yet — the panel may be down or the port blocked."
+    warn "Confirm this is the panel-API URL (default port 4000) and that port is open."
+    warn "Continuing anyway; the agent retries registration until it succeeds."
+    return
+  fi
+  if printf '%s' "$body" | grep -qiE '<!doctype html|<html|_next'; then
+    die "panel-url '${base}' is serving the WEB UI, not panel-api.
+     Use the panel-API URL — default port 4000 — e.g. http://your-host:4000 (not the website)."
+  fi
+  log "Panel API reachable at ${base}"
+}
+preflight_panel_url
+
 # ---- detect distro & arch ---------------------------------------------------
 . /etc/os-release || die "Cannot read /etc/os-release."
 log "Detected: ${PRETTY_NAME:-$ID}"

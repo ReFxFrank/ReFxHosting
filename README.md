@@ -485,12 +485,21 @@ Save it and **copy the bootstrap token** shown once. (Lost it? **Admin → Nodes
 
 ### Step 2 — install the agent on the node
 
+> [!IMPORTANT]
+> **`--panel-url` / `-PanelUrl` is the panel-_API_ (panel-api), not the website.**
+> That's **port 4000** by default (e.g. `http://<panel-public-ip>:4000`), and do
+> **not** append `/api` or `/api/v1` — the agent adds that itself. Pointing it at
+> the web UI (port 3000 / your site) makes registration fail with an HTML `404`.
+> The installers now probe `<panel-url>/health` and refuse a web-UI URL. A remote
+> node must use the panel's **public** address; only a same-box (hybrid) node can
+> use `http://127.0.0.1:4000`.
+
 **Linux** (Ubuntu / Debian / AlmaLinux / Rocky, systemd, x86_64 / arm64):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/refxfrank/refxhosting/main/infra/scripts/install-node.sh -o install-node.sh
 sudo bash install-node.sh \
-  --panel-url https://panel.example.com \
+  --panel-url http://<panel-public-ip>:4000 \
   --token <BOOTSTRAP_TOKEN>
 # add --skip-docker if you only run native_process servers
 ```
@@ -498,7 +507,7 @@ sudo bash install-node.sh \
 **Windows Server 2022 / 2025** (PowerShell as Administrator):
 
 ```powershell
-.\infra\scripts\install-node.ps1 -PanelUrl https://panel.example.com -Token <BOOTSTRAP_TOKEN>
+.\infra\scripts\install-node.ps1 -PanelUrl http://<panel-public-ip>:4000 -Token <BOOTSTRAP_TOKEN>
 ```
 
 The installer:
@@ -519,6 +528,16 @@ journalctl -u refx-agent -f          # watch it register + heartbeat
 In **Admin → Nodes** the node flips to **ONLINE** within a few seconds and starts
 streaming **CPU / RAM / disk / container** gauges. Use the **Ping** button to
 measure panel→agent latency, and open a node to see its live heartbeat graphs.
+
+> [!TIP]
+> **Ping shows "offline" but the node is heartbeating?** Registration, heartbeats
+> and stats are **agent → panel** (outbound from the node), but **Ping** is
+> **panel → agent** on port **8443** (inbound to the node). If the box heartbeats
+> yet pings offline, the panel can't reach the node's `:8443` — open inbound TCP
+> **8443** from the panel's IP in the node's **cloud security group** (the host
+> firewall rule is added for you), and confirm the node's **FQDN** in the panel is
+> an address the panel can actually reach. Verify from the **panel** host:
+> `curl -k https://<node-fqdn>:8443/healthz` should return `{"status":"ok"}`.
 
 ### Restart / update the agent
 

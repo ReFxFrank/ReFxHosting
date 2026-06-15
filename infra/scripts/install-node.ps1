@@ -7,7 +7,10 @@
     ports, and registers it as a Windows Service that auto-starts.
 
 .PARAMETER PanelUrl
-    Base URL of the panel API, e.g. https://api.refx.example
+    Base URL of the panel **API** (panel-api), NOT the website. Default port 4000,
+    e.g. http://203.0.113.10:4000 or https://api.refx.example. Do not include
+    /api or /api/v1 — the agent adds that. (Pointing this at the web UI is the
+    most common setup mistake; the installer checks and refuses it.)
 
 .PARAMETER Token
     Bootstrap node token from Admin -> Nodes -> Add.
@@ -16,7 +19,7 @@
     Agent release tag, or "latest" (default).
 
 .EXAMPLE
-    .\install-node.ps1 -PanelUrl https://api.refx.example -Token abc123
+    .\install-node.ps1 -PanelUrl http://203.0.113.10:4000 -Token abc123
 #>
 [CmdletBinding()]
 param(
@@ -38,6 +41,28 @@ function Write-Log { param($m) Write-Host "[refx] $m" -ForegroundColor Green }
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     throw "This script must be run as Administrator."
+}
+
+# ---- preflight: ensure -PanelUrl points at panel-api, not the web UI --------
+# The agent registers at <PanelUrl>/api/v1/agent/register; panel-api serves a
+# JSON probe at /health, while the web UI returns its HTML 404 there. This
+# catches the #1 mistake: pointing the agent at the website instead of the API.
+$PanelUrl = $PanelUrl.TrimEnd('/')
+if ($PanelUrl -match '/api(/v1)?$') {
+    Write-Host "[refx] -PanelUrl should not include /api or /api/v1 (the agent adds it) — trimming." -ForegroundColor Yellow
+    $PanelUrl = $PanelUrl -replace '/api(/v1)?$', ''
+}
+try {
+    $resp = Invoke-WebRequest -Uri "$PanelUrl/health" -UseBasicParsing -TimeoutSec 8
+    if ($resp.Content -match '(?i)<!doctype html|<html|_next') { throw "WEBUI" }
+    Write-Log "Panel API reachable at $PanelUrl"
+} catch {
+    $status = $null
+    try { $status = [int]$_.Exception.Response.StatusCode } catch {}
+    if ($_.Exception.Message -eq "WEBUI" -or $status -eq 404) {
+        throw "PanelUrl '$PanelUrl' is serving the WEB UI, not panel-api (HTTP $status at /health). Use the panel-API URL (default port 4000), e.g. http://your-host:4000 — not the website."
+    }
+    Write-Host "[refx] Could not verify $PanelUrl/health (the agent will retry at runtime): $($_.Exception.Message)" -ForegroundColor Yellow
 }
 
 # ---- directories ------------------------------------------------------------
