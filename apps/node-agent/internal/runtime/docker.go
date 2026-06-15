@@ -227,9 +227,14 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 		Memory:     lim.MemoryMB * 1024 * 1024,
 		MemorySwap: (lim.MemoryMB + lim.SwapMB) * 1024 * 1024,
 		// NanoCPUs encodes fractional cores: 1.0 core == 1e9.
-		NanoCPUs:    int64(lim.CPUCores * 1e9),
-		PidsLimit:   pidsPtr(lim.PidsLimit),
-		BlkioWeight: uint16(clampIO(lim.IOWeight)),
+		NanoCPUs:  int64(lim.CPUCores * 1e9),
+		PidsLimit: pidsPtr(lim.PidsLimit),
+	}
+	// Block-IO weight maps to the cgroup v2 `io` controller, which isn't exposed
+	// under Docker Desktop's WSL2 kernel — setting it makes runc fail to start
+	// the container ("io.weight: no such file or directory"). Apply on Linux only.
+	if goruntime.GOOS != "windows" {
+		res.BlkioWeight = uint16(clampIO(lim.IOWeight))
 	}
 
 	ports := nat.PortSet{}
@@ -441,13 +446,17 @@ func (d *DockerRuntime) Stats(ctx context.Context, s *server.Server) (Stats, err
 
 // Reconfigure applies new limits live via ContainerUpdate.
 func (d *DockerRuntime) Reconfigure(ctx context.Context, s *server.Server, lim server.Limits) error {
-	upd := container.UpdateConfig{Resources: container.Resources{
-		Memory:      lim.MemoryMB * 1024 * 1024,
-		MemorySwap:  (lim.MemoryMB + lim.SwapMB) * 1024 * 1024,
-		NanoCPUs:    int64(lim.CPUCores * 1e9),
-		PidsLimit:   pidsPtr(lim.PidsLimit),
-		BlkioWeight: uint16(clampIO(lim.IOWeight)),
-	}}
+	res := container.Resources{
+		Memory:     lim.MemoryMB * 1024 * 1024,
+		MemorySwap: (lim.MemoryMB + lim.SwapMB) * 1024 * 1024,
+		NanoCPUs:   int64(lim.CPUCores * 1e9),
+		PidsLimit:  pidsPtr(lim.PidsLimit),
+	}
+	// See hostConfig: io.weight is unavailable under WSL2; Linux only.
+	if goruntime.GOOS != "windows" {
+		res.BlkioWeight = uint16(clampIO(lim.IOWeight))
+	}
+	upd := container.UpdateConfig{Resources: res}
 	if _, err := d.cli.ContainerUpdate(ctx, containerName(s), upd); err != nil {
 		if client.IsErrNotFound(err) {
 			return nil // not yet created; new limits apply on next Start
