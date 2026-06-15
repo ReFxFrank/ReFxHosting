@@ -510,6 +510,21 @@ sudo bash install-node.sh \
 .\infra\scripts\install-node.ps1 -PanelUrl http://<panel-public-ip>:4000 -Token <BOOTSTRAP_TOKEN>
 ```
 
+> [!NOTE]
+> **Windows node specifics:**
+> - **`data_dir` must be a drive-rooted Windows path** (e.g. `C:/ProgramData/ReFx/data`),
+>   because it becomes a Docker bind-mount source. The installer sets this for you;
+>   if you hand-edit the config, **don't** use a Unix path like `/var/lib/refx-agent`
+>   — Docker rejects it with *"is not a valid Windows path"* and installs hang. The
+>   agent now defaults to `%ProgramData%\ReFx\data` on Windows and refuses to start
+>   with a clear message if `data_dir` isn't drive-rooted.
+> - **Linux game images need Docker in Linux-container mode.** Most eggs (including
+>   Minecraft's `eclipse-temurin`) are Linux images. On Windows that means Docker
+>   Desktop with the **WSL2 backend** (Linux containers, *not* Windows-containers
+>   mode), and the **`C:` drive shared** under *Settings → Resources → File Sharing*.
+>   For Docker-free hosting, use the **`native_process`** runtime instead (run the
+>   game directly on the host) — see [docs/06-node-agent.md](docs/06-node-agent.md).
+
 The installer:
 1. installs Docker Engine (unless `--skip-docker` / already present),
 2. creates a `refx` system user + data dirs (`/var/lib/refx`),
@@ -584,9 +599,9 @@ cp config.example.yaml config.yaml               # then edit panel.url + panel.b
 Minimum viable `config.yaml`:
 
 ```yaml
-data_dir: /var/lib/refx-agent
+data_dir: /var/lib/refx-agent            # Windows: use C:/ProgramData/ReFx/data (drive-rooted!)
 panel:
-  url: https://panel.example.com
+  url: https://panel.example.com:4000     # the panel-API (port 4000), NOT the website
   bootstrap_token: "<BOOTSTRAP_TOKEN>"   # one-time; safe to delete after first boot
   skip_tls_verify: false                  # true only for a self-signed panel cert
 api:
@@ -598,6 +613,10 @@ runtime:
 ```
 
 Every value can also be set via env (`REFX_PANEL_URL`, `REFX_PANEL_BOOTSTRAP_TOKEN`, …).
+
+> On **Windows**, `data_dir` must be a drive-rooted path (e.g. `C:/ProgramData/ReFx/data`)
+> since it becomes a Docker bind-mount source; a Unix path makes Docker fail with
+> *"not a valid Windows path"*. The agent defaults to `%ProgramData%\ReFx\data` there.
 
 ### Ports & networking
 
