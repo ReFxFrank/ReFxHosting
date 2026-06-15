@@ -68,7 +68,7 @@ export function GameCard({ game }: { game: StorefrontGame }) {
               <span className="text-muted-foreground">Contact us</span>
             )}
           </div>
-          <span className="inline-flex items-center gap-1 text-sm font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-primary opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
             Configure <ArrowRight className="size-4" />
           </span>
         </div>
@@ -114,14 +114,15 @@ export function GameCategoryTabs({
   ];
 
   return (
-    <div className="flex flex-wrap gap-2">
+    // Single scrollable row on mobile (bleeds to the screen edges); wraps on ≥sm.
+    <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {tabs.map((t) => (
         <button
           key={t.value}
           type="button"
           onClick={() => onChange(t.value)}
           className={cn(
-            "rounded-full border px-4 py-1.5 text-sm transition-colors",
+            "shrink-0 rounded-full border px-4 py-1.5 text-sm transition-colors",
             active === t.value
               ? "refx-primary-surface border-transparent text-white"
               : "border-white/[0.08] text-muted-foreground hover:border-white/20 hover:text-foreground",

@@ -53,10 +53,11 @@ export default function GameDetailPage() {
     <>
       <GameDetailHero game={detail.data.game} />
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_340px]">
-        <div className="order-2 lg:order-1">
+        {/* Plans first everywhere (primary action); About sidebar second. */}
+        <div>
           <GameOrderSummaryPanel detail={detail.data} />
         </div>
-        <aside className="order-1 lg:order-2">
+        <aside>
           <GameAbout game={detail.data.game} />
         </aside>
       </div>

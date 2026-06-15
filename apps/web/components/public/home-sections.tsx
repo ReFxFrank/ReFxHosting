@@ -42,13 +42,13 @@ export function HeroSplash() {
           no re-purchase. Instant setup, DDoS protection, and one clean panel for
           servers and billing.
         </p>
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Button size="lg" asChild>
+        <div className="mx-auto mt-8 flex w-full max-w-xs flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center">
+          <Button size="lg" asChild className="w-full sm:w-auto">
             <Link href="/games">
               Browse games <ArrowRight className="size-4" />
             </Link>
           </Button>
-          <Button size="lg" variant="outline" asChild>
+          <Button size="lg" variant="outline" asChild className="w-full sm:w-auto">
             <Link href="/login">Client area</Link>
           </Button>
         </div>

@@ -41,8 +41,8 @@ export function GameDetailHero({ game }: { game: StorefrontGameDetail["game"] })
         {game.description && (
           <p className="mt-4 max-w-2xl text-lg text-muted-foreground">{game.description}</p>
         )}
-        <div className="mt-6 flex flex-wrap items-center gap-4">
-          <Button size="lg" asChild>
+        <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
+          <Button size="lg" asChild className="w-full sm:w-auto">
             <Link href={`/order?game=${game.slug}`}>
               Configure server <ArrowRight className="size-4" />
             </Link>
@@ -114,7 +114,7 @@ export function GameOrderSummaryPanel({ detail }: { detail: StorefrontGameDetail
                     <p className="text-sm text-muted-foreground">Contact us</p>
                   )}
                 </div>
-                <Button className="mt-4" asChild>
+                <Button className="mt-4 w-full" asChild>
                   <Link href={`/order?game=${game.slug}&plan=${p.slug}`}>Select</Link>
                 </Button>
               </div>
