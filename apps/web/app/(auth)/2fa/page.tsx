@@ -37,9 +37,9 @@ export default function TwoFactorPage() {
     setSubmitting(true);
     try {
       const res = await api.auth.verifyMfa(mfa.token, code.trim(), method);
-      if (res.tokens) {
+      if (res.accessToken && res.refreshToken) {
         sessionStorage.removeItem("refx.mfa");
-        await setSession(res.tokens, res.user);
+        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
         router.replace(mfa.next || "/dashboard");
       }
     } catch (e) {
@@ -56,9 +56,9 @@ export default function TwoFactorPage() {
     toast.info("Passkey verification requires the WebAuthn ceremony (TODO impl).");
     try {
       const res = await api.auth.verifyWebAuthn(mfa.token, { stub: true });
-      if (res.tokens) {
+      if (res.accessToken && res.refreshToken) {
         sessionStorage.removeItem("refx.mfa");
-        await setSession(res.tokens, res.user);
+        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
         router.replace(mfa.next || "/dashboard");
       }
     } catch {

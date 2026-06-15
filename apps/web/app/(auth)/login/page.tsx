@@ -38,12 +38,13 @@ function LoginForm() {
     try {
       const res = await api.auth.login(values.email, values.password);
       if (res.mfaRequired && res.mfaToken) {
-        sessionStorage.setItem("refx.mfa", JSON.stringify({ token: res.mfaToken, methods: res.methods, next }));
+        sessionStorage.setItem("refx.mfa", JSON.stringify({ token: res.mfaToken, methods: res.methods ?? ["totp"], next }));
         router.push("/2fa");
         return;
       }
-      if (res.tokens) {
-        await setSession(res.tokens, res.user);
+      if (res.accessToken && res.refreshToken) {
+        // User is loaded by setSession -> refreshUser() via /auth/me.
+        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
         router.replace(next);
       }
     } catch (e) {

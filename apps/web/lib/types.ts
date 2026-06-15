@@ -422,10 +422,12 @@ export interface AuthTokens {
 }
 
 export interface LoginResponse {
-  // When MFA is required the server returns a challenge instead of tokens.
+  // The panel-api returns a FLAT token payload. When MFA is required it returns
+  // a challenge (mfaRequired + mfaToken) and the token fields are empty.
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
   mfaRequired?: boolean;
   mfaToken?: string;
   methods?: ("totp" | "webauthn" | "recovery")[];
-  tokens?: AuthTokens;
-  user?: User;
 }

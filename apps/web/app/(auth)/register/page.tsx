@@ -45,8 +45,8 @@ export default function RegisterPage() {
         firstName: values.firstName,
         lastName: values.lastName,
       });
-      if (res.tokens) {
-        await setSession(res.tokens, res.user);
+      if (res.accessToken && res.refreshToken) {
+        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
         router.replace("/dashboard");
       } else {
         toast.success("Account created. Check your inbox to verify your email.");
