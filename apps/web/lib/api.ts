@@ -33,6 +33,9 @@ import type {
   AuditLog,
   GlobalAlert,
   AdminServer,
+  StorefrontGame,
+  StorefrontGameDetail,
+  HomepageAlert,
 } from "@/lib/types";
 
 export const API_URL =
@@ -386,6 +389,12 @@ export const api = {
       http.get<{ versions: string[] }>("/catalog/minecraft-versions", {
         anonymous: true,
       }),
+    // Public storefront (unauthenticated).
+    games: () => getList<StorefrontGame>("/catalog/games", { anonymous: true }),
+    game: (slug: string) =>
+      http.get<StorefrontGameDetail>(`/catalog/games/${slug}`, { anonymous: true }),
+    homepageAlerts: () =>
+      getList<HomepageAlert>("/catalog/homepage-alerts", { anonymous: true }),
   },
 
   orders: {
@@ -489,6 +498,14 @@ export const api = {
       input.id
         ? http.patch<GameTemplate>(`/admin/templates/${input.id}`, input)
         : http.post<GameTemplate>("/admin/templates", input),
+
+    homepageAlerts: () => getList<HomepageAlert>("/admin/homepage-alerts"),
+    saveHomepageAlert: (input: Partial<HomepageAlert>) =>
+      input.id
+        ? http.patch<HomepageAlert>(`/admin/homepage-alerts/${input.id}`, input)
+        : http.post<HomepageAlert>("/admin/homepage-alerts", input),
+    deleteHomepageAlert: (id: string) =>
+      http.delete<void>(`/admin/homepage-alerts/${id}`),
 
     auditLogs: (query?: { actorId?: string; targetType?: string; page?: number }) =>
       http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),

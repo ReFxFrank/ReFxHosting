@@ -169,6 +169,87 @@ export interface GameTemplate {
   recDiskMb: number;
   iconUrl?: string | null;
   variables?: TemplateVariable[];
+  // Public storefront metadata
+  isPublished?: boolean;
+  featured?: boolean;
+  sortOrder?: number;
+  longDescription?: string | null;
+  cardImageUrl?: string | null;
+  heroImageUrl?: string | null;
+  tags?: string[];
+}
+
+// ---- Public storefront ----------------------------------------------------
+
+export interface StartingPrice {
+  amountMinor: number;
+  currency: string;
+}
+
+/** A published game as shown on the public homepage/catalog. */
+export interface StorefrontGame {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  longDescription: string | null;
+  featured: boolean;
+  sortOrder: number;
+  cardImageUrl: string | null;
+  heroImageUrl: string | null;
+  iconUrl: string | null;
+  tags: string[];
+  supportsLinux: boolean;
+  supportsWindows: boolean;
+  recCpuCores: number;
+  recMemoryMb: number;
+  recDiskMb: number;
+  category: { id: string; name: string; slug: string; iconUrl: string | null } | null;
+  startingPrice: StartingPrice | null;
+}
+
+/** A safe, orderable plan view for the public game detail page. */
+export interface StorefrontPlan {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  cpuCores: number | null;
+  memoryMb: number | null;
+  diskMb: number | null;
+  slots: number | null;
+  prices: { id: string; interval: BillingInterval; currency: string; amountMinor: number }[];
+}
+
+export interface StorefrontGameDetail {
+  game: StorefrontGame & {
+    author: string;
+    deployMethods: DeployMethod[];
+    variables: Pick<
+      TemplateVariable,
+      "envName" | "displayName" | "description" | "type" | "defaultValue" | "rules" | "sortOrder"
+    >[];
+  };
+  plans: StorefrontPlan[];
+  regions: { id: string; code: string; name: string; country: string }[];
+}
+
+export type HomepageAlertType = "INFO" | "SUCCESS" | "WARNING" | "DANGER" | "PROMO";
+
+export interface HomepageAlert {
+  id: string;
+  type: HomepageAlertType;
+  title: string;
+  body: string;
+  isActive: boolean;
+  startsAt: string | null;
+  endsAt: string | null;
+  ctaLabel: string | null;
+  ctaUrl: string | null;
+  dismissible: boolean;
+  priority: number;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export type BackupState = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -83,6 +83,36 @@ export default function OrderPage() {
     queryKey: ["catalog", "products", "GAME_SERVER"],
     queryFn: () => api.catalog.products({ type: "GAME_SERVER" }),
   });
+
+  // Deep-link preselection from the public storefront: /order?game=<slug>&plan=<slug>.
+  // Read from window (avoids the useSearchParams Suspense requirement on this
+  // fully client, auth-gated page).
+  const templates = useQuery({
+    queryKey: ["catalog", "templates", "all"],
+    queryFn: () => api.catalog.templates(),
+  });
+  const [preset, setPreset] = useState<{ game?: string; plan?: string }>({});
+  const presetApplied = useRef(false);
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    setPreset({ game: sp.get("game") ?? undefined, plan: sp.get("plan") ?? undefined });
+  }, []);
+  useEffect(() => {
+    if (presetApplied.current) return;
+    if (!preset.game && !preset.plan) return;
+    if (preset.plan && !products.data) return;
+    if (preset.game && !templates.data) return;
+
+    if (preset.plan && products.data) {
+      const p = products.data.find((x) => x.slug === preset.plan);
+      if (p) setProduct(p);
+    }
+    if (preset.game && templates.data) {
+      const t = templates.data.find((x) => x.slug === preset.game);
+      if (t) setTemplate(t);
+    }
+    presetApplied.current = true;
+  }, [preset, products.data, templates.data]);
 
   const createMutation = useMutation({
     mutationFn: () =>

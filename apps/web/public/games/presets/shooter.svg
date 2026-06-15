@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450" role="img" aria-label="SHOOTER">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0a1626"/>
+      <stop offset="1" stop-color="#070b12"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.25" r="0.95">
+      <stop offset="0" stop-color="#ef4444" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#ef4444" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#ef4444" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#ef4444" stroke-opacity="0.08" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="450" fill="url(#g)"/>
+  <rect width="800" height="450" fill="url(#grid)"/>
+  <rect width="800" height="450" fill="url(#glow)"/>
+  <circle cx="650" cy="370" r="230" fill="#ec4899" opacity="0.07"/>
+  <g font-family="Inter, system-ui, sans-serif" text-anchor="middle">
+    <text x="400" y="248" font-size="40" font-weight="800" fill="#eaf2ff" letter-spacing="4">SHOOTER</text>
+  </g>
+</svg>
