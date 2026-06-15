@@ -377,6 +377,10 @@ export const api = {
     categories: () => getList<GameCategory>("/catalog/categories"),
     templates: (query?: { categoryId?: string; search?: string }) =>
       getList<GameTemplate>("/catalog/templates", { query }),
+    minecraftVersions: () =>
+      http.get<{ versions: string[] }>("/catalog/minecraft-versions", {
+        anonymous: true,
+      }),
   },
 
   orders: {

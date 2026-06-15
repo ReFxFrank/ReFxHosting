@@ -32,6 +32,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -266,6 +273,16 @@ function VariablesCard({ id }: { id: string }) {
     }
   }, [variables]);
 
+  // Surface MINECRAFT_VERSION as a dropdown when the server exposes it.
+  const hasMinecraftVersion = !!variables?.some(
+    (v) => v.envName === "MINECRAFT_VERSION",
+  );
+  const { data: mcVersions } = useQuery({
+    queryKey: ["catalog", "minecraft-versions"],
+    queryFn: () => api.catalog.minecraftVersions(),
+    enabled: hasMinecraftVersion,
+  });
+
   const queryClient = useQueryClient();
   const saveMutation = useMutation({
     mutationFn: (envName: string) =>
@@ -294,15 +311,45 @@ function VariablesCard({ id }: { id: string }) {
         ) : variables?.length ? (
           variables.map((v) => {
             const dirty = (values[v.envName] ?? "") !== v.value;
+            const isMcVersion = v.envName === "MINECRAFT_VERSION";
             return (
               <div key={v.envName} className="grid gap-2 sm:grid-cols-[12rem_1fr_auto] sm:items-center">
                 <Label className="font-mono text-xs">{v.envName}</Label>
-                <Input
-                  value={values[v.envName] ?? ""}
-                  onChange={(e) =>
-                    setValues((s) => ({ ...s, [v.envName]: e.target.value }))
-                  }
-                />
+                {isMcVersion ? (
+                  <Select
+                    value={values[v.envName] ?? ""}
+                    onValueChange={(val) =>
+                      setValues((s) => ({ ...s, [v.envName]: val }))
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select version" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="latest">Latest (recommended)</SelectItem>
+                      {/* Keep the current value selectable even if not in the list. */}
+                      {values[v.envName] &&
+                        values[v.envName] !== "latest" &&
+                        !(mcVersions?.versions ?? []).includes(values[v.envName]) && (
+                          <SelectItem value={values[v.envName]}>
+                            {values[v.envName]}
+                          </SelectItem>
+                        )}
+                      {(mcVersions?.versions ?? []).map((ver) => (
+                        <SelectItem key={ver} value={ver}>
+                          {ver}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={values[v.envName] ?? ""}
+                    onChange={(e) =>
+                      setValues((s) => ({ ...s, [v.envName]: e.target.value }))
+                    }
+                  />
+                )}
                 <Button
                   variant="outline"
                   size="sm"

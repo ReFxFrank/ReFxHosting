@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { BillingService } from '../billing/billing.service';
 import { TemplatesService } from '../templates/templates.service';
+import { MinecraftVersionsService } from './minecraft-versions.service';
 
 /**
  * Public storefront catalog. No auth — these feed the unauthenticated buy flow.
@@ -14,6 +15,7 @@ export class CatalogController {
   constructor(
     private readonly billing: BillingService,
     private readonly templates: TemplatesService,
+    private readonly minecraftVersions: MinecraftVersionsService,
   ) {}
 
   @Get('products')
@@ -37,5 +39,15 @@ export class CatalogController {
     @Query('search') search?: string,
   ) {
     return this.templates.listActive({ categoryId, search });
+  }
+
+  /**
+   * Released Minecraft (Java Edition) versions for the version picker, newest
+   * first. Sourced from Mojang's manifest (cached ~1h) with a hardcoded
+   * fallback — always returns a non-empty list.
+   */
+  @Get('minecraft-versions')
+  async minecraftVersionsList() {
+    return { versions: await this.minecraftVersions.list() };
   }
 }

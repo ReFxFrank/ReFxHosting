@@ -1,0 +1,93 @@
+{
+  "name": "Minecraft: Forge",
+  "slug": "minecraft-forge",
+  "author": "ops@refx.example",
+  "description": "Minecraft Forge mod-loader server. The classic modding platform for large modpacks (CurseForge / FTB style).",
+  "category": "survival",
+  "deployMethods": ["DOCKER"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Java 21": "eclipse-temurin:21-jre"
+  },
+  "steamAppId": null,
+  "startupCommand": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dterminal.jline=false -Dterminal.ansi=true @user_jvm_args.txt @libraries/net/minecraftforge/forge/{{MINECRAFT_VERSION}}-{{LOADER_VERSION}}/unix_args.txt --port {{SERVER_PORT}} nogui",
+  "startupDetect": "Done \\(\\d+\\.\\d+s\\)! For help, type \"help\"",
+  "stopCommand": "stop",
+  "installScript": {
+    "container": "eclipse-temurin:21-jdk",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\napt-get update && apt-get install -y curl jq\ncd /mnt/server\nMC_VER=\"${MINECRAFT_VERSION}\"\nLOADER=\"${LOADER_VERSION}\"\n# TODO(impl): when LOADER_VERSION is 'latest'/'recommended', resolve the build\n# from the Forge promotions manifest. The recommended build is not always\n# present for every Minecraft version; fall back to the latest in that case.\nif [ \"$LOADER\" = \"latest\" ] || [ \"$LOADER\" = \"recommended\" ]; then\n  PROMOS=$(curl -fsSL https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json)\n  LOADER=$(echo \"$PROMOS\" | jq -r --arg k \"${MC_VER}-recommended\" '.promos[$k] // empty')\n  if [ -z \"$LOADER\" ]; then\n    LOADER=$(echo \"$PROMOS\" | jq -r --arg k \"${MC_VER}-latest\" '.promos[$k] // empty')\n  fi\n  if [ -z \"$LOADER\" ]; then echo \"No Forge build found for Minecraft ${MC_VER}\" >&2; exit 1; fi\nfi\nFULL=\"${MC_VER}-${LOADER}\"\necho \"Installing Forge ${FULL}\"\ncurl -fsSL -o forge-installer.jar \"https://maven.minecraftforge.net/net/minecraftforge/forge/${FULL}/forge-${FULL}-installer.jar\"\njava -jar forge-installer.jar --installServer\nrm -f forge-installer.jar forge-installer.jar.log\n# Modern Forge (1.17+) generates run.sh + user_jvm_args.txt +\n# libraries/.../unix_args.txt instead of a runnable server jar; the startup\n# command launches via those arg files. Ensure user_jvm_args.txt exists.\nif [ ! -f user_jvm_args.txt ]; then\n  echo '# Xmx/Xms are supplied on the command line by the panel' > user_jvm_args.txt\nfi\n# TODO(impl): legacy Forge (<=1.16) produces a runnable forge-*-universal/\n# server jar and no unix_args.txt; that path would need a different startup\n# command. Modern Forge only for now.\nif [ \"${EULA}\" = \"true\" ]; then echo 'eula=true' > eula.txt; fi\necho 'Install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "server.properties",
+      "parser": "properties",
+      "find": {
+        "server-port": "{{server.build.default.port}}",
+        "query.port": "{{server.build.default.port}}",
+        "enable-query": "true"
+      }
+    }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 6144,
+  "recDiskMb": 15360,
+  "variables": [
+    {
+      "envName": "SERVER_JARFILE",
+      "displayName": "Server JAR File",
+      "description": "Unused for modern Forge (the server launches via generated arg files); kept for compatibility.",
+      "type": "STRING",
+      "defaultValue": "server.jar",
+      "rules": { "required": false, "regex": "^[\\w.-]+\\.jar$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MINECRAFT_VERSION",
+      "displayName": "Minecraft Version",
+      "description": "The Minecraft version to install Forge for (e.g. 1.21.1).",
+      "type": "STRING",
+      "defaultValue": "1.21.1",
+      "rules": { "required": true, "regex": "^\\d+\\.\\d+(\\.\\d+)?$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "LOADER_VERSION",
+      "displayName": "Forge Version",
+      "description": "The Forge build version. Use 'recommended' (or 'latest') to auto-resolve from the Forge promotions manifest.",
+      "type": "STRING",
+      "defaultValue": "recommended",
+      "rules": { "required": true, "regex": "^(latest|recommended|[\\w.+-]+)$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "SERVER_MEMORY",
+      "displayName": "JVM Max Heap (MB)",
+      "description": "Maximum Java heap size in megabytes (-Xmx).",
+      "type": "NUMBER",
+      "defaultValue": "4096",
+      "rules": { "required": true, "min": 1024, "max": 32768 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "EULA",
+      "displayName": "Accept Mojang EULA",
+      "description": "You must accept the Mojang EULA to run a server.",
+      "type": "BOOLEAN",
+      "defaultValue": "true",
+      "rules": { "required": true },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    }
+  ]
+}

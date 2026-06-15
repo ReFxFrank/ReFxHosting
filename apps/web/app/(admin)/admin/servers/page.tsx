@@ -50,6 +50,8 @@ const emptyForm = {
   cpuCores: 2,
   memoryMb: 2048,
   diskMb: 10240,
+  // Minecraft version selection (only sent for minecraft-* templates).
+  minecraftVersion: "latest",
 };
 
 export default function AdminServersPage() {
@@ -80,6 +82,18 @@ export default function AdminServersPage() {
     enabled: createOpen,
   });
 
+  const selectedTemplate: GameTemplate | undefined = templates?.find(
+    (t) => t.id === form.templateId,
+  );
+  const isMinecraft = !!selectedTemplate?.slug?.startsWith("minecraft-");
+
+  // Minecraft version list (only fetched once a Minecraft egg is selected).
+  const { data: mcVersions } = useQuery({
+    queryKey: ["catalog", "minecraft-versions"],
+    queryFn: () => api.catalog.minecraftVersions(),
+    enabled: createOpen && isMinecraft,
+  });
+
   // Selecting an egg prefills the recommended resources (overridable below).
   const selectTemplate = (id: string) => {
     const t: GameTemplate | undefined = templates?.find((x) => x.id === id);
@@ -89,6 +103,8 @@ export default function AdminServersPage() {
       cpuCores: t?.recCpuCores ?? f.cpuCores,
       memoryMb: t?.recMemoryMb ?? f.memoryMb,
       diskMb: t?.recDiskMb ?? f.diskMb,
+      // Reset version to default whenever the egg changes.
+      minecraftVersion: "latest",
     }));
   };
 
@@ -105,6 +121,10 @@ export default function AdminServersPage() {
         cpuCores: form.cpuCores,
         memoryMb: form.memoryMb,
         diskMb: form.diskMb,
+        // For Minecraft eggs, pin the chosen version via the install env.
+        ...(isMinecraft
+          ? { environment: { MINECRAFT_VERSION: form.minecraftVersion } }
+          : {}),
       }),
     onSuccess: () => {
       toast.success("Server created — provisioning queued");
@@ -286,6 +306,30 @@ export default function AdminServersPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {isMinecraft && (
+              <div className="space-y-1.5">
+                <Label>Minecraft version</Label>
+                <Select
+                  value={form.minecraftVersion}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, minecraftVersion: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select version" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="latest">Latest (recommended)</SelectItem>
+                    {(mcVersions?.versions ?? []).map((v) => (
+                      <SelectItem key={v} value={v}>
+                        {v}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="space-y-1.5">

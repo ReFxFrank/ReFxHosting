@@ -1,0 +1,93 @@
+{
+  "name": "Minecraft: Fabric",
+  "slug": "minecraft-fabric",
+  "author": "ops@refx.example",
+  "description": "Fabric mod-loader Minecraft Java Edition server. Lightweight, fast-updating modding platform — pair with the Fabric API for most mods.",
+  "category": "survival",
+  "deployMethods": ["DOCKER"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Java 21": "eclipse-temurin:21-jre"
+  },
+  "steamAppId": null,
+  "startupCommand": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}} --port {{SERVER_PORT}} --nogui",
+  "startupDetect": "Done \\(\\d+\\.\\d+s\\)! For help, type \"help\"",
+  "stopCommand": "stop",
+  "installScript": {
+    "container": "eclipse-temurin:21-jdk",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\napt-get update && apt-get install -y curl jq\ncd /mnt/server\nMC_VER=\"${MINECRAFT_VERSION}\"\nLOADER=\"${LOADER_VERSION}\"\nif [ \"$MC_VER\" = \"latest\" ]; then\n  MC_VER=$(curl -fsSL https://meta.fabricmc.net/v2/versions/game | jq -r '[.[] | select(.stable==true)][0].version')\nfi\nif [ \"$LOADER\" = \"latest\" ] || [ \"$LOADER\" = \"recommended\" ]; then\n  LOADER=$(curl -fsSL https://meta.fabricmc.net/v2/versions/loader | jq -r '[.[] | select(.stable==true)][0].version')\nfi\nINSTALLER=$(curl -fsSL https://meta.fabricmc.net/v2/versions/installer | jq -r '[.[] | select(.stable==true)][0].version')\necho \"Installing Fabric: minecraft=${MC_VER} loader=${LOADER} installer=${INSTALLER}\"\ncurl -fsSL -o \"${SERVER_JARFILE}\" \"https://meta.fabricmc.net/v2/versions/loader/${MC_VER}/${LOADER}/${INSTALLER}/server/jar\"\nif [ \"${EULA}\" = \"true\" ]; then echo 'eula=true' > eula.txt; fi\necho 'Install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "server.properties",
+      "parser": "properties",
+      "find": {
+        "server-port": "{{server.build.default.port}}",
+        "query.port": "{{server.build.default.port}}",
+        "enable-query": "true"
+      }
+    }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 10240,
+  "variables": [
+    {
+      "envName": "SERVER_JARFILE",
+      "displayName": "Server JAR File",
+      "description": "The name of the Fabric server launcher jarfile to run the server with.",
+      "type": "STRING",
+      "defaultValue": "fabric-server-launch.jar",
+      "rules": { "required": true, "regex": "^[\\w.-]+\\.jar$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MINECRAFT_VERSION",
+      "displayName": "Minecraft Version",
+      "description": "The Minecraft version to install Fabric for. Use 'latest' for the newest stable release.",
+      "type": "STRING",
+      "defaultValue": "1.21.1",
+      "rules": { "required": true, "regex": "^(latest|\\d+\\.\\d+(\\.\\d+)?)$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "LOADER_VERSION",
+      "displayName": "Fabric Loader Version",
+      "description": "The Fabric loader version. Use 'latest' for the newest stable loader.",
+      "type": "STRING",
+      "defaultValue": "latest",
+      "rules": { "required": true, "regex": "^(latest|recommended|[\\w.+-]+)$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "SERVER_MEMORY",
+      "displayName": "JVM Max Heap (MB)",
+      "description": "Maximum Java heap size in megabytes (-Xmx).",
+      "type": "NUMBER",
+      "defaultValue": "3072",
+      "rules": { "required": true, "min": 1024, "max": 32768 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "EULA",
+      "displayName": "Accept Mojang EULA",
+      "description": "You must accept the Mojang EULA to run a server.",
+      "type": "BOOLEAN",
+      "defaultValue": "true",
+      "rules": { "required": true },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    }
+  ]
+}

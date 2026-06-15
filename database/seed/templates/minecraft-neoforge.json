@@ -1,0 +1,93 @@
+{
+  "name": "Minecraft: NeoForge",
+  "slug": "minecraft-neoforge",
+  "author": "ops@refx.example",
+  "description": "Minecraft NeoForge mod-loader server. The community-driven Forge fork; the default loader for most modern (1.20.2+) modpacks.",
+  "category": "survival",
+  "deployMethods": ["DOCKER"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Java 21": "eclipse-temurin:21-jre"
+  },
+  "steamAppId": null,
+  "startupCommand": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dterminal.jline=false -Dterminal.ansi=true @user_jvm_args.txt @libraries/net/neoforged/neoforge/{{LOADER_VERSION}}/unix_args.txt --port {{SERVER_PORT}} nogui",
+  "startupDetect": "Done \\(\\d+\\.\\d+s\\)! For help, type \"help\"",
+  "stopCommand": "stop",
+  "installScript": {
+    "container": "eclipse-temurin:21-jdk",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\napt-get update && apt-get install -y curl jq\ncd /mnt/server\nMC_VER=\"${MINECRAFT_VERSION}\"\nLOADER=\"${LOADER_VERSION}\"\n# NeoForge versions are derived from the Minecraft version: e.g. MC 1.21.1 ->\n# 21.1.x. When 'latest'/'recommended', resolve the newest matching build from\n# the NeoForged maven metadata.\nif [ \"$LOADER\" = \"latest\" ] || [ \"$LOADER\" = \"recommended\" ]; then\n  META=$(curl -fsSL https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml)\n  # Map e.g. 1.21.1 -> prefix 21.1.  (drop the leading '1.')\n  PREFIX=$(echo \"$MC_VER\" | sed -E 's/^1\\.([0-9]+)(\\.([0-9]+))?$/\\1.\\3/; s/\\.$/.0/')\n  # TODO(impl): the prefix mapping above assumes 1.x.y Minecraft versioning;\n  # confirm against the NeoForged maven metadata before relying on it for new\n  # snapshots / non-standard version strings.\n  LOADER=$(echo \"$META\" | grep -oE '<version>[^<]+</version>' | sed -E 's/<\\/?version>//g' | grep -E \"^${PREFIX}\\.\" | grep -v -- '-beta' | tail -n 1 || true)\n  if [ -z \"$LOADER\" ]; then\n    LOADER=$(echo \"$META\" | grep -oE '<version>[^<]+</version>' | sed -E 's/<\\/?version>//g' | grep -E \"^${PREFIX}\\.\" | tail -n 1 || true)\n  fi\n  if [ -z \"$LOADER\" ]; then echo \"No NeoForge build found for Minecraft ${MC_VER} (prefix ${PREFIX})\" >&2; exit 1; fi\nfi\necho \"Installing NeoForge ${LOADER} (Minecraft ${MC_VER})\"\ncurl -fsSL -o neoforge-installer.jar \"https://maven.neoforged.net/releases/net/neoforged/neoforge/${LOADER}/neoforge-${LOADER}-installer.jar\"\njava -jar neoforge-installer.jar --installServer\nrm -f neoforge-installer.jar neoforge-installer.jar.log\n# NeoForge generates run.sh + user_jvm_args.txt +\n# libraries/net/neoforged/neoforge/<ver>/unix_args.txt; the startup command\n# launches via those arg files (no runnable server jar).\nif [ ! -f user_jvm_args.txt ]; then\n  echo '# Xmx/Xms are supplied on the command line by the panel' > user_jvm_args.txt\nfi\nif [ \"${EULA}\" = \"true\" ]; then echo 'eula=true' > eula.txt; fi\necho 'Install complete.'\n"
+  },
+  "configFiles": [
+    {
+      "path": "server.properties",
+      "parser": "properties",
+      "find": {
+        "server-port": "{{server.build.default.port}}",
+        "query.port": "{{server.build.default.port}}",
+        "enable-query": "true"
+      }
+    }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 6144,
+  "recDiskMb": 15360,
+  "variables": [
+    {
+      "envName": "SERVER_JARFILE",
+      "displayName": "Server JAR File",
+      "description": "Unused for NeoForge (the server launches via generated arg files); kept for compatibility.",
+      "type": "STRING",
+      "defaultValue": "server.jar",
+      "rules": { "required": false, "regex": "^[\\w.-]+\\.jar$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MINECRAFT_VERSION",
+      "displayName": "Minecraft Version",
+      "description": "The Minecraft version to install NeoForge for (e.g. 1.21.1).",
+      "type": "STRING",
+      "defaultValue": "1.21.1",
+      "rules": { "required": true, "regex": "^\\d+\\.\\d+(\\.\\d+)?$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "LOADER_VERSION",
+      "displayName": "NeoForge Version",
+      "description": "The NeoForge build version (e.g. 21.1.66). Use 'latest' to auto-resolve the newest matching build from NeoForged maven.",
+      "type": "STRING",
+      "defaultValue": "latest",
+      "rules": { "required": true, "regex": "^(latest|recommended|[\\w.+-]+)$" },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "SERVER_MEMORY",
+      "displayName": "JVM Max Heap (MB)",
+      "description": "Maximum Java heap size in megabytes (-Xmx).",
+      "type": "NUMBER",
+      "defaultValue": "4096",
+      "rules": { "required": true, "min": 1024, "max": 32768 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "EULA",
+      "displayName": "Accept Mojang EULA",
+      "description": "You must accept the Mojang EULA to run a server.",
+      "type": "BOOLEAN",
+      "defaultValue": "true",
+      "rules": { "required": true },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    }
+  ]
+}
