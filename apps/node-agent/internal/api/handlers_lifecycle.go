@@ -148,6 +148,10 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err != nil {
+		s.log.Warn().Err(err).
+			Str("server", srv.ID()).
+			Str("action", req.Action).
+			Msg("power action failed")
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}

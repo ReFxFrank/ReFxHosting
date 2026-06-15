@@ -301,19 +301,30 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 	}
 
 	name := containerName(s)
-	// Reuse an existing container if present; otherwise create.
-	if _, err := d.cli.ContainerInspect(ctx, name); err != nil {
-		if !client.IsErrNotFound(err) {
-			s.SetState(server.StateCrashed)
-			return fmt.Errorf("docker: inspect: %w", err)
+	// Always (re)create the container from the current config so changes to the
+	// image, user, mounts or env take effect. An existing container is removed
+	// first (unless it's actively running) — its data lives in the bind-mounted
+	// data dir, so the container itself is disposable. This also avoids
+	// re-starting a previously-crashed container in a bad state.
+	if existing, err := d.cli.ContainerInspect(ctx, name); err == nil {
+		if existing.State != nil && existing.State.Running {
+			s.SetState(server.StateRunning)
+			return nil
 		}
-		created, err := d.cli.ContainerCreate(ctx, cfg, host, &network.NetworkingConfig{}, nil, name)
-		if err != nil {
-			s.SetState(server.StateCrashed)
-			return fmt.Errorf("docker: create: %w", err)
+		if rmErr := d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true}); rmErr != nil {
+			d.log.Warn().Err(rmErr).Str("server", s.ID()).Msg("removing stale container failed")
 		}
-		s.RuntimeRef = created.ID
+	} else if !client.IsErrNotFound(err) {
+		s.SetState(server.StateCrashed)
+		return fmt.Errorf("docker: inspect: %w", err)
 	}
+
+	created, err := d.cli.ContainerCreate(ctx, cfg, host, &network.NetworkingConfig{}, nil, name)
+	if err != nil {
+		s.SetState(server.StateCrashed)
+		return fmt.Errorf("docker: create: %w", err)
+	}
+	s.RuntimeRef = created.ID
 
 	if err := d.cli.ContainerStart(ctx, name, container.StartOptions{}); err != nil {
 		s.SetState(server.StateCrashed)
