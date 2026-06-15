@@ -110,7 +110,9 @@ export function GameCategoryTabs({
   const tabs = [
     { value: FEATURED, label: "Popular" },
     { value: ALL, label: "All games" },
-    ...[...cats.entries()].map(([slug, name]) => ({ value: slug, label: name })),
+    ...[...cats.entries()]
+      .map(([slug, name]) => ({ value: slug, label: name }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
   ];
 
   return (

@@ -3,8 +3,10 @@
   "slug": "minecraft-neoforge",
   "author": "ops@refx.example",
   "description": "Minecraft NeoForge mod-loader server. The community-driven Forge fork; the default loader for most modern (1.20.2+) modpacks.",
-  "category": "survival",
-  "deployMethods": ["DOCKER"],
+  "category": "modded",
+  "deployMethods": [
+    "DOCKER"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -40,7 +42,10 @@
       "description": "Unused for NeoForge (the server launches via generated arg files); kept for compatibility.",
       "type": "STRING",
       "defaultValue": "server.jar",
-      "rules": { "required": false, "regex": "^[\\w.-]+\\.jar$" },
+      "rules": {
+        "required": false,
+        "regex": "^[\\w.-]+\\.jar$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -51,7 +56,10 @@
       "description": "The Minecraft version to install NeoForge for (e.g. 1.21.1).",
       "type": "STRING",
       "defaultValue": "1.21.1",
-      "rules": { "required": true, "regex": "^\\d+\\.\\d+(\\.\\d+)?$" },
+      "rules": {
+        "required": true,
+        "regex": "^\\d+\\.\\d+(\\.\\d+)?$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -62,7 +70,10 @@
       "description": "The NeoForge build version (e.g. 21.1.66). Use 'latest' to auto-resolve the newest matching build from NeoForged maven.",
       "type": "STRING",
       "defaultValue": "latest",
-      "rules": { "required": true, "regex": "^(latest|recommended|[\\w.+-]+)$" },
+      "rules": {
+        "required": true,
+        "regex": "^(latest|recommended|[\\w.+-]+)$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -73,7 +84,11 @@
       "description": "Maximum Java heap size in megabytes (-Xmx).",
       "type": "NUMBER",
       "defaultValue": "4096",
-      "rules": { "required": true, "min": 1024, "max": 32768 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 32768
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 3
@@ -84,10 +99,18 @@
       "description": "You must accept the Mojang EULA to run a server.",
       "type": "BOOLEAN",
       "defaultValue": "true",
-      "rules": { "required": true },
+      "rules": {
+        "required": true
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 4
     }
-  ]
+  ],
+  "tags": [
+    "minecraft",
+    "mods",
+    "neoforge"
+  ],
+  "longDescription": "NeoForge — the community-driven Forge fork and the default loader for most modern (1.20.2+) modpacks."
 }

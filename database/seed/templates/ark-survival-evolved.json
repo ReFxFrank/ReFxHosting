@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Studio Wildcard's dinosaur survival sandbox. SteamCMD-installed dedicated server with map and rate configuration.",
   "category": "survival",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
@@ -36,7 +39,10 @@
       "description": "Name shown in the in-game server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting ARK Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -47,7 +53,21 @@
       "description": "The world map to load.",
       "type": "ENUM",
       "defaultValue": "TheIsland",
-      "rules": { "required": true, "options": ["TheIsland", "Ragnarok", "TheCenter", "ScorchedEarth_P", "Aberration_P", "Extinction", "Valguero_P", "CrystalIsles", "Fjordur", "Genesis"] },
+      "rules": {
+        "required": true,
+        "options": [
+          "TheIsland",
+          "Ragnarok",
+          "TheCenter",
+          "ScorchedEarth_P",
+          "Aberration_P",
+          "Extinction",
+          "Valguero_P",
+          "CrystalIsles",
+          "Fjordur",
+          "Genesis"
+        ]
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -58,7 +78,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "70",
-      "rules": { "required": true, "min": 1, "max": 255 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 255
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -69,7 +93,11 @@
       "description": "Steam query port.",
       "type": "NUMBER",
       "defaultValue": "27015",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 3
@@ -80,7 +108,11 @@
       "description": "TCP port for the RCON interface.",
       "type": "NUMBER",
       "defaultValue": "27020",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 4
@@ -91,10 +123,19 @@
       "description": "Password granting in-game admin and RCON access.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": true, "minLength": 8 },
+      "rules": {
+        "required": true,
+        "minLength": 8
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 5
     }
-  ]
+  ],
+  "tags": [
+    "dinosaurs",
+    "pvp",
+    "open-world"
+  ],
+  "longDescription": "Tame dinosaurs and build tribes on a dedicated ARK server with full mod and rate customisation."
 }

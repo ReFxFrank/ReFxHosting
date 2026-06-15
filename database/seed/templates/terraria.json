@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Re-Logic's 2D sandbox adventure. Runs the TShock server mod for plugins, permissions, and REST/console administration. No SteamCMD required.",
   "category": "sandbox",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -40,7 +43,10 @@
       "description": "TShock release tag to install. Use 'latest' for the newest stable release.",
       "type": "STRING",
       "defaultValue": "latest",
-      "rules": { "required": true, "regex": "^(latest|v?\\d+\\.\\d+(\\.\\d+)?)$" },
+      "rules": {
+        "required": true,
+        "regex": "^(latest|v?\\d+\\.\\d+(\\.\\d+)?)$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -51,7 +57,10 @@
       "description": "Name of the world file to load or auto-create.",
       "type": "STRING",
       "defaultValue": "world",
-      "rules": { "required": true, "regex": "^[\\w-]+$" },
+      "rules": {
+        "required": true,
+        "regex": "^[\\w-]+$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -62,7 +71,14 @@
       "description": "Size used when auto-creating a world (1 = Small, 2 = Medium, 3 = Large).",
       "type": "ENUM",
       "defaultValue": "2",
-      "rules": { "required": true, "options": ["1", "2", "3"] },
+      "rules": {
+        "required": true,
+        "options": [
+          "1",
+          "2",
+          "3"
+        ]
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -73,7 +89,15 @@
       "description": "World difficulty (0 = Classic, 1 = Expert, 2 = Master, 3 = Journey).",
       "type": "ENUM",
       "defaultValue": "0",
-      "rules": { "required": true, "options": ["0", "1", "2", "3"] },
+      "rules": {
+        "required": true,
+        "options": [
+          "0",
+          "1",
+          "2",
+          "3"
+        ]
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 3
@@ -84,7 +108,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "16",
-      "rules": { "required": true, "min": 1, "max": 255 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 255
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 4
@@ -95,10 +123,19 @@
       "description": "Optional join password. Leave blank for an open server.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": false, "maxLength": 64 },
+      "rules": {
+        "required": false,
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 5
     }
-  ]
+  ],
+  "tags": [
+    "2d",
+    "adventure",
+    "building"
+  ],
+  "longDescription": "2D adventure and building sandbox powered by TShock — plugins, permissions and a thriving community toolset."
 }

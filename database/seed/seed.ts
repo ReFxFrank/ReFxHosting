@@ -95,6 +95,7 @@ interface TemplateFile {
   author: string;
   description?: string;
   longDescription?: string;
+  tags?: string[];
   category?: string; // GameCategory slug
   deployMethods: string[]; // DeployMethod enum strings
   supportsLinux?: boolean;
@@ -253,8 +254,11 @@ async function seedTicketCategories() {
 async function seedGameCategories() {
   const categories: Array<{ name: string; slug: string }> = [
     { name: 'Survival', slug: 'survival' },
+    { name: 'Modded', slug: 'modded' },
     { name: 'Sandbox', slug: 'sandbox' },
-    { name: 'Shooter', slug: 'shooter' },
+    { name: 'Simulation', slug: 'simulation' },
+    { name: 'Roleplay', slug: 'roleplay' },
+    { name: 'FPS', slug: 'shooter' },
   ];
 
   const bySlug: Record<string, string> = {};
@@ -444,7 +448,7 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
       longDescription: tpl.longDescription ?? tpl.description ?? null,
       cardImageUrl: preset,
       heroImageUrl: preset,
-      tags: tpl.category ? [tpl.category] : [],
+      tags: tpl.tags ?? (tpl.category ? [tpl.category] : []),
     };
 
     const template = await prisma.gameTemplate.upsert({
@@ -460,6 +464,14 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
       await prisma.gameTemplate.update({
         where: { id: template.id },
         data: storefront,
+      });
+    } else if (template.cardImageUrl.startsWith('/games/presets/')) {
+      // Seed-managed preset art (not an admin custom URL): keep it in sync with
+      // the template's current category + tags so re-seeds reflect taxonomy
+      // changes without overwriting admin customisation or publish state.
+      await prisma.gameTemplate.update({
+        where: { id: template.id },
+        data: { cardImageUrl: preset, heroImageUrl: preset, tags: storefront.tags },
       });
     }
 

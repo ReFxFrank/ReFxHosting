@@ -3,8 +3,11 @@
   "slug": "satisfactory",
   "author": "ops@refx.example",
   "description": "Coffee Stain's first-person factory-building sim. SteamCMD-installed dedicated server managed in-game via the server manager UI.",
-  "category": "sandbox",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "category": "simulation",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -37,7 +40,11 @@
       "description": "Maximum concurrent players (officially supported up to 4, higher is unsupported).",
       "type": "NUMBER",
       "defaultValue": "4",
-      "rules": { "required": true, "min": 1, "max": 16 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 16
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -48,7 +55,11 @@
       "description": "UDP port used for server discovery and the management API handshake.",
       "type": "NUMBER",
       "defaultValue": "15777",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 1
@@ -59,7 +70,11 @@
       "description": "UDP beacon port used for client connection negotiation.",
       "type": "NUMBER",
       "defaultValue": "15000",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 2
@@ -81,10 +96,19 @@
       "description": "Optional administrator password used when claiming the server in the manager UI.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": false, "minLength": 8 },
+      "rules": {
+        "required": false,
+        "minLength": 8
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 4
     }
-  ]
+  ],
+  "tags": [
+    "factory",
+    "automation",
+    "co-op"
+  ],
+  "longDescription": "Build sprawling automated factories with friends on a dedicated Satisfactory server."
 }

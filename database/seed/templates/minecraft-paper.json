@@ -4,7 +4,9 @@
   "author": "ops@refx.example",
   "description": "High-performance Paper (Spigot fork) Minecraft Java Edition server. Great default for survival/SMP communities with plugin support.",
   "category": "survival",
-  "deployMethods": ["DOCKER"],
+  "deployMethods": [
+    "DOCKER"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -40,7 +42,10 @@
       "description": "The name of the server jarfile to run the server with.",
       "type": "STRING",
       "defaultValue": "server.jar",
-      "rules": { "required": true, "regex": "^[\\w.-]+\\.jar$" },
+      "rules": {
+        "required": true,
+        "regex": "^[\\w.-]+\\.jar$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -51,7 +56,10 @@
       "description": "The version of Paper to install. Use 'latest' for the newest stable release.",
       "type": "STRING",
       "defaultValue": "latest",
-      "rules": { "required": true, "regex": "^(latest|\\d+\\.\\d+(\\.\\d+)?)$" },
+      "rules": {
+        "required": true,
+        "regex": "^(latest|\\d+\\.\\d+(\\.\\d+)?)$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -62,7 +70,11 @@
       "description": "Maximum Java heap size in megabytes (-Xmx).",
       "type": "NUMBER",
       "defaultValue": "3072",
-      "rules": { "required": true, "min": 1024, "max": 32768 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 32768
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 2
@@ -73,10 +85,18 @@
       "description": "You must accept the Mojang EULA to run a server.",
       "type": "BOOLEAN",
       "defaultValue": "true",
-      "rules": { "required": true },
+      "rules": {
+        "required": true
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 3
     }
-  ]
+  ],
+  "tags": [
+    "minecraft",
+    "plugins",
+    "multiplayer"
+  ],
+  "longDescription": "High-performance Paper server for survival and SMP communities — full plugin support, great TPS, and effortless multiplayer."
 }

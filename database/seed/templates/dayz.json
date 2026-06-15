@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Bohemia Interactive's open-world zombie survival. SteamCMD-installed dedicated server; runs well as a native process for mod loading.",
   "category": "survival",
-  "deployMethods": ["NATIVE_PROCESS", "DOCKER"],
+  "deployMethods": [
+    "NATIVE_PROCESS",
+    "DOCKER"
+  ],
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
@@ -36,7 +39,10 @@
       "description": "Hostname shown in the DayZ server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting DayZ Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -47,7 +53,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "60",
-      "rules": { "required": true, "min": 1, "max": 127 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 127
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -58,7 +68,9 @@
       "description": "Semicolon-separated -mod= arguments (Workshop mod folders). Leave blank for vanilla.",
       "type": "STRING",
       "defaultValue": "",
-      "rules": { "maxLength": 2048 },
+      "rules": {
+        "maxLength": 2048
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -69,10 +81,19 @@
       "description": "Password protecting BattlEye RCON admin access.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": true, "minLength": 8 },
+      "rules": {
+        "required": true,
+        "minLength": 8
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 3
     }
-  ]
+  ],
+  "tags": [
+    "zombies",
+    "pvp",
+    "hardcore"
+  ],
+  "longDescription": "Hardcore open-world zombie survival. Host persistent DayZ servers with custom loot, mods and rules."
 }

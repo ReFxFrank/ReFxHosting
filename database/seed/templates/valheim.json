@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Iron Gate's Norse survival sandbox dedicated server. SteamCMD-installed with optional BepInEx mod loader support.",
   "category": "survival",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -37,7 +40,10 @@
       "description": "Display name shown in the in-game server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Valheim Server",
-      "rules": { "required": true, "maxLength": 64 },
+      "rules": {
+        "required": true,
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -48,7 +54,10 @@
       "description": "Name of the world save to load or create.",
       "type": "STRING",
       "defaultValue": "Dedicated",
-      "rules": { "required": true, "regex": "^[\\w-]+$" },
+      "rules": {
+        "required": true,
+        "regex": "^[\\w-]+$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -59,7 +68,10 @@
       "description": "Join password (minimum 5 characters). Required for non-public servers.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": true, "minLength": 5 },
+      "rules": {
+        "required": true,
+        "minLength": 5
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 2
@@ -70,10 +82,22 @@
       "description": "1 = listed in the community browser, 0 = join by IP only.",
       "type": "ENUM",
       "defaultValue": "1",
-      "rules": { "required": true, "options": ["1", "0"] },
+      "rules": {
+        "required": true,
+        "options": [
+          "1",
+          "0"
+        ]
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 3
     }
-  ]
+  ],
+  "tags": [
+    "viking",
+    "co-op",
+    "exploration"
+  ],
+  "longDescription": "Explore, build and conquer the tenth Norse world with friends on a dedicated Valheim server."
 }

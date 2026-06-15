@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "The Indie Stone's isometric zombie survival sim. SteamCMD-installed dedicated server with Workshop mod support and RCON administration.",
   "category": "survival",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -41,7 +44,10 @@
       "description": "Public server name and the name of the save/config set used.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Zomboid Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -52,7 +58,10 @@
       "description": "Password for the built-in 'admin' account.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": true, "minLength": 8 },
+      "rules": {
+        "required": true,
+        "minLength": 8
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 1
@@ -63,7 +72,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "16",
-      "rules": { "required": true, "min": 1, "max": 100 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 100
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -74,7 +87,11 @@
       "description": "Secondary UDP port used by the Steam direct-connect handshake.",
       "type": "NUMBER",
       "defaultValue": "16262",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 3
@@ -85,7 +102,10 @@
       "description": "Semicolon-separated list of Steam Workshop mod IDs to load.",
       "type": "STRING",
       "defaultValue": "",
-      "rules": { "required": false, "regex": "^(\\d+(;\\d+)*)?$" },
+      "rules": {
+        "required": false,
+        "regex": "^(\\d+(;\\d+)*)?$"
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 4
@@ -96,10 +116,20 @@
       "description": "Maximum Java heap size in megabytes for the server JVM.",
       "type": "NUMBER",
       "defaultValue": "4096",
-      "rules": { "required": true, "min": 2048, "max": 32768 },
+      "rules": {
+        "required": true,
+        "min": 2048,
+        "max": 32768
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 5
     }
-  ]
+  ],
+  "tags": [
+    "zombies",
+    "co-op",
+    "hardcore"
+  ],
+  "longDescription": "Persistent zombie-survival sandbox. Run a co-op Project Zomboid world with mods and custom sandbox settings."
 }

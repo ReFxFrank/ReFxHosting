@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Facepunch's survival sandbox. SteamCMD-installed dedicated server with Oxide/uMod support and live map configuration.",
   "category": "survival",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -37,7 +40,10 @@
       "description": "The name shown in the in-game server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Rust Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -48,7 +54,11 @@
       "description": "Procedural map size in meters. 3000-4500 recommended for most servers.",
       "type": "NUMBER",
       "defaultValue": "3500",
-      "rules": { "required": true, "min": 1000, "max": 6000 },
+      "rules": {
+        "required": true,
+        "min": 1000,
+        "max": 6000
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -59,7 +69,11 @@
       "description": "Procedural generation seed. Same seed + size produces the same map.",
       "type": "NUMBER",
       "defaultValue": "1337",
-      "rules": { "required": true, "min": 0, "max": 2147483647 },
+      "rules": {
+        "required": true,
+        "min": 0,
+        "max": 2147483647
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -70,7 +84,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "50",
-      "rules": { "required": true, "min": 1, "max": 500 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 500
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 3
@@ -81,7 +99,15 @@
       "description": "World level to generate.",
       "type": "ENUM",
       "defaultValue": "Procedural Map",
-      "rules": { "required": true, "options": ["Procedural Map", "Barren", "HapisIsland", "SavasIsland_koth"] },
+      "rules": {
+        "required": true,
+        "options": [
+          "Procedural Map",
+          "Barren",
+          "HapisIsland",
+          "SavasIsland_koth"
+        ]
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 4
@@ -92,7 +118,11 @@
       "description": "TCP port for the RCON/web-rcon interface.",
       "type": "NUMBER",
       "defaultValue": "28016",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 5
@@ -103,7 +133,10 @@
       "description": "Password protecting the RCON interface.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": true, "minLength": 8 },
+      "rules": {
+        "required": true,
+        "minLength": 8
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 6
@@ -119,5 +152,11 @@
       "userViewable": true,
       "sortOrder": 7
     }
-  ]
+  ],
+  "tags": [
+    "pvp",
+    "open-world",
+    "multiplayer"
+  ],
+  "longDescription": "Survive, build and raid on your own Rust server. Tune wipe schedules, plugins and player counts for your community."
 }

@@ -3,8 +3,11 @@
   "slug": "fivem",
   "author": "ops@refx.example",
   "description": "Cfx.re multiplayer framework for Grand Theft Auto V. Runs the FXServer artifact with a resources directory; not Steam-based.",
-  "category": "sandbox",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "category": "roleplay",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
@@ -36,7 +39,10 @@
       "description": "Name shown in the FiveM server list.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting FiveM Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -47,7 +53,10 @@
       "description": "Server key from https://keymaster.fivem.net (required to start).",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": true, "minLength": 16 },
+      "rules": {
+        "required": true,
+        "minLength": 16
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 1
@@ -58,7 +67,11 @@
       "description": "Maximum concurrent player slots (sv_maxClients).",
       "type": "NUMBER",
       "defaultValue": "48",
-      "rules": { "required": true, "min": 1, "max": 2048 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 2048
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -69,10 +82,19 @@
       "description": "Cfx.re artifact build number, or 'latest' for the newest recommended build.",
       "type": "STRING",
       "defaultValue": "latest",
-      "rules": { "required": true, "maxLength": 32 },
+      "rules": {
+        "required": true,
+        "maxLength": 32
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 3
     }
-  ]
+  ],
+  "tags": [
+    "gta",
+    "roleplay",
+    "community"
+  ],
+  "longDescription": "Host a custom GTA V roleplay community with FiveM — resources, scripts and hundreds of slots."
 }

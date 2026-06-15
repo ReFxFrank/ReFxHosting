@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Pocketpair's creature-collection survival crafting game. SteamCMD-installed dedicated server with RCON support.",
   "category": "survival",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -37,7 +40,10 @@
       "description": "Name shown in the in-game community server list.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Palworld Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -48,7 +54,11 @@
       "description": "Maximum concurrent players (hard cap of 32).",
       "type": "NUMBER",
       "defaultValue": "16",
-      "rules": { "required": true, "min": 1, "max": 32 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 32
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -59,7 +69,10 @@
       "description": "Server admin password used for in-game admin commands.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": true, "minLength": 8 },
+      "rules": {
+        "required": true,
+        "minLength": 8
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 2
@@ -81,10 +94,20 @@
       "description": "TCP port for the RCON interface.",
       "type": "NUMBER",
       "defaultValue": "25575",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 4
     }
-  ]
+  ],
+  "tags": [
+    "creatures",
+    "co-op",
+    "open-world"
+  ],
+  "longDescription": "Co-op creature-collecting survival. Spin up a Palworld dedicated server for you and your friends in minutes."
 }
