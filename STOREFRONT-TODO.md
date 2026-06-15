@@ -39,10 +39,14 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
       `sortOrder`, pick `cardImageUrl`/`heroImageUrl`/`iconUrl` (preset picker from
       `/games/presets/*` + custom URL field), edit `longDescription`, `tags`.
       Use `api.admin.saveTemplate(...)` (already supports these fields). Add a live card preview.
-- [ ] **Admin → Homepage alerts**: new page to manage `HomepageAlert`s
-      (type/title/body/schedule/cta/dismissible/priority/active).
+- [ ] **Admin → Homepage alerts**: new page `app/(admin)/admin/homepage-alerts/page.tsx`
+      to manage `HomepageAlert`s (type/title/body/schedule/cta/dismissible/priority/active).
       Use `api.admin.homepageAlerts() / saveHomepageAlert() / deleteHomepageAlert()` (already added).
-      Add a nav entry in the admin sidebar (note: keep distinct from the existing dashboard "Alerts").
+      Link it from the admin hub: add a tile to `QUICK_LINKS` in
+      `app/(admin)/admin/page.tsx` (lines ~37–43) labelled "Homepage Alerts" — keep it
+      distinct from the existing "Alerts" tile (that one = internal dashboard `GlobalAlert`).
+      Nav definitions live in `components/layout/nav-config.ts` (`adminNav`) if you also
+      want a sidebar entry.
 
 ## 🧪 Testing / polish
 - [ ] E2E: homepage → game → `/order` (preselected) → register-at-checkout → server provisions → shows in `/servers`.
