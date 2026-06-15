@@ -18,6 +18,7 @@ import {
   SubscriptionState,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../platform/settings.service';
 import {
   Paginated,
   PaginationDto,
@@ -59,6 +60,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly stripe: StripeGateway,
+    private readonly settings: SettingsService,
     @InjectQueue(QUEUE.BILLING_RENEWAL) private readonly renewalQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
   ) {
@@ -453,20 +455,21 @@ export class BillingService {
     await this.prisma.invoice.delete({ where: { id } });
   }
 
-  /** Whether each payment gateway is configured (no secrets returned). */
-  gatewayStatus(): {
+  /** Whether each payment gateway is configured (no secrets returned). Reads the
+   *  effective config (owner-edited DB settings → env fallback). */
+  async gatewayStatus(): Promise<{
     stripe: { configured: boolean; publishableKey: string | null };
     paypal: { configured: boolean };
-  } {
-    const stripe = this.config.get<AppConfig['stripe']>('stripe');
-    const paypal = this.config.get<AppConfig['paypal']>('paypal');
+  }> {
+    const stripe = await this.settings.stripeConfig();
+    const paypal = await this.settings.paypalConfig();
     return {
       stripe: {
-        configured: !!stripe?.secretKey,
-        // The publishable key is not a secret; safe to expose to the admin UI.
-        publishableKey: stripe?.publishableKey || null,
+        configured: !!stripe.secretKey,
+        // The publishable key is not a secret; safe to expose to the client.
+        publishableKey: stripe.publishableKey || null,
       },
-      paypal: { configured: !!paypal?.clientId && !!paypal?.clientSecret },
+      paypal: { configured: !!paypal.clientId && !!paypal.clientSecret },
     };
   }
 

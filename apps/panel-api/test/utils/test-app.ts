@@ -15,6 +15,7 @@ import { CryptoService } from '../../src/common/crypto/crypto.service';
 import { EmailService } from '../../src/email/email.service';
 import { ApiKeyService } from '../../src/auth/api-key.service';
 import { UsersService } from '../../src/users/users.service';
+import { SettingsService } from '../../src/platform/settings.service';
 import { JwtStrategy } from '../../src/auth/strategies/jwt.strategy';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/auth/guards/roles.guard';
@@ -90,6 +91,7 @@ export async function buildTestApp(
       EmailService,
       ApiKeyService,
       UsersService,
+      SettingsService,
       JwtStrategy,
       // Auth guards (real).
       JwtAuthGuard,

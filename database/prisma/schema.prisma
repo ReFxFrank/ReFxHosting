@@ -1010,3 +1010,12 @@ model HomepageAlert {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 }
+
+/// Key/value platform configuration editable at runtime (e.g. payment-gateway
+/// credentials). Secret values are stored AES-256-GCM-encrypted (encrypted=true).
+model PlatformSetting {
+  key       String   @id
+  value     String
+  encrypted Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}

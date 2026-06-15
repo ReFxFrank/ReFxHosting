@@ -51,7 +51,7 @@ export class StripeWebhookController {
     let event: StripeEvent;
     try {
       // req.body is a Buffer because main.ts mounts express.raw on this path.
-      event = this.stripe.verifyWebhook(req.body as Buffer, signature);
+      event = await this.stripe.verifyWebhook(req.body as Buffer, signature);
     } catch (err) {
       const e = err as Error;
       this.logger.warn(`Stripe webhook signature verification failed: ${e.message}`);

@@ -47,6 +47,38 @@ export class SetUserRoleDto {
   roleId?: string;
 }
 
+export class SetGatewayConfigDto {
+  @ApiPropertyOptional({ description: 'Stripe secret key (write-only; stored encrypted).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  stripeSecretKey?: string;
+
+  @ApiPropertyOptional({ description: 'Stripe webhook signing secret (encrypted).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  stripeWebhookSecret?: string;
+
+  @ApiPropertyOptional({ description: 'Stripe publishable key (not secret).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  stripePublishableKey?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  paypalClientId?: string;
+
+  @ApiPropertyOptional({ description: 'PayPal client secret (encrypted).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  paypalClientSecret?: string;
+}
+
 export class CreateRoleDto {
   @ApiProperty({ description: 'Unique key/slug, e.g. "billing-manager".' })
   @IsString()

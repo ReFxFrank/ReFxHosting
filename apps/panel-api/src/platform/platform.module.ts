@@ -5,6 +5,7 @@ import { AuditService } from './audit.service';
 import { NotificationsService } from './notifications.service';
 import { AlertsService } from './alerts.service';
 import { HomepageAlertsService } from './homepage-alerts.service';
+import { SettingsService } from './settings.service';
 import { PlatformResolver } from './platform.resolver';
 import { HealthController } from './health.controller';
 import { MetricsController } from './metrics.controller';
@@ -37,6 +38,7 @@ import { AlertsController } from './alerts.controller';
     NotificationsService,
     AlertsService,
     HomepageAlertsService,
+    SettingsService,
     PlatformResolver,
   ],
   exports: [
@@ -45,6 +47,7 @@ import { AlertsController } from './alerts.controller';
     AlertsService,
     HomepageAlertsService,
     AuditService,
+    SettingsService,
   ],
 })
 export class PlatformModule {}

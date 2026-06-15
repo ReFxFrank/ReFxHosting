@@ -45,6 +45,7 @@ import type {
   AdminPayment,
   AdminBillingSummary,
   GatewayStatus,
+  GatewayConfigDetail,
   ProfileUpdate,
   AdminRole,
 } from "@/lib/types";
@@ -563,6 +564,14 @@ export const api = {
     payments: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminPayment>>("/admin/payments", { query }),
     paymentGateways: () => http.get<GatewayStatus>("/admin/payments/gateways"),
+    gatewayConfig: () => http.get<GatewayConfigDetail>("/admin/payments/gateways/config"),
+    setGatewayConfig: (input: {
+      stripeSecretKey?: string;
+      stripeWebhookSecret?: string;
+      stripePublishableKey?: string;
+      paypalClientId?: string;
+      paypalClientSecret?: string;
+    }) => http.patch<void>("/admin/payments/gateways/config", input),
 
     products: () => getList<Product>("/admin/products"),
     saveProduct: (input: Partial<Product>) =>

@@ -156,6 +156,17 @@ export interface GatewayStatus {
   paypal: { configured: boolean };
 }
 
+/** Masked, editable gateway config for the owner Payments editor. */
+export interface GatewayConfigDetail {
+  stripe: {
+    configured: boolean;
+    secretKeyMasked: string;
+    webhookSecretSet: boolean;
+    publishableKey: string;
+  };
+  paypal: { configured: boolean; clientId: string; clientSecretSet: boolean };
+}
+
 /** Full account view for the admin user-detail page. */
 export interface AdminUserDetail extends User {
   ownedServers?: Array<

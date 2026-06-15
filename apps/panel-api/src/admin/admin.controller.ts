@@ -21,6 +21,7 @@ import { ServersService } from '../servers/servers.service';
 import { AlertsService } from '../platform/alerts.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 import { AuditService } from '../platform/audit.service';
+import { SettingsService } from '../platform/settings.service';
 import { RolesService } from './roles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminPermissionGuard } from '../auth/guards/admin-permission.guard';
@@ -43,6 +44,7 @@ import {
 import {
   AdminCreateServerDto,
   CreateRoleDto,
+  SetGatewayConfigDto,
   SetUserRoleDto,
   UpdateAlertDto,
   UpdateProductDto,
@@ -72,6 +74,7 @@ export class AdminController {
     private readonly homepageAlerts: HomepageAlertsService,
     private readonly audit: AuditService,
     private readonly roles: RolesService,
+    private readonly settings: SettingsService,
   ) {}
 
   // ---- Nodes -------------------------------------------------------------
@@ -297,6 +300,20 @@ export class AdminController {
   @RequirePerm('payments.manage')
   paymentGateways() {
     return this.billing.gatewayStatus();
+  }
+
+  /** Masked gateway config for the owner editor (no secrets returned). */
+  @Get('payments/gateways/config')
+  @RequirePerm('payments.manage')
+  gatewayConfig() {
+    return this.settings.gatewayConfig();
+  }
+
+  @Patch('payments/gateways/config')
+  @RequirePerm('payments.manage')
+  @Audit({ action: 'admin.gateways.update', targetType: 'PlatformSetting' })
+  setGatewayConfig(@Body() dto: SetGatewayConfigDto) {
+    return this.settings.setGatewayConfig(dto);
   }
 
   // ---- Products ----------------------------------------------------------

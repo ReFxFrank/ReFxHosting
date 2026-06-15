@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 import { Invoice } from '@prisma/client';
 
@@ -23,8 +22,8 @@ export type StripeMetadata = StripeInvoice['metadata'];
 export type StripeError = InstanceType<typeof Stripe.errors.StripeError> & {
   payment_intent?: { id?: string };
 };
-import { AppConfig } from '../../config/configuration';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
+import { SettingsService } from '../../platform/settings.service';
 import {
   ChargeResult,
   CheckoutSessionParams,
@@ -42,28 +41,36 @@ import {
 export class StripeGateway implements PaymentGateway {
   readonly name = 'stripe';
   private readonly logger = new Logger(StripeGateway.name);
-  private readonly stripe: StripeClient;
-  private readonly webhookSecret: string;
+  private cachedKey = '';
+  private cachedClient: StripeClient | null = null;
 
-  constructor(private readonly config: ConfigService) {
-    const cfg = this.config.get<AppConfig['stripe']>('stripe')!;
-    this.webhookSecret = cfg.webhookSecret;
-    if (!cfg.secretKey) {
-      // No key configured yet (common in dev / before going live). Use a
-      // placeholder so the SDK constructs and the app still boots; any live call
-      // returns a clear auth error rather than crashing startup. Set
-      // STRIPE_SECRET_KEY (+ STRIPE_WEBHOOK_SECRET) to start accepting payments.
-      this.logger.warn(
-        'STRIPE_SECRET_KEY is not set — Stripe is inert (no live charges). ' +
-          'Set the Stripe env vars to enable payments.',
-      );
+  constructor(private readonly settings: SettingsService) {}
+
+  /**
+   * Build (and cache) a Stripe client from the current effective secret key
+   * (owner-edited DB setting → env fallback), so key changes take effect without
+   * a restart. A placeholder is used when unconfigured so the app stays inert
+   * rather than crashing.
+   */
+  private async client(): Promise<StripeClient> {
+    const { secretKey } = await this.settings.stripeConfig();
+    const key = secretKey || 'sk_test_unconfigured';
+    if (!this.cachedClient || key !== this.cachedKey) {
+      if (!secretKey) {
+        this.logger.warn(
+          'Stripe secret key is not set — inert mode (no live charges). ' +
+            'Configure it under Payments or set STRIPE_SECRET_KEY.',
+        );
+      }
+      this.cachedClient = new Stripe(key, {
+        // Pin the API version the SDK major targets; bump deliberately when
+        // upgrading the SDK (stripe-node v22 → 2026-05-27.dahlia).
+        apiVersion: '2026-05-27.dahlia',
+        typescript: true,
+      });
+      this.cachedKey = key;
     }
-    this.stripe = new Stripe(cfg.secretKey || 'sk_test_unconfigured', {
-      // Pin the API version the SDK major targets; bump deliberately when
-      // upgrading the SDK (stripe-node v22 → 2026-05-27.dahlia).
-      apiVersion: '2026-05-27.dahlia',
-      typescript: true,
-    });
+    return this.cachedClient;
   }
 
   /** Create (or look up) a Stripe Customer for the user and return its id. */
@@ -78,7 +85,8 @@ export class StripeGateway implements PaymentGateway {
 
     // TODO(impl): de-duplicate by searching existing customers (metadata.userId)
     // before creating, to avoid orphaned customers on retries.
-    const customer = await this.stripe.customers.create({
+    const stripe = await this.client();
+    const customer = await stripe.customers.create({
       email: user.email,
       name: name || undefined,
       metadata: { userId: user.id },
@@ -96,7 +104,8 @@ export class StripeGateway implements PaymentGateway {
     paymentMethodRef: string,
   ): Promise<ChargeResult> {
     try {
-      const intent = await this.stripe.paymentIntents.create({
+      const stripe = await this.client();
+      const intent = await stripe.paymentIntents.create({
         amount: invoice.totalMinor,
         currency: invoice.currency.toLowerCase(),
         payment_method: paymentMethodRef,
@@ -138,7 +147,8 @@ export class StripeGateway implements PaymentGateway {
 
     // TODO(impl): prefer line-item mode mapping each InvoiceLineItem to a
     // Stripe price/price_data entry; this single line collapses to the total.
-    const session = await this.stripe.checkout.sessions.create({
+    const stripe = await this.client();
+    const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer: customerRef,
       success_url: successUrl,
@@ -164,11 +174,9 @@ export class StripeGateway implements PaymentGateway {
    * Verify and decode a Stripe webhook using the raw request body and the
    * `stripe-signature` header. Throws on invalid signatures.
    */
-  verifyWebhook(rawBody: Buffer, signature: string): StripeEvent {
-    return this.stripe.webhooks.constructEvent(
-      rawBody,
-      signature,
-      this.webhookSecret,
-    );
+  async verifyWebhook(rawBody: Buffer, signature: string): Promise<StripeEvent> {
+    const { webhookSecret } = await this.settings.stripeConfig();
+    const stripe = await this.client();
+    return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
   }
 }
