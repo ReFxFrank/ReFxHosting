@@ -52,7 +52,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-refx}
       POSTGRES_DB: ${POSTGRES_DB:-refx}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Bound to loopback by default (BIND_HOST=127.0.0.1) so nothing is exposed
+      # to the public internet. A reverse proxy (Caddy) on the host fronts the
+      # web/api; container-to-container traffic uses the docker network, not
+      # these host mappings, so loopback binding never breaks internal calls.
+      - "${BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -76,7 +80,7 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${BIND_HOST:-127.0.0.1}:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
     healthcheck:
@@ -110,7 +114,7 @@ services:
         soft: 65536
         hard: 65536
     ports:
-      - "${OPENSEARCH_PORT:-9200}:9200"
+      - "${BIND_HOST:-127.0.0.1}:${OPENSEARCH_PORT:-9200}:9200"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     healthcheck:
@@ -131,8 +135,8 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-${S3_ACCESS_KEY:-refxadmin}}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-${S3_SECRET_KEY:-refxadminsecret}}
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"   # S3 API
-      - "${MINIO_CONSOLE_PORT:-9001}:9001" # Web console
+      - "${BIND_HOST:-127.0.0.1}:${MINIO_API_PORT:-9000}:9000"   # S3 API
+      - "${BIND_HOST:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9001}:9001" # Web console
     volumes:
       - minio-data:/data
     healthcheck:
@@ -178,8 +182,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-refx}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-refx}
     ports:
-      - "${RABBITMQ_PORT:-5672}:5672"      # AMQP
-      - "${RABBITMQ_MGMT_PORT:-15672}:15672" # Management UI
+      - "${BIND_HOST:-127.0.0.1}:${RABBITMQ_PORT:-5672}:5672"      # AMQP
+      - "${BIND_HOST:-127.0.0.1}:${RABBITMQ_MGMT_PORT:-15672}:15672" # Management UI
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     healthcheck:
@@ -204,7 +208,7 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=15d"
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "${BIND_HOST:-127.0.0.1}:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
@@ -231,7 +235,7 @@ services:
       # Datasources + dashboards are provisioned from ./grafana/provisioning.
       GF_PATHS_PROVISIONING: /etc/grafana/provisioning
     ports:
-      - "${GRAFANA_PORT:-3001}:3000"
+      - "${BIND_HOST:-127.0.0.1}:${GRAFANA_PORT:-3001}:3000"
     volumes:
       - grafana-data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
@@ -250,7 +254,7 @@ services:
     <<: *restart
     command: -config.file=/etc/loki/loki-config.yml
     ports:
-      - "${LOKI_PORT:-3100}:3100"
+      - "${BIND_HOST:-127.0.0.1}:${LOKI_PORT:-3100}:3100"
     volumes:
       - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
       - loki-data:/loki
@@ -289,7 +293,7 @@ services:
     volumes:
       - /:/host:ro,rslave
     ports:
-      - "9100:9100"
+      - "${BIND_HOST:-127.0.0.1}:9100:9100"
     networks:
       - refx
 
@@ -345,7 +349,9 @@ services:
       migrate:
         condition: service_completed_successfully
     ports:
-      - "${PANEL_API_PORT:-4000}:4000"
+      # Fronted by the reverse proxy (api.refx.gg -> 127.0.0.1:4000). Loopback by
+      # default; set BIND_HOST=0.0.0.0 only if you must expose it directly.
+      - "${BIND_HOST:-127.0.0.1}:${PANEL_API_PORT:-4000}:4000"
     healthcheck:
       # health is excluded from the global API prefix in main.ts, so it is at
       # /health (not /api/v1/health). See platform/health.controller.ts.
@@ -381,7 +387,8 @@ services:
     depends_on:
       - panel-api
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      # Fronted by the reverse proxy (refx.gg / www.refx.gg -> 127.0.0.1:3000).
+      - "${BIND_HOST:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O- http://localhost:3000/ || exit 1"]
       interval: 30s

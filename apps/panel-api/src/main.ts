@@ -26,6 +26,19 @@ async function bootstrap(): Promise<void> {
   const config = app.get(ConfigService);
   const reflector = app.get(Reflector);
 
+  // Behind a reverse proxy (Caddy/nginx) the socket peer is the proxy, not the
+  // client. Trust the proxy so Express derives req.ip from X-Forwarded-For —
+  // otherwise per-IP rate limiting and audit logs all collapse onto the proxy's
+  // loopback address. TRUST_PROXY accepts Express's syntax: a hop count ("1"),
+  // "loopback", a subnet, or "true". Defaults to one hop (the local proxy).
+  const trustProxy = process.env.TRUST_PROXY ?? '1';
+  const trustProxyValue = /^\d+$/.test(trustProxy)
+    ? Number(trustProxy)
+    : trustProxy === 'true'
+      ? true
+      : trustProxy;
+  app.getHttpAdapter().getInstance().set('trust proxy', trustProxyValue);
+
   const port = config.get<AppConfig['port']>('port')!;
   const apiPrefix = config.get<AppConfig['apiPrefix']>('apiPrefix')!;
   const corsOrigins = config.get<AppConfig['corsOrigins']>('corsOrigins')!;
