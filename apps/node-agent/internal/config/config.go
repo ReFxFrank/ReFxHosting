@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -167,8 +168,20 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
+// defaultDataDir is OS-appropriate: a drive-rooted path on Windows (so Docker
+// bind-mount sources are valid Windows paths) and the FHS location on Unix.
+func defaultDataDir() string {
+	if runtime.GOOS == "windows" {
+		if pd := os.Getenv("ProgramData"); pd != "" {
+			return filepath.Join(pd, "ReFx", "data")
+		}
+		return `C:\ProgramData\ReFx\data`
+	}
+	return "/var/lib/refx-agent"
+}
+
 func setDefaults(v *viper.Viper) {
-	v.SetDefault("data_dir", "/var/lib/refx-agent")
+	v.SetDefault("data_dir", defaultDataDir())
 	v.SetDefault("api.bind_addr", "0.0.0.0:8443")
 	v.SetDefault("sftp.bind_addr", "0.0.0.0:2022")
 	v.SetDefault("panel.timeout", 30*time.Second)
@@ -190,6 +203,14 @@ func (c *Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		return errors.New("config: data_dir is required")
+	}
+	// On Windows the data dir becomes a Docker bind-mount source, which must be a
+	// drive-rooted path (e.g. C:\ProgramData\ReFx\data). A Unix-style path like
+	// /var/lib/refx-agent makes Docker fail with "not a valid Windows path".
+	if runtime.GOOS == "windows" && !filepath.IsAbs(c.DataDir) {
+		return fmt.Errorf(
+			"config: data_dir %q is not a valid Windows path; use an absolute path "+
+				"with a drive letter, e.g. C:\\ProgramData\\ReFx\\data", c.DataDir)
 	}
 	return nil
 }
