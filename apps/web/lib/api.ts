@@ -200,6 +200,17 @@ export const http = {
     request<T>(path, { ...opts, method: "DELETE" }),
 };
 
+/**
+ * GET a list endpoint and always return a bare array, whether the panel-api
+ * responds with a plain array or a paginated `{ data, meta }` envelope. (List
+ * endpoints that need the pagination meta are typed `Paginated<T>` and use
+ * `http.get` directly.)
+ */
+async function getList<T>(path: string, opts?: RequestOptions): Promise<T[]> {
+  const r = await request<T[] | Paginated<T>>(path, { ...opts, method: "GET" });
+  return Array.isArray(r) ? r : (r?.data ?? []);
+}
+
 // ---------------------------------------------------------------------------
 // Domain-grouped API surface. Each group maps 1:1 to REST resources.
 // ---------------------------------------------------------------------------
@@ -226,9 +237,9 @@ export const api = {
       http.patch<User>("/account", input),
     changePassword: (currentPassword: string, newPassword: string) =>
       http.post<void>("/account/password", { currentPassword, newPassword }),
-    sessions: () => http.get<Session[]>("/account/sessions"),
+    sessions: () => getList<Session>("/account/sessions"),
     revokeSession: (id: string) => http.delete<void>(`/account/sessions/${id}`),
-    apiKeys: () => http.get<ApiKey[]>("/account/api-keys"),
+    apiKeys: () => getList<ApiKey>("/account/api-keys"),
     createApiKey: (input: { name: string; scopes: ApiKey["scopes"] }) =>
       http.post<ApiKey>("/account/api-keys", input),
     revokeApiKey: (id: string) => http.delete<void>(`/account/api-keys/${id}`),
@@ -237,18 +248,18 @@ export const api = {
     totpEnable: (code: string) =>
       http.post<{ recoveryCodes: string[] }>("/account/mfa/totp/enable", { code }),
     totpDisable: (code: string) => http.post<void>("/account/mfa/totp/disable", { code }),
-    notifications: () => http.get<Notification[]>("/account/notifications"),
+    notifications: () => getList<Notification>("/account/notifications"),
     markNotificationRead: (id: string) =>
       http.post<void>(`/account/notifications/${id}/read`),
   },
 
   servers: {
     list: (query?: { search?: string; state?: string }) =>
-      http.get<Server[]>("/servers", { query }),
+      getList<Server>("/servers", { query }),
     get: (id: string) => http.get<Server>(`/servers/${id}`),
     stats: (id: string) => http.get<ServerStat>(`/servers/${id}/stats`),
     statsHistory: (id: string, range = "1h") =>
-      http.get<ServerStat[]>(`/servers/${id}/stats/history`, { query: { range } }),
+      getList<ServerStat>(`/servers/${id}/stats/history`, { query: { range } }),
     power: (id: string, signal: "start" | "stop" | "restart" | "kill") =>
       http.post<void>(`/servers/${id}/power`, { signal }),
     command: (id: string, command: string) =>
@@ -269,7 +280,7 @@ export const api = {
 
     // Game switching — the signature flow.
     switchableTemplates: (id: string) =>
-      http.get<GameTemplate[]>(`/servers/${id}/switch-game/templates`),
+      getList<GameTemplate>(`/servers/${id}/switch-game/templates`),
     switchGame: (id: string, input: { templateId: string; preserveData: boolean }) =>
       http.post<void>(`/servers/${id}/switch-game`, input),
 
@@ -283,7 +294,7 @@ export const api = {
       http.post<void>(`/servers/${id}/upgrade`, input),
 
     // Sub-users
-    subUsers: (id: string) => http.get<SubUser[]>(`/servers/${id}/sub-users`),
+    subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),
     addSubUser: (id: string, input: { email: string; permissions: string[] }) =>
       http.post<SubUser>(`/servers/${id}/sub-users`, input),
     updateSubUser: (id: string, subId: string, permissions: string[]) =>
@@ -294,7 +305,7 @@ export const api = {
     // Files
     files: {
       list: (id: string, path = "/") =>
-        http.get<FileEntry[]>(`/servers/${id}/files/list`, { query: { path } }),
+        getList<FileEntry>(`/servers/${id}/files/list`, { query: { path } }),
       read: (id: string, path: string) =>
         http.get<string>(`/servers/${id}/files/contents`, { query: { path } }),
       write: (id: string, path: string, content: string) =>
@@ -320,7 +331,7 @@ export const api = {
 
     // Backups
     backups: {
-      list: (id: string) => http.get<Backup[]>(`/servers/${id}/backups`),
+      list: (id: string) => getList<Backup>(`/servers/${id}/backups`),
       create: (id: string, input: { name: string; ignoredFiles?: string[] }) =>
         http.post<Backup>(`/servers/${id}/backups`, input),
       restore: (id: string, backupId: string) =>
@@ -335,7 +346,7 @@ export const api = {
 
     // Databases
     databases: {
-      list: (id: string) => http.get<ServerDatabase[]>(`/servers/${id}/databases`),
+      list: (id: string) => getList<ServerDatabase>(`/servers/${id}/databases`),
       create: (id: string, input: { engine: ServerDatabase["engine"]; name: string; remoteAccess?: string }) =>
         http.post<ServerDatabase>(`/servers/${id}/databases`, input),
       rotatePassword: (id: string, dbId: string) =>
@@ -346,7 +357,7 @@ export const api = {
 
     // Schedules
     schedules: {
-      list: (id: string) => http.get<Schedule[]>(`/servers/${id}/schedules`),
+      list: (id: string) => getList<Schedule>(`/servers/${id}/schedules`),
       create: (id: string, input: Partial<Schedule>) =>
         http.post<Schedule>(`/servers/${id}/schedules`, input),
       update: (id: string, scheduleId: string, input: Partial<Schedule>) =>
@@ -359,11 +370,11 @@ export const api = {
   },
 
   catalog: {
-    products: (query?: { type?: string }) => http.get<Product[]>("/catalog/products", { query }),
+    products: (query?: { type?: string }) => getList<Product>("/catalog/products", { query }),
     product: (slug: string) => http.get<Product>(`/catalog/products/${slug}`),
-    categories: () => http.get<GameCategory[]>("/catalog/categories"),
+    categories: () => getList<GameCategory>("/catalog/categories"),
     templates: (query?: { categoryId?: string; search?: string }) =>
-      http.get<GameTemplate[]>("/catalog/templates", { query }),
+      getList<GameTemplate>("/catalog/templates", { query }),
   },
 
   orders: {
@@ -378,16 +389,16 @@ export const api = {
   },
 
   billing: {
-    invoices: () => http.get<Invoice[]>("/billing/invoices"),
+    invoices: () => getList<Invoice>("/billing/invoices"),
     invoice: (id: string) => http.get<Invoice>(`/billing/invoices/${id}`),
     payInvoice: (id: string) =>
       http.post<{ checkoutUrl?: string }>(`/billing/invoices/${id}/pay`),
-    subscriptions: () => http.get<Subscription[]>("/billing/subscriptions"),
+    subscriptions: () => getList<Subscription>("/billing/subscriptions"),
     cancelSubscription: (id: string, atPeriodEnd = true) =>
       http.post<Subscription>(`/billing/subscriptions/${id}/cancel`, { atPeriodEnd }),
     resumeSubscription: (id: string) =>
       http.post<Subscription>(`/billing/subscriptions/${id}/resume`),
-    paymentMethods: () => http.get<PaymentMethod[]>("/billing/payment-methods"),
+    paymentMethods: () => getList<PaymentMethod>("/billing/payment-methods"),
     addPaymentMethodUrl: () =>
       http.post<{ url: string }>("/billing/payment-methods/setup"),
     setDefaultPaymentMethod: (id: string) =>
@@ -397,7 +408,7 @@ export const api = {
   },
 
   support: {
-    tickets: (query?: { state?: string }) => http.get<Ticket[]>("/support/tickets", { query }),
+    tickets: (query?: { state?: string }) => getList<Ticket>("/support/tickets", { query }),
     ticket: (id: string) =>
       http.get<Ticket & { messages: TicketMessage[] }>(`/support/tickets/${id}`),
     createTicket: (input: { subject: string; body: string; priority?: string; categoryId?: string }) =>
@@ -407,7 +418,7 @@ export const api = {
     setState: (id: string, state: Ticket["state"]) =>
       http.patch<Ticket>(`/support/tickets/${id}`, { state }),
     kb: (query?: { search?: string; category?: string }) =>
-      http.get<KbArticle[]>("/support/kb", { query }),
+      getList<KbArticle>("/support/kb", { query }),
     kbArticle: (slug: string) => http.get<KbArticle>(`/support/kb/${slug}`),
   },
 
@@ -426,10 +437,10 @@ export const api = {
   // Admin surface (role-gated server-side; the UI also gates by role).
   // -------------------------------------------------------------------------
   admin: {
-    nodes: () => http.get<Node[]>("/admin/nodes"),
+    nodes: () => getList<Node>("/admin/nodes"),
     node: (id: string) => http.get<Node>(`/admin/nodes/${id}`),
     nodeHeartbeats: (id: string, range = "1h") =>
-      http.get<NodeHeartbeat[]>(`/admin/nodes/${id}/heartbeats`, { query: { range } }),
+      getList<NodeHeartbeat>(`/admin/nodes/${id}/heartbeats`, { query: { range } }),
     createNode: (input: Partial<Node> & { regionId: string }) =>
       http.post<Node & { bootstrapToken: string }>("/admin/nodes", input),
     setNodeMaintenance: (id: string, maintenance: boolean) =>
@@ -440,13 +451,13 @@ export const api = {
     setUserState: (id: string, state: User["state"]) =>
       http.patch<User>(`/admin/users/${id}`, { state }),
 
-    products: () => http.get<Product[]>("/admin/products"),
+    products: () => getList<Product>("/admin/products"),
     saveProduct: (input: Partial<Product>) =>
       input.id
         ? http.patch<Product>(`/admin/products/${input.id}`, input)
         : http.post<Product>("/admin/products", input),
 
-    templates: () => http.get<GameTemplate[]>("/admin/templates"),
+    templates: () => getList<GameTemplate>("/admin/templates"),
     saveTemplate: (input: Partial<GameTemplate>) =>
       input.id
         ? http.patch<GameTemplate>(`/admin/templates/${input.id}`, input)
@@ -455,7 +466,7 @@ export const api = {
     auditLogs: (query?: { actorId?: string; targetType?: string; page?: number }) =>
       http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),
 
-    alerts: () => http.get<GlobalAlert[]>("/admin/alerts"),
+    alerts: () => getList<GlobalAlert>("/admin/alerts"),
     saveAlert: (input: Partial<GlobalAlert>) =>
       input.id
         ? http.patch<GlobalAlert>(`/admin/alerts/${input.id}`, input)
