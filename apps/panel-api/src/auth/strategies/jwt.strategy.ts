@@ -33,24 +33,40 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     if (payload.type !== 'access') {
       throw new UnauthorizedException('Invalid token type');
     }
-    const user = await this.prisma.user.findFirst({
-      where: { id: payload.sub, deletedAt: null },
-      select: {
-        id: true,
-        email: true,
-        globalRole: true,
-        state: true,
-        role: { select: { permissions: true } },
-      },
-    });
+    type LoadedUser = {
+      id: string;
+      email: string;
+      globalRole: string;
+      state: string;
+      role?: { permissions: string[] } | null;
+    };
+    let user: LoadedUser | null;
+    try {
+      user = (await this.prisma.user.findFirst({
+        where: { id: payload.sub, deletedAt: null },
+        select: {
+          id: true,
+          email: true,
+          globalRole: true,
+          state: true,
+          role: { select: { permissions: true } },
+        },
+      })) as LoadedUser | null;
+    } catch {
+      // RBAC tables not migrated yet (e.g. migrate hasn't run) — fall back to a
+      // basic lookup so authentication never hard-fails for the whole app.
+      user = (await this.prisma.user.findFirst({
+        where: { id: payload.sub, deletedAt: null },
+        select: { id: true, email: true, globalRole: true, state: true },
+      })) as LoadedUser | null;
+    }
     if (!user) throw new UnauthorizedException('User not found');
     if (user.state === 'BANNED' || user.state === 'SUSPENDED') {
       throw new UnauthorizedException(`Account ${user.state.toLowerCase()}`);
     }
     // Effective permissions: the assigned RBAC role, else the globalRole default.
     const permissions =
-      (user as { role?: { permissions: string[] } | null }).role?.permissions ??
-      permissionsForGlobalRole(user.globalRole);
+      user.role?.permissions ?? permissionsForGlobalRole(user.globalRole);
     return {
       id: user.id,
       email: user.email,
