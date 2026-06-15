@@ -43,10 +43,19 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
       the admin hub `QUICK_LINKS`, distinct from the internal "Alerts" tile.
 
 ## 🧪 Testing / polish
-- [ ] E2E: homepage → game → `/order` (preselected) → register-at-checkout → server provisions → shows in `/servers`.
-- [ ] Verify unauthenticated `/order` redirects to `login?next=…` and returns; confirm the login→register link carries `next`.
+- [x] **Automated E2E** for the public API (`catalog.e2e-spec`): games list, game
+      detail (404 when unpublished, allowed-plan filtering, safe-field whitelist),
+      homepage alerts. 45 e2e + 144 unit green.
+- [x] **Fixed** `?next` query preservation through login/register so the
+      storefront → `/order?game=&plan=` preselection survives account creation.
+- [x] **Fixed** pre-existing e2e breakage (ServersService missing
+      MinecraftResolverService in servers/auth specs).
+- [ ] **Live browser pass on the VPS**: homepage → game → `/order` (preselected)
+      → register-at-checkout → server provisions → shows in `/servers`.
+      (Couldn't run a real browser in the build container — needs the live stack.)
 - [ ] Mobile/responsive pass (homepage hero, game grid, detail two-column).
-- [ ] Optionally add more `GameCategory` rows (currently survival/sandbox/shooter) + matching preset SVGs for richer category tabs.
+- [ ] Optionally add more `GameCategory` rows (currently survival/sandbox/shooter)
+      + matching preset SVGs for richer category tabs.
 
 ## 🅿️ Parked (resume after storefront)
 - **Modrinth mod browser.** Decision: Mods tab on **all** Minecraft servers (`mods/` for
