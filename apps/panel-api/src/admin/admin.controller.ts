@@ -102,6 +102,12 @@ export class AdminController {
     return this.nodes.ping(id);
   }
 
+  @Post('nodes/:id/restart-agent')
+  @Audit({ action: 'admin.node.restart-agent', targetType: 'Node', targetParam: 'id' })
+  restartNodeAgent(@Param('id') id: string) {
+    return this.nodes.restartAgent(id);
+  }
+
   @Patch('nodes/:id')
   @Audit({ action: 'admin.node.update', targetType: 'Node', targetParam: 'id' })
   updateNode(@Param('id') id: string, @Body() dto: UpdateNodeDto) {

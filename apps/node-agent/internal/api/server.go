@@ -106,6 +106,9 @@ func (s *Server) routes() chi.Router {
 	r.Group(func(r chi.Router) {
 		r.Use(s.authSignature)
 
+		// Node-level control (not server-scoped).
+		r.Post("/api/v1/system/restart", s.handleAgentRestart)
+
 		r.Route("/api/v1/servers", func(r chi.Router) {
 			r.Post("/", s.handleInstall) // create + install
 			r.Route("/{id}", func(r chi.Router) {

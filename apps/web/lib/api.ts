@@ -501,6 +501,8 @@ export const api = {
     nodeHeartbeats: (id: string, range = "1h") =>
       getList<NodeHeartbeat>(`/admin/nodes/${id}/heartbeats`, { query: { range } }),
     nodePing: (id: string) => http.get<NodePing>(`/admin/nodes/${id}/ping`),
+    restartNodeAgent: (id: string) =>
+      http.post<{ restarting: true }>(`/admin/nodes/${id}/restart-agent`),
     createNode: (input: Partial<Node> & { regionId: string }) =>
       http.post<Node & { bootstrapToken: string }>("/admin/nodes", input),
     setNodeMaintenance: (id: string, maintenance: boolean) =>

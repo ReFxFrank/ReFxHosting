@@ -153,6 +153,19 @@ export class NodesService {
     }
   }
 
+  /**
+   * Ask the node's agent to restart itself in place. Game servers keep running
+   * and are re-adopted when the agent comes back. Does NOT power-cycle the host.
+   */
+  async restartAgent(id: string): Promise<{ restarting: true }> {
+    const node = await this.prisma.node.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!node) throw new NotFoundException('Node not found');
+    await this.agent.restartAgent(node);
+    return { restarting: true };
+  }
+
   update(id: string, dto: UpdateNodeDto): Promise<Node> {
     return this.prisma.node.update({ where: { id }, data: dto });
   }

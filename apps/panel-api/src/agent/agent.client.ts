@@ -146,6 +146,15 @@ export class NodeAgentClient {
     return this.request(node, 'DELETE', `/api/v1/servers/${serverId}`);
   }
 
+  /**
+   * Ask the agent to restart itself in place (re-exec). Running game containers
+   * keep running and are re-adopted when the fresh process boots. The agent
+   * replies before re-executing, so this resolves quickly.
+   */
+  restartAgent(node: Node) {
+    return this.request(node, 'POST', `/api/v1/system/restart`);
+  }
+
   /** Push a server's SFTP credential to the agent so a rotation takes effect live. */
   setSftpCredential(
     node: Node,

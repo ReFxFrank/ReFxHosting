@@ -202,6 +202,7 @@ export default function AdminNodesPage() {
   const [bootstrapToken, setBootstrapToken] = useState<string | null>(null);
   const [detailNode, setDetailNode] = useState<Node | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Node | null>(null);
+  const [restartTarget, setRestartTarget] = useState<Node | null>(null);
 
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["admin", "nodes"],
@@ -260,6 +261,16 @@ export default function AdminNodesPage() {
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to delete node"),
+  });
+
+  const restartAgentMutation = useMutation({
+    mutationFn: (id: string) => api.admin.restartNodeAgent(id),
+    onSuccess: () => {
+      toast.success("Agent restart requested — the node reconnects in a few seconds");
+      setRestartTarget(null);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to restart agent"),
   });
 
   return (
@@ -563,7 +574,13 @@ export default function AdminNodesPage() {
           {detailNode && <NodeDetailLive nodeId={detailNode.id} fallback={detailNode} />}
           {detailNode && <NodeServersPower nodeId={detailNode.id} />}
           {detailNode && <NodeHeartbeatChart nodeId={detailNode.id} />}
-          <DialogFooter>
+          <DialogFooter className="sm:justify-between">
+            <Button
+              variant="outline"
+              onClick={() => detailNode && setRestartTarget(detailNode)}
+            >
+              <RotateCw className="size-4" /> Restart agent
+            </Button>
             <Button variant="ghost" onClick={() => setDetailNode(null)}>
               Close
             </Button>
@@ -590,6 +607,33 @@ export default function AdminNodesPage() {
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
             >
               Delete node
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restart agent confirmation */}
+      <Dialog open={!!restartTarget} onOpenChange={(o) => !o && setRestartTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Restart agent on {restartTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              The node daemon restarts and reconnects within a few seconds.
+              Running game servers are <b>not</b> stopped — they keep running and
+              re-attach automatically. This does not reboot the VPS itself.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRestartTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              loading={restartAgentMutation.isPending}
+              onClick={() =>
+                restartTarget && restartAgentMutation.mutate(restartTarget.id)
+              }
+            >
+              <RotateCw className="size-4" /> Restart agent
             </Button>
           </DialogFooter>
         </DialogContent>
