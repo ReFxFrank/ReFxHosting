@@ -39,8 +39,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const user = await api.auth.me();
       set({ user, status: "authenticated" });
     } catch {
-      clearTokens();
-      set({ user: null, status: "unauthenticated" });
+      // If our tokens are gone, the refresh path determined we're truly logged
+      // out. If they're still present this was transient (e.g. the panel was
+      // mid-rebuild) — keep the session and retry shortly rather than logging
+      // the user out.
+      if (!getTokens()?.accessToken) {
+        clearTokens();
+        set({ user: null, status: "unauthenticated" });
+        return;
+      }
+      set((s) => ({ status: s.user ? "authenticated" : "loading" }));
+      setTimeout(() => {
+        void get().refreshUser();
+      }, 3000);
     }
   },
 

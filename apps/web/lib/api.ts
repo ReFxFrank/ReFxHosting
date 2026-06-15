@@ -79,24 +79,25 @@ async function doRefresh(): Promise<AuthTokens | null> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ refreshToken: tokens.refreshToken }),
     });
-    if (!res.ok) {
-      clearTokens();
-      return null;
+    if (res.ok) {
+      const json = (await res.json().catch(() => null)) as
+        | { success?: boolean; data?: AuthTokens }
+        | AuthTokens
+        | null;
+      const data = ((json as { data?: AuthTokens } | null)?.data ??
+        json) as AuthTokens | null;
+      if (data?.accessToken) {
+        setTokens(data);
+        return data;
+      }
     }
-    const json = (await res.json().catch(() => null)) as
-      | { success?: boolean; data?: AuthTokens }
-      | AuthTokens
-      | null;
-    const data = ((json as { data?: AuthTokens } | null)?.data ??
-      json) as AuthTokens | null;
-    if (!data?.accessToken) {
-      clearTokens();
-      return null;
-    }
-    setTokens(data);
-    return data;
+    // Only a definitive auth rejection means the refresh token is actually
+    // invalid → clear it. Transient failures (panel restarting: 5xx / network)
+    // keep the session so the user stays signed in once the panel returns.
+    if (res.status === 401 || res.status === 403) clearTokens();
+    return null;
   } catch {
-    clearTokens();
+    // Network error (e.g. the panel is mid-rebuild) — transient, keep tokens.
     return null;
   }
 }
@@ -150,7 +151,8 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     if (refreshed) {
       return request<T>(path, { ...opts, _retry: true });
     }
-    clearTokens();
+    // Don't clear here — doRefresh() already cleared tokens iff the refresh
+    // token was genuinely invalid (vs. a transient panel outage).
   }
 
   if (res.status === 204) return undefined as T;
