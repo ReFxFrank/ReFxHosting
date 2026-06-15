@@ -9,7 +9,11 @@ import {
   SIGN_HEADER_TIMESTAMP,
   deriveSigningKey,
   signRequest,
+  signRequestRaw,
 } from './agent.signing';
+
+/** The agent caps signed request bodies at 32 MiB; stay under it for uploads. */
+export const AGENT_MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 
 export type PowerSignal = 'start' | 'stop' | 'restart' | 'kill';
 
@@ -169,6 +173,64 @@ export class NodeAgentClient {
       content,
       { rawBody: true },
     );
+  }
+
+  /**
+   * Stream raw binary bytes (e.g. a mod jar) to the agent's /files/write. The
+   * HMAC is computed over the exact bytes, which is what the agent verifies, so
+   * the upload survives intact. Used by the mod installer; subject to the agent's
+   * 32 MiB signed-body cap (see AGENT_MAX_UPLOAD_BYTES).
+   */
+  async uploadFileBytes(
+    node: Node,
+    serverId: string,
+    relPath: string,
+    bytes: Uint8Array,
+  ): Promise<void> {
+    const path = `/api/v1/servers/${serverId}/files/write?path=${encodeURIComponent(
+      relPath,
+    )}`;
+    const url = `${this.baseUrl(node)}${path}`;
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = signRequestRaw(
+      this.signingKey(node),
+      'POST',
+      path,
+      timestamp,
+      bytes,
+    );
+
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(),
+      Math.max(this.timeoutMs, 60_000),
+    );
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/octet-stream',
+          [SIGN_HEADER_NODE]: node.id,
+          [SIGN_HEADER_TIMESTAMP]: timestamp,
+          [SIGN_HEADER_SIGNATURE]: signature,
+        },
+        body: bytes as unknown as BodyInit,
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new ServiceUnavailableException(
+          `Node agent upload error ${res.status}: ${text || res.statusText}`,
+        );
+      }
+    } catch (err: any) {
+      if (err instanceof ServiceUnavailableException) throw err;
+      throw new ServiceUnavailableException(
+        `Node ${node.name} unreachable: ${err.message}`,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   deleteFiles(node: Node, serverId: string, paths: string[]) {

@@ -64,6 +64,25 @@ export function signRequest(
 }
 
 /**
+ * Sign a request whose body is raw binary (e.g. a mod jar uploaded to the
+ * agent's /files/write). Identical canonical form to {@link signRequest} but the
+ * body hash is computed over the exact bytes, which is what the agent verifies.
+ */
+export function signRequestRaw(
+  key: string,
+  method: string,
+  path: string,
+  timestamp: string,
+  body: Uint8Array,
+): string {
+  const bodyHash = createHash('sha256').update(body).digest('hex');
+  const canonical = `${method.toUpperCase()}\n${pathWithoutQuery(
+    path,
+  )}\n${timestamp}\n${bodyHash}`;
+  return createHmac('sha256', key).update(canonical).digest('hex');
+}
+
+/**
  * Verify an inbound signature in constant time and enforce the replay window.
  * `body` is the raw request body string.
  */
