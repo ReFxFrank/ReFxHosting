@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ApiKey, ApiKeyScope } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
@@ -41,6 +45,35 @@ export class ApiKeyService {
       },
     });
     return { plaintext, record };
+  }
+
+  /** List a user's API keys (never exposes the hash). */
+  async list(userId: string) {
+    return this.prisma.apiKey.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        prefix: true,
+        scopes: true,
+        allowedIps: true,
+        lastUsedAt: true,
+        expiresAt: true,
+        revokedAt: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  /** Revoke (soft) a key owned by the user. Idempotent. */
+  async revoke(userId: string, id: string): Promise<void> {
+    const key = await this.prisma.apiKey.findFirst({ where: { id, userId } });
+    if (!key) throw new NotFoundException('API key not found');
+    await this.prisma.apiKey.updateMany({
+      where: { id, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   async authenticate(rawKey: string, ip?: string): Promise<AuthUser> {

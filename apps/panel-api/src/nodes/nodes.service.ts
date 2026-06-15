@@ -159,6 +159,31 @@ export class NodesService {
     return best?.node ?? null;
   }
 
+  /**
+   * Heartbeat history for a node within a relative range ("1h" | "6h" | "24h" |
+   * "7d"), newest first. Powers the admin node detail graphs.
+   */
+  async listHeartbeats(id: string, range = '1h'): Promise<unknown[]> {
+    await this.get(id);
+    const ms = this.rangeToMs(range);
+    const since = new Date(Date.now() - ms);
+    return this.prisma.nodeHeartbeat.findMany({
+      where: { nodeId: id, recordedAt: { gte: since } },
+      orderBy: { recordedAt: 'desc' },
+      take: 5000,
+    });
+  }
+
+  private rangeToMs(range: string): number {
+    const map: Record<string, number> = {
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+      '7d': 7 * 24 * 60 * 60 * 1000,
+    };
+    return map[range] ?? map['1h'];
+  }
+
   // ---- agent-facing endpoints --------------------------------------------
 
   /** The agent calls this with its bootstrap token to register & get config. */

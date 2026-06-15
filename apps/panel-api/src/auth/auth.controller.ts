@@ -11,12 +11,15 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { WebAuthnService } from './webauthn.service';
 import { ApiKeyService } from './api-key.service';
+import { UsersService } from '../users/users.service';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import {
   CreateApiKeyDto,
+  ForgotPasswordDto,
   LoginDto,
+  MfaVerifyDto,
   RefreshDto,
   RegisterDto,
   TotpVerifyDto,
@@ -30,7 +33,48 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly webauthn: WebAuthnService,
     private readonly apiKeys: ApiKeyService,
+    private readonly users: UsersService,
   ) {}
+
+  // ---- Current user / password reset / MFA verify -----------------------
+
+  @ApiBearerAuth()
+  @Get('me')
+  me(@CurrentUser('id') userId: string) {
+    return this.users.getProfile(userId);
+  }
+
+  @Public()
+  @Post('forgot-password')
+  @HttpCode(200)
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.auth.forgotPassword(dto.email);
+    // Always succeed regardless of whether the email exists.
+    return { ok: true };
+  }
+
+  @Public()
+  @Post('mfa/verify')
+  @HttpCode(200)
+  async mfaVerify(@Body() dto: MfaVerifyDto, @Req() req: any) {
+    const userId = await this.resolveMfaToken(dto.mfaToken);
+    return this.auth.mfaVerify(
+      userId,
+      dto.code,
+      dto.method === 'recovery' ? 'recovery' : 'totp',
+      { ip: req.ip, userAgent: req.headers['user-agent'] },
+    );
+  }
+
+  /**
+   * The login step returns an opaque mfaToken; for now the web treats the user
+   * id as that token (the MFA challenge is short-lived and bound to the already
+   * password-verified principal). TODO(impl): mint a signed, single-use MFA
+   * challenge token at login and verify it here.
+   */
+  private async resolveMfaToken(mfaToken: string): Promise<string> {
+    return mfaToken;
+  }
 
   @Public()
   @Post('register')

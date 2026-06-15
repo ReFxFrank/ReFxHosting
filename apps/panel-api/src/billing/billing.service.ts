@@ -53,6 +53,7 @@ export interface MarkPaidDetails {
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
   private readonly billingCfg: AppConfig['billing'];
+  private readonly panelUrl: string;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -62,6 +63,7 @@ export class BillingService {
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
   ) {
     this.billingCfg = this.config.get<AppConfig['billing']>('billing')!;
+    this.panelUrl = this.config.get<AppConfig['panelUrl']>('panelUrl')!;
   }
 
   // ---- Products & Prices -------------------------------------------------
@@ -118,6 +120,55 @@ export class BillingService {
         isActive: dto.isActive ?? true,
       },
     });
+  }
+
+  /** Admin: list all products (active and inactive) with their prices. */
+  listAllProducts(): Promise<Product[]> {
+    return this.prisma.product.findMany({
+      include: { prices: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  /** Admin: update a product's mutable fields. */
+  async updateProduct(
+    id: string,
+    dto: Partial<CreateProductDto>,
+  ): Promise<Product> {
+    await this.getProduct(id);
+    const data: Prisma.ProductUpdateInput = {};
+    if (dto.type !== undefined) data.type = dto.type;
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.slug !== undefined) data.slug = dto.slug;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.cpuCores !== undefined) data.cpuCores = dto.cpuCores;
+    if (dto.memoryMb !== undefined) data.memoryMb = dto.memoryMb;
+    if (dto.diskMb !== undefined) data.diskMb = dto.diskMb;
+    if (dto.slots !== undefined) data.slots = dto.slots;
+    if (dto.allowedTemplateIds !== undefined) {
+      data.allowedTemplateIds = dto.allowedTemplateIds;
+    }
+    return this.prisma.product.update({ where: { id }, data });
+  }
+
+  /** Admin: soft-deactivate a product (kept for invoice history integrity). */
+  async deleteProduct(id: string): Promise<Product> {
+    await this.getProduct(id);
+    return this.prisma.product.update({
+      where: { id },
+      data: { isActive: false },
+    });
+  }
+
+  /** Public catalog: a single active product resolved by its slug. */
+  async getActiveProductBySlug(slug: string): Promise<Product> {
+    const product = await this.prisma.product.findFirst({
+      where: { slug, isActive: true },
+      include: { prices: { where: { isActive: true } } },
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    return product;
   }
 
   // ---- Subscriptions -----------------------------------------------------
@@ -205,6 +256,21 @@ export class BillingService {
     });
   }
 
+  /**
+   * Resume a subscription scheduled to cancel at period end: clear the flag and
+   * re-enable auto-renew. Only valid while it is still in good standing.
+   */
+  async resumeSubscription(userId: string, id: string): Promise<Subscription> {
+    const sub = await this.getOwnedSubscription(userId, id);
+    if (sub.state === SubscriptionState.CANCELED || sub.state === SubscriptionState.EXPIRED) {
+      throw new BadRequestException('Subscription cannot be resumed');
+    }
+    return this.prisma.subscription.update({
+      where: { id },
+      data: { cancelAtPeriodEnd: false, autoRenew: true },
+    });
+  }
+
   // ---- Invoices ----------------------------------------------------------
 
   async listInvoices(
@@ -232,6 +298,55 @@ export class BillingService {
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
     return invoice;
+  }
+
+  /**
+   * Pay an OPEN invoice owned by the user. Charges the user's default payment
+   * method through the gateway and marks the invoice paid on success; on failure
+   * records a FAILED payment. Returns a (potentially) hosted checkout URL when no
+   * stored method exists so the web can redirect.
+   */
+  async payInvoice(
+    userId: string,
+    id: string,
+  ): Promise<{ paid: boolean; checkoutUrl?: string; reason?: string }> {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id, userId },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.state === InvoiceState.PAID) {
+      return { paid: true };
+    }
+    if (invoice.state !== InvoiceState.OPEN) {
+      throw new BadRequestException(`Invoice is ${invoice.state}, not payable`);
+    }
+
+    const method = await this.prisma.paymentMethod.findFirst({
+      where: { userId, isDefault: true },
+    });
+    if (!method) {
+      // No saved method: hand off to a hosted checkout session.
+      const session = await this.stripe.createCheckoutSession({
+        invoice,
+        successUrl: `${this.panelUrl}/billing/invoices/${invoice.id}?paid=1`,
+        cancelUrl: `${this.panelUrl}/billing/invoices/${invoice.id}`,
+      });
+      return { paid: false, checkoutUrl: session.url };
+    }
+
+    const result = await this.stripe.charge(invoice, method.gatewayRef);
+    if (result.success) {
+      await this.markInvoicePaid(invoice.id, {
+        gateway: this.stripe.name,
+        gatewayRef: result.gatewayRef,
+      });
+      return { paid: true };
+    }
+    await this.handlePaymentFailure(invoice.id, result.failureReason ?? 'charge failed', {
+      gateway: this.stripe.name,
+      gatewayRef: result.gatewayRef,
+    });
+    return { paid: false, reason: result.failureReason };
   }
 
   /**
@@ -499,6 +614,53 @@ export class BillingService {
       where: { userId },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     });
+  }
+
+  private async getOwnedPaymentMethod(
+    userId: string,
+    id: string,
+  ): Promise<PaymentMethod> {
+    const method = await this.prisma.paymentMethod.findFirst({
+      where: { id, userId },
+    });
+    if (!method) throw new NotFoundException('Payment method not found');
+    return method;
+  }
+
+  /** Remove a stored payment method owned by the user. */
+  async removePaymentMethod(userId: string, id: string): Promise<void> {
+    await this.getOwnedPaymentMethod(userId, id);
+    // TODO(impl): detach the PaymentMethod from the processor (stripe.detach).
+    await this.prisma.paymentMethod.delete({ where: { id } });
+  }
+
+  /** Mark a payment method as the user's default (clears the flag on others). */
+  async setDefaultPaymentMethod(
+    userId: string,
+    id: string,
+  ): Promise<PaymentMethod> {
+    await this.getOwnedPaymentMethod(userId, id);
+    await this.prisma.$transaction([
+      this.prisma.paymentMethod.updateMany({
+        where: { userId, isDefault: true },
+        data: { isDefault: false },
+      }),
+      this.prisma.paymentMethod.update({
+        where: { id },
+        data: { isDefault: true },
+      }),
+    ]);
+    return this.getOwnedPaymentMethod(userId, id);
+  }
+
+  /**
+   * Begin adding a payment method: return the client material the web needs to
+   * collect card details. TODO(impl): create a real Stripe SetupIntent and return
+   * its client_secret; the placeholder URL keeps the flow wired end-to-end.
+   */
+  async createSetupIntent(userId: string): Promise<{ url: string; clientSecret?: string }> {
+    void userId;
+    return { url: `${this.panelUrl}/billing/payment-methods/add` };
   }
 
   // ---- Renewal & dunning (driven by the billing-renewal queue) -----------

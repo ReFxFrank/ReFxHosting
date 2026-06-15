@@ -1,0 +1,160 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type GameSwitchLog {
+  createdAt: DateTime!
+  fromTemplate: String
+  id: String!
+  preservedData: Boolean!
+  toTemplate: String!
+}
+
+type GlobalAlert {
+  body: String!
+  createdAt: DateTime!
+  endsAt: DateTime
+  id: ID!
+  isActive: Boolean!
+  severity: String!
+  startsAt: DateTime
+  title: String!
+}
+
+type Invoice {
+  amountPaidMinor: Int!
+  createdAt: DateTime!
+  currency: String!
+  dueAt: DateTime
+  id: ID!
+  number: String!
+  paidAt: DateTime
+  state: String!
+  subscriptionId: ID
+  subtotalMinor: Int!
+  taxMinor: Int!
+  taxRatePct: Float
+  taxType: String
+  totalMinor: Int!
+}
+
+type KbArticle {
+  body: String!
+  category: String
+  createdAt: DateTime!
+  id: ID!
+  isPublished: Boolean!
+  slug: String!
+  title: String!
+  updatedAt: DateTime!
+  views: Int!
+}
+
+type Node {
+  agentVersion: String
+  cpuCores: Int!
+  cpuOvercommit: Float
+  createdAt: DateTime!
+  diskMb: Int!
+  fqdn: String!
+  id: String!
+  maintenance: Boolean!
+  memoryMb: Int!
+  name: String!
+  os: String!
+  state: String!
+}
+
+type Notification {
+  body: String!
+  channel: String!
+  createdAt: DateTime!
+  id: ID!
+  readAt: DateTime
+  title: String!
+}
+
+type Product {
+  cpuCores: Float
+  createdAt: DateTime!
+  description: String
+  diskMb: Int
+  id: ID!
+  isActive: Boolean!
+  memoryMb: Int
+  name: String!
+  slots: Int
+  slug: String!
+  type: String!
+}
+
+type Query {
+  activeAlerts: [GlobalAlert!]!
+  kbArticles: [KbArticle!]!
+  me: User!
+  myInvoices(page: Int, pageSize: Int): [Invoice!]!
+  myNotifications(page: Int = 1, pageSize: Int = 25): [Notification!]!
+  myServers: [Server!]!
+  mySubscriptions: [Subscription!]!
+  myTickets: [Ticket!]!
+  nodes(page: Int, pageSize: Int): [Node!]!
+  products: [Product!]!
+  server(id: String!): Server!
+  serverGameHistory(id: String!): [GameSwitchLog!]!
+  ticket(id: ID!): Ticket!
+  users(page: Int = 1, pageSize: Int = 25, q: String): [User!]!
+}
+
+type Server {
+  cpuCores: Float!
+  createdAt: DateTime!
+  deployMethod: String!
+  description: String
+  diskMb: Int!
+  id: String!
+  memoryMb: Int!
+  name: String!
+  shortId: String!
+  state: String!
+  templateId: String
+  templateVersion: Int
+}
+
+type Subscription {
+  autoRenew: Boolean!
+  cancelAtPeriodEnd: Boolean!
+  createdAt: DateTime!
+  currentPeriodEnd: DateTime!
+  currentPeriodStart: DateTime!
+  gateway: String!
+  id: ID!
+  interval: String!
+  priceId: ID!
+  productId: ID!
+  state: String!
+}
+
+type Ticket {
+  createdAt: DateTime!
+  id: ID!
+  number: Int!
+  priority: String!
+  slaBreached: Boolean!
+  state: String!
+  subject: String!
+}
+
+type User {
+  createdAt: DateTime!
+  email: String!
+  firstName: String
+  globalRole: String!
+  id: ID!
+  lastName: String
+  state: String!
+}

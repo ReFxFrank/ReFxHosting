@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -92,6 +93,20 @@ export class BillingController {
     return this.billing.cancelSubscription(userId, id, atEnd);
   }
 
+  @Post('subscriptions/:id/resume')
+  @HttpCode(200)
+  @Audit({
+    action: 'billing.subscription.resume',
+    targetType: 'Subscription',
+    targetParam: 'id',
+  })
+  resumeSubscription(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.billing.resumeSubscription(userId, id);
+  }
+
   // ---- Invoices ----------------------------------------------------------
 
   @Get('invoices')
@@ -105,6 +120,13 @@ export class BillingController {
   @Get('invoices/:id')
   getInvoice(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.billing.getInvoice(userId, id);
+  }
+
+  @Post('invoices/:id/pay')
+  @HttpCode(200)
+  @Audit({ action: 'billing.invoice.pay', targetType: 'Invoice', targetParam: 'id' })
+  payInvoice(@CurrentUser('id') userId: string, @Param('id') id: string) {
+    return this.billing.payInvoice(userId, id);
   }
 
   // ---- Payment methods ---------------------------------------------------
@@ -121,5 +143,40 @@ export class BillingController {
     @Body() dto: AddPaymentMethodDto,
   ) {
     return this.billing.addPaymentMethod(userId, dto);
+  }
+
+  @Post('payment-methods/setup')
+  @HttpCode(200)
+  @Audit({ action: 'billing.payment_method.setup', targetType: 'PaymentMethod' })
+  setupPaymentMethod(@CurrentUser('id') userId: string) {
+    return this.billing.createSetupIntent(userId);
+  }
+
+  @Post('payment-methods/:id/default')
+  @HttpCode(200)
+  @Audit({
+    action: 'billing.payment_method.default',
+    targetType: 'PaymentMethod',
+    targetParam: 'id',
+  })
+  setDefaultPaymentMethod(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.billing.setDefaultPaymentMethod(userId, id);
+  }
+
+  @Delete('payment-methods/:id')
+  @HttpCode(204)
+  @Audit({
+    action: 'billing.payment_method.remove',
+    targetType: 'PaymentMethod',
+    targetParam: 'id',
+  })
+  removePaymentMethod(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.billing.removePaymentMethod(userId, id);
   }
 }

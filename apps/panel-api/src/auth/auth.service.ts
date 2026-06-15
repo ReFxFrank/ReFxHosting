@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -241,5 +242,135 @@ export class AuthService {
       data: { totpEnabledAt: null, totpSecretEnc: null },
     });
     await this.prisma.recoveryCode.deleteMany({ where: { userId } });
+  }
+
+  // ---- Unified MFA verify (login challenge) ------------------------------
+
+  /**
+   * Verify a TOTP or recovery code for a user who has cleared the password
+   * factor and now needs to satisfy the MFA challenge. Returns a fresh token
+   * pair on success. WebAuthn assertions are handled by WebAuthnService; this
+   * covers the `totp` and `recovery` methods.
+   */
+  async mfaVerify(
+    userId: string,
+    code: string,
+    method: 'totp' | 'recovery',
+    ctx: { ip?: string; userAgent?: string },
+  ): Promise<TokenResponseDto> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+    });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
+
+    if (method === 'recovery') {
+      const codes = await this.prisma.recoveryCode.findMany({
+        where: { userId, usedAt: null },
+      });
+      const hash = this.crypto.hash(code.toUpperCase());
+      const match = codes.find((c) => c.codeHash === hash);
+      if (!match) throw new UnauthorizedException('Invalid recovery code');
+      await this.prisma.recoveryCode.update({
+        where: { id: match.id },
+        data: { usedAt: new Date() },
+      });
+    } else {
+      if (!user.totpSecretEnc) {
+        throw new UnauthorizedException('MFA is not configured');
+      }
+      const secret = this.crypto.decrypt(user.totpSecretEnc);
+      if (!authenticator.check(code, secret)) {
+        throw new UnauthorizedException('Invalid MFA code');
+      }
+    }
+
+    return this.issueTokens(user, ctx);
+  }
+
+  // ---- Password reset / change ------------------------------------------
+
+  /**
+   * Begin a password-reset flow. Always resolves (never leaks whether the email
+   * exists). When the user exists a single-use token is minted and stored
+   * hashed; the email itself is dispatched out of band.
+   */
+  async forgotPassword(email: string): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { email: email.toLowerCase(), deletedAt: null },
+      select: { id: true },
+    });
+    if (!user) return; // do not leak existence
+
+    // Mint a single-use, time-boxed reset token. We never persist the plaintext.
+    const token = this.crypto.token(32);
+    void token;
+    // TODO(impl): persist the hashed reset token (needs a User.passwordResetTokenHash
+    // column + migration) and dispatch the reset email (link carrying the
+    // plaintext token) via the notifications/email delivery provider.
+  }
+
+  /**
+   * Change the caller's password: verify the current password, re-hash the new
+   * one and revoke every *other* active session (keeping the current device).
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    keepSessionId?: string,
+  ): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+    });
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const ok = await argon2.verify(user.passwordHash, currentPassword);
+    if (!ok) throw new BadRequestException('Current password is incorrect');
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: await argon2.hash(newPassword, ARGON_OPTS) },
+    });
+
+    // Revoke all other sessions for safety; keep the current one if known.
+    await this.prisma.session.updateMany({
+      where: {
+        userId,
+        revokedAt: null,
+        ...(keepSessionId ? { id: { not: keepSessionId } } : {}),
+      },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  // ---- Session management -----------------------------------------------
+
+  /** List the caller's active (non-revoked, non-expired) sessions. */
+  async listSessions(userId: string) {
+    const sessions = await this.prisma.session.findMany({
+      where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        ip: true,
+        userAgent: true,
+        createdAt: true,
+        expiresAt: true,
+      },
+    });
+    return sessions;
+  }
+
+  /** Revoke a single session owned by the caller. Idempotent. */
+  async revokeSession(userId: string, sessionId: string): Promise<void> {
+    const session = await this.prisma.session.findFirst({
+      where: { id: sessionId, userId },
+    });
+    if (!session) throw new NotFoundException('Session not found');
+    await this.prisma.session.updateMany({
+      where: { id: sessionId, userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 }

@@ -37,6 +37,6 @@ import { AlertsController } from './alerts.controller';
     AlertsService,
     PlatformResolver,
   ],
-  exports: [MetricsService, NotificationsService],
+  exports: [MetricsService, NotificationsService, AlertsService, AuditService],
 })
 export class PlatformModule {}

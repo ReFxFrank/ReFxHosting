@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   MinLength,
@@ -50,6 +51,27 @@ export class RefreshDto {
   @ApiProperty()
   @IsString()
   refreshToken!: string;
+}
+
+export class ForgotPasswordDto {
+  @ApiProperty()
+  @IsEmail()
+  email!: string;
+}
+
+export class MfaVerifyDto {
+  @ApiProperty({ description: 'Opaque token returned by the login MFA challenge' })
+  @IsString()
+  mfaToken!: string;
+
+  @ApiProperty({ description: 'TOTP or recovery code' })
+  @IsString()
+  code!: string;
+
+  @ApiPropertyOptional({ enum: ['totp', 'recovery'], default: 'totp' })
+  @IsOptional()
+  @IsIn(['totp', 'recovery'])
+  method?: 'totp' | 'recovery';
 }
 
 export class TotpVerifyDto {

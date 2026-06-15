@@ -15,6 +15,7 @@ import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 import { AgentModule } from './agent/agent.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { AccountModule } from './account/account.module';
 import { NodesModule } from './nodes/nodes.module';
 import { ServersModule } from './servers/servers.module';
 import { FilesModule } from './files/files.module';
@@ -25,6 +26,11 @@ import { SftpModule } from './sftp/sftp.module';
 import { BillingModule } from './billing/billing.module';
 import { SupportModule } from './support/support.module';
 import { PlatformModule } from './platform/platform.module';
+import { TemplatesModule } from './templates/templates.module';
+import { AdminModule } from './admin/admin.module';
+import { CatalogModule } from './catalog/catalog.module';
+import { OrdersModule } from './orders/orders.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { QueuesModule } from './queues/queues.module';
 import { MetricsInterceptor } from './platform/metrics.interceptor';
 
@@ -84,6 +90,7 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     // Features
     AuthModule,
     UsersModule,
+    AccountModule,
     NodesModule,
     ServersModule,
     FilesModule,
@@ -94,6 +101,11 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     BillingModule,
     SupportModule,
     PlatformModule,
+    TemplatesModule,
+    AdminModule,
+    CatalogModule,
+    OrdersModule,
+    DashboardModule,
     QueuesModule,
   ],
   providers: [

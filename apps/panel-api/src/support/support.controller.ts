@@ -150,8 +150,19 @@ export class SupportController {
     return this.support.listArticles(user);
   }
 
+  // Web-facing aliases (`/support/kb`) for the knowledge base.
+  @Get('kb')
+  listKb(@CurrentUser() user: AuthUser) {
+    return this.support.listArticles(user);
+  }
+
   @Get('kb-articles/:slug')
   getArticle(@CurrentUser() user: AuthUser, @Param('slug') slug: string) {
+    return this.support.getArticle(user, slug);
+  }
+
+  @Get('kb/:slug')
+  getKbArticle(@CurrentUser() user: AuthUser, @Param('slug') slug: string) {
     return this.support.getArticle(user, slug);
   }
 
