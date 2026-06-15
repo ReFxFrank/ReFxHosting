@@ -3,17 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import {
-  LogOut,
-  Menu,
-  Moon,
-  Sun,
-  UserCog,
-  CreditCard,
-  Shield,
-} from "lucide-react";
-import { LogoMark } from "@/components/brand/logo";
+import { LogOut, Menu, Moon, Sun, UserCog, ArrowLeft, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,14 +18,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuthStore } from "@/store/auth";
 import { useUiStore } from "@/store/ui";
 import { initials } from "@/lib/utils";
-import { customerNav } from "./nav-config";
+import { adminNavItems } from "./nav-config";
 
-const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
-
-export function TopNav() {
+export function AdminTopNav() {
   const router = useRouter();
   const { theme, setTheme } = useTheme();
-  const { user, logout, isAdmin } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
 
   async function handleLogout() {
@@ -41,18 +31,33 @@ export function TopNav() {
     router.replace("/login");
   }
 
+  const roleLabel = user?.globalRole === "OWNER" ? "Owner" : "Admin";
+
   return (
-    <header className="refx-beam sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-white/[0.06] bg-[rgba(7,13,24,0.7)] px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-[rgba(7,13,24,0.55)]">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-white/[0.08] bg-[rgba(5,8,16,0.8)] px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-[rgba(5,8,16,0.6)]">
       <Button variant="ghost" size="icon" className="md:hidden" onClick={toggleSidebar}>
         <Menu className="size-5" />
       </Button>
 
-      <Link href="/dashboard" className="flex items-center gap-2 md:hidden">
-        <LogoMark size={24} />
-        <span className="font-semibold tracking-tight">{BRAND}</span>
+      <Link href="/admin" className="flex items-center gap-2 md:hidden">
+        <ShieldCheck className="size-5 text-[hsl(var(--primary))]" />
+        <span className="font-semibold tracking-tight">Staff Panel</span>
       </Link>
 
+      <Badge
+        variant="outline"
+        className="hidden border-primary/40 bg-primary/10 text-[hsl(var(--primary))] sm:inline-flex"
+      >
+        <ShieldCheck className="size-3.5" /> {roleLabel}
+      </Badge>
+
       <div className="ml-auto flex items-center gap-2">
+        <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
+          <Link href="/dashboard">
+            <ArrowLeft className="size-4" /> Client area
+          </Link>
+        </Button>
+
         <Button
           variant="ghost"
           size="icon"
@@ -83,16 +88,11 @@ export function TopNav() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => router.push("/account")}>
-              <UserCog className="size-4" /> Account
+              <UserCog className="size-4" /> My account
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => router.push("/billing")}>
-              <CreditCard className="size-4" /> Billing
+            <DropdownMenuItem onClick={() => router.push("/dashboard")}>
+              <ArrowLeft className="size-4" /> Exit to client area
             </DropdownMenuItem>
-            {isAdmin() && (
-              <DropdownMenuItem onClick={() => router.push("/admin")}>
-                <Shield className="size-4" /> Staff panel
-              </DropdownMenuItem>
-            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem destructive onClick={handleLogout}>
               <LogOut className="size-4" /> Sign out
@@ -104,15 +104,14 @@ export function TopNav() {
   );
 }
 
-export function MobileNav() {
-  // Lightweight mobile drawer-less nav rendered below topnav on small screens.
+export function AdminMobileNav() {
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b border-white/[0.06] bg-[rgba(7,13,24,0.5)] px-2 py-2 backdrop-blur md:hidden">
-      {customerNav.map((item) => (
+    <nav className="flex gap-1 overflow-x-auto border-b border-white/[0.08] bg-[rgba(5,8,16,0.6)] px-2 py-2 backdrop-blur md:hidden">
+      {adminNavItems.map((item) => (
         <Link
           key={item.href}
           href={item.href}
-          className="flex shrink-0 items-center gap-1.5 rounded-md border border-transparent px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-white/[0.06] hover:bg-white/[0.04] hover:text-foreground"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-transparent px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-white/[0.07] hover:bg-white/[0.04] hover:text-foreground"
         >
           <item.icon className="size-4" />
           {item.label}

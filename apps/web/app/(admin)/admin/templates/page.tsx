@@ -195,8 +195,8 @@ export default function AdminTemplatesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Game templates"
-        description="Manage the eggs used to install and run games on nodes."
+        title="Eggs"
+        description="Game templates (eggs) used to install and run games on nodes."
         actions={
           <Button onClick={openNew}>
             <Plus className="size-4" /> New template

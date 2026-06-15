@@ -1,21 +1,26 @@
 "use client";
 
-import { Sidebar } from "@/components/layout/sidebar";
-import { TopNav, MobileNav } from "@/components/layout/topnav";
+import { AdminSidebar } from "@/components/layout/admin-sidebar";
+import { AdminTopNav, AdminMobileNav } from "@/components/layout/admin-topnav";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { Skeleton } from "@/components/ui/skeleton";
 
+/**
+ * Dedicated staff/admin shell — its own sidebar, top bar and accent (the
+ * `admin-scope` class re-tints the primary accent). Access is gated to
+ * ADMIN/OWNER here (client) and again server-side by the admin controller's
+ * RolesGuard; non-admins are redirected to /dashboard by the hook.
+ */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  // Non-admins are redirected to /dashboard by the hook; until then show a shell.
   const { authorized } = useRequireAuth({ roles: ["ADMIN", "OWNER"] });
 
   return (
-    <div className="flex min-h-svh">
-      <Sidebar />
+    <div className="admin-scope flex min-h-svh bg-[hsl(var(--background))]">
+      <AdminSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <TopNav />
-        <MobileNav />
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-5 lg:p-6">
+        <AdminTopNav />
+        <AdminMobileNav />
+        <main className="mx-auto w-full max-w-[1400px] flex-1 p-4 sm:p-5 lg:p-6">
           {authorized ? children : <LoadingShell />}
         </main>
       </div>

@@ -8,8 +8,7 @@ import { LogoMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
-import { useAuthStore } from "@/store/auth";
-import { mainNav, adminNav, type NavItem } from "./nav-config";
+import { customerNav, type NavItem } from "./nav-config";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
@@ -50,7 +49,6 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
 
 export function Sidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUiStore();
-  const isAdmin = useAuthStore((s) => s.user?.globalRole === "ADMIN" || s.user?.globalRole === "OWNER");
 
   return (
     <aside
@@ -74,19 +72,9 @@ export function Sidebar() {
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
-        {mainNav.map((item) => (
+        {customerNav.map((item) => (
           <NavLink key={item.href} item={item} collapsed={sidebarCollapsed} />
         ))}
-        {isAdmin && (
-          <>
-            <div className={cn("refx-eyebrow my-2 px-3 pt-2", sidebarCollapsed && "hidden")}>
-              Administration
-            </div>
-            {adminNav.map((item) => (
-              <NavLink key={item.href} item={item} collapsed={sidebarCollapsed} />
-            ))}
-          </>
-        )}
       </nav>
 
       <div className="border-t border-white/[0.06] p-2">

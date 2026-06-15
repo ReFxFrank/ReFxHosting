@@ -41,7 +41,13 @@ export default function TwoFactorPage() {
       if (res.accessToken && res.refreshToken) {
         sessionStorage.removeItem("refx.mfa");
         await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, mfa?.remember ?? true);
-        router.replace(mfa.next || "/dashboard");
+        {
+          const role = useAuthStore.getState().user?.globalRole;
+          const staff = role === "ADMIN" || role === "OWNER";
+          router.replace(
+            mfa.next && mfa.next !== "/dashboard" ? mfa.next : staff ? "/admin" : "/dashboard",
+          );
+        }
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Invalid code");
@@ -60,7 +66,13 @@ export default function TwoFactorPage() {
       if (res.accessToken && res.refreshToken) {
         sessionStorage.removeItem("refx.mfa");
         await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, mfa?.remember ?? true);
-        router.replace(mfa.next || "/dashboard");
+        {
+          const role = useAuthStore.getState().user?.globalRole;
+          const staff = role === "ADMIN" || role === "OWNER";
+          router.replace(
+            mfa.next && mfa.next !== "/dashboard" ? mfa.next : staff ? "/admin" : "/dashboard",
+          );
+        }
       }
     } catch {
       /* expected while stubbed */

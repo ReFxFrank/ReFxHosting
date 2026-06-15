@@ -126,6 +126,20 @@
     --sidebar-accent: 217 44% 15%;
     --sidebar-border: 214 38% 20%;
   }
+
+  /* Admin / Staff scope — same ReFx Glassy foundation, re-tinted to a stronger
+     violet "operational" accent so the staff panel reads as a distinct, serious
+     management surface (not a page inside the client area). Only accent tokens
+     are remapped, so light/dark backgrounds + text contrast stay intact; the
+     darker chrome is applied at the component level (admin sidebar/top bar). */
+  .admin-scope {
+    --primary: 262 83% 64%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 262 83% 66%;
+    --accent: 258 30% 16%;
+    --accent-foreground: 258 100% 95%;
+    --sidebar-accent: 258 30% 15%;
+  }
 }
 
 @layer base {
