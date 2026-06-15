@@ -139,16 +139,12 @@ export default function ConsolePage() {
   }, [id]);
 
   async function power(signal: "start" | "stop" | "restart" | "kill") {
-    // Prefer sending over the socket for instant feedback; fall back to REST.
-    if (socketRef.current && connected) {
-      socketRef.current.sendPower(signal);
-    } else {
-      try {
-        await api.servers.power(id, signal);
-      } catch {
-        toast.error("Power action failed");
-        return;
-      }
+    // Power actions go over REST (the console gateway only handles console I/O).
+    try {
+      await api.servers.power(id, signal);
+    } catch {
+      toast.error("Power action failed");
+      return;
     }
     toast.success(`Sent ${signal} signal`);
   }
