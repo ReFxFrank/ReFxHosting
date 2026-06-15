@@ -9,7 +9,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { NodeAgentClient } from '../agent/agent.client';
 import { deriveSigningKey } from '../agent/agent.signing';
-import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
+import {
+  isJavaImage,
+  latestJavaDefault,
+  resolveJavaImage,
+} from '../common/util/java-version.util';
 import { uuidv7 } from '../common/util/uuid';
 import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
 import {
@@ -336,8 +340,12 @@ export class NodesService {
       let dockerImage = server.dockerImage ?? '';
       if (isJavaImage(dockerImage)) {
         dockerImage =
-          resolveJavaImage(dockerImage, env['MINECRAFT_VERSION'], 'jre') ??
-          dockerImage;
+          resolveJavaImage(
+            dockerImage,
+            env['MINECRAFT_VERSION'],
+            'jre',
+            latestJavaDefault(template?.slug),
+          ) ?? dockerImage;
       }
 
       return {

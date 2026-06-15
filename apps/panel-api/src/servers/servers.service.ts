@@ -34,7 +34,11 @@ import {
   pickFreePort,
   isPortEnvName,
 } from './allocation-port.util';
-import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
+import {
+  isJavaImage,
+  latestJavaDefault,
+  resolveJavaImage,
+} from '../common/util/java-version.util';
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
@@ -121,6 +125,7 @@ export class ServersService {
     const dockerImage = this.resolveDockerImage(
       template.dockerImages,
       dto.environment,
+      template.slug,
     );
 
     const limits = {
@@ -199,6 +204,7 @@ export class ServersService {
     const dockerImage = this.resolveDockerImage(
       template.dockerImages,
       dto.environment,
+      template.slug,
     );
 
     const server = await this.prisma.server.create({
@@ -345,6 +351,7 @@ export class ServersService {
     const dockerImage = this.resolveDockerImage(
       target.dockerImages,
       dto.environment,
+      target.slug,
     );
     const gameSwitchLogId = uuidv7();
 
@@ -827,6 +834,7 @@ export class ServersService {
   private resolveDockerImage(
     images: Prisma.JsonValue,
     environment?: Record<string, unknown> | null,
+    templateSlug?: string | null,
   ): string | undefined {
     const base = this.firstDockerImage(images);
     if (!isJavaImage(base)) return base;
@@ -835,7 +843,7 @@ export class ServersService {
       env['MINECRAFT_VERSION'] != null
         ? String(env['MINECRAFT_VERSION'])
         : 'latest';
-    return resolveJavaImage(base, mc, 'jre');
+    return resolveJavaImage(base, mc, 'jre', latestJavaDefault(templateSlug));
   }
 
   private firstDockerImage(images: Prisma.JsonValue): string | undefined {
