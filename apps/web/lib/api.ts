@@ -76,7 +76,16 @@ async function doRefresh(): Promise<AuthTokens | null> {
       clearTokens();
       return null;
     }
-    const data = (await res.json()) as AuthTokens;
+    const json = (await res.json().catch(() => null)) as
+      | { success?: boolean; data?: AuthTokens }
+      | AuthTokens
+      | null;
+    const data = ((json as { data?: AuthTokens } | null)?.data ??
+      json) as AuthTokens | null;
+    if (!data?.accessToken) {
+      clearTokens();
+      return null;
+    }
     setTokens(data);
     return data;
   } catch {
@@ -142,6 +151,8 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const isJson = res.headers.get("content-type")?.includes("application/json");
   const data = isJson ? await res.json().catch(() => null) : await res.text();
 
+  // unwrap below after error handling
+
   if (!res.ok) {
     const message =
       (isJson && (data?.message || data?.error)) ||
@@ -154,6 +165,22 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
       isJson ? data?.code : undefined,
       isJson ? data?.details ?? data?.errors : undefined,
     );
+  }
+
+  // The panel-api wraps successful REST responses in a { success, data }
+  // envelope ({ success, data, meta } for paginated). Unwrap so callers receive
+  // the payload (or { data, meta }) directly.
+  if (
+    isJson &&
+    data &&
+    typeof data === "object" &&
+    (data as { success?: unknown }).success === true &&
+    "data" in (data as object)
+  ) {
+    const env = data as { success: true; data: unknown; meta?: unknown };
+    return (env.meta !== undefined
+      ? { data: env.data, meta: env.meta }
+      : env.data) as T;
   }
 
   return data as T;
