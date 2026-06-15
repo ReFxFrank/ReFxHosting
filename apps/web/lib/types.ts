@@ -96,7 +96,7 @@ export interface Node {
   name: string;
   fqdn: string;
   regionId: string;
-  region?: { id: string; code: string; name: string };
+  region?: { id: string; code: string; name: string; country?: string | null };
   os: NodeOs;
   state: NodeState;
   maintenance: boolean;
@@ -105,6 +105,8 @@ export interface Node {
   memoryMb: number;
   diskMb: number;
   servers?: number;
+  /** Most-recent heartbeat for live gauges (null until the agent reports). */
+  latestHeartbeat?: NodeHeartbeat | null;
   createdAt: string;
 }
 
@@ -116,6 +118,12 @@ export interface NodeHeartbeat {
   netTxBytes: number;
   containers: number;
   recordedAt: string;
+}
+
+/** Panel -> agent round-trip latency probe result. */
+export interface NodePing {
+  ms: number | null;
+  reachable: boolean;
 }
 
 export interface GameCategory {

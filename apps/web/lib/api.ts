@@ -13,6 +13,7 @@ import type {
   LoginResponse,
   Node,
   NodeHeartbeat,
+  NodePing,
   Notification,
   Paginated,
   PaymentMethod,
@@ -442,6 +443,7 @@ export const api = {
     node: (id: string) => http.get<Node>(`/admin/nodes/${id}`),
     nodeHeartbeats: (id: string, range = "1h") =>
       getList<NodeHeartbeat>(`/admin/nodes/${id}/heartbeats`, { query: { range } }),
+    nodePing: (id: string) => http.get<NodePing>(`/admin/nodes/${id}/ping`),
     createNode: (input: Partial<Node> & { regionId: string }) =>
       http.post<Node & { bootstrapToken: string }>("/admin/nodes", input),
     setNodeMaintenance: (id: string, maintenance: boolean) =>

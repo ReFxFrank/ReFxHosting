@@ -7,6 +7,7 @@ import { ConfigService } from '@nestjs/config';
 import { Node } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
+import { NodeAgentClient } from '../agent/agent.client';
 import { deriveSigningKey } from '../agent/agent.signing';
 import { uuidv7 } from '../common/util/uuid';
 import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
@@ -24,6 +25,7 @@ export class NodesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly agent: NodeAgentClient,
     config: ConfigService,
   ) {
     this.secretsEncKey = config.get<string>('secretsEncKey')!;
@@ -52,7 +54,28 @@ export class NodesService {
     return { node, bootstrapToken };
   }
 
-  async list(pagination: PaginationDto): Promise<Paginated<Node>> {
+  /**
+   * Shape returned to the admin UI: the Node row plus its region (name +
+   * country) and the single most-recent NodeHeartbeat. The UI renders gauges
+   * from the heartbeat against the node's advertised capacity.
+   */
+  private readonly adminNodeInclude = {
+    region: { select: { id: true, code: true, name: true, country: true } },
+    heartbeats: {
+      orderBy: { recordedAt: 'desc' as const },
+      take: 1,
+    },
+  };
+
+  /** Flatten the `heartbeats` array into a single `latestHeartbeat` field. */
+  private decorate<
+    T extends { heartbeats?: { recordedAt: Date }[] },
+  >(node: T) {
+    const { heartbeats, ...rest } = node;
+    return { ...rest, latestHeartbeat: heartbeats?.[0] ?? null };
+  }
+
+  async list(pagination: PaginationDto): Promise<Paginated<unknown>> {
     const where = { deletedAt: null };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.node.findMany({
@@ -60,18 +83,39 @@ export class NodesService {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { createdAt: 'desc' },
+        include: this.adminNodeInclude,
       }),
       this.prisma.node.count({ where }),
     ]);
-    return paginate(data, total, pagination);
+    return paginate(data.map((n) => this.decorate(n)), total, pagination);
   }
 
   async get(id: string): Promise<Node> {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
+      include: this.adminNodeInclude,
     });
     if (!node) throw new NotFoundException('Node not found');
-    return node;
+    return this.decorate(node) as unknown as Node;
+  }
+
+  /**
+   * Measure panel -> agent round-trip latency by hitting a cheap agent endpoint
+   * (its `/api/v1/system` status route). Returns the elapsed milliseconds and a
+   * `reachable` flag; on timeout / connection failure `reachable` is false.
+   */
+  async ping(id: string): Promise<{ ms: number | null; reachable: boolean }> {
+    const node = await this.prisma.node.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!node) throw new NotFoundException('Node not found');
+    const started = Date.now();
+    try {
+      await this.agent.fetchAgentStatus(node);
+      return { ms: Date.now() - started, reachable: true };
+    } catch {
+      return { ms: null, reachable: false };
+    }
   }
 
   update(id: string, dto: UpdateNodeDto): Promise<Node> {

@@ -85,6 +85,11 @@ export class AdminController {
     return this.nodes.listHeartbeats(id, range ?? '1h');
   }
 
+  @Get('nodes/:id/ping')
+  nodePing(@Param('id') id: string) {
+    return this.nodes.ping(id);
+  }
+
   @Patch('nodes/:id')
   @Audit({ action: 'admin.node.update', targetType: 'Node', targetParam: 'id' })
   updateNode(@Param('id') id: string, @Body() dto: UpdateNodeDto) {

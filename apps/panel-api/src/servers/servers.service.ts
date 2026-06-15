@@ -28,6 +28,12 @@ import {
   SwitchGameDto,
 } from './dto/server.dto';
 import { AdminCreateServerDto } from '../admin/dto/admin.dto';
+import {
+  PORT_RANGE_START,
+  PORT_RANGE_END,
+  pickFreePort,
+  isPortEnvName,
+} from './allocation-port.util';
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
@@ -147,11 +153,14 @@ export class ServersService {
       },
     });
 
+    // Reserve a reachable public port and wire it into the startup env.
+    await this.assignPrimaryAllocation(nodeId, server.id);
+
     await this.provisionQueue.add(JOB.PROVISION, {
       serverId: server.id,
     } satisfies ProvisionJob);
 
-    return server;
+    return this.prisma.server.findUniqueOrThrow({ where: { id: server.id } });
   }
 
   /**
@@ -204,11 +213,14 @@ export class ServersService {
       },
     });
 
+    // Reserve a reachable public port and wire it into the startup env.
+    await this.assignPrimaryAllocation(dto.nodeId, server.id);
+
     await this.provisionQueue.add(JOB.PROVISION, {
       serverId: server.id,
     } satisfies ProvisionJob);
 
-    return server;
+    return this.prisma.server.findUniqueOrThrow({ where: { id: server.id } });
   }
 
   /** Admin list of every (non-deleted) server with node/owner/template names. */
@@ -657,6 +669,115 @@ export class ServersService {
   }
 
   // ---- helpers -----------------------------------------------------------
+
+  /**
+   * Reserve a reachable public port for a freshly created server and wire it into
+   * the startup environment so `{{SERVER_PORT}}` (and any port-like template
+   * variable) resolves at install time:
+   *   1. Pick the lowest free port in [25565, 25999] on the node.
+   *   2. Create the primary Allocation { ip: node.fqdn, port, isPrimary }.
+   *   3. Merge SERVER_PORT / SERVER_PORT_PRIMARY into the server's environment and
+   *      set a ServerVariable override for any template variable whose envName
+   *      looks like a port.
+   * Concurrency-safe enough: on a unique-constraint clash it retries the next
+   * free port a few times.
+   *
+   * TODO(impl): multi-IP nodes (currently binds the single node.fqdn).
+   * TODO(impl): resolve a hostname fqdn to a concrete bind IP (works today
+   *   because our node fqdn is an IP).
+   * TODO(impl): additional (non-primary) allocations per game (e.g. query/RCON
+   *   ports declared by the template).
+   */
+  private async assignPrimaryAllocation(
+    nodeId: string,
+    serverId: string,
+  ): Promise<number> {
+    const node = await this.prisma.node.findUnique({
+      where: { id: nodeId },
+      select: { fqdn: true },
+    });
+    if (!node) throw new NotFoundException('Node not found');
+
+    const MAX_ATTEMPTS = 5;
+    let port = 0;
+
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      // Re-query taken ports each attempt so a concurrent allocation is observed.
+      const taken = await this.prisma.allocation.findMany({
+        where: { nodeId, port: { gte: PORT_RANGE_START, lte: PORT_RANGE_END } },
+        select: { port: true },
+      });
+      const candidate = pickFreePort(
+        taken.map((a) => a.port),
+        PORT_RANGE_START,
+        PORT_RANGE_END,
+      );
+
+      try {
+        await this.prisma.allocation.create({
+          data: {
+            id: uuidv7(),
+            nodeId,
+            ip: node.fqdn,
+            port: candidate,
+            serverId,
+            isPrimary: true,
+          },
+        });
+        port = candidate;
+        break;
+      } catch (e) {
+        // Unique-constraint clash on (nodeId, ip, port): another server grabbed
+        // it first. Retry with a freshly computed free port.
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002' &&
+          attempt < MAX_ATTEMPTS - 1
+        ) {
+          continue;
+        }
+        throw e;
+      }
+    }
+
+    if (!port) {
+      throw new ConflictException('No free port available on the node');
+    }
+
+    // Wire the port into the startup env so {{SERVER_PORT}} resolves.
+    const server = await this.prisma.server.findUniqueOrThrow({
+      where: { id: serverId },
+      select: { environment: true, templateId: true },
+    });
+    const environment = {
+      ...((server.environment as Record<string, unknown>) ?? {}),
+      SERVER_PORT: String(port),
+      SERVER_PORT_PRIMARY: String(port),
+    };
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { environment },
+    });
+
+    // Also set a ServerVariable override for any port-like template variable so
+    // games whose template names the port differently still get the right value.
+    const portVars = server.templateId
+      ? await this.prisma.templateVariable.findMany({
+          where: { templateId: server.templateId },
+          select: { envName: true },
+        })
+      : [];
+    for (const v of portVars) {
+      if (!isPortEnvName(v.envName)) continue;
+      await this.prisma.serverVariable.upsert({
+        where: { serverId_envName: { serverId, envName: v.envName } },
+        create: { id: uuidv7(), serverId, envName: v.envName, value: String(port) },
+        update: { value: String(port) },
+      });
+    }
+
+    return port;
+  }
 
   private assertTemplateAllowed(allowed: string[], templateId: string): void {
     // Empty whitelist = all templates permitted.

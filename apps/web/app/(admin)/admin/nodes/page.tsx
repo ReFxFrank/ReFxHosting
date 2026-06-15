@@ -6,6 +6,7 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip as ReTooltip,
   XAxis,
@@ -19,6 +20,12 @@ import {
   Check,
   TriangleAlert,
   Trash2,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  MapPin,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -26,6 +33,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Badge, NodeStateBadge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -52,8 +60,98 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { formatMb, formatDateTime } from "@/lib/utils";
+import { cn, formatMb, formatDateTime, pct } from "@/lib/utils";
 import type { Node, NodeOs } from "@/lib/types";
+
+/** Bar tint by utilisation: green < 70 < amber < 90 < red. */
+function usageIndicator(value: number) {
+  if (value > 90) return "bg-destructive shadow-[0_0_12px_-2px_rgba(255,80,80,0.7)]";
+  if (value > 70) return "bg-warning shadow-[0_0_12px_-2px_rgba(245,170,40,0.7)]";
+  return "bg-success shadow-[0_0_12px_-2px_rgba(40,200,120,0.6)]";
+}
+
+/** Compact labelled usage bar (used in the list + detail dialog). */
+function UsageBar({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: number;
+  detail: string;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[0.6875rem] text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <Icon className="size-3" /> {label}
+        </span>
+        <span className="tabular-nums">{detail}</span>
+      </div>
+      <Progress value={value} indicatorClassName={usageIndicator(value)} />
+    </div>
+  );
+}
+
+/** Live panel->agent latency probe, polled while visible. */
+function NodePing({ nodeId, poll }: { nodeId: string; poll?: boolean }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "node-ping", nodeId],
+    queryFn: () => api.admin.nodePing(nodeId),
+    refetchInterval: poll ? 10_000 : false,
+    retry: false,
+  });
+
+  if (isLoading) return <Skeleton className="h-4 w-12" />;
+
+  if (!data?.reachable || data.ms == null) {
+    return (
+      <span className="flex items-center gap-1 text-xs font-medium text-destructive">
+        <WifiOff className="size-3" /> offline
+      </span>
+    );
+  }
+
+  const tint =
+    data.ms > 150 ? "text-destructive" : data.ms > 60 ? "text-warning" : "text-success";
+  return (
+    <span className={cn("flex items-center gap-1 text-xs font-medium tabular-nums", tint)}>
+      <Wifi className="size-3" /> {data.ms} ms
+    </span>
+  );
+}
+
+/** Three stacked gauges driven by a node's latest heartbeat vs capacity. */
+function NodeUsage({ node, compact }: { node: Node; compact?: boolean }) {
+  const hb = node.latestHeartbeat;
+  if (!hb) {
+    return (
+      <span className="text-xs text-muted-foreground">No heartbeat</span>
+    );
+  }
+  const cpu = Math.round(hb.cpuPct);
+  const memPct = pct(hb.memUsedMb, node.memoryMb);
+  const diskPct = pct(hb.diskUsedMb, node.diskMb);
+  return (
+    <div className={cn("space-y-2", compact ? "w-44" : "w-full")}>
+      <UsageBar icon={Cpu} label="CPU" value={cpu} detail={`${cpu}%`} />
+      <UsageBar
+        icon={MemoryStick}
+        label="MEM"
+        value={memPct}
+        detail={`${formatMb(hb.memUsedMb)} / ${formatMb(node.memoryMb)}`}
+      />
+      <UsageBar
+        icon={HardDrive}
+        label="DISK"
+        value={diskPct}
+        detail={`${formatMb(hb.diskUsedMb)} / ${formatMb(node.diskMb)}`}
+      />
+    </div>
+  );
+}
 
 const OS_OPTIONS: { value: NodeOs; label: string }[] = [
   { value: "LINUX", label: "Linux" },
@@ -174,11 +272,11 @@ export default function AdminNodesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>FQDN</TableHead>
-                  <TableHead>Region</TableHead>
+                  <TableHead>Location</TableHead>
                   <TableHead>OS</TableHead>
                   <TableHead>State</TableHead>
-                  <TableHead>Capacity</TableHead>
+                  <TableHead>Ping</TableHead>
+                  <TableHead className="w-48">Live usage</TableHead>
                   <TableHead>Servers</TableHead>
                   <TableHead>Maintenance</TableHead>
                   <TableHead className="w-10" />
@@ -187,10 +285,25 @@ export default function AdminNodesPage() {
               <TableBody>
                 {nodes.map((node) => (
                   <TableRow key={node.id}>
-                    <TableCell className="font-medium">{node.name}</TableCell>
-                    <TableCell className="font-mono text-xs">{node.fqdn}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {node.region?.name ?? "—"}
+                    <TableCell>
+                      <div className="font-medium">{node.name}</div>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {node.fqdn}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-1.5 text-sm">
+                        <MapPin className="size-3.5 text-muted-foreground" />
+                        <span>
+                          {node.region?.name ?? "—"}
+                          {node.region?.country && (
+                            <span className="text-xs text-muted-foreground">
+                              {" · "}
+                              {node.region.country}
+                            </span>
+                          )}
+                        </span>
+                      </span>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{node.os}</Badge>
@@ -198,9 +311,11 @@ export default function AdminNodesPage() {
                     <TableCell>
                       <NodeStateBadge state={node.state} />
                     </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {node.cpuCores} vCPU · {formatMb(node.memoryMb)} ·{" "}
-                      {formatMb(node.diskMb)}
+                    <TableCell>
+                      <NodePing nodeId={node.id} />
+                    </TableCell>
+                    <TableCell>
+                      <NodeUsage node={node} compact />
                     </TableCell>
                     <TableCell className="tabular-nums">{node.servers ?? 0}</TableCell>
                     <TableCell>
@@ -405,11 +520,22 @@ export default function AdminNodesPage() {
       <Dialog open={!!detailNode} onOpenChange={(o) => !o && setDetailNode(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{detailNode?.name}</DialogTitle>
-            <DialogDescription>
-              CPU utilisation over the last hour.
+            <DialogTitle className="flex items-center gap-3">
+              {detailNode?.name}
+              {detailNode && <NodeStateBadge state={detailNode.state} />}
+            </DialogTitle>
+            <DialogDescription className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="flex items-center gap-1">
+                <MapPin className="size-3.5" />
+                {detailNode?.region?.name ?? "—"}
+                {detailNode?.region?.country ? ` · ${detailNode.region.country}` : ""}
+              </span>
+              {detailNode && (
+                <NodePing nodeId={detailNode.id} poll />
+              )}
             </DialogDescription>
           </DialogHeader>
+          {detailNode && <NodeDetailLive nodeId={detailNode.id} fallback={detailNode} />}
           {detailNode && <NodeHeartbeatChart nodeId={detailNode.id} />}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDetailNode(null)}>
@@ -446,11 +572,44 @@ export default function AdminNodesPage() {
   );
 }
 
+/**
+ * Live gauges for the detail dialog: refetches the node (latest heartbeat) on a
+ * 10s interval while the dialog is open. Falls back to the row's cached node
+ * until the first refetch lands.
+ */
+function NodeDetailLive({ nodeId, fallback }: { nodeId: string; fallback: Node }) {
+  const { data } = useQuery({
+    queryKey: ["admin", "node", nodeId],
+    queryFn: () => api.admin.node(nodeId),
+    refetchInterval: 10_000,
+    initialData: fallback,
+  });
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <NodeUsage node={data ?? fallback} />
+        <p className="mt-3 text-[0.6875rem] text-muted-foreground">
+          {fallback.cpuCores} vCPU · {formatMb(fallback.memoryMb)} RAM ·{" "}
+          {formatMb(fallback.diskMb)} disk
+          {data?.latestHeartbeat &&
+            ` · updated ${formatDateTime(data.latestHeartbeat.recordedAt)}`}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function NodeHeartbeatChart({ nodeId }: { nodeId: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "node-heartbeats", nodeId],
     queryFn: () => api.admin.nodeHeartbeats(nodeId),
+    refetchInterval: 10_000,
   });
+
+  const node = useQuery({
+    queryKey: ["admin", "node", nodeId],
+    queryFn: () => api.admin.node(nodeId),
+  }).data;
 
   if (isLoading) return <Skeleton className="h-56 w-full" />;
   if (!data?.length)
@@ -460,10 +619,19 @@ function NodeHeartbeatChart({ nodeId }: { nodeId: string }) {
       </p>
     );
 
-  const points = data.map((h) => ({
+  const memTotal = node?.memoryMb ?? 0;
+  const diskTotal = node?.diskMb ?? 0;
+
+  // History comes back newest-first; reverse so the chart reads left -> right.
+  const points = [...data].reverse().map((h) => ({
     t: formatDateTime(h.recordedAt),
     cpu: Math.round(h.cpuPct),
+    mem: memTotal ? pct(h.memUsedMb, memTotal) : 0,
+    disk: diskTotal ? pct(h.diskUsedMb, diskTotal) : 0,
   }));
+
+  // Only plot disk if it carries signal (avoids a flat zero line cluttering it).
+  const showDisk = points.some((p) => p.disk > 0);
 
   return (
     <div className="h-56">
@@ -471,14 +639,24 @@ function NodeHeartbeatChart({ nodeId }: { nodeId: string }) {
         <AreaChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
           <defs>
             <linearGradient id="node-cpu" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
               <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="node-mem" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.3} />
+              <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0} />
+            </linearGradient>
+            <linearGradient id="node-disk" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="hsl(var(--warning))" stopOpacity={0.25} />
+              <stop offset="100%" stopColor="hsl(var(--warning))" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
           <XAxis dataKey="t" hide />
           <YAxis
             domain={[0, 100]}
+            unit="%"
+            width={40}
             tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
             tickLine={false}
             axisLine={false}
@@ -490,16 +668,41 @@ function NodeHeartbeatChart({ nodeId }: { nodeId: string }) {
               borderRadius: 8,
               fontSize: 12,
             }}
-            formatter={(v) => [`${v}%`, "CPU"] as [string, string]}
+            formatter={(v, name) => [`${v}%`, String(name)] as [string, string]}
+          />
+          <Legend
+            iconType="plainline"
+            wrapperStyle={{ fontSize: 11 }}
           />
           <Area
             type="monotone"
             dataKey="cpu"
+            name="CPU"
             stroke="hsl(var(--primary))"
             strokeWidth={1.5}
             fill="url(#node-cpu)"
             isAnimationActive={false}
           />
+          <Area
+            type="monotone"
+            dataKey="mem"
+            name="Memory"
+            stroke="hsl(var(--success))"
+            strokeWidth={1.5}
+            fill="url(#node-mem)"
+            isAnimationActive={false}
+          />
+          {showDisk && (
+            <Area
+              type="monotone"
+              dataKey="disk"
+              name="Disk"
+              stroke="hsl(var(--warning))"
+              strokeWidth={1.5}
+              fill="url(#node-disk)"
+              isAnimationActive={false}
+            />
+          )}
         </AreaChart>
       </ResponsiveContainer>
     </div>
