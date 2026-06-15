@@ -13,7 +13,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { ResourceGauge, type GaugePoint } from "@/components/server/resource-gauge";
-import { formatMb, pct } from "@/lib/utils";
+import { formatMb, pct, copyToClipboard } from "@/lib/utils";
 import type { ServerState } from "@/lib/types";
 
 const MAX_POINTS = 30;
@@ -196,7 +196,7 @@ export default function ConsolePage() {
   async function copyAddress() {
     if (!address) return;
     try {
-      await navigator.clipboard.writeText(address);
+      if (!(await copyToClipboard(address))) throw new Error("copy failed");
       toast.success("Address copied");
     } catch {
       toast.error("Couldn't copy address");

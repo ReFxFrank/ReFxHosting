@@ -64,7 +64,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { cn, formatMb, formatDateTime, pct } from "@/lib/utils";
+import { cn, formatMb, formatDateTime, pct, copyToClipboard } from "@/lib/utils";
 import type { Node, NodeOs } from "@/lib/types";
 
 /** Bar tint by utilisation: green < 70 < amber < 90 < red. */
@@ -171,7 +171,7 @@ function CopyButton({ value }: { value: string }) {
       size="icon-sm"
       onClick={async () => {
         try {
-          await navigator.clipboard.writeText(value);
+          if (!(await copyToClipboard(value))) throw new Error("copy failed");
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         } catch {

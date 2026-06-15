@@ -40,7 +40,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { cn } from "@/lib/utils";
+import { cn, copyToClipboard } from "@/lib/utils";
 import type { Server, SubUser } from "@/lib/types";
 
 const PERMISSIONS = [
@@ -58,7 +58,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(value);
+      if (!(await copyToClipboard(value))) throw new Error("copy failed");
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -365,7 +365,7 @@ function SftpTab({ id }: { id: string }) {
   const copyPw = async () => {
     if (!revealed) return;
     try {
-      await navigator.clipboard.writeText(revealed);
+      if (!(await copyToClipboard(revealed))) throw new Error("copy failed");
       setPwCopied(true);
       setTimeout(() => setPwCopied(false), 1500);
     } catch {

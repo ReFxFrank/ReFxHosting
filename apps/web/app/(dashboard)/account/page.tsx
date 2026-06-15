@@ -50,7 +50,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { cn, formatRelative, formatDate, initials } from "@/lib/utils";
+import { cn, formatRelative, formatDate, initials, copyToClipboard } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 import type { ApiKey } from "@/lib/types";
 
@@ -993,7 +993,7 @@ function CopyButton({
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(value);
+      if (!(await copyToClipboard(value))) throw new Error("copy failed");
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {

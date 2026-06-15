@@ -51,6 +51,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { copyToClipboard } from "@/lib/utils";
 import type { DbEngine, ServerDatabase } from "@/lib/types";
 
 const ENGINES: { value: DbEngine; label: string }[] = [
@@ -72,7 +73,7 @@ function CopyButton({ value, label }: { value: string; label?: string }) {
       size={label ? "sm" : "icon-sm"}
       onClick={async () => {
         try {
-          await navigator.clipboard.writeText(value);
+          if (!(await copyToClipboard(value))) throw new Error("copy failed");
           setCopied(true);
           setTimeout(() => setCopied(false), 1500);
         } catch {
