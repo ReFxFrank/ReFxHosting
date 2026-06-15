@@ -36,6 +36,8 @@ import type {
   StorefrontGame,
   StorefrontGameDetail,
   HomepageAlert,
+  ModrinthProject,
+  ModrinthVersion,
 } from "@/lib/types";
 
 export const API_URL =
@@ -291,6 +293,31 @@ export const api = {
         `/servers/${id}/minecraft`,
         input,
       ),
+    mods: {
+      context: (id: string) =>
+        http.get<{ loader: string; kind: "mod" | "plugin"; directory: string; gameVersion: string }>(
+          `/servers/${id}/mods/context`,
+        ),
+      search: (id: string, q: string) =>
+        getList<ModrinthProject>(`/servers/${id}/mods/search`, { query: { q } }),
+      versions: (id: string, projectId: string) =>
+        getList<ModrinthVersion>(`/servers/${id}/mods/versions`, {
+          query: { projectId },
+        }),
+      installed: (id: string) =>
+        http.get<{ directory: string; files: { name: string; size: number }[] }>(
+          `/servers/${id}/mods/installed`,
+        ),
+      install: (id: string, input: { projectId?: string; versionId?: string }) =>
+        http.post<{ installed: true; filename: string; directory: string }>(
+          `/servers/${id}/mods/install`,
+          input,
+        ),
+      remove: (id: string, filename: string) =>
+        http.delete<{ removed: true }>(
+          `/servers/${id}/mods/${encodeURIComponent(filename)}`,
+        ),
+    },
     sftp: (id: string) =>
       http.get<{ host: string; port: number; username: string }>(`/servers/${id}/sftp`),
     rotateSftp: (id: string) =>

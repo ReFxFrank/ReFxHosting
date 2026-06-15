@@ -38,6 +38,8 @@ export const serverTabs = (id: string) => [
   { label: "Databases", href: `/servers/${id}/databases` },
   { label: "Backups", href: `/servers/${id}/backups` },
   { label: "Schedules", href: `/servers/${id}/schedules` },
+  { label: "Minecraft", href: `/servers/${id}/minecraft` },
+  { label: "Mods", href: `/servers/${id}/mods` },
   { label: "Switch Game", href: `/servers/${id}/switch-game` },
   { label: "Upgrade", href: `/servers/${id}/upgrade` },
   { label: "Settings", href: `/servers/${id}/settings` },

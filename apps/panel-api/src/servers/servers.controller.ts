@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ServersService } from './servers.service';
 import { ServerResourcesService } from './server-resources.service';
+import { ModsService } from './mods.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
@@ -27,6 +28,7 @@ import {
   CreateScheduleDto,
   CreateServerDto,
   PowerActionDto,
+  ModInstallDto,
   ResizeServerDto,
   SendCommandDto,
   SetVariableDto,
@@ -43,6 +45,7 @@ export class ServersController {
   constructor(
     private readonly servers: ServersService,
     private readonly resources: ServerResourcesService,
+    private readonly mods: ModsService,
   ) {}
 
   // ---- collection --------------------------------------------------------
@@ -163,6 +166,46 @@ export class ServersController {
   })
   setMinecraft(@Param('id') id: string, @Body() dto: SetMinecraftConfigDto) {
     return this.servers.setMinecraftConfig(id, dto);
+  }
+
+  // ---- Mods / plugins (Modrinth) -----------------------------------------
+
+  @Get(':id/mods/context')
+  @RequirePermissions('files.read')
+  modsContext(@Param('id') id: string) {
+    return this.mods.context(id);
+  }
+
+  @Get(':id/mods/search')
+  @RequirePermissions('files.read')
+  modsSearch(@Param('id') id: string, @Query('q') q = '') {
+    return this.mods.search(id, q);
+  }
+
+  @Get(':id/mods/versions')
+  @RequirePermissions('files.read')
+  modsVersions(@Param('id') id: string, @Query('projectId') projectId: string) {
+    return this.mods.versions(id, projectId);
+  }
+
+  @Get(':id/mods/installed')
+  @RequirePermissions('files.read')
+  modsInstalled(@Param('id') id: string) {
+    return this.mods.installed(id);
+  }
+
+  @Post(':id/mods/install')
+  @RequirePermissions('files.write')
+  @Audit({ action: 'server.mod.install', targetType: 'Server', targetParam: 'id' })
+  modsInstall(@Param('id') id: string, @Body() dto: ModInstallDto) {
+    return this.mods.install(id, dto);
+  }
+
+  @Delete(':id/mods/:filename')
+  @RequirePermissions('files.write')
+  @Audit({ action: 'server.mod.remove', targetType: 'Server', targetParam: 'id' })
+  modsRemove(@Param('id') id: string, @Param('filename') filename: string) {
+    return this.mods.remove(id, filename);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

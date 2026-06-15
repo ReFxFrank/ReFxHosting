@@ -234,6 +234,33 @@ export interface StorefrontGameDetail {
   regions: { id: string; code: string; name: string; country: string }[];
 }
 
+// ---- Mods (Modrinth) ------------------------------------------------------
+
+export interface ModrinthProject {
+  projectId: string;
+  slug: string;
+  title: string;
+  description: string;
+  author: string;
+  downloads: number;
+  follows: number;
+  iconUrl: string | null;
+  categories: string[];
+  clientSide: string;
+  serverSide: string;
+}
+
+export interface ModrinthVersion {
+  id: string;
+  name: string;
+  versionNumber: string;
+  gameVersions: string[];
+  loaders: string[];
+  datePublished: string;
+  downloads: number;
+  files: { url: string; filename: string; size: number; primary: boolean }[];
+}
+
 export type HomepageAlertType = "INFO" | "SUCCESS" | "WARNING" | "DANGER" | "PROMO";
 
 export interface HomepageAlert {

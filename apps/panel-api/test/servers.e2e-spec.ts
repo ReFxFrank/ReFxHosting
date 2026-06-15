@@ -4,6 +4,7 @@ import { buildTestApp, PREFIX, type TestAppHandles } from './utils/test-app';
 import { ServersController } from '../src/servers/servers.controller';
 import { ServersService } from '../src/servers/servers.service';
 import { ServerResourcesService } from '../src/servers/server-resources.service';
+import { ModsService } from '../src/servers/mods.service';
 import { MinecraftResolverService } from '../src/servers/minecraft-resolver.service';
 import { NodesService } from '../src/nodes/nodes.service';
 import { NodeAgentClient } from '../src/agent/agent.client';
@@ -27,6 +28,7 @@ describe('Servers (e2e)', () => {
       providers: [
         ServersService,
         { provide: ServerResourcesService, useValue: {} },
+        { provide: ModsService, useValue: {} },
         {
           provide: MinecraftResolverService,
           useValue: { resolve: jest.fn(async (_s: unknown, v: string) => v ?? 'latest'), resolveByLoader: jest.fn(async (_l: unknown, v: string) => v ?? 'latest') },

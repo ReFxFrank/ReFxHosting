@@ -159,6 +159,18 @@ export class SetMinecraftConfigDto {
   loaderVersion?: string;
 }
 
+export class ModInstallDto {
+  @ApiPropertyOptional({ description: 'Modrinth project id/slug (installs latest compatible).' })
+  @IsOptional()
+  @IsString()
+  projectId?: string;
+
+  @ApiPropertyOptional({ description: 'Modrinth version id (installs that exact version).' })
+  @IsOptional()
+  @IsString()
+  versionId?: string;
+}
+
 export class UpdateStartupDto {
   @ApiPropertyOptional()
   @IsOptional()

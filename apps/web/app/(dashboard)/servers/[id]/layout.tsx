@@ -21,7 +21,18 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
     refetchInterval: 15_000,
   });
 
-  const tabs = serverTabs(id);
+  // The Mods tab only applies to Minecraft servers that can load mods/plugins
+  // (i.e. not Vanilla).
+  const slug = server?.template?.slug ?? "";
+  const loader = server?.environment?.LOADER;
+  const isMinecraft = slug === "minecraft" || slug.startsWith("minecraft-");
+  const supportsMods = isMinecraft && loader !== "vanilla";
+  // Minecraft + Mods tabs are Minecraft-only (Mods also excludes Vanilla).
+  const tabs = serverTabs(id).filter((t) => {
+    if (t.href.endsWith("/minecraft")) return isMinecraft;
+    if (t.href.endsWith("/mods")) return supportsMods;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
