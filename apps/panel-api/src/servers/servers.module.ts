@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { ServersService } from './servers.service';
 import { ServerResourcesService } from './server-resources.service';
+import { MinecraftResolverService } from './minecraft-resolver.service';
 import { ServersController } from './servers.controller';
 import { ServersResolver } from './servers.resolver';
 import { NodesModule } from '../nodes/nodes.module';
@@ -17,7 +18,12 @@ import { QUEUE } from '../queues/queue.constants';
     ),
   ],
   controllers: [ServersController],
-  providers: [ServersService, ServerResourcesService, ServersResolver],
+  providers: [
+    ServersService,
+    ServerResourcesService,
+    MinecraftResolverService,
+    ServersResolver,
+  ],
   exports: [ServersService],
 })
 export class ServersModule {}

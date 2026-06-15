@@ -56,16 +56,6 @@ export function requiredJavaMajor(
   return 21; // 1.21.x (until a future 1.x bumps it)
 }
 
-/**
- * The Java major to assume for a "latest"/unknown Minecraft version on a given
- * template. Forge & NeoForge trail vanilla and are strict about too-new JVMs, so
- * cap them at 21 (current modded-stable); everything else gets the newest.
- */
-export function latestJavaDefault(templateSlug?: string | null): number {
-  if (templateSlug && /forge/i.test(templateSlug)) return 21; // forge + neoforge
-  return NEWEST_JAVA;
-}
-
 /** Build an eclipse-temurin image ref for a Java major version. */
 export function javaImage(major: number, kind: 'jre' | 'jdk' = 'jre'): string {
   return `eclipse-temurin:${major}-${kind}`;

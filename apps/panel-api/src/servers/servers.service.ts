@@ -34,11 +34,8 @@ import {
   pickFreePort,
   isPortEnvName,
 } from './allocation-port.util';
-import {
-  isJavaImage,
-  latestJavaDefault,
-  resolveJavaImage,
-} from '../common/util/java-version.util';
+import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
+import { MinecraftResolverService } from './minecraft-resolver.service';
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
@@ -52,6 +49,7 @@ export class ServersService {
     private readonly crypto: CryptoService,
     private readonly nodes: NodesService,
     private readonly agent: NodeAgentClient,
+    private readonly mcResolver: MinecraftResolverService,
     @InjectQueue(QUEUE.PROVISIONING) private readonly provisionQueue: Queue,
     @InjectQueue(QUEUE.REINSTALL) private readonly reinstallQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
@@ -122,11 +120,11 @@ export class ServersService {
     if (!template) throw new NotFoundException('Template not found');
     this.assertTemplateAllowed(subscription.product.allowedTemplateIds, dto.templateId);
 
-    const dockerImage = this.resolveDockerImage(
-      template.dockerImages,
-      dto.environment,
+    const environment = await this.resolveMinecraftEnv(
       template.slug,
+      dto.environment,
     );
+    const dockerImage = this.resolveDockerImage(template.dockerImages, environment);
 
     const limits = {
       cpuCores: subscription.product.cpuCores ?? template.recCpuCores,
@@ -160,7 +158,7 @@ export class ServersService {
         slots: subscription.product.slots ?? null,
         startupCommand: template.startupCommand,
         dockerImage,
-        environment: dto.environment ?? {},
+        environment,
         subscriptionId: subscription.id,
         sftpPasswordEnc: this.crypto.encrypt(this.crypto.token(16)),
       },
@@ -201,11 +199,11 @@ export class ServersService {
     });
     if (!template) throw new NotFoundException('Template not found');
 
-    const dockerImage = this.resolveDockerImage(
-      template.dockerImages,
-      dto.environment,
+    const environment = await this.resolveMinecraftEnv(
       template.slug,
+      dto.environment,
     );
+    const dockerImage = this.resolveDockerImage(template.dockerImages, environment);
 
     const server = await this.prisma.server.create({
       data: {
@@ -224,7 +222,7 @@ export class ServersService {
         swapMb: dto.swapMb ?? 0,
         startupCommand: template.startupCommand,
         dockerImage,
-        environment: dto.environment ?? {},
+        environment,
         subscriptionId: null,
         sftpPasswordEnc: this.crypto.encrypt(this.crypto.token(16)),
       },
@@ -348,11 +346,11 @@ export class ServersService {
       );
     }
 
-    const dockerImage = this.resolveDockerImage(
-      target.dockerImages,
-      dto.environment,
+    const environment = await this.resolveMinecraftEnv(
       target.slug,
+      dto.environment,
     );
+    const dockerImage = this.resolveDockerImage(target.dockerImages, environment);
     const gameSwitchLogId = uuidv7();
 
     // (3)+(4) atomic record + repoint.
@@ -377,7 +375,7 @@ export class ServersService {
           dockerImage,
           startupCommand: target.startupCommand,
           deployMethod: (target.deployMethods[0] as any) ?? server.deployMethod,
-          environment: dto.environment ?? {},
+          environment,
           state: 'SWITCHING_GAME',
         },
       }),
@@ -831,10 +829,32 @@ export class ServersService {
    * The agent also runs the install script in this image, so install + runtime
    * stay on one compatible JVM.
    */
+  /**
+   * For minecraft-* templates, resolve a "latest" MINECRAFT_VERSION to a concrete
+   * version (per loader) so the JVM image and the install target agree. Other
+   * templates pass their environment through unchanged.
+   */
+  private async resolveMinecraftEnv(
+    templateSlug: string | null | undefined,
+    environment?: Record<string, unknown> | null,
+  ): Promise<Prisma.InputJsonObject> {
+    const env = { ...((environment ?? {}) as Record<string, string>) };
+    if (templateSlug?.startsWith('minecraft-')) {
+      const requested =
+        env['MINECRAFT_VERSION'] != null
+          ? String(env['MINECRAFT_VERSION'])
+          : 'latest';
+      env['MINECRAFT_VERSION'] = await this.mcResolver.resolve(
+        templateSlug,
+        requested,
+      );
+    }
+    return env as Prisma.InputJsonObject;
+  }
+
   private resolveDockerImage(
     images: Prisma.JsonValue,
     environment?: Record<string, unknown> | null,
-    templateSlug?: string | null,
   ): string | undefined {
     const base = this.firstDockerImage(images);
     if (!isJavaImage(base)) return base;
@@ -843,7 +863,7 @@ export class ServersService {
       env['MINECRAFT_VERSION'] != null
         ? String(env['MINECRAFT_VERSION'])
         : 'latest';
-    return resolveJavaImage(base, mc, 'jre', latestJavaDefault(templateSlug));
+    return resolveJavaImage(base, mc, 'jre');
   }
 
   private firstDockerImage(images: Prisma.JsonValue): string | undefined {
