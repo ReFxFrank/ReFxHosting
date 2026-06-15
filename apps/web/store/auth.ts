@@ -26,6 +26,7 @@ interface AuthState {
   bootstrap: () => Promise<void>;
   logout: () => Promise<void>;
   hasRole: (...roles: GlobalRole[]) => boolean;
+  hasPermission: (perm: string) => boolean;
   isAdmin: () => boolean;
 }
 
@@ -91,6 +92,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     // an ADMIN.
     const min = Math.min(...roles.map((r) => ROLE_RANK[r]));
     return ROLE_RANK[role] >= min;
+  },
+
+  hasPermission(perm) {
+    const perms = get().user?.permissions ?? [];
+    return perms.includes("*") || perms.includes(perm);
   },
 
   isAdmin() {

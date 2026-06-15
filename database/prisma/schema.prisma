@@ -52,6 +52,10 @@ model User {
   firstName         String?
   lastName          String?
   globalRole        GlobalRole  @default(CUSTOMER)
+  // Assigned RBAC role (granular permissions). Falls back to globalRole defaults
+  // when null. Seeded/backfilled to the matching system role.
+  roleId            String?     @db.Uuid
+  role              Role?       @relation(fields: [roleId], references: [id])
   state             UserState   @default(PENDING_VERIFICATION)
   locale            String      @default("en")
   timezone          String      @default("UTC")
@@ -95,6 +99,22 @@ model User {
 
   @@index([state])
   @@index([globalRole])
+  @@index([roleId])
+}
+
+/// RBAC role: a named set of granular permission strings (see common/permissions).
+/// System roles (owner/admin/support/customer) mirror the GlobalRole hierarchy
+/// and can't be deleted; owners may create custom roles with any permission set.
+model Role {
+  id          String   @id @db.Uuid
+  key         String   @unique
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  permissions String[]
+  users       User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Session {

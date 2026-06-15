@@ -10,6 +10,8 @@ export interface AuthUser {
   email: string;
   globalRole: string;
   state: string;
+  /** Effective admin permissions (from the assigned RBAC role, or role defaults). */
+  permissions: string[];
   /** Present when the request authenticated via an API key. */
   apiKeyId?: string;
   apiKeyScopes?: string[];

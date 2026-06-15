@@ -5,6 +5,7 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import { AppConfig } from '../../config/configuration';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
+import { permissionsForGlobalRole } from '../../common/permissions';
 
 export interface JwtPayload {
   sub: string;
@@ -34,17 +35,28 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     }
     const user = await this.prisma.user.findFirst({
       where: { id: payload.sub, deletedAt: null },
-      select: { id: true, email: true, globalRole: true, state: true },
+      select: {
+        id: true,
+        email: true,
+        globalRole: true,
+        state: true,
+        role: { select: { permissions: true } },
+      },
     });
     if (!user) throw new UnauthorizedException('User not found');
     if (user.state === 'BANNED' || user.state === 'SUSPENDED') {
       throw new UnauthorizedException(`Account ${user.state.toLowerCase()}`);
     }
+    // Effective permissions: the assigned RBAC role, else the globalRole default.
+    const permissions =
+      (user as { role?: { permissions: string[] } | null }).role?.permissions ??
+      permissionsForGlobalRole(user.globalRole);
     return {
       id: user.id,
       email: user.email,
       globalRole: user.globalRole,
       state: user.state,
+      permissions,
     };
   }
 }

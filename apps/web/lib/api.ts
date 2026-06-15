@@ -46,6 +46,7 @@ import type {
   AdminBillingSummary,
   GatewayStatus,
   ProfileUpdate,
+  AdminRole,
 } from "@/lib/types";
 
 export const API_URL =
@@ -529,9 +530,19 @@ export const api = {
     userDetail: (id: string) => http.get<AdminUserDetail>(`/admin/users/${id}`),
     setUserState: (id: string, state: User["state"]) =>
       http.patch<User>(`/admin/users/${id}`, { state }),
-    setUserRole: (id: string, role: User["globalRole"]) =>
-      http.patch<User>(`/admin/users/${id}/role`, { role }),
+    setUserRole: (id: string, input: { role?: User["globalRole"]; roleId?: string }) =>
+      http.patch<User>(`/admin/users/${id}/role`, input),
     deleteUser: (id: string) => http.delete<void>(`/admin/users/${id}`),
+
+    // Roles & permissions (RBAC)
+    roles: () => getList<AdminRole>("/admin/roles"),
+    rolePermissions: () =>
+      http.get<{ wildcard: string; permissions: string[] }>("/admin/roles/permissions"),
+    createRole: (input: { key: string; name: string; description?: string; permissions: string[] }) =>
+      http.post<AdminRole>("/admin/roles", input),
+    updateRole: (id: string, input: Partial<{ name: string; description: string; permissions: string[] }>) =>
+      http.patch<AdminRole>(`/admin/roles/${id}`, input),
+    deleteRole: (id: string) => http.delete<void>(`/admin/roles/${id}`),
 
     // Locations (regions) — full CRUD; new locations feed the node-create picker.
     locations: () => getList<Region>("/admin/locations"),
@@ -547,6 +558,8 @@ export const api = {
       http.get<Paginated<AdminSubscription>>("/admin/orders", { query }),
     invoices: (query?: { page?: number; q?: string; state?: string }) =>
       http.get<Paginated<AdminInvoice>>("/admin/invoices", { query }),
+    voidInvoice: (id: string) => http.post<AdminInvoice>(`/admin/invoices/${id}/void`),
+    deleteInvoice: (id: string) => http.delete<void>(`/admin/invoices/${id}`),
     payments: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminPayment>>("/admin/payments", { query }),
     paymentGateways: () => http.get<GatewayStatus>("/admin/payments/gateways"),

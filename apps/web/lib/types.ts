@@ -27,7 +27,20 @@ export interface User {
   region: string | null;
   postalCode: string | null;
   country: string | null;
+  /** Effective admin permissions (present on /auth/me; gates the admin UI). */
+  permissions?: string[];
+  roleId?: string | null;
   createdAt: string;
+}
+
+export interface AdminRole {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  permissions: string[];
+  _count?: { users: number };
 }
 
 /** Editable contact/address profile fields. */

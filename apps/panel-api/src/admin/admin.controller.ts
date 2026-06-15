@@ -21,9 +21,10 @@ import { ServersService } from '../servers/servers.service';
 import { AlertsService } from '../platform/alerts.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 import { AuditService } from '../platform/audit.service';
+import { RolesService } from './roles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
+import { AdminPermissionGuard } from '../auth/guards/admin-permission.guard';
+import { RequirePerm } from '../common/decorators/require-permission.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateNodeDto, UpdateNodeDto } from '../nodes/dto/node.dto';
@@ -41,21 +42,23 @@ import {
 } from '../templates/dto/template.dto';
 import {
   AdminCreateServerDto,
+  CreateRoleDto,
   SetUserRoleDto,
   UpdateAlertDto,
   UpdateProductDto,
+  UpdateRoleDto,
   UpdateUserDto,
 } from './dto/admin.dto';
 
 /**
- * Admin surface (`/admin/*`). Mostly thin aliases over existing feature services;
- * the whole controller is ADMIN/OWNER-gated. The "egg editor" template CRUD and
- * the JSON metrics summary are the only non-alias additions.
+ * Admin surface (`/admin/*`). Every route declares the granular permission it
+ * needs via @RequirePerm; AdminPermissionGuard enforces it against the caller's
+ * effective permissions (their RBAC role, or globalRole defaults). Customers
+ * hold no admin permissions, so the whole surface is staff-only.
  */
 @ApiTags('admin')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(GlobalRole.ADMIN, GlobalRole.OWNER)
+@UseGuards(JwtAuthGuard, AdminPermissionGuard)
 @Controller('admin')
 export class AdminController {
   constructor(
@@ -68,16 +71,19 @@ export class AdminController {
     private readonly alerts: AlertsService,
     private readonly homepageAlerts: HomepageAlertsService,
     private readonly audit: AuditService,
+    private readonly roles: RolesService,
   ) {}
 
   // ---- Nodes -------------------------------------------------------------
 
   @Get('nodes')
+  @RequirePerm('nodes.read')
   listNodes(@Query() pagination: PaginationDto) {
     return this.nodes.list(pagination);
   }
 
   @Post('nodes')
+  @RequirePerm('nodes.manage')
   @Audit({ action: 'admin.node.create', targetType: 'Node' })
   createNode(@Body() dto: CreateNodeDto) {
     return this.nodes.create(dto);
@@ -85,38 +91,45 @@ export class AdminController {
 
   // Static route must precede `nodes/:id` so it isn't captured as an id.
   @Get('nodes/regions')
+  @RequirePerm('nodes.read')
   listRegions() {
     return this.nodes.listRegions();
   }
 
   @Get('nodes/:id')
+  @RequirePerm('nodes.read')
   getNode(@Param('id') id: string) {
     return this.nodes.get(id);
   }
 
   @Get('nodes/:id/heartbeats')
+  @RequirePerm('nodes.read')
   nodeHeartbeats(@Param('id') id: string, @Query('range') range?: string) {
     return this.nodes.listHeartbeats(id, range ?? '1h');
   }
 
   @Get('nodes/:id/ping')
+  @RequirePerm('nodes.read')
   nodePing(@Param('id') id: string) {
     return this.nodes.ping(id);
   }
 
   @Post('nodes/:id/restart-agent')
+  @RequirePerm('nodes.manage')
   @Audit({ action: 'admin.node.restart-agent', targetType: 'Node', targetParam: 'id' })
   restartNodeAgent(@Param('id') id: string) {
     return this.nodes.restartAgent(id);
   }
 
   @Patch('nodes/:id')
+  @RequirePerm('nodes.manage')
   @Audit({ action: 'admin.node.update', targetType: 'Node', targetParam: 'id' })
   updateNode(@Param('id') id: string, @Body() dto: UpdateNodeDto) {
     return this.nodes.update(id, dto);
   }
 
   @Delete('nodes/:id')
+  @RequirePerm('nodes.manage')
   @HttpCode(204)
   @Audit({ action: 'admin.node.delete', targetType: 'Node', targetParam: 'id' })
   deleteNode(@Param('id') id: string) {
@@ -126,23 +139,27 @@ export class AdminController {
   // ---- Locations (regions) ----------------------------------------------
 
   @Get('locations')
+  @RequirePerm('locations.manage')
   listLocations() {
     return this.nodes.listRegions();
   }
 
   @Post('locations')
+  @RequirePerm('locations.manage')
   @Audit({ action: 'admin.location.create', targetType: 'Region' })
   createLocation(@Body() dto: CreateLocationDto) {
     return this.nodes.createRegion(dto);
   }
 
   @Patch('locations/:id')
+  @RequirePerm('locations.manage')
   @Audit({ action: 'admin.location.update', targetType: 'Region', targetParam: 'id' })
   updateLocation(@Param('id') id: string, @Body() dto: UpdateLocationDto) {
     return this.nodes.updateRegion(id, dto);
   }
 
   @Delete('locations/:id')
+  @RequirePerm('locations.manage')
   @HttpCode(204)
   @Audit({ action: 'admin.location.delete', targetType: 'Region', targetParam: 'id' })
   deleteLocation(@Param('id') id: string) {
@@ -152,7 +169,7 @@ export class AdminController {
   // ---- Users -------------------------------------------------------------
 
   @Get('users')
-  @Roles(GlobalRole.SUPPORT) // support staff may look up customer accounts (read-only)
+  @RequirePerm('users.read')
   listUsers(
     @Query() pagination: PaginationDto,
     @Query('role') role?: string,
@@ -165,13 +182,14 @@ export class AdminController {
   }
 
   @Get('users/:id')
-  @Roles(GlobalRole.SUPPORT) // read-only account view; mutations below stay ADMIN+
+  @RequirePerm('users.read')
   getUser(@Param('id') id: string) {
     // Full account view (profile + billing + servers), secrets stripped.
     return this.admin.userDetail(id);
   }
 
   @Patch('users/:id')
+  @RequirePerm('users.manage')
   @Audit({ action: 'admin.user.update', targetType: 'User', targetParam: 'id' })
   async updateUser(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     if (dto.state === 'BANNED') return this.users.banUser(id);
@@ -181,48 +199,102 @@ export class AdminController {
   }
 
   @Patch('users/:id/role')
-  @Roles(GlobalRole.OWNER) // assigning staff roles is owner-only
+  @RequirePerm('roles.manage')
   @Audit({ action: 'admin.user.role', targetType: 'User', targetParam: 'id' })
   setUserRole(@Param('id') id: string, @Body() dto: SetUserRoleDto) {
-    return this.users.setRole(id, dto.role);
+    return this.users.setRole(id, dto.role, dto.roleId);
   }
 
   @Delete('users/:id')
+  @RequirePerm('users.manage')
   @HttpCode(204)
   @Audit({ action: 'admin.user.delete', targetType: 'User', targetParam: 'id' })
   deleteUser(@Param('id') id: string) {
     return this.users.deleteUser(id);
   }
 
+  // ---- Roles & permissions (owner) --------------------------------------
+
+  @Get('roles')
+  @RequirePerm('roles.manage')
+  listRoles() {
+    return this.roles.list();
+  }
+
+  @Get('roles/permissions')
+  @RequirePerm('roles.manage')
+  listPermissions() {
+    return this.roles.permissionCatalog();
+  }
+
+  @Post('roles')
+  @RequirePerm('roles.manage')
+  @Audit({ action: 'admin.role.create', targetType: 'Role' })
+  createRole(@Body() dto: CreateRoleDto) {
+    return this.roles.create(dto);
+  }
+
+  @Patch('roles/:id')
+  @RequirePerm('roles.manage')
+  @Audit({ action: 'admin.role.update', targetType: 'Role', targetParam: 'id' })
+  updateRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
+    return this.roles.update(id, dto);
+  }
+
+  @Delete('roles/:id')
+  @RequirePerm('roles.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.role.delete', targetType: 'Role', targetParam: 'id' })
+  deleteRole(@Param('id') id: string) {
+    return this.roles.remove(id);
+  }
+
   // ---- Billing, orders & invoices ---------------------------------------
 
   @Get('billing/summary')
+  @RequirePerm('billing.read')
   billingSummary() {
     return this.billing.adminBillingSummary();
   }
 
   /** "Orders" = subscriptions (each is a customer's plan purchase). */
   @Get('orders')
+  @RequirePerm('billing.read')
   listOrders(@Query() pagination: PaginationDto) {
     return this.billing.listAllSubscriptions(pagination);
   }
 
   @Get('invoices')
+  @RequirePerm('billing.read')
   listInvoices(@Query() pagination: PaginationDto, @Query('state') state?: string) {
     return this.billing.listAllInvoices(pagination, state as InvoiceState | undefined);
   }
 
-  // ---- Payments (OWNER only) --------------------------------------------
-  // Raw payment ledger + gateway config are restricted to the highest rank.
+  @Post('invoices/:id/void')
+  @RequirePerm('billing.manage')
+  @Audit({ action: 'admin.invoice.void', targetType: 'Invoice', targetParam: 'id' })
+  voidInvoice(@Param('id') id: string) {
+    return this.billing.voidInvoice(id);
+  }
+
+  @Delete('invoices/:id')
+  @RequirePerm('billing.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.invoice.delete', targetType: 'Invoice', targetParam: 'id' })
+  deleteInvoice(@Param('id') id: string) {
+    return this.billing.deleteInvoice(id);
+  }
+
+  // ---- Payments (owner-only) --------------------------------------------
 
   @Get('payments')
-  @Roles(GlobalRole.OWNER)
+  @RequirePerm('payments.manage')
   listPayments(@Query() pagination: PaginationDto) {
     return this.billing.listAllPayments(pagination);
   }
 
   @Get('payments/gateways')
-  @Roles(GlobalRole.OWNER)
+  @RequirePerm('payments.manage')
   paymentGateways() {
     return this.billing.gatewayStatus();
   }
@@ -230,28 +302,33 @@ export class AdminController {
   // ---- Products ----------------------------------------------------------
 
   @Get('products')
+  @RequirePerm('catalog.manage')
   listProducts() {
     return this.billing.listAllProducts();
   }
 
   @Post('products')
+  @RequirePerm('catalog.manage')
   @Audit({ action: 'admin.product.create', targetType: 'Product' })
   createProduct(@Body() dto: CreateProductDto) {
     return this.billing.createProduct(dto);
   }
 
   @Get('products/:id')
+  @RequirePerm('catalog.manage')
   getProduct(@Param('id') id: string) {
     return this.billing.getProduct(id);
   }
 
   @Patch('products/:id')
+  @RequirePerm('catalog.manage')
   @Audit({ action: 'admin.product.update', targetType: 'Product', targetParam: 'id' })
   updateProduct(@Param('id') id: string, @Body() dto: UpdateProductDto) {
     return this.billing.updateProduct(id, dto);
   }
 
   @Delete('products/:id')
+  @RequirePerm('catalog.manage')
   @HttpCode(204)
   @Audit({ action: 'admin.product.delete', targetType: 'Product', targetParam: 'id' })
   async deleteProduct(@Param('id') id: string) {
@@ -261,28 +338,33 @@ export class AdminController {
   // ---- Templates (egg editor) -------------------------------------------
 
   @Get('templates')
+  @RequirePerm('catalog.manage')
   listTemplates() {
     return this.templates.list();
   }
 
   @Post('templates')
+  @RequirePerm('catalog.manage')
   @Audit({ action: 'admin.template.create', targetType: 'GameTemplate' })
   createTemplate(@Body() dto: CreateTemplateDto) {
     return this.templates.create(dto);
   }
 
   @Get('templates/:id')
+  @RequirePerm('catalog.manage')
   getTemplate(@Param('id') id: string) {
     return this.templates.get(id);
   }
 
   @Patch('templates/:id')
+  @RequirePerm('catalog.manage')
   @Audit({ action: 'admin.template.update', targetType: 'GameTemplate', targetParam: 'id' })
   updateTemplate(@Param('id') id: string, @Body() dto: UpdateTemplateDto) {
     return this.templates.update(id, dto);
   }
 
   @Delete('templates/:id')
+  @RequirePerm('catalog.manage')
   @HttpCode(204)
   @Audit({ action: 'admin.template.delete', targetType: 'GameTemplate', targetParam: 'id' })
   deleteTemplate(@Param('id') id: string) {
@@ -292,18 +374,20 @@ export class AdminController {
   // ---- Servers (admin create-from-egg) -----------------------------------
 
   @Get('servers')
-  @Roles(GlobalRole.SUPPORT) // support staff may look up servers (read-only)
+  @RequirePerm('servers.read')
   listServers(@Query() pagination: PaginationDto) {
     return this.servers.adminList(pagination);
   }
 
   @Post('servers')
+  @RequirePerm('servers.manage')
   @Audit({ action: 'admin.server.create', targetType: 'Server' })
   createServer(@Body() dto: AdminCreateServerDto) {
     return this.servers.adminCreate(dto);
   }
 
   @Delete('servers/:id')
+  @RequirePerm('servers.manage')
   @HttpCode(204)
   @Audit({ action: 'admin.server.delete', targetType: 'Server', targetParam: 'id' })
   deleteServer(@Param('id') id: string) {
@@ -313,23 +397,27 @@ export class AdminController {
   // ---- Alerts ------------------------------------------------------------
 
   @Get('alerts')
+  @RequirePerm('content.manage')
   listAlerts() {
     return this.alerts.listAllAlerts();
   }
 
   @Post('alerts')
+  @RequirePerm('content.manage')
   @Audit({ action: 'admin.alert.create', targetType: 'GlobalAlert' })
   createAlert(@Body() dto: CreateAlertDto) {
     return this.alerts.createAlert(dto);
   }
 
   @Patch('alerts/:id')
+  @RequirePerm('content.manage')
   @Audit({ action: 'admin.alert.update', targetType: 'GlobalAlert', targetParam: 'id' })
   updateAlert(@Param('id') id: string, @Body() dto: UpdateAlertDto) {
     return this.alerts.updateAlert(id, dto);
   }
 
   @Delete('alerts/:id')
+  @RequirePerm('content.manage')
   @HttpCode(204)
   @Audit({ action: 'admin.alert.delete', targetType: 'GlobalAlert', targetParam: 'id' })
   deleteAlert(@Param('id') id: string) {
@@ -339,17 +427,20 @@ export class AdminController {
   // ---- Homepage alerts (public storefront notices) -----------------------
 
   @Get('homepage-alerts')
+  @RequirePerm('content.manage')
   listHomepageAlerts() {
     return this.homepageAlerts.listAll();
   }
 
   @Post('homepage-alerts')
+  @RequirePerm('content.manage')
   @Audit({ action: 'admin.homepage-alert.create', targetType: 'HomepageAlert' })
   createHomepageAlert(@Body() dto: CreateHomepageAlertDto) {
     return this.homepageAlerts.create(dto);
   }
 
   @Patch('homepage-alerts/:id')
+  @RequirePerm('content.manage')
   @Audit({
     action: 'admin.homepage-alert.update',
     targetType: 'HomepageAlert',
@@ -363,6 +454,7 @@ export class AdminController {
   }
 
   @Delete('homepage-alerts/:id')
+  @RequirePerm('content.manage')
   @HttpCode(204)
   @Audit({
     action: 'admin.homepage-alert.delete',
@@ -376,6 +468,7 @@ export class AdminController {
   // ---- Audit logs --------------------------------------------------------
 
   @Get('audit-logs')
+  @RequirePerm('audit.read')
   auditLogs(@Query() query: AuditQueryDto) {
     return this.audit.listAuditLogs(query);
   }
@@ -383,7 +476,7 @@ export class AdminController {
   // ---- Metrics summary ---------------------------------------------------
 
   @Get('metrics')
-  @Roles(GlobalRole.SUPPORT) // overview dashboard is read-only aggregate data
+  @RequirePerm('dashboard.read')
   metrics() {
     return this.admin.adminSummary();
   }

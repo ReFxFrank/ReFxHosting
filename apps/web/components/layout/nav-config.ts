@@ -20,14 +20,13 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
-import type { GlobalRole } from "@/lib/types";
 
 export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** Minimum roles allowed to see this item (admin area only). Omitted = all staff. */
-  roles?: GlobalRole[];
+  /** Admin permission required to see this item (server-enforced too). */
+  perm?: string;
 }
 
 /** A titled group of nav items (used by the admin sidebar). */
@@ -51,50 +50,50 @@ export const customerNav: NavItem[] = [
 // Each major section is a direct route. The whole /admin surface is gated to
 // ADMIN/OWNER on the client (AdminLayout guard) AND server-side (RolesGuard on
 // the admin controller), so these are not security-by-hiding.
-// Role gating: items with no `roles` are visible to all staff incl. SUPPORT
-// (a read-only tier). ADMIN-only items carry roles: ["ADMIN"]; Payments is OWNER.
-// The server enforces the same boundaries, so this isn't security-by-hiding.
+// Each item declares the admin permission it needs; the sidebar hides items the
+// staff member lacks. The server enforces the same permission on every request,
+// so this is not security-by-hiding.
 export const adminNav: NavSection[] = [
-  { items: [{ label: "Overview", href: "/admin", icon: LayoutDashboard }] },
+  { items: [{ label: "Overview", href: "/admin", icon: LayoutDashboard, perm: "dashboard.read" }] },
   {
     title: "Operations",
     items: [
-      { label: "Servers", href: "/admin/servers", icon: ServerCog },
-      { label: "Nodes", href: "/admin/nodes", icon: Boxes, roles: ["ADMIN"] },
-      { label: "Locations", href: "/admin/locations", icon: MapPin, roles: ["ADMIN"] },
+      { label: "Servers", href: "/admin/servers", icon: ServerCog, perm: "servers.read" },
+      { label: "Nodes", href: "/admin/nodes", icon: Boxes, perm: "nodes.read" },
+      { label: "Locations", href: "/admin/locations", icon: MapPin, perm: "locations.manage" },
     ],
   },
   {
     title: "Customers & Billing",
     items: [
-      { label: "Customers", href: "/admin/customers", icon: Users },
-      { label: "Users", href: "/admin/users", icon: UserCog },
-      { label: "Orders", href: "/admin/orders", icon: ShoppingCart, roles: ["ADMIN"] },
-      { label: "Invoices", href: "/admin/invoices", icon: ReceiptText, roles: ["ADMIN"] },
-      { label: "Billing", href: "/admin/billing", icon: CreditCard, roles: ["ADMIN"] },
-      { label: "Payments", href: "/admin/payments", icon: Wallet, roles: ["OWNER"] },
+      { label: "Customers", href: "/admin/customers", icon: Users, perm: "users.read" },
+      { label: "Users", href: "/admin/users", icon: UserCog, perm: "users.read" },
+      { label: "Orders", href: "/admin/orders", icon: ShoppingCart, perm: "billing.read" },
+      { label: "Invoices", href: "/admin/invoices", icon: ReceiptText, perm: "billing.read" },
+      { label: "Billing", href: "/admin/billing", icon: CreditCard, perm: "billing.read" },
+      { label: "Payments", href: "/admin/payments", icon: Wallet, perm: "payments.manage" },
     ],
   },
   {
     title: "Catalog",
     items: [
-      { label: "Products", href: "/admin/products", icon: Package, roles: ["ADMIN"] },
-      { label: "Eggs", href: "/admin/templates", icon: Egg, roles: ["ADMIN"] },
+      { label: "Products", href: "/admin/products", icon: Package, perm: "catalog.manage" },
+      { label: "Eggs", href: "/admin/templates", icon: Egg, perm: "catalog.manage" },
     ],
   },
   {
     title: "Content",
     items: [
-      { label: "Homepage Alerts", href: "/admin/homepage-alerts", icon: Megaphone, roles: ["ADMIN"] },
-      { label: "Alerts", href: "/admin/alerts", icon: Bell, roles: ["ADMIN"] },
+      { label: "Homepage Alerts", href: "/admin/homepage-alerts", icon: Megaphone, perm: "content.manage" },
+      { label: "Alerts", href: "/admin/alerts", icon: Bell, perm: "content.manage" },
     ],
   },
   {
     title: "System",
     items: [
-      { label: "Roles & Permissions", href: "/admin/roles", icon: ShieldCheck, roles: ["OWNER"] },
-      { label: "Audit Logs", href: "/admin/audit", icon: ScrollText, roles: ["ADMIN"] },
-      { label: "Settings", href: "/admin/settings", icon: Settings, roles: ["ADMIN"] },
+      { label: "Roles & Permissions", href: "/admin/roles", icon: ShieldCheck, perm: "roles.manage" },
+      { label: "Audit Logs", href: "/admin/audit", icon: ScrollText, perm: "audit.read" },
+      { label: "Settings", href: "/admin/settings", icon: Settings, perm: "settings.manage" },
     ],
   },
 ];

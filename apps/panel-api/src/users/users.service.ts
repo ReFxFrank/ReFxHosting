@@ -12,6 +12,7 @@ import {
   paginate,
 } from '../common/dto/pagination.dto';
 import { uuidv7 } from '../common/util/uuid';
+import { deriveGlobalRole } from '../common/permissions';
 import { AddSubUserDto } from './dto/add-sub-user.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -104,20 +105,43 @@ export class UsersService {
   }
 
   /**
-   * Set a user's global role (OWNER-only operation, gated at the controller).
-   * Refuses to remove the last OWNER so the platform can't be locked out.
+   * Assign an RBAC role to a user (owner-only, gated at the controller). Accepts
+   * either a specific role id (system or custom) or a GlobalRole enum (mapped to
+   * the matching system role). Keeps globalRole in sync with the role's tier for
+   * the coarse hierarchy/display, and refuses to remove the last OWNER.
    */
-  async setRole(id: string, role: GlobalRole): Promise<User> {
-    if (!Object.values(GlobalRole).includes(role)) {
-      throw new BadRequestException('Invalid role');
-    }
+  async setRole(
+    id: string,
+    role?: GlobalRole,
+    roleId?: string,
+  ): Promise<User> {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, globalRole: true },
     });
     if (!user) throw new NotFoundException('User not found');
 
-    if (user.globalRole === GlobalRole.OWNER && role !== GlobalRole.OWNER) {
+    // Resolve the target Role row.
+    let target: { id: string; key: string; permissions: string[] } | null = null;
+    if (roleId) {
+      target = await this.prisma.role.findUnique({
+        where: { id: roleId },
+        select: { id: true, key: true, permissions: true },
+      });
+    } else if (role && Object.values(GlobalRole).includes(role)) {
+      target = await this.prisma.role.findUnique({
+        where: { key: role.toLowerCase() },
+        select: { id: true, key: true, permissions: true },
+      });
+    }
+    if (!target) throw new BadRequestException('Unknown role');
+
+    const newGlobal = deriveGlobalRole(
+      target.permissions,
+      target.key,
+    ) as GlobalRole;
+
+    if (user.globalRole === GlobalRole.OWNER && newGlobal !== GlobalRole.OWNER) {
       const owners = await this.prisma.user.count({
         where: { globalRole: GlobalRole.OWNER, deletedAt: null },
       });
@@ -127,7 +151,10 @@ export class UsersService {
         );
       }
     }
-    return this.prisma.user.update({ where: { id }, data: { globalRole: role } });
+    return this.prisma.user.update({
+      where: { id },
+      data: { roleId: target.id, globalRole: newGlobal },
+    });
   }
 
   private async setState(id: string, state: UserState): Promise<User> {

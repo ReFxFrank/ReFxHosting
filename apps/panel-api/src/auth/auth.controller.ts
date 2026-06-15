@@ -13,7 +13,10 @@ import { WebAuthnService } from './webauthn.service';
 import { ApiKeyService } from './api-key.service';
 import { UsersService } from '../users/users.service';
 import { Public } from '../common/decorators/public.decorator';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import {
+  CurrentUser,
+  AuthUser,
+} from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import {
   CreateApiKeyDto,
@@ -43,8 +46,11 @@ export class AuthController {
 
   @ApiBearerAuth()
   @Get('me')
-  me(@CurrentUser('id') userId: string) {
-    return this.users.getProfile(userId);
+  async me(@CurrentUser() user: AuthUser) {
+    const profile = await this.users.getProfile(user.id);
+    // Expose the caller's effective admin permissions so the web can gate the
+    // admin UI (the server still enforces them on every request).
+    return { ...profile, permissions: user.permissions };
   }
 
   @Public()

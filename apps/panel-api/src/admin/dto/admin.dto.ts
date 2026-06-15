@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -7,6 +8,8 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Length,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { GlobalRole, UserState } from '@prisma/client';
@@ -33,9 +36,59 @@ export class UpdateUserDto {
 }
 
 export class SetUserRoleDto {
-  @ApiProperty({ enum: GlobalRole })
+  @ApiPropertyOptional({ enum: GlobalRole })
+  @IsOptional()
   @IsEnum(GlobalRole)
-  role!: GlobalRole;
+  role?: GlobalRole;
+
+  @ApiPropertyOptional({ description: 'Assign a specific RBAC role by id (system or custom).' })
+  @IsOptional()
+  @IsString()
+  roleId?: string;
+}
+
+export class CreateRoleDto {
+  @ApiProperty({ description: 'Unique key/slug, e.g. "billing-manager".' })
+  @IsString()
+  @Length(2, 40)
+  key!: string;
+
+  @ApiProperty()
+  @IsString()
+  @Length(1, 60)
+  name!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  description?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissions?: string[];
+}
+
+export class UpdateRoleDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @Length(1, 60)
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  description?: string;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissions?: string[];
 }
 
 /**

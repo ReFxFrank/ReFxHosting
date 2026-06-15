@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Node } from '@prisma/client';
+import { Node, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { NodeAgentClient } from '../agent/agent.client';
@@ -98,17 +98,39 @@ export class NodesService {
   }
 
   async deleteRegion(id: string): Promise<void> {
-    const nodes = await this.prisma.node.count({
+    const region = await this.prisma.region.findUnique({ where: { id } });
+    if (!region) throw new NotFoundException('Location not found');
+
+    // Count ALL nodes that reference this region — including soft-deleted ones,
+    // which still hold the (non-nullable) regionId foreign key and would make the
+    // delete fail with a raw "Foreign key constraint failed".
+    const active = await this.prisma.node.count({
       where: { regionId: id, deletedAt: null },
     });
-    if (nodes > 0) {
+    const total = await this.prisma.node.count({ where: { regionId: id } });
+    if (active > 0) {
       throw new BadRequestException(
         'Cannot delete a location that still has nodes; move or delete them first',
       );
     }
-    const region = await this.prisma.region.findUnique({ where: { id } });
-    if (!region) throw new NotFoundException('Location not found');
-    await this.prisma.region.delete({ where: { id } });
+    if (total > 0) {
+      throw new BadRequestException(
+        'This location still has removed nodes referencing it and cannot be deleted yet',
+      );
+    }
+    try {
+      await this.prisma.region.delete({ where: { id } });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2003'
+      ) {
+        throw new BadRequestException(
+          'Location is still referenced and cannot be deleted',
+        );
+      }
+      throw e;
+    }
   }
 
   /**

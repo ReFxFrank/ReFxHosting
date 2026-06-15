@@ -57,14 +57,14 @@ function AdminNavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }
 
 export function AdminSidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUiStore();
-  const hasRole = useAuthStore((s) => s.hasRole);
+  const hasPermission = useAuthStore((s) => s.hasPermission);
 
-  // Role-gate items (e.g. Payments is OWNER-only). The server also enforces this,
-  // so hidden items aren't reachable even by URL/API.
+  // Permission-gate items. The server enforces the same permission on every
+  // request, so hidden items aren't reachable even by URL/API.
   const sections = adminNav
     .map((section) => ({
       ...section,
-      items: section.items.filter((i) => !i.roles || hasRole(...i.roles)),
+      items: section.items.filter((i) => !i.perm || hasPermission(i.perm)),
     }))
     .filter((section) => section.items.length > 0);
 

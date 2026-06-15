@@ -431,6 +431,28 @@ export class BillingService {
     return paginate(data, total, pagination);
   }
 
+  /** Void (revoke) an invoice — marks it uncollectable without deleting history. */
+  async voidInvoice(id: string): Promise<Invoice> {
+    const invoice = await this.prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.state === InvoiceState.PAID) {
+      throw new BadRequestException(
+        'A paid invoice cannot be voided; issue a refund instead',
+      );
+    }
+    return this.prisma.invoice.update({
+      where: { id },
+      data: { state: InvoiceState.VOID },
+    });
+  }
+
+  /** Permanently delete an invoice (and its line items/payments via cascade). */
+  async deleteInvoice(id: string): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    await this.prisma.invoice.delete({ where: { id } });
+  }
+
   /** Whether each payment gateway is configured (no secrets returned). */
   gatewayStatus(): {
     stripe: { configured: boolean; publishableKey: string | null };

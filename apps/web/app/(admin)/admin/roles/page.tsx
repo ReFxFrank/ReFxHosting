@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, Search, Check, Minus } from "lucide-react";
+import { ShieldCheck, Search, Plus, Pencil, Trash2, Lock } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge, type BadgeProps } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input, Label, Textarea } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -15,6 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Table,
   TableBody,
@@ -24,124 +33,194 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "@/components/ui/sonner";
-import { useAuthStore } from "@/store/auth";
 import { cn } from "@/lib/utils";
-import type { GlobalRole } from "@/lib/types";
+import type { AdminRole } from "@/lib/types";
 
-const ROLES: { value: GlobalRole; label: string; blurb: string }[] = [
-  { value: "CUSTOMER", label: "Customer", blurb: "Client area only — no staff access." },
-  { value: "SUPPORT", label: "Support", blurb: "Read-only staff: overview, customers, servers." },
-  { value: "ADMIN", label: "Admin", blurb: "Full management except owner-only financials." },
-  { value: "OWNER", label: "Owner", blurb: "Everything, incl. payments & role management." },
+const PERM_GROUPS: { title: string; perms: string[] }[] = [
+  { title: "Dashboard", perms: ["dashboard.read"] },
+  { title: "Servers", perms: ["servers.read", "servers.manage"] },
+  { title: "Infrastructure", perms: ["nodes.read", "nodes.manage", "locations.manage"] },
+  { title: "Customers", perms: ["users.read", "users.manage"] },
+  { title: "Billing", perms: ["billing.read", "billing.manage", "payments.manage"] },
+  { title: "Catalog", perms: ["catalog.manage"] },
+  { title: "Content", perms: ["content.manage"] },
+  { title: "System", perms: ["audit.read", "settings.manage", "roles.manage"] },
 ];
 
-const ROLE_VARIANT: Record<GlobalRole, BadgeProps["variant"]> = {
-  CUSTOMER: "muted",
-  SUPPORT: "secondary",
-  ADMIN: "default",
-  OWNER: "success",
-};
+function permLabel(p: string) {
+  const [area, action] = p.split(".");
+  const verb = action === "read" ? "View" : "Manage";
+  return `${verb} ${area}`;
+}
 
-// Capability → which roles have it (rank-inclusive: a higher role implies lower).
-// Mirrors the server RolesGuard + admin nav gating; this is the reference matrix.
-const MATRIX: { area: string; min: GlobalRole; note?: string }[] = [
-  { area: "Overview dashboard", min: "SUPPORT" },
-  { area: "View customers & users", min: "SUPPORT" },
-  { area: "View servers", min: "SUPPORT" },
-  { area: "Manage accounts (suspend/ban/delete)", min: "ADMIN" },
-  { area: "Nodes & locations", min: "ADMIN" },
-  { area: "Orders, invoices & billing", min: "ADMIN" },
-  { area: "Products & eggs", min: "ADMIN" },
-  { area: "Alerts & homepage notices", min: "ADMIN" },
-  { area: "Audit logs & settings", min: "ADMIN" },
-  { area: "Payments ledger & gateways", min: "OWNER" },
-  { area: "Roles & permissions", min: "OWNER" },
-];
-
-const RANK: Record<GlobalRole, number> = { CUSTOMER: 0, SUPPORT: 1, ADMIN: 2, OWNER: 3 };
+const emptyForm = { key: "", name: "", description: "", permissions: [] as string[] };
 
 export default function AdminRolesPage() {
   const queryClient = useQueryClient();
-  const isOwner = useAuthStore((s) => s.hasRole("OWNER"));
-  const me = useAuthStore((s) => s.user);
   const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState<AdminRole | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<AdminRole | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const rolesQ = useQuery({ queryKey: ["admin", "roles"], queryFn: () => api.admin.roles() });
+  const usersQ = useQuery({
     queryKey: ["admin", "roles-users", search],
     queryFn: () => api.admin.users(search ? { q: search } : undefined),
   });
-  const users = data?.data ?? [];
 
-  const roleMutation = useMutation({
-    mutationFn: ({ id, role }: { id: string; role: GlobalRole }) =>
-      api.admin.setUserRole(id, role),
+  const roles = rolesQ.data ?? [];
+  const rolesById = useMemo(() => Object.fromEntries(roles.map((r) => [r.id, r])), [roles]);
+  const rolesByKey = useMemo(() => Object.fromEntries(roles.map((r) => [r.key, r])), [roles]);
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin", "roles"] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "roles-users"] });
+  };
+
+  const saveMutation = useMutation({
+    mutationFn: () =>
+      editing
+        ? api.admin.updateRole(editing.id, {
+            name: form.name,
+            description: form.description,
+            permissions: form.permissions,
+          })
+        : api.admin.createRole(form),
     onSuccess: () => {
-      toast.success("Role updated");
-      queryClient.invalidateQueries({ queryKey: ["admin", "roles-users"] });
+      toast.success(editing ? "Role updated" : "Role created");
+      setEditorOpen(false);
+      invalidate();
     },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to set role"),
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to save role"),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.admin.deleteRole(id),
+    onSuccess: () => {
+      toast.success("Role deleted");
+      setDeleteTarget(null);
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to delete role"),
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: ({ id, roleId }: { id: string; roleId: string }) =>
+      api.admin.setUserRole(id, { roleId }),
+    onSuccess: () => {
+      toast.success("Role assigned");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to assign role"),
+  });
+
+  function openNew() {
+    setEditing(null);
+    setForm(emptyForm);
+    setEditorOpen(true);
+  }
+  function openEdit(r: AdminRole) {
+    setEditing(r);
+    setForm({ key: r.key, name: r.name, description: r.description ?? "", permissions: r.permissions });
+    setEditorOpen(true);
+  }
+  function togglePerm(p: string) {
+    setForm((f) => ({
+      ...f,
+      permissions: f.permissions.includes(p)
+        ? f.permissions.filter((x) => x !== p)
+        : [...f.permissions, p],
+    }));
+  }
+
+  const isWildcard = form.permissions.includes("*");
+  const permsLocked = !!editing?.isSystem; // system role permissions are fixed
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Roles & permissions"
-        description="Assign staff roles and review exactly what each role can access. The admin panel is locked to staff roles — customers never see it."
+        description="Define what staff can access. The admin panel is permission-gated end to end — customers never see it."
+        actions={
+          <Button onClick={openNew}>
+            <Plus className="size-4" /> New role
+          </Button>
+        }
       />
 
-      {/* Permission matrix */}
+      {/* Roles list */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <ShieldCheck className="size-4" /> Permission matrix
+            <ShieldCheck className="size-4" /> Roles
           </CardTitle>
-          <CardDescription>
-            Built-in roles are hierarchical: Owner &gt; Admin &gt; Support &gt; Customer. A
-            higher role inherits everything below it.
-          </CardDescription>
+          <CardDescription>System roles are fixed; create custom roles with any permission set.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Capability</TableHead>
-                {ROLES.map((r) => (
-                  <TableHead key={r.value} className="text-center">
-                    {r.label}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {MATRIX.map((row) => (
-                <TableRow key={row.area}>
-                  <TableCell className="font-medium">{row.area}</TableCell>
-                  {ROLES.map((r) => {
-                    const allowed = RANK[r.value] >= RANK[row.min];
-                    return (
-                      <TableCell key={r.value} className="text-center">
-                        {allowed ? (
-                          <Check className="mx-auto size-4 text-success" />
-                        ) : (
-                          <Minus className="mx-auto size-4 text-muted-foreground/40" />
-                        )}
-                      </TableCell>
-                    );
-                  })}
+          {rolesQ.isLoading ? (
+            <div className="p-4">
+              <ListSkeleton rows={4} />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Permissions</TableHead>
+                  <TableHead>Users</TableHead>
+                  <TableHead className="w-24" />
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {roles.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2 font-medium">
+                        {r.name}
+                        {r.isSystem && (
+                          <Badge variant="secondary" className="gap-1">
+                            <Lock className="size-3" /> system
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="font-mono text-xs text-muted-foreground">{r.key}</div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {r.permissions.includes("*")
+                        ? "All permissions"
+                        : `${r.permissions.length} permission${r.permissions.length === 1 ? "" : "s"}`}
+                    </TableCell>
+                    <TableCell className="tabular-nums">{r._count?.users ?? 0}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon-sm" onClick={() => openEdit(r)}>
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive"
+                          disabled={r.isSystem || (r._count?.users ?? 0) > 0}
+                          onClick={() => setDeleteTarget(r)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
-      {/* Role assignment */}
+      {/* Assign roles */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Assign roles</CardTitle>
-          <CardDescription>
-            Promote a customer to staff or change a staff member&apos;s role. Owner-only.
-          </CardDescription>
+          <CardDescription>Give a user any role. Permissions take effect immediately.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="relative max-w-sm">
@@ -153,22 +232,23 @@ export default function AdminRolesPage() {
               className="pl-9"
             />
           </div>
-
-          {isLoading ? (
+          {usersQ.isLoading ? (
             <ListSkeleton rows={5} />
-          ) : users.length ? (
+          ) : usersQ.data?.data.length ? (
             <div className="overflow-hidden rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>User</TableHead>
-                    <TableHead>Current role</TableHead>
-                    <TableHead className="w-56">Set role</TableHead>
+                    <TableHead className="w-64">Role</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((u) => {
-                    const isSelf = u.id === me?.id;
+                  {usersQ.data.data.map((u) => {
+                    const current =
+                      (u.roleId && rolesById[u.roleId]?.id) ??
+                      rolesByKey[u.globalRole.toLowerCase()]?.id ??
+                      "";
                     return (
                       <TableRow key={u.id}>
                         <TableCell>
@@ -178,23 +258,18 @@ export default function AdminRolesPage() {
                           <div className="text-xs text-muted-foreground">{u.email}</div>
                         </TableCell>
                         <TableCell>
-                          <Badge variant={ROLE_VARIANT[u.globalRole]}>{u.globalRole}</Badge>
-                        </TableCell>
-                        <TableCell>
                           <Select
-                            value={u.globalRole}
-                            disabled={!isOwner || isSelf || roleMutation.isPending}
-                            onValueChange={(v) =>
-                              roleMutation.mutate({ id: u.id, role: v as GlobalRole })
-                            }
+                            value={current}
+                            disabled={assignMutation.isPending}
+                            onValueChange={(roleId) => assignMutation.mutate({ id: u.id, roleId })}
                           >
-                            <SelectTrigger className={cn(isSelf && "opacity-60")}>
-                              <SelectValue />
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select role" />
                             </SelectTrigger>
                             <SelectContent>
-                              {ROLES.map((r) => (
-                                <SelectItem key={r.value} value={r.value}>
-                                  {r.label}
+                              {roles.map((r) => (
+                                <SelectItem key={r.id} value={r.id}>
+                                  {r.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -207,19 +282,133 @@ export default function AdminRolesPage() {
               </Table>
             </div>
           ) : (
-            <EmptyState
-              icon={ShieldCheck}
-              title="No users found"
-              description={search ? "No users match your search." : "Users will appear here."}
-            />
-          )}
-          {!isOwner && (
-            <p className="text-xs text-muted-foreground">
-              Only owners can change roles. You can view the permission model above.
-            </p>
+            <EmptyState icon={ShieldCheck} title="No users found" description="Try another search." />
           )}
         </CardContent>
       </Card>
+
+      {/* Role editor dialog */}
+      <Dialog open={editorOpen} onOpenChange={setEditorOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? `Edit ${editing.name}` : "New role"}</DialogTitle>
+            <DialogDescription>
+              {permsLocked
+                ? "This is a system role — its permissions are fixed, but you can rename it."
+                : "Toggle the permissions this role grants."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="role-name">Name</Label>
+                <Input
+                  id="role-name"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </div>
+              {!editing && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="role-key">Key</Label>
+                  <Input
+                    id="role-key"
+                    placeholder="billing-manager"
+                    value={form.key}
+                    onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))}
+                    className="font-mono"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="role-desc">Description</Label>
+              <Textarea
+                id="role-desc"
+                rows={2}
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <Label>Permissions</Label>
+              {isWildcard ? (
+                <p className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+                  This role has the <span className="font-mono">*</span> wildcard — full access to
+                  everything.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {PERM_GROUPS.map((g) => (
+                    <div key={g.title}>
+                      <p className="refx-eyebrow mb-1">{g.title}</p>
+                      <div className="grid gap-1.5 sm:grid-cols-2">
+                        {g.perms.map((p) => (
+                          <label
+                            key={p}
+                            className={cn(
+                              "flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm",
+                              permsLocked ? "opacity-60" : "cursor-pointer hover:bg-accent/40",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="size-4 accent-primary"
+                              disabled={permsLocked}
+                              checked={form.permissions.includes(p)}
+                              onChange={() => togglePerm(p)}
+                            />
+                            {permLabel(p)}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditorOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={saveMutation.isPending}
+              disabled={!form.name.trim() || (!editing && !form.key.trim())}
+              onClick={() => saveMutation.mutate()}
+            >
+              {editing ? "Save changes" : "Create role"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirm */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleteTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              Custom roles can only be deleted when no users are assigned. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              Delete role
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

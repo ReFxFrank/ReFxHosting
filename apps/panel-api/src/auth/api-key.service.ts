@@ -7,6 +7,7 @@ import { ApiKey, ApiKeyScope } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { AuthUser } from '../common/decorators/current-user.decorator';
+import { permissionsForGlobalRole } from '../common/permissions';
 
 /**
  * API-key authentication. Keys are formatted `refx_<prefix><secret>`; we look up
@@ -109,6 +110,7 @@ export class ApiKeyService {
       email: key.user.email,
       globalRole: key.user.globalRole,
       state: key.user.state,
+      permissions: permissionsForGlobalRole(key.user.globalRole),
       apiKeyId: key.id,
       apiKeyScopes: key.scopes,
     };

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { RolesService } from './roles.service';
 import { NodesModule } from '../nodes/nodes.module';
 import { TemplatesModule } from '../templates/templates.module';
 import { UsersModule } from '../users/users.module';
@@ -21,6 +22,7 @@ import { ServersModule } from '../servers/servers.module';
     ServersModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [AdminService, RolesService],
+  exports: [RolesService],
 })
 export class AdminModule {}

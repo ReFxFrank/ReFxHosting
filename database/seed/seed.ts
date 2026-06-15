@@ -148,6 +148,56 @@ async function seedOwner() {
   return owner;
 }
 
+// System RBAC roles (mirror apps/panel-api/src/common/permissions.ts).
+const SYSTEM_ROLES = [
+  { key: 'owner', name: 'Owner', description: 'Full access, including payments and roles.', permissions: ['*'] },
+  {
+    key: 'admin',
+    name: 'Admin',
+    description: 'Full management except owner-only financials.',
+    permissions: [
+      'dashboard.read', 'servers.read', 'servers.manage', 'nodes.read', 'nodes.manage',
+      'locations.manage', 'users.read', 'users.manage', 'billing.read', 'billing.manage',
+      'catalog.manage', 'content.manage', 'audit.read', 'settings.manage',
+    ],
+  },
+  { key: 'support', name: 'Support', description: 'Read-only: overview, customers, servers.', permissions: ['dashboard.read', 'users.read', 'servers.read'] },
+  { key: 'customer', name: 'Customer', description: 'Client area only — no admin access.', permissions: [] },
+];
+
+async function seedRoles() {
+  for (const r of SYSTEM_ROLES) {
+    await prisma.role.upsert({
+      where: { key: r.key },
+      update: { name: r.name, description: r.description, permissions: r.permissions, isSystem: true },
+      create: {
+        id: uuidv7(),
+        key: r.key,
+        name: r.name,
+        description: r.description,
+        isSystem: true,
+        permissions: r.permissions,
+      },
+    });
+  }
+  // Backfill: assign each role-less user the system role matching its globalRole.
+  const roles = await prisma.role.findMany({
+    where: { isSystem: true },
+    select: { id: true, key: true },
+  });
+  const byKey = Object.fromEntries(roles.map((r) => [r.key, r.id]));
+  for (const key of ['owner', 'admin', 'support', 'customer']) {
+    await prisma.user.updateMany({
+      where: {
+        roleId: null,
+        globalRole: key.toUpperCase() as Prisma.UserWhereInput['globalRole'],
+      },
+      data: { roleId: byKey[key] },
+    });
+  }
+  console.log(`  • Roles: ${SYSTEM_ROLES.map((r) => r.key).join(', ')}`);
+}
+
 async function seedRegionAndNode() {
   // A few common regions so nodes can be placed/labelled accurately.
   const regions = [
@@ -524,6 +574,7 @@ async function main() {
 
   console.log('Identity:');
   await seedOwner();
+  await seedRoles();
 
   console.log('Infrastructure:');
   await seedRegionAndNode();
