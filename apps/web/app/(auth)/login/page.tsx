@@ -26,6 +26,7 @@ function LoginForm() {
   const next = params.get("next") || "/dashboard";
   const setSession = useAuthStore((s) => s.setSession);
   const [submitting, setSubmitting] = useState(false);
+  const [remember, setRemember] = useState(true);
 
   const {
     register,
@@ -38,13 +39,13 @@ function LoginForm() {
     try {
       const res = await api.auth.login(values.email, values.password);
       if (res.mfaRequired && res.mfaToken) {
-        sessionStorage.setItem("refx.mfa", JSON.stringify({ token: res.mfaToken, methods: res.methods ?? ["totp"], next }));
+        sessionStorage.setItem("refx.mfa", JSON.stringify({ token: res.mfaToken, methods: res.methods ?? ["totp"], next, remember }));
         router.push("/2fa");
         return;
       }
       if (res.accessToken && res.refreshToken) {
         // User is loaded by setSession -> refreshUser() via /auth/me.
-        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
+        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, remember);
         router.replace(next);
       }
     } catch (e) {
@@ -77,6 +78,15 @@ function LoginForm() {
           <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
           {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
         </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            className="size-4 accent-[hsl(var(--primary))]"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+          />
+          Keep me signed in
+        </label>
         <Button type="submit" className="w-full" loading={submitting}>
           Sign in
         </Button>

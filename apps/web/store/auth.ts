@@ -9,7 +9,11 @@ import type { AuthTokens, GlobalRole, User } from "@/lib/types";
 interface AuthState {
   user: User | null;
   status: "idle" | "loading" | "authenticated" | "unauthenticated";
-  setSession: (tokens: AuthTokens, user?: User) => Promise<void>;
+  setSession: (
+    tokens: AuthTokens,
+    user?: User,
+    remember?: boolean,
+  ) => Promise<void>;
   refreshUser: () => Promise<void>;
   bootstrap: () => Promise<void>;
   logout: () => Promise<void>;
@@ -21,8 +25,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   status: "idle",
 
-  async setSession(tokens, user) {
-    setTokens(tokens);
+  async setSession(tokens, user, remember = true) {
+    setTokens(tokens, remember);
     if (user) {
       set({ user, status: "authenticated" });
     } else {

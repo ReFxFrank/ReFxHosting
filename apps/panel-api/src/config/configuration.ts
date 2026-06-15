@@ -91,7 +91,9 @@ export default (): AppConfig => ({
   jwt: {
     accessSecret: process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret',
     refreshSecret: process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret',
-    accessTtl: toInt(process.env.JWT_ACCESS_TTL, 900),
+    // Access tokens are silently refreshed; a 1h default (was 15m) cuts refresh
+    // churn so sessions feel stable. Refresh tokens last 30 days.
+    accessTtl: toInt(process.env.JWT_ACCESS_TTL, 3600),
     refreshTtl: toInt(process.env.JWT_REFRESH_TTL, 2592000),
     // Dedicated secret for the short-lived MFA login challenge token. Falls back
     // to a derived value so the challenge is still unforgeable in dev/test.

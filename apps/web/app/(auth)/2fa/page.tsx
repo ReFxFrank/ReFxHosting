@@ -13,6 +13,7 @@ interface MfaState {
   token: string;
   methods?: ("totp" | "webauthn" | "recovery")[];
   next?: string;
+  remember?: boolean;
 }
 
 export default function TwoFactorPage() {
@@ -39,7 +40,7 @@ export default function TwoFactorPage() {
       const res = await api.auth.verifyMfa(mfa.token, code.trim(), method);
       if (res.accessToken && res.refreshToken) {
         sessionStorage.removeItem("refx.mfa");
-        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
+        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, mfa?.remember ?? true);
         router.replace(mfa.next || "/dashboard");
       }
     } catch (e) {
@@ -58,7 +59,7 @@ export default function TwoFactorPage() {
       const res = await api.auth.verifyWebAuthn(mfa.token, { stub: true });
       if (res.accessToken && res.refreshToken) {
         sessionStorage.removeItem("refx.mfa");
-        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
+        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, mfa?.remember ?? true);
         router.replace(mfa.next || "/dashboard");
       }
     } catch {
