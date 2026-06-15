@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUiStore } from "@/store/ui";
+import { useAuthStore } from "@/store/auth";
 import { adminNav, type NavItem } from "./nav-config";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
@@ -56,6 +57,16 @@ function AdminNavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }
 
 export function AdminSidebar() {
   const { sidebarCollapsed, toggleSidebar } = useUiStore();
+  const hasRole = useAuthStore((s) => s.hasRole);
+
+  // Role-gate items (e.g. Payments is OWNER-only). The server also enforces this,
+  // so hidden items aren't reachable even by URL/API.
+  const sections = adminNav
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((i) => !i.roles || hasRole(...i.roles)),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <aside
@@ -86,7 +97,7 @@ export function AdminSidebar() {
       </div>
 
       <nav className="flex-1 space-y-3 overflow-y-auto p-2">
-        {adminNav.map((section, i) => (
+        {sections.map((section, i) => (
           <div key={section.title ?? `s${i}`} className="space-y-1">
             {section.title && !sidebarCollapsed && (
               <div className="px-3 pb-0.5 pt-1 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">

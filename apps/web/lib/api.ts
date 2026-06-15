@@ -39,6 +39,12 @@ import type {
   HomepageAlert,
   ModrinthProject,
   ModrinthVersion,
+  AdminUserDetail,
+  AdminInvoice,
+  AdminSubscription,
+  AdminPayment,
+  AdminBillingSummary,
+  GatewayStatus,
 } from "@/lib/types";
 
 export const API_URL =
@@ -509,10 +515,30 @@ export const api = {
       http.patch<Node>(`/admin/nodes/${id}`, { maintenance }),
     deleteNode: (id: string) => http.delete<void>(`/admin/nodes/${id}`),
 
-    users: (query?: { search?: string; state?: string }) =>
+    users: (query?: { q?: string; role?: string; state?: string }) =>
       http.get<Paginated<User>>("/admin/users", { query }),
+    userDetail: (id: string) => http.get<AdminUserDetail>(`/admin/users/${id}`),
     setUserState: (id: string, state: User["state"]) =>
       http.patch<User>(`/admin/users/${id}`, { state }),
+    deleteUser: (id: string) => http.delete<void>(`/admin/users/${id}`),
+
+    // Locations (regions) — full CRUD; new locations feed the node-create picker.
+    locations: () => getList<Region>("/admin/locations"),
+    createLocation: (input: { code: string; name: string; country: string }) =>
+      http.post<Region>("/admin/locations", input),
+    updateLocation: (id: string, input: Partial<{ code: string; name: string; country: string }>) =>
+      http.patch<Region>(`/admin/locations/${id}`, input),
+    deleteLocation: (id: string) => http.delete<void>(`/admin/locations/${id}`),
+
+    // Billing / orders / invoices / payments (payments are OWNER-only).
+    billingSummary: () => http.get<AdminBillingSummary>("/admin/billing/summary"),
+    orders: (query?: { page?: number; q?: string }) =>
+      http.get<Paginated<AdminSubscription>>("/admin/orders", { query }),
+    invoices: (query?: { page?: number; q?: string; state?: string }) =>
+      http.get<Paginated<AdminInvoice>>("/admin/invoices", { query }),
+    payments: (query?: { page?: number; q?: string }) =>
+      http.get<Paginated<AdminPayment>>("/admin/payments", { query }),
+    paymentGateways: () => http.get<GatewayStatus>("/admin/payments/gateways"),
 
     products: () => getList<Product>("/admin/products"),
     saveProduct: (input: Partial<Product>) =>

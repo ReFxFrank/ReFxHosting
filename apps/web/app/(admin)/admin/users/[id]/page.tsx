@@ -1,0 +1,381 @@
+"use client";
+
+import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  Mail,
+  Shield,
+  Server as ServerIcon,
+  CreditCard,
+  ReceiptText,
+  Trash2,
+  Ban,
+  Pause,
+  Play,
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+} from "lucide-react";
+import { api, ApiError } from "@/lib/api";
+import { PageHeader } from "@/components/shared";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge, type BadgeProps, ServerStateBadge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { toast } from "@/components/ui/sonner";
+import { formatDate, formatMoney } from "@/lib/utils";
+import type { UserState } from "@/lib/types";
+
+const STATE_VARIANT: Record<UserState, BadgeProps["variant"]> = {
+  ACTIVE: "success",
+  SUSPENDED: "warning",
+  BANNED: "destructive",
+  PENDING_VERIFICATION: "muted",
+};
+
+function fullName(u: { firstName: string | null; lastName: string | null }) {
+  return [u.firstName, u.lastName].filter(Boolean).join(" ");
+}
+
+export default function AdminUserDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const { data: user, isLoading } = useQuery({
+    queryKey: ["admin", "user", id],
+    queryFn: () => api.admin.userDetail(id),
+  });
+
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "user", id] });
+
+  const stateMutation = useMutation({
+    mutationFn: (state: UserState) => api.admin.setUserState(id, state),
+    onSuccess: () => {
+      toast.success("Account updated");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to update account"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.admin.deleteUser(id),
+    onSuccess: () => {
+      toast.success("User deleted");
+      router.push("/admin/users");
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to delete user"),
+  });
+
+  if (isLoading || !user) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Skeleton className="h-64 lg:col-span-1" />
+          <Skeleton className="h-64 lg:col-span-2" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Button asChild variant="ghost" size="sm" className="-ml-2 w-fit text-muted-foreground">
+        <Link href="/admin/users">
+          <ArrowLeft className="size-4" /> All users
+        </Link>
+      </Button>
+
+      <PageHeader
+        title={fullName(user) || user.email}
+        description={user.email}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {user.state !== "ACTIVE" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => stateMutation.mutate("ACTIVE")}
+                loading={stateMutation.isPending}
+              >
+                <Play className="size-4" /> Activate
+              </Button>
+            )}
+            {user.state !== "SUSPENDED" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => stateMutation.mutate("SUSPENDED")}
+              >
+                <Pause className="size-4" /> Suspend
+              </Button>
+            )}
+            {user.state !== "BANNED" && (
+              <Button variant="outline" size="sm" onClick={() => stateMutation.mutate("BANNED")}>
+                <Ban className="size-4" /> Ban
+              </Button>
+            )}
+            <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
+              <Trash2 className="size-4" /> Delete
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Contact / profile */}
+        <Card className="lg:col-span-1">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Mail className="size-4" /> Contact & account
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <Row label="Status">
+              <Badge variant={STATE_VARIANT[user.state] ?? "secondary"}>{user.state}</Badge>
+            </Row>
+            <Row label="Role">
+              <span className="flex items-center gap-1.5">
+                <Shield className="size-3.5 text-muted-foreground" /> {user.globalRole}
+              </span>
+            </Row>
+            <Row label="Email">
+              <span className="flex items-center gap-1.5">
+                {user.email}
+                {user.emailVerifiedAt ? (
+                  <CheckCircle2 className="size-3.5 text-success" />
+                ) : (
+                  <XCircle className="size-3.5 text-warning" />
+                )}
+              </span>
+            </Row>
+            <Row label="Name">{fullName(user) || "—"}</Row>
+            <Row label="2FA">
+              <span className="flex items-center gap-1.5">
+                {user.totpEnabledAt ? (
+                  <>
+                    <ShieldCheck className="size-3.5 text-success" /> Enabled
+                  </>
+                ) : (
+                  "Off"
+                )}
+              </span>
+            </Row>
+            <Row label="Locale">{user.locale}</Row>
+            <Row label="Timezone">{user.timezone}</Row>
+            <Row label="Joined">{formatDate(user.createdAt)}</Row>
+            <p className="pt-1 text-xs text-muted-foreground">
+              Postal address isn&apos;t collected by the platform; reach customers via email.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Billing + servers */}
+        <div className="space-y-4 lg:col-span-2">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Mini label="Servers" value={user._count?.ownedServers ?? 0} icon={ServerIcon} />
+            <Mini
+              label="Subscriptions"
+              value={user._count?.subscriptions ?? 0}
+              icon={CreditCard}
+            />
+            <Mini label="Tickets" value={user._count?.tickets ?? 0} icon={ReceiptText} />
+          </div>
+
+          <Section title="Servers" icon={ServerIcon}>
+            {user.ownedServers?.length ? (
+              <SimpleTable head={["Name", "Short ID", "Node", "State"]}>
+                {user.ownedServers.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{s.name}</TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {s.shortId}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{s.node?.name ?? "—"}</TableCell>
+                    <TableCell>
+                      <ServerStateBadge state={s.state} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </SimpleTable>
+            ) : (
+              <Empty>No servers.</Empty>
+            )}
+          </Section>
+
+          <Section title="Subscriptions" icon={CreditCard}>
+            {user.subscriptions?.length ? (
+              <SimpleTable head={["Product", "Status", "Interval", "Renews"]}>
+                {user.subscriptions.map((sub) => (
+                  <TableRow key={sub.id}>
+                    <TableCell className="font-medium">{sub.product?.name ?? "—"}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{sub.state}</Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{sub.interval}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {sub.cancelAtPeriodEnd ? "Cancels" : formatDate(sub.currentPeriodEnd)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </SimpleTable>
+            ) : (
+              <Empty>No subscriptions.</Empty>
+            )}
+          </Section>
+
+          <Section title="Invoices" icon={ReceiptText}>
+            {user.invoices?.length ? (
+              <SimpleTable head={["Number", "Status", "Total", "Issued"]}>
+                {user.invoices.map((inv) => (
+                  <TableRow key={inv.id}>
+                    <TableCell className="font-mono text-xs">{inv.number}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary">{inv.state}</Badge>
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {formatMoney(inv.totalMinor, inv.currency)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{formatDate(inv.createdAt)}</TableCell>
+                  </TableRow>
+                ))}
+              </SimpleTable>
+            ) : (
+              <Empty>No invoices.</Empty>
+            )}
+          </Section>
+
+          {!!user.paymentMethods?.length && (
+            <Section title="Payment methods" icon={CreditCard}>
+              <div className="flex flex-wrap gap-2">
+                {user.paymentMethods.map((pm) => (
+                  <Badge key={pm.id} variant="outline" className="gap-1.5">
+                    <span className="capitalize">{pm.brand ?? pm.gateway}</span>
+                    {pm.last4 && <span className="font-mono">•••• {pm.last4}</span>}
+                    {pm.isDefault && <span className="text-[hsl(var(--primary))]">default</span>}
+                  </Badge>
+                ))}
+              </div>
+            </Section>
+          )}
+        </div>
+      </div>
+
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {fullName(user) || user.email}?</DialogTitle>
+            <DialogDescription>
+              This soft-deletes the account and bans it. A user who still owns servers
+              can&apos;t be deleted — remove or transfer their servers first.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate()}
+            >
+              Delete user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right font-medium">{children}</span>
+    </div>
+  );
+}
+
+function Mini({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: number;
+  icon: React.ComponentType<{ className?: string }>;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-center justify-between p-3">
+        <div>
+          <p className="refx-eyebrow">{label}</p>
+          <p className="text-xl font-semibold">{value}</p>
+        </div>
+        <Icon className="size-5 text-muted-foreground" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function Section({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Icon className="size-4" /> {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-0">{children}</CardContent>
+    </Card>
+  );
+}
+
+function SimpleTable({ head, children }: { head: string[]; children: React.ReactNode }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          {head.map((h) => (
+            <TableHead key={h}>{h}</TableHead>
+          ))}
+        </TableRow>
+      </TableHeader>
+      <TableBody>{children}</TableBody>
+    </Table>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="px-4 py-6 text-center text-sm text-muted-foreground">{children}</p>;
+}

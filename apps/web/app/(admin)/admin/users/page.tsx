@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Users as UsersIcon,
@@ -9,6 +10,7 @@ import {
   ShieldCheck,
   ShieldOff,
   Ban,
+  Eye,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -77,8 +79,8 @@ export default function AdminUsersPage() {
     queryKey: ["admin", "users", search, page],
     // `page` is forwarded as a raw query param by the REST client.
     queryFn: () =>
-      api.admin.users({ search: search || undefined, page } as {
-        search?: string;
+      api.admin.users({ q: search || undefined, page } as {
+        q?: string;
         page?: number;
       }),
   });
@@ -170,6 +172,12 @@ export default function AdminUsersPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link href={`/admin/users/${user.id}`}>
+                                <Eye /> View account
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               disabled={user.state === "ACTIVE"}
                               onSelect={() =>

@@ -30,16 +30,12 @@ export default function AdminCustomersPage() {
   const [search, setSearch] = useState("");
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin", "users", search],
-    queryFn: () => api.admin.users(search ? { search } : undefined),
+    queryKey: ["admin", "customers", search],
+    // Server-side role filter so large datasets paginate correctly.
+    queryFn: () => api.admin.users({ role: "CUSTOMER", q: search || undefined }),
   });
 
-  // Customers are accounts without a staff role. Full account controls (suspend,
-  // role changes) live under Users.
-  const customers = useMemo(
-    () => (data?.data ?? []).filter((u) => u.globalRole === "CUSTOMER"),
-    [data],
-  );
+  const customers = useMemo(() => data?.data ?? [], [data]);
 
   return (
     <div className="space-y-6">
@@ -94,7 +90,7 @@ export default function AdminCustomersPage() {
                     </TableCell>
                     <TableCell>
                       <Button asChild variant="ghost" size="sm">
-                        <Link href="/admin/users">Manage</Link>
+                        <Link href={`/admin/users/${u.id}`}>Manage</Link>
                       </Button>
                     </TableCell>
                   </TableRow>

@@ -16,13 +16,17 @@ import {
   ScrollText,
   Settings,
   ReceiptText,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
+import type { GlobalRole } from "@/lib/types";
 
 export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  /** Minimum roles allowed to see this item (admin area only). Omitted = all staff. */
+  roles?: GlobalRole[];
 }
 
 /** A titled group of nav items (used by the admin sidebar). */
@@ -64,6 +68,7 @@ export const adminNav: NavSection[] = [
       { label: "Orders", href: "/admin/orders", icon: ShoppingCart },
       { label: "Invoices", href: "/admin/invoices", icon: ReceiptText },
       { label: "Billing", href: "/admin/billing", icon: CreditCard },
+      { label: "Payments", href: "/admin/payments", icon: Wallet, roles: ["OWNER"] },
     ],
   },
   {

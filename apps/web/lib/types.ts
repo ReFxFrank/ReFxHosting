@@ -69,6 +69,72 @@ export interface AdminServer extends Server {
   owner?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
 }
 
+/** Minimal customer reference embedded in admin billing rows. */
+export type AdminUserRef = Pick<User, "id" | "email" | "firstName" | "lastName">;
+
+export type PaymentState = "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
+
+export interface AdminInvoice extends Invoice {
+  user?: AdminUserRef;
+}
+
+export interface AdminSubscription {
+  id: string;
+  state: SubscriptionState;
+  interval: BillingInterval;
+  currentPeriodEnd: string;
+  cancelAtPeriodEnd: boolean;
+  gateway: string;
+  createdAt: string;
+  product?: { id: string; name: string; type: string };
+  user?: AdminUserRef;
+  _count?: { servers: number };
+}
+
+export interface AdminPayment {
+  id: string;
+  gateway: string;
+  amountMinor: number;
+  currency: string;
+  state: PaymentState;
+  failureReason: string | null;
+  createdAt: string;
+  invoice?: { id: string; number: string; user?: AdminUserRef };
+}
+
+export interface AdminBillingSummary {
+  currency: string;
+  revenueMinor: number;
+  outstandingMinor: number;
+  activeSubscriptions: number;
+  openInvoices: number;
+  paidInvoices: number;
+}
+
+export interface GatewayStatus {
+  stripe: { configured: boolean; publishableKey: string | null };
+  paypal: { configured: boolean };
+}
+
+/** Full account view for the admin user-detail page. */
+export interface AdminUserDetail extends User {
+  ownedServers?: Array<
+    Pick<Server, "id" | "shortId" | "name" | "state"> & { node?: { name: string } }
+  >;
+  subscriptions?: AdminSubscription[];
+  invoices?: AdminInvoice[];
+  paymentMethods?: {
+    id: string;
+    gateway: string;
+    brand: string | null;
+    last4: string | null;
+    expMonth: number | null;
+    expYear: number | null;
+    isDefault: boolean;
+  }[];
+  _count?: { ownedServers: number; subscriptions: number; tickets: number };
+}
+
 export interface ServerStat {
   cpuPct: number;
   memUsedMb: number;
