@@ -36,14 +36,20 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 | 🛟 **Helpdesk built in** | Tickets, internal notes, canned responses, SLA tracking, knowledge base. |
 | 🔐 **Enterprise auth** | Argon2id, TOTP + WebAuthn, RBAC + per-server sub-user permissions, scoped API keys, audit logs. |
 | 🧱 **Eggs, evolved** | JSON-driven game templates — admins add new games with **zero code changes**. |
-| ⛏️ **Minecraft, done right** | Version picker (live Mojang manifest), **Paper + Fabric / Forge / NeoForge** loaders, and **automatic JVM selection** per Minecraft version — no more `UnsupportedClassVersionError` boot crashes. |
+| ⛏️ **One Minecraft, every loader** | Buy **Minecraft once**, then pick **Vanilla / Paper / Fabric / Forge / NeoForge** and the **exact version** any time from a dedicated **Minecraft** tab — the server keeps its identity. **Automatic JVM selection** per version means no `UnsupportedClassVersionError` boot crashes. |
+| 🧩 **Mod & plugin browser** | Built-in **Modrinth** search with **one-click install** of mods/plugins (loader- and version-aware) straight into the server — no manual jar uploads. |
+| 🔒 **Rootless game containers** | Game servers run as a non-root user (`uid 1000`), so you don't get the "running as root" warning and a compromised server can't run as root on the node. |
 | 🔌 **Auto networking** | Every new server reserves a free port and wires it into the game's startup automatically; players connect at the **IP:port** shown right on the server page (one-click copy). |
-| 🛠️ **Admin power tools** | Create servers straight from an egg (no SSH), manage & delete nodes, and watch **live node CPU / RAM / disk / ping graphs** from heartbeats. |
-| 🎨 **ReFx Glassy UI** | Dark, premium control-panel design (`#0072ff`) with a live `xterm.js` console, real-time resource gauges, and the blue ReFx brand throughout. |
+| 🛠️ **Admin power tools** | Create servers straight from an egg (no SSH), manage & delete nodes, **start/stop/restart individual servers from the node view**, pick a node's **region from a dropdown**, and watch **live node CPU / RAM / disk / ping graphs** from heartbeats. |
+| 🗂️ **Real file manager + live SFTP** | Browse, edit, upload, compress/extract files in the browser, or connect over **SFTP** — credentials you rotate in the panel propagate to the node **immediately** (no restart). |
+| 🎨 **ReFx Glassy UI** | Dark, premium control-panel design (`#0072ff`) with a live `xterm.js` console that **survives page switches and refreshes**, real-time resource gauges, per-game storefront artwork, and **sessions that stay signed in across panel rebuilds**. |
 | 📦 **Migrate in** | Importers for **Pterodactyl** (live), AMP & TCAdmin (scaffolded). |
 
 > [!NOTE]
-> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (96 unit + 41 e2e tests green, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
+> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**144 unit + 45 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
+
+> [!TIP]
+> **Recently shipped:** unified **one-Minecraft** product with a post-purchase loader/version tab · built-in **Modrinth** mod & plugin browser · **rootless** game containers · in-browser **file manager** + live **SFTP** credential rotation · **per-server power controls** in the admin node view · **region dropdown** for node creation · console that **persists across navigations & refreshes** · sessions that **stay signed in across panel rebuilds** · per-game storefront artwork and node-derived server locations.
 
 ---
 
@@ -141,14 +147,13 @@ The orchestration lives in [`apps/panel-api/src/servers/`](apps/panel-api/src/se
 
 | | | | |
 |---|---|---|---|
-| ⛏️ Minecraft: Paper | 🧵 Minecraft: Fabric | 🔨 Minecraft: Forge | 🆕 Minecraft: NeoForge |
-| 🔫 Rust | 🦖 ARK: Survival Evolved | 🧟 DayZ | 🪓 Valheim |
-| 🐾 Palworld | 💥 Counter-Strike 2 | 🚗 FiveM (GTA V) | 🏭 Satisfactory |
-| 🌳 Terraria | 🧠 Project Zomboid | | _+ add your own_ |
+| ⛏️ **Minecraft** _(Vanilla · Paper · Fabric · Forge · NeoForge)_ | 🔫 Rust | 🦖 ARK: Survival Evolved | 🧟 DayZ |
+| 🪓 Valheim | 🐾 Palworld | 💥 Counter-Strike 2 | 🚗 FiveM (GTA V) |
+| 🏭 Satisfactory | 🌳 Terraria | 🧠 Project Zomboid | _+ add your own_ |
 
 Each is a JSON template in [`database/seed/templates/`](database/seed/templates) — no code required to add a game. See **[docs/10-game-templates.md](docs/10-game-templates.md)**.
 
-> **Minecraft niceties:** all four Minecraft templates expose a **version selector** (resolved live from Mojang's manifest, `GET /api/v1/catalog/minecraft-versions`) and the panel **auto-picks the right `eclipse-temurin` JVM** for the chosen version (Java 11 → 25), so newer releases like the `26.x` line boot without manual image fiddling. Fabric/Forge/NeoForge loader versions can be pinned or left as `latest`/`recommended` (auto-resolved at install).
+> **Minecraft, unified:** there's now a **single Minecraft product**. After buying, open the server's **Minecraft** tab to choose the loader — **Vanilla, Paper, Fabric, Forge or NeoForge** — and the **exact version** (resolved live from each project's API; Mojang's manifest for Vanilla), switching between them whenever you like without losing the server. The panel **auto-picks the right `eclipse-temurin` JVM** for the chosen version (Java 11 → 25), so newer releases boot without manual image fiddling, and loader builds can be pinned or left as `latest`/`recommended` (auto-resolved at install). On modded/plugin loaders, the **Mods** tab adds Modrinth search + one-click install.
 
 ---
 
@@ -168,13 +173,13 @@ Each is a JSON template in [`database/seed/templates/`](database/seed/templates)
 ## 🧩 Components & key functions
 
 ### 🧠 panel-api — [`apps/panel-api`](apps/panel-api)
-NestJS central panel. **118 source files; compiles clean & boots; 96 unit tests green.**
+NestJS central panel. **Compiles clean & boots; 144 unit + 45 e2e tests green.**
 
 | Area | Where | Notable functions / endpoints |
 |------|-------|-------------------------------|
 | Auth & MFA | `src/auth` | `register` / `login` (Argon2id), JWT access+refresh with **rotation + reuse detection**, `totpEnroll`/`totpVerify`, WebAuthn ceremonies, scoped + IP-allowlisted API keys |
 | AuthZ | `src/auth/guards` | `RolesGuard` (global roles), `PermissionGuard` (per-server `SubUser` perms, owner/admin override, wildcard `files.*`) |
-| Servers | `src/servers` | `POST /servers` (queues provisioning), power `start/stop/restart/kill`, `reinstall`, **`switchGame()`**, `resize()` (capacity-checked), variables/allocations/sub-users/schedules |
+| Servers | `src/servers` | `POST /servers` (queues provisioning), power `start/stop/restart/kill`, `reinstall`, **`switchGame()`**, **`setMinecraftConfig()`** (loader + version), **Modrinth mod search/install**, `resize()` (capacity-checked), variables/allocations/sub-users/schedules |
 | Agent link | `src/agent` | `NodeAgentClient` (HMAC-signed calls), `ConsoleGateway` (browser ↔ agent WebSocket relay) |
 | Billing | `src/billing` | `calculateTax()` (VAT/GST/US), invoice numbering, `StripeGateway`/`PayPalGateway`, renewal + dunning workers |
 | Support | `src/support` | tickets, internal notes, canned responses, SLA breach computation, KB |
@@ -189,13 +194,17 @@ Content-Type: application/json
 ```
 
 ### 🖥️ web — [`apps/web`](apps/web)
-Next.js 14 customer + admin panel. **29 routes; builds, typechecks & lints clean.**
+Next.js 14 customer + admin panel. **Builds, typechecks & lints clean.**
 
-- **Live console** — `xterm.js` wired to the panel WebSocket (`lib/ws.ts`), with power controls and live CPU/RAM/disk gauges (Recharts).
-- **File manager** — browse, edit, upload, compress/extract, permissions.
+- **Live console** — `xterm.js` wired to the panel WebSocket (`lib/ws.ts`), with power controls and live CPU/RAM/disk gauges (Recharts). A shared console hub keeps the socket + scrollback **alive across tab switches and full page refreshes** (`lib/console-hub.ts`).
+- **Minecraft tab** — for Minecraft servers, pick the loader (Vanilla/Paper/Fabric/Forge/NeoForge) and exact version; switch any time.
+- **Mods tab** — Modrinth search with one-click install/remove of mods & plugins (loader/version-aware).
+- **File manager** — browse, edit, upload, compress/extract, permissions; now surfaces agent errors instead of silently showing an empty folder.
 - **Switch-game flow** — choose from the plan-allowed catalog with an explicit keep-vs-wipe data decision.
 - **Resource upgrade** — CPU/RAM/disk sliders with live price preview.
-- Plus dashboard, backups, databases, schedules, billing, support, account/security, a full admin area, and a GPortal-style **storefront**.
+- **Admin** — create servers from an egg, manage nodes (region **dropdown** on create), and **start/stop/restart individual servers** from a node's detail view.
+- Sessions **stay signed in across panel rebuilds** (transient-tolerant token refresh + optional "keep me signed in").
+- Plus dashboard, backups, databases, schedules, billing, support, account/security, a full admin area, and a GPortal-style **storefront** with per-game artwork and node-derived server locations.
 
 ### ⚙️ node-agent — [`apps/node-agent`](apps/node-agent)
 Original Go daemon. **Cross-compiles to linux/amd64, linux/arm64, windows/amd64; vet + tests pass.**
@@ -363,7 +372,7 @@ In the web panel go to **Admin → Nodes → Add node** and fill in:
 |------|-------|
 | **Name** | Friendly label, e.g. `eu-frankfurt-01`. |
 | **FQDN / IP** | A hostname or IP the **panel** can reach the node on. Players also connect here. |
-| **Region** | One of the seeded regions (`us-east`, `us-west`, `eu-central`, …). |
+| **Region** | Picked from a **dropdown** of seeded regions (`us-east`, `us-west`, `eu-central`, …) — no hand-typed IDs. |
 | **OS** | `LINUX` or `WINDOWS`. |
 | **CPU / RAM / Disk capacity** | What the node may hand out (used by the scheduler for placement). |
 | **Daemon port** | Control API, default **8443**. |
@@ -546,8 +555,8 @@ refxhosting/
 ## 🧪 Testing
 
 ```bash
-cd apps/panel-api && npm test          # 96 unit tests
-cd apps/panel-api && npm run test:e2e  # HTTP integration tests
+cd apps/panel-api && npm test          # 144 unit tests
+cd apps/panel-api && npm run test:e2e  # 45 HTTP integration tests
 cd apps/node-agent && go test ./...    # agent unit tests
 npx prisma validate --schema database/prisma/schema.prisma
 ```
