@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
-export default function ServerIndex({ params }: { params: { id: string } }) {
-  redirect(`/servers/${params.id}/console`);
+export default async function ServerIndex({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  redirect(`/servers/${id}/console`);
 }

@@ -301,7 +301,7 @@ export default function AdminProductsPage() {
               </div>
               <Switch
                 checked={form.isActive}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, isActive: v }))}
+                onCheckedChange={(v: boolean) => setForm((f) => ({ ...f, isActive: v }))}
               />
             </div>
 

@@ -5,7 +5,9 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const Select = SelectPrimitive.Root;
+// See dialog.tsx: explicit props annotation restores onValueChange inference
+// under React 19 typings + TS "bundler" module resolution.
+const Select: React.FC<SelectPrimitive.SelectProps> = SelectPrimitive.Root;
 const SelectGroup = SelectPrimitive.Group;
 const SelectValue = SelectPrimitive.Value;
 

@@ -194,7 +194,7 @@ export default function AdminNodesPage() {
                       <Switch
                         checked={node.maintenance}
                         disabled={maintenanceMutation.isPending}
-                        onCheckedChange={(v) =>
+                        onCheckedChange={(v: boolean) =>
                           maintenanceMutation.mutate({ id: node.id, maintenance: v })
                         }
                       />
@@ -443,7 +443,7 @@ function NodeHeartbeatChart({ nodeId }: { nodeId: string }) {
               borderRadius: 8,
               fontSize: 12,
             }}
-            formatter={(v: number) => [`${v}%`, "CPU"]}
+            formatter={(v) => [`${v}%`, "CPU"] as [string, string]}
           />
           <Area
             type="monotone"

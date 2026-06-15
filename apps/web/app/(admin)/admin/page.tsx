@@ -163,7 +163,7 @@ export default function AdminOverviewPage() {
                         borderRadius: 8,
                         fontSize: 12,
                       }}
-                      formatter={(v: number) => [`${v}%`, "CPU"]}
+                      formatter={(v) => [`${v}%`, "CPU"] as [string, string]}
                     />
                     <Bar dataKey="cpu" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>

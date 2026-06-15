@@ -5,7 +5,10 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const Dialog = DialogPrimitive.Root;
+// React 19's typings + TS "bundler" module resolution fail to infer inline
+// callback param types (e.g. onOpenChange) on Radix's re-exported FC roots.
+// Re-annotating the local alias with the explicit props type restores it.
+const Dialog: React.FC<DialogPrimitive.DialogProps> = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
 const DialogPortal = DialogPrimitive.Portal;
 const DialogClose = DialogPrimitive.Close;

@@ -1,8 +1,24 @@
 @import "xterm/css/xterm.css";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.ts";
+
+/*
+ * Tailwind v4 compatibility:
+ * v4 changed the default border/divide/ring color from gray-200 to
+ * `currentColor`, and dropped the default ring width/color. The codebase
+ * relies on bare `border`, `divide-*` and the design-token border color, so
+ * restore the v3 defaults here to avoid a visual break.
+ */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: hsl(var(--border));
+  }
+}
 
 /* ReFx Hosting design tokens. Dark-mode first (Linear / Vercel / GPortal feel). */
 @layer base {

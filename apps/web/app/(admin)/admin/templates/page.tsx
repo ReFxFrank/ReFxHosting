@@ -358,7 +358,7 @@ export default function AdminTemplatesPage() {
                 <span className="text-sm font-medium">Supports Linux</span>
                 <Switch
                   checked={form.supportsLinux}
-                  onCheckedChange={(v) =>
+                  onCheckedChange={(v: boolean) =>
                     setForm((f) => ({ ...f, supportsLinux: v }))
                   }
                 />
@@ -367,7 +367,7 @@ export default function AdminTemplatesPage() {
                 <span className="text-sm font-medium">Supports Windows</span>
                 <Switch
                   checked={form.supportsWindows}
-                  onCheckedChange={(v) =>
+                  onCheckedChange={(v: boolean) =>
                     setForm((f) => ({ ...f, supportsWindows: v }))
                   }
                 />

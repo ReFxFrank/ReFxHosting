@@ -236,7 +236,7 @@ export default function SchedulesPage() {
                   <Switch
                     checked={schedule.isActive}
                     disabled={toggleMutation.isPending}
-                    onCheckedChange={(isActive) =>
+                    onCheckedChange={(isActive: boolean) =>
                       toggleMutation.mutate({ schedule, isActive })
                     }
                     aria-label="Toggle schedule active"
@@ -363,7 +363,7 @@ export default function SchedulesPage() {
               </div>
               <Switch
                 checked={draft.onlyWhenOnline}
-                onCheckedChange={(v) => setDraft((d) => ({ ...d, onlyWhenOnline: v }))}
+                onCheckedChange={(v: boolean) => setDraft((d) => ({ ...d, onlyWhenOnline: v }))}
               />
             </label>
 
