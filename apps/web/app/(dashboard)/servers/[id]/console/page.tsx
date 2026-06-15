@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users } from "lucide-react";
+import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users, Globe, Copy } from "lucide-react";
 import { api } from "@/lib/api";
 import { ConsoleSocket, type ConsoleEvent, type ConsoleStats } from "@/lib/ws";
 import { Button } from "@/components/ui/button";
@@ -179,6 +179,20 @@ export default function ConsolePage() {
     }
   }
 
+  const address = server?.primaryAllocation
+    ? `${server.primaryAllocation.ip}:${server.primaryAllocation.port}`
+    : null;
+
+  async function copyAddress() {
+    if (!address) return;
+    try {
+      await navigator.clipboard.writeText(address);
+      toast.success("Address copied");
+    } catch {
+      toast.error("Couldn't copy address");
+    }
+  }
+
   const running = state === "RUNNING" || state === "STARTING";
   const memLimit = stats?.memLimitMb ?? server?.memoryMb ?? 0;
   const diskLimit = stats?.diskLimitMb ?? server?.diskMb ?? 0;
@@ -230,6 +244,32 @@ export default function ConsolePage() {
 
       {/* Live gauges */}
       <div className="space-y-3">
+        {/* Connection address — what players put in their game client. */}
+        <Card className="space-y-2 p-4">
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Globe className="size-4" /> Server Address
+          </span>
+          {address ? (
+            <div className="flex items-center justify-between gap-2">
+              <code className="truncate font-mono text-sm font-semibold tabular-nums">
+                {address}
+              </code>
+              <Button
+                size="icon"
+                variant="outline"
+                onClick={copyAddress}
+                aria-label="Copy server address"
+              >
+                <Copy className="size-4" />
+              </Button>
+            </div>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              No address allocated yet
+            </span>
+          )}
+        </Card>
+
         <ResourceGauge
           label="CPU"
           icon={Cpu}

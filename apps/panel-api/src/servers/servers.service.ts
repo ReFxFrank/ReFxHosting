@@ -75,11 +75,15 @@ export class ServersService {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { createdAt: 'desc' },
-        include: { template: true, node: { select: { name: true, fqdn: true } } },
+        include: {
+          template: true,
+          node: { select: { name: true, fqdn: true } },
+          allocations: true,
+        },
       }),
       this.prisma.server.count({ where }),
     ]);
-    return paginate(data, total, pagination);
+    return paginate(data.map((s) => this.withPrimaryAllocation(s)), total, pagination);
   }
 
   async get(id: string): Promise<Server> {
@@ -93,7 +97,7 @@ export class ServersService {
       },
     });
     if (!server) throw new NotFoundException('Server not found');
-    return server;
+    return this.withPrimaryAllocation(server);
   }
 
   // ---- create / provision ------------------------------------------------
@@ -248,11 +252,12 @@ export class ServersService {
           template: { select: { id: true, name: true, slug: true } },
           node: { select: { id: true, name: true, fqdn: true } },
           owner: { select: { id: true, email: true, firstName: true, lastName: true } },
+          allocations: true,
         },
       }),
       this.prisma.server.count({ where }),
     ]);
-    return paginate(data, total, pagination);
+    return paginate(data.map((s) => this.withPrimaryAllocation(s)), total, pagination);
   }
 
   // ---- power -------------------------------------------------------------
@@ -787,6 +792,19 @@ export class ServersService {
     }
 
     return port;
+  }
+
+  /**
+   * Surface the server's connection address by flattening its allocations into a
+   * single `primaryAllocation` (the one flagged primary, else the first). The web
+   * panel renders {ip}:{port} from this; without it the address never shows.
+   */
+  private withPrimaryAllocation<
+    T extends { allocations?: { isPrimary: boolean }[] | null },
+  >(server: T) {
+    const allocations = server.allocations ?? [];
+    const primary = allocations.find((a) => a.isPrimary) ?? allocations[0] ?? null;
+    return { ...server, primaryAllocation: primary };
   }
 
   private assertTemplateAllowed(allowed: string[], templateId: string): void {
