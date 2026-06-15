@@ -12,6 +12,15 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { PrismaService } from './prisma/prisma.service';
 
+// Prisma returns BigInt for byte-count columns (NodeHeartbeat/ServerStat net*,
+// Backup sizeBytes). JSON.stringify throws on BigInt, which 500s those reads —
+// teach it to emit a Number so every endpoint serializes cleanly.
+(BigInt.prototype as unknown as { toJSON: () => number }).toJSON = function (
+  this: bigint,
+) {
+  return Number(this);
+};
+
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
   const config = app.get(ConfigService);
