@@ -147,12 +147,23 @@ async function seedOwner() {
 }
 
 async function seedRegionAndNode() {
-  const region = await prisma.region.upsert({
+  // A few common regions so nodes can be placed/labelled accurately.
+  const regions = [
+    { code: 'us-east', name: 'US East', country: 'US' },
+    { code: 'us-west', name: 'US West', country: 'US' },
+    { code: 'eu-central', name: 'EU Central', country: 'DE' },
+  ];
+  for (const r of regions) {
+    await prisma.region.upsert({
+      where: { code: r.code },
+      update: { name: r.name, country: r.country },
+      create: { id: uuidv7(), ...r },
+    });
+  }
+  const region = await prisma.region.findUniqueOrThrow({
     where: { code: 'eu-central' },
-    update: { name: 'EU Central', country: 'DE' },
-    create: { id: uuidv7(), code: 'eu-central', name: 'EU Central', country: 'DE' },
   });
-  console.log(`  • Region: ${region.code} (${region.id})`);
+  console.log(`  • Regions: ${regions.map((r) => r.code).join(', ')}`);
 
   // The node bootstrap token would normally be generated and shown once in the
   // panel UI; here we hash a well-known sample so the seed is deterministic.

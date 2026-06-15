@@ -319,7 +319,9 @@ export class NodeAgentClient {
   // ---- agent config -------------------------------------------------------
 
   fetchAgentStatus(node: Node) {
-    return this.request(node, 'GET', `/api/v1/system`);
+    // /healthz is the agent's always-available liveness route (unauthenticated);
+    // used for the panel->agent ping. (/api/v1/system is not served.)
+    return this.request(node, 'GET', `/healthz`);
   }
 
   // ---- internals ----------------------------------------------------------

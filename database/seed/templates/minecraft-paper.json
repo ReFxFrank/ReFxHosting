@@ -8,9 +8,8 @@
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
-    "Java 21": "itzg/minecraft-server:java21",
-    "Java 17": "itzg/minecraft-server:java17",
-    "ReFx Yolk (Java 21)": "ghcr.io/refxfrank/yolks/java:21"
+    "Java 21": "eclipse-temurin:21-jre",
+    "Java 17": "eclipse-temurin:17-jre"
   },
   "steamAppId": null,
   "startupCommand": "java -Xms128M -Xmx{{SERVER_MEMORY}}M -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}} nogui",
