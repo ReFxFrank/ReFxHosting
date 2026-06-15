@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -28,6 +29,7 @@ import (
 type PanelReporter interface {
 	PushLogs(ctx context.Context, lines []panel.LogLine) error
 	BackupProgress(ctx context.Context, payload any) error
+	PowerEvent(ctx context.Context, serverID, state string) error
 }
 
 // Deps are the collaborators the API handlers operate against.
@@ -52,6 +54,11 @@ type Server struct {
 	deps   Deps
 	http   *http.Server
 	router chi.Router
+
+	// Active console forwarders (serverID -> cancel), streaming a running
+	// server's stdout to the panel via PushLogs.
+	fwdMu sync.Mutex
+	fwd   map[string]context.CancelFunc
 }
 
 // New builds the API server with all routes and middleware wired.

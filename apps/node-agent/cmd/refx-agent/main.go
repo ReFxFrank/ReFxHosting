@@ -192,6 +192,9 @@ func run(ctx context.Context, cfgPath string) error {
 		HeartbeatInterval: cfg.Stats.HeartbeatInterval,
 	})
 
+	// Stream the console of any already-running (adopted) servers to the panel.
+	apiSrv.StartRunningForwarders()
+
 	// --- run all subsystems; first error or signal triggers shutdown -------
 	return supervise(ctx, log, []service{
 		{"control-api", apiSrv.Start},

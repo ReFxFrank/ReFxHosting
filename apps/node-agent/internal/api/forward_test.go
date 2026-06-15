@@ -37,6 +37,10 @@ func (f *fakePanel) BackupProgress(_ context.Context, payload any) error {
 	return nil
 }
 
+func (f *fakePanel) PowerEvent(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func newTestServer(deps Deps) *Server {
 	return &Server{log: zerolog.Nop(), deps: deps}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
@@ -141,7 +142,124 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, err.Error())
 		return
 	}
+
+	// Notify the panel of the new state so the UI reflects it immediately, and
+	// (de)activate live console forwarding.
+	if s.deps.Panel != nil {
+		pctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = s.deps.Panel.PowerEvent(pctx, srv.ID(), string(srv.State()))
+		cancel()
+	}
+	switch req.Action {
+	case "start", "restart":
+		s.startConsoleForward(srv.ID())
+	case "stop", "kill":
+		s.stopConsoleForward(srv.ID())
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{"state": string(srv.State())})
+}
+
+// --- live console forwarding ----------------------------------------------
+
+// StartRunningForwarders begins console forwarding for every server already
+// running (called on boot after adopting surviving containers).
+func (s *Server) StartRunningForwarders() {
+	for _, srv := range s.deps.Manager.List() {
+		if srv.State() == server.StateRunning {
+			s.startConsoleForward(srv.ID())
+		}
+	}
+}
+
+// startConsoleForward attaches a running server's console and streams its output
+// to the panel via PushLogs until the server stops or the agent shuts down.
+func (s *Server) startConsoleForward(serverID string) {
+	if s.deps.Panel == nil {
+		return
+	}
+	s.fwdMu.Lock()
+	if s.fwd == nil {
+		s.fwd = make(map[string]context.CancelFunc)
+	}
+	if _, ok := s.fwd[serverID]; ok {
+		s.fwdMu.Unlock()
+		return
+	}
+	srv, ok := s.deps.Manager.Get(serverID)
+	if !ok {
+		s.fwdMu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	s.fwd[serverID] = cancel
+	s.fwdMu.Unlock()
+	go s.runConsoleForward(ctx, srv)
+}
+
+func (s *Server) stopConsoleForward(serverID string) {
+	s.fwdMu.Lock()
+	defer s.fwdMu.Unlock()
+	if cancel, ok := s.fwd[serverID]; ok {
+		cancel()
+		delete(s.fwd, serverID)
+	}
+}
+
+func (s *Server) runConsoleForward(ctx context.Context, srv *server.Server) {
+	defer s.stopConsoleForward(srv.ID())
+	con, err := s.deps.Manager.AttachConsole(ctx, srv)
+	if err != nil {
+		s.log.Warn().Err(err).Str("server", srv.ID()).Msg("console forward attach failed")
+		return
+	}
+	defer con.Close()
+
+	flush := time.NewTicker(400 * time.Millisecond)
+	defer flush.Stop()
+	var batch []panel.LogLine
+	send := func() {
+		if len(batch) == 0 {
+			return
+		}
+		cctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_ = s.deps.Panel.PushLogs(cctx, batch)
+		cancel()
+		batch = batch[:0]
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			send()
+			return
+		case chunk, ok := <-con.Output:
+			if !ok {
+				send()
+				return
+			}
+			for _, line := range splitConsoleLines(chunk) {
+				batch = append(batch, panel.LogLine{
+					ServerID: srv.ID(),
+					Line:     line,
+					Stream:   "stdout",
+					At:       time.Now().UnixMilli(),
+				})
+			}
+			if len(batch) >= 50 {
+				send()
+			}
+		case <-flush.C:
+			send()
+		}
+	}
+}
+
+func splitConsoleLines(b []byte) []string {
+	text := strings.TrimRight(string(b), "\r\n")
+	if text == "" {
+		return nil
+	}
+	return strings.Split(text, "\n")
 }
 
 // commandRequest is the body of a console command.

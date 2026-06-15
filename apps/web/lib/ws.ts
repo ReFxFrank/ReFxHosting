@@ -87,9 +87,13 @@ export class ConsoleSocket {
     socket.on("console", (frame: unknown) =>
       this.onEvent({ type: "line", line: extractLine(frame) }),
     );
-    socket.on("stats", (frame: unknown) =>
-      this.onEvent({ type: "stats", stats: mapStats(frame) }),
-    );
+    socket.on("stats", (frame: unknown) => {
+      this.onEvent({ type: "stats", stats: mapStats(frame) });
+      // The agent's stat sample carries the live server state; surface it so the
+      // console badge stays in sync while the server runs.
+      const st = (frame as { state?: string })?.state;
+      if (st) this.onEvent({ type: "status", state: st as ServerState });
+    });
     socket.on("power", (frame: unknown) => {
       const state = (frame as { state?: string })?.state;
       if (state) this.onEvent({ type: "status", state: state as ServerState });
