@@ -39,7 +39,8 @@ Legend:
 | Area | Status | Notes |
 |------|--------|-------|
 | Auth (Argon2id, JWT access+refresh rotation, sessions) | **Done** | Reuse-detection on refresh. |
-| 2FA (TOTP + recovery codes, WebAuthn) | **Partial** | Flows wired; WebAuthn challenge store is in-memory (`TODO(impl)`: Redis-backed). |
+| Password reset + email verification (token email, hashed at rest) | **Done** | `/auth/forgot-password`, `/reset-password`, `/verify-email`, `/resend-verification`; SHA-256-hashed single-use tokens, real SMTP transport (jsonTransport fallback in dev/test). |
+| 2FA (TOTP + recovery codes, WebAuthn) | **Partial** | Flows wired; login MFA step now issues a signed, short-lived (`mfa`-type) challenge JWT — no longer the raw user id. WebAuthn challenge store is in-memory (`TODO(impl)`: Redis-backed). |
 | API keys (scoped, IP allowlist) | **Done** | Hash lookup + scope/IP checks. |
 | RBAC + per-server PermissionGuard | **Done** | Global roles + SubUser permissions + admin override. |
 | Servers lifecycle + **game switching** | **Done** | Stopped-check → whitelist → `GameSwitchLog` → atomic repoint → queued reinstall preserving identity. |
@@ -70,14 +71,15 @@ Legend:
 
 ## Frontend ↔ backend integration
 
-The `web` panel and `panel-api` were built against slightly different API
-designs. The **core slice is wired end-to-end** (auth, server list/detail/power/
-reinstall/**game-switch**/variables/sub-users/schedules, ticket browse/reply,
-billing invoice/subscription browse, and the WebSocket console). A number of UI
-features call routes the backend does not yet serve (server `files`/`backups`/
-`databases`/`stats`/`sftp`, the admin `templates` editor, and the `catalog`/
-`orders`/`dashboard` storefront surface). The complete route-by-route map and
-convergence plan is in **[17 — Integration Map](17-integration-map.md)**.
+The `web` panel and `panel-api` are now wired across the full UI surface. Beyond
+the core (auth, server list/detail/power/reinstall/**game-switch**/variables/
+sub-users/schedules, tickets, billing, WebSocket console), the backend now also
+serves the server sub-resources (`files`, `backups`, `databases`, `stats`,
+`sftp`, command/startup/upgrade) and the `account`, `admin` (incl. the
+GameTemplate "egg editor"), `catalog`, `orders`, and `dashboard` surfaces. The
+authoritative route-by-route map is **[17 — Integration Map](17-integration-map.md)**.
+Remaining `// TODO(impl)` on these paths is external wiring (live payment
+capture, real DB-host provisioning, SFTP credential push), not missing routes.
 
 ## What is deliberately *not* done
 
@@ -91,7 +93,8 @@ beyond a single build session, and are called out so expectations are clear:
 - **Production secrets/TLS/mTLS** between panel and agents (self-signed by default).
 - **Load/scale validation** to the "tens of thousands of servers" target —
   the architecture (docs 01/09) supports it; it has not been benchmarked.
-- **Email delivery, OpenSearch indexing, migration importers** (Pterodactyl/
-  AMP/TCAdmin) — designed (docs 11) with `TODO(impl)` stubs.
+- **OpenSearch indexing, migration importers** (Pterodactyl/AMP/TCAdmin) —
+  designed (docs 11) with `TODO(impl)` stubs. (Transactional email delivery for
+  password reset / verification is now implemented via nodemailer/SMTP.)
 - **Comprehensive test suites** — security-critical paths in the agent have
   tests; broad unit/e2e coverage is not yet in place.

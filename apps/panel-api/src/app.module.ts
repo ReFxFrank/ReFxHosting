@@ -10,6 +10,7 @@ import { join } from 'path';
 import configuration, { AppConfig } from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { CryptoModule } from './common/crypto/crypto.module';
+import { EmailModule } from './email/email.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 
 import { AgentModule } from './agent/agent.module';

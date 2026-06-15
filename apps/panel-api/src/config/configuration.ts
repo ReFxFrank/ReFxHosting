@@ -26,8 +26,18 @@ export interface AppConfig {
     refreshSecret: string;
     accessTtl: number;
     refreshTtl: number;
+    mfaSecret: string;
+    mfaTtl: number;
   };
   secretsEncKey: string;
+  email: {
+    host?: string;
+    port: number;
+    user?: string;
+    password?: string;
+    from: string;
+    secure: boolean;
+  };
   agent: {
     requestTimeoutMs: number;
   };
@@ -83,10 +93,24 @@ export default (): AppConfig => ({
     refreshSecret: process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret',
     accessTtl: toInt(process.env.JWT_ACCESS_TTL, 900),
     refreshTtl: toInt(process.env.JWT_REFRESH_TTL, 2592000),
+    // Dedicated secret for the short-lived MFA login challenge token. Falls back
+    // to a derived value so the challenge is still unforgeable in dev/test.
+    mfaSecret:
+      process.env.JWT_MFA_SECRET ??
+      `${process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret'}:mfa`,
+    mfaTtl: toInt(process.env.JWT_MFA_TTL, 300), // 5 minutes
   },
   secretsEncKey:
     process.env.SECRETS_ENC_KEY ??
     '0'.repeat(64),
+  email: {
+    host: process.env.SMTP_HOST || undefined,
+    port: toInt(process.env.SMTP_PORT, 587),
+    user: process.env.SMTP_USER || undefined,
+    password: process.env.SMTP_PASSWORD || undefined,
+    from: process.env.SMTP_FROM || 'ReFx Hosting <no-reply@refx.example>',
+    secure: (process.env.SMTP_SECURE ?? '').toLowerCase() === 'true',
+  },
   agent: {
     requestTimeoutMs: toInt(process.env.AGENT_REQUEST_TIMEOUT_MS, 15000),
   },

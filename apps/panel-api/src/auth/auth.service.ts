@@ -12,9 +12,19 @@ import { authenticator } from 'otplib';
 import { User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
+import { EmailService } from '../email/email.service';
 import { uuidv7 } from '../common/util/uuid';
 import { AppConfig } from '../config/configuration';
 import { LoginDto, RegisterDto, TokenResponseDto } from './dto/auth.dto';
+
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
+const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/** Claims carried by the short-lived MFA login-challenge JWT. */
+interface MfaChallengeClaims {
+  sub: string;
+  type: 'mfa';
+}
 
 const ARGON_OPTS = {
   type: argon2.argon2id,
@@ -30,6 +40,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly crypto: CryptoService,
+    private readonly email: EmailService,
   ) {}
 
   // ---- registration / login ---------------------------------------------
@@ -49,10 +60,35 @@ export class AuthService {
         lastName: dto.lastName,
         state: 'PENDING_VERIFICATION',
       },
-      select: { id: true, email: true },
+      select: { id: true, email: true, firstName: true },
     });
-    // TODO(impl): dispatch verification email via notifications module.
-    return user;
+
+    // Mint + dispatch the email-verification token. Email delivery never throws.
+    await this.issueEmailVerification(user);
+
+    return { id: user.id, email: user.email };
+  }
+
+  /**
+   * Create a single-use, hashed email-verification token for the user and email
+   * the verify link. The plaintext token is never persisted.
+   */
+  private async issueEmailVerification(
+    user: { id: string; email: string; firstName?: string | null },
+  ): Promise<void> {
+    const token = this.crypto.token(32);
+    await this.prisma.emailVerificationToken.create({
+      data: {
+        id: uuidv7(),
+        userId: user.id,
+        tokenHash: this.crypto.hash(token),
+        expiresAt: new Date(Date.now() + EMAIL_VERIFY_TTL_MS),
+      },
+    });
+    await this.email.sendEmailVerification(
+      { email: user.email, firstName: user.firstName ?? null },
+      token,
+    );
   }
 
   async login(
@@ -74,11 +110,14 @@ export class AuthService {
     // MFA challenge
     if (user.totpEnabledAt && user.totpSecretEnc) {
       if (!dto.totp) {
+        // Issue a short-lived, signed challenge token bound to this (already
+        // password-verified) principal. The raw user id is NEVER returned.
         return {
           accessToken: '',
           refreshToken: '',
           expiresIn: 0,
           mfaRequired: true,
+          mfaToken: await this.issueMfaChallenge(user.id),
         };
       }
       const secret = this.crypto.decrypt(user.totpSecretEnc);
@@ -88,6 +127,42 @@ export class AuthService {
     }
 
     return this.issueTokens(user, ctx);
+  }
+
+  // ---- MFA login challenge token ----------------------------------------
+
+  /**
+   * Mint a short-lived signed JWT that proves the bearer cleared the password
+   * factor for `userId`. Carries a dedicated `mfa` type claim and is signed with
+   * the dedicated MFA secret, so it cannot be confused with access/refresh
+   * tokens and cannot be forged by a client.
+   */
+  async issueMfaChallenge(userId: string): Promise<string> {
+    const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
+    return this.jwt.signAsync(
+      { sub: userId, type: 'mfa' },
+      { secret: jwtCfg.mfaSecret, expiresIn: jwtCfg.mfaTtl },
+    );
+  }
+
+  /**
+   * Verify + decode an MFA challenge token, returning the bound userId. Rejects
+   * expired, tampered or wrong-type tokens.
+   */
+  async verifyMfaChallenge(challengeToken: string): Promise<string> {
+    const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
+    let payload: MfaChallengeClaims;
+    try {
+      payload = await this.jwt.verifyAsync<MfaChallengeClaims>(challengeToken, {
+        secret: jwtCfg.mfaSecret,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired MFA challenge');
+    }
+    if (payload.type !== 'mfa' || !payload.sub) {
+      throw new UnauthorizedException('Invalid MFA challenge');
+    }
+    return payload.sub;
   }
 
   // ---- token issuance + refresh rotation --------------------------------
@@ -297,16 +372,96 @@ export class AuthService {
   async forgotPassword(email: string): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: { email: email.toLowerCase(), deletedAt: null },
-      select: { id: true },
+      select: { id: true, email: true, firstName: true },
     });
     if (!user) return; // do not leak existence
 
-    // Mint a single-use, time-boxed reset token. We never persist the plaintext.
+    // Mint a single-use, time-boxed reset token. We never persist the plaintext;
+    // only its SHA-256 hash is stored, the raw token travels by email.
     const token = this.crypto.token(32);
-    void token;
-    // TODO(impl): persist the hashed reset token (needs a User.passwordResetTokenHash
-    // column + migration) and dispatch the reset email (link carrying the
-    // plaintext token) via the notifications/email delivery provider.
+    await this.prisma.passwordResetToken.create({
+      data: {
+        id: uuidv7(),
+        userId: user.id,
+        tokenHash: this.crypto.hash(token),
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+      },
+    });
+    await this.email.sendPasswordReset(
+      { email: user.email, firstName: user.firstName },
+      token,
+    );
+  }
+
+  /**
+   * Complete a password reset: validate the (hashed) token, set a new argon2id
+   * hash, mark the token used and revoke every existing session for the user.
+   */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const tokenHash = this.crypto.hash(token);
+    const record = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+    if (!record || record.usedAt || record.expiresAt < new Date()) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { passwordHash: await argon2.hash(newPassword, ARGON_OPTS) },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+      // Invalidate every active session — a reset implies the account may have
+      // been compromised.
+      this.prisma.session.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+  }
+
+  // ---- Email verification ------------------------------------------------
+
+  /**
+   * Consume an email-verification token: mark the address verified and move the
+   * user to ACTIVE. Idempotent-safe rejection on invalid/expired/used tokens.
+   */
+  async verifyEmail(token: string): Promise<void> {
+    const tokenHash = this.crypto.hash(token);
+    const record = await this.prisma.emailVerificationToken.findUnique({
+      where: { tokenHash },
+    });
+    if (!record || record.usedAt || record.expiresAt < new Date()) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { emailVerifiedAt: new Date(), state: 'ACTIVE' },
+      }),
+      this.prisma.emailVerificationToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+  }
+
+  /**
+   * Re-issue an email-verification token. Always resolves (no enumeration): only
+   * does work when the user exists and is still pending verification.
+   */
+  async resendVerification(email: string): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { email: email.toLowerCase(), deletedAt: null },
+      select: { id: true, email: true, firstName: true, emailVerifiedAt: true },
+    });
+    if (!user || user.emailVerifiedAt) return; // nothing to do / no leak
+    await this.issueEmailVerification(user);
   }
 
   /**

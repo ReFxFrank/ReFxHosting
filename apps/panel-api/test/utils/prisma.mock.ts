@@ -12,6 +12,8 @@ const MODELS = [
   'user',
   'session',
   'recoveryCode',
+  'passwordResetToken',
+  'emailVerificationToken',
   'apiKey',
   'server',
   'subUser',

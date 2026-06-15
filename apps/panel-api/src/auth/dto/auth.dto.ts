@@ -59,8 +59,33 @@ export class ForgotPasswordDto {
   email!: string;
 }
 
+export class ResetPasswordDto {
+  @ApiProperty({ description: 'Raw reset token from the emailed link' })
+  @IsString()
+  token!: string;
+
+  @ApiProperty({ minLength: 10 })
+  @IsString()
+  @MinLength(10)
+  newPassword!: string;
+}
+
+export class VerifyEmailDto {
+  @ApiProperty({ description: 'Raw verification token from the emailed link' })
+  @IsString()
+  token!: string;
+}
+
+export class ResendVerificationDto {
+  @ApiProperty()
+  @IsEmail()
+  email!: string;
+}
+
 export class MfaVerifyDto {
-  @ApiProperty({ description: 'Opaque token returned by the login MFA challenge' })
+  @ApiProperty({
+    description: 'Signed, short-lived MFA challenge token returned by login',
+  })
   @IsString()
   mfaToken!: string;
 
@@ -121,4 +146,11 @@ export class TokenResponseDto {
   @IsOptional()
   @IsBoolean()
   mfaRequired?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Signed, short-lived MFA challenge token (present iff mfaRequired)',
+  })
+  @IsOptional()
+  @IsString()
+  mfaToken?: string;
 }

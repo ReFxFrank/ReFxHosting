@@ -12,6 +12,7 @@ import { TransformInterceptor } from '../../src/common/interceptors/transform.in
 
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { CryptoService } from '../../src/common/crypto/crypto.service';
+import { EmailService } from '../../src/email/email.service';
 import { ApiKeyService } from '../../src/auth/api-key.service';
 import { UsersService } from '../../src/users/users.service';
 import { JwtStrategy } from '../../src/auth/strategies/jwt.strategy';
@@ -84,6 +85,9 @@ export async function buildTestApp(
     providers: [
       // Infra (real implementations, with Prisma mocked below).
       CryptoService,
+      // Real EmailService; with SMTP unconfigured it uses jsonTransport and
+      // never opens a socket or throws, so auth flows resolve cleanly.
+      EmailService,
       ApiKeyService,
       UsersService,
       JwtStrategy,

@@ -13,6 +13,7 @@ describe('AuthService TOTP', () => {
   let jwt: any;
   let config: any;
   let crypto: any;
+  let email: any;
   let service: AuthService;
 
   const USER_ID = 'user-1';
@@ -41,6 +42,8 @@ describe('AuthService TOTP', () => {
             refreshSecret: 'r',
             accessTtl: 900,
             refreshTtl: 86400,
+            mfaSecret: 'mfa-secret',
+            mfaTtl: 300,
           };
         }
         return undefined;
@@ -54,7 +57,13 @@ describe('AuthService TOTP', () => {
       token: jest.fn(() => 'ABCDE12345'),
     };
 
-    service = new AuthService(prisma, jwt, config, crypto);
+    email = {
+      sendPasswordReset: jest.fn().mockResolvedValue(undefined),
+      sendEmailVerification: jest.fn().mockResolvedValue(undefined),
+      sendGeneric: jest.fn().mockResolvedValue(undefined),
+    };
+
+    service = new AuthService(prisma, jwt, config, crypto, email);
   });
 
   describe('totpVerify', () => {

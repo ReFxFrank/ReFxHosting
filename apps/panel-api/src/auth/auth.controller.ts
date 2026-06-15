@@ -22,7 +22,10 @@ import {
   MfaVerifyDto,
   RefreshDto,
   RegisterDto,
+  ResendVerificationDto,
+  ResetPasswordDto,
   TotpVerifyDto,
+  VerifyEmailDto,
   WebAuthnVerifyDto,
 } from './dto/auth.dto';
 
@@ -54,26 +57,46 @@ export class AuthController {
   }
 
   @Public()
+  @Post('reset-password')
+  @HttpCode(200)
+  @Audit({ action: 'auth.password.reset', targetType: 'User' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.auth.resetPassword(dto.token, dto.newPassword);
+    return { ok: true };
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(200)
+  @Audit({ action: 'auth.email.verify', targetType: 'User' })
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    await this.auth.verifyEmail(dto.token);
+    return { ok: true };
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(200)
+  async resendVerification(@Body() dto: ResendVerificationDto) {
+    await this.auth.resendVerification(dto.email);
+    // Always succeed regardless of whether the email exists / is pending.
+    return { ok: true };
+  }
+
+  @Public()
   @Post('mfa/verify')
   @HttpCode(200)
   async mfaVerify(@Body() dto: MfaVerifyDto, @Req() req: any) {
-    const userId = await this.resolveMfaToken(dto.mfaToken);
+    // Verify + decode the signed, short-lived MFA challenge token issued at
+    // login. This rejects expired / tampered / wrong-type tokens; the raw user
+    // id is never accepted as a challenge token.
+    const userId = await this.auth.verifyMfaChallenge(dto.mfaToken);
     return this.auth.mfaVerify(
       userId,
       dto.code,
       dto.method === 'recovery' ? 'recovery' : 'totp',
       { ip: req.ip, userAgent: req.headers['user-agent'] },
     );
-  }
-
-  /**
-   * The login step returns an opaque mfaToken; for now the web treats the user
-   * id as that token (the MFA challenge is short-lived and bound to the already
-   * password-verified principal). TODO(impl): mint a signed, single-use MFA
-   * challenge token at login and verify it here.
-   */
-  private async resolveMfaToken(mfaToken: string): Promise<string> {
-    return mfaToken;
   }
 
   @Public()
