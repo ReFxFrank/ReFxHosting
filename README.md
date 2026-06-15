@@ -17,7 +17,7 @@ A production-grade alternative to **Pterodactyl**, **AMP**, and **GPortal**, wit
 [![Next.js](https://img.shields.io/badge/Next.js%2014-000?logo=next.js&logoColor=white)](#-web-panel--apps-web)
 [![NestJS](https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white)](#-panel-api--apps-panel-api)
 
-[Quick start](#-quick-start) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
+[Quick start](#-quick-start) · [Cheat-sheet](#-operator-cheat-sheet-this-box) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
 
 </div>
 
@@ -254,6 +254,106 @@ cd refxhosting
 The default Compose profile is lean (~2 GB); add `--profile full` for OpenSearch + observability. The seed prints a default owner login (`owner@refx.example`).
 
 > Deploying remotely? Set `NEXT_PUBLIC_API_URL=http://<host>:4000` in `.env` **before** building the web image (it's baked at build time). See **[docs/18-installation.md](docs/18-installation.md)**.
+
+---
+
+## 🧭 Operator cheat-sheet (this box)
+
+Quick command reference for **this single-box deployment** — panel **and** a node
+on the same host. Paths below reflect this server (user `claude`, repo at
+`~/refxhosting`, agent running as **root**); adjust if yours differ.
+
+### Where everything lives
+
+| What | Path / value |
+|------|--------------|
+| Repo checkout | `/home/claude/refxhosting` |
+| Compose stack | `infra/docker/docker-compose.yml` + `--env-file .env` |
+| Panel services | `panel-api`, `web` (+ one-shot `migrate`) |
+| Agent binary | `apps/node-agent/refx-agent` |
+| Agent config | `/home/claude/refxhosting/node-agent.yaml` |
+| Agent state _(root-owned)_ | `/var/lib/refx-agent` → the agent runs as **root** |
+| Agent log | `/var/log/refx-agent.log` |
+
+### One-liners (after I push changes)
+
+```bash
+# Update the panel (web + API) — rebuilds only the app containers, applies migrations
+~/refxhosting/infra/scripts/update-panel.sh
+
+# Update the node agent — rebuilds the Go binary + restarts it
+~/refxhosting/infra/scripts/update-agent.sh
+```
+
+Both scripts `git pull` first. After updating the panel, **hard-refresh** the
+browser (Ctrl/Cmd-Shift-R) — `NEXT_PUBLIC_API_URL` and the web bundle are baked
+at build time.
+
+### Manual equivalents
+
+<details><summary><b>Panel</b> (web + panel-api)</summary>
+
+```bash
+cd ~/refxhosting && git pull origin main
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build panel-api web
+# apply any new DB migrations (safe to always run):
+docker compose -f infra/docker/docker-compose.yml --env-file .env up -d migrate
+```
+</details>
+
+<details><summary><b>Node agent</b> (runs as root, manual / no systemd)</summary>
+
+```bash
+cd ~/refxhosting && git pull origin main
+cd apps/node-agent
+go build -o ./refx-agent.new ./cmd/refx-agent     # build as your user (Go in your PATH)
+sudo pkill -f refx-agent                          # stop the root agent
+mv -f ./refx-agent.new ./refx-agent               # swap the binary (can't overwrite a running one)
+sudo bash -c 'nohup /home/claude/refxhosting/apps/node-agent/refx-agent \
+  --config /home/claude/refxhosting/node-agent.yaml > /var/log/refx-agent.log 2>&1 &'
+```
+</details>
+
+### Recommended: run the agent under systemd
+
+Install once; afterwards updates are a binary swap + `systemctl restart`, it
+auto-restarts on crash, and it survives reboots:
+
+```bash
+cd ~/refxhosting
+sudo cp infra/systemd/refx-agent.service.example /etc/systemd/system/refx-agent.service
+# edit the two paths in the unit if your checkout isn't /home/claude/refxhosting
+sudo pkill -f refx-agent || true        # stop the manual one
+sudo systemctl daemon-reload
+sudo systemctl enable --now refx-agent
+sudo systemctl status refx-agent
+```
+
+Once installed, `update-agent.sh` auto-detects the unit and uses
+`systemctl restart` for you.
+
+### Status & logs
+
+```bash
+# Agent
+pgrep -af refx-agent
+sudo tail -f /var/log/refx-agent.log                 # manual launch
+sudo journalctl -u refx-agent -f                     # systemd
+
+# Panel
+docker compose -f infra/docker/docker-compose.yml --env-file .env ps
+docker compose -f infra/docker/docker-compose.yml --env-file .env logs -f panel-api
+```
+
+### Which rebuild do I need?
+
+| I changed… | Do this |
+|------------|---------|
+| `apps/web` | `update-panel.sh` |
+| `apps/panel-api` | `update-panel.sh` |
+| `database/prisma/**` (schema or migration) | `update-panel.sh` _(rebuilds API **and** runs `migrate`)_ |
+| `apps/node-agent` | `update-agent.sh` _(on the node box)_ |
+| `packages/shared` | `update-panel.sh` _(rebuilds web + API)_ |
 
 ---
 

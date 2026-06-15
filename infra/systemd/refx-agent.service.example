@@ -1,0 +1,27 @@
+# ReFx Hosting node agent — systemd unit (example).
+#
+# Install:
+#   sudo cp infra/systemd/refx-agent.service.example /etc/systemd/system/refx-agent.service
+#   # edit the two paths below if your checkout/config differ
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now refx-agent
+#
+# The agent runs as root so it can reach the Docker socket and its state dir
+# (/var/lib/refx-agent). Adjust ExecStart paths to match your deployment.
+
+[Unit]
+Description=ReFx Hosting node agent
+Documentation=https://github.com/refxfrank/refxhosting
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/home/claude/refxhosting/apps/node-agent/refx-agent --config /home/claude/refxhosting/node-agent.yaml
+Restart=on-failure
+RestartSec=3
+# Let running game servers keep going during a quick agent restart.
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
