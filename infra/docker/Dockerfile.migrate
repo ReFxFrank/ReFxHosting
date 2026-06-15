@@ -70,7 +70,7 @@ RUN printf '%s\n' \
     'fi' \
     'if [ -f ./database/seed/seed.ts ]; then' \
     '  echo "[seed] running database/seed/seed.ts"' \
-    '  npx ts-node --transpile-only --compiler-options "{\\"module\\":\\"commonjs\\"}" ./database/seed/seed.ts || echo "[seed] seed failed (non-fatal)"' \
+    '  npx ts-node --transpile-only ./database/seed/seed.ts || echo "[seed] seed failed (non-fatal)"' \
     'else' \
     '  echo "[seed] no seed.ts found — skipping"' \
     'fi' \

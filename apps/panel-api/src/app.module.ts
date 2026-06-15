@@ -5,7 +5,6 @@ import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { BullModule } from '@nestjs/bullmq';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { join } from 'path';
 
 import configuration, { AppConfig } from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
@@ -77,7 +76,10 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     // Code-first GraphQL (schema generated from resolvers/models at boot).
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
-      autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+      // Generate the schema in-memory: the production image has no writable
+      // `src/` (runs as non-root, only `dist/` is shipped), and we don't need
+      // the .gql artifact at runtime.
+      autoSchemaFile: true,
       sortSchema: true,
       playground: true,
       context: ({ req }) => ({ req }),
