@@ -20,6 +20,7 @@ import (
 	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
 	"github.com/refxfrank/refxhosting/node-agent/internal/runtime"
 	"github.com/refxfrank/refxhosting/node-agent/internal/server"
+	"github.com/refxfrank/refxhosting/node-agent/internal/sftp"
 	"github.com/refxfrank/refxhosting/node-agent/internal/ws"
 )
 
@@ -46,6 +47,9 @@ type Deps struct {
 	SigningKey string
 	// MetricsHandler is the Prometheus handler mounted at /metrics.
 	MetricsHandler http.Handler
+	// SFTPAuth is the live SFTP credential store; handlers update it on install
+	// and password rotation so creds work without an agent restart. May be nil.
+	SFTPAuth *sftp.MemoryAuthenticator
 }
 
 // Server wraps the HTTP server and its router.
@@ -113,6 +117,7 @@ func (s *Server) routes() chi.Router {
 				r.Post("/command", s.handleCommand)
 				r.Post("/reinstall", s.handleReinstall)
 				r.Patch("/reconfigure", s.handleReconfigure)
+				r.Post("/sftp", s.handleSetSftpCred)
 
 				r.Route("/files", func(r chi.Router) {
 					r.Get("/list", s.handleFileList)

@@ -146,6 +146,19 @@ export class NodeAgentClient {
     return this.request(node, 'DELETE', `/api/v1/servers/${serverId}`);
   }
 
+  /** Push a server's SFTP credential to the agent so a rotation takes effect live. */
+  setSftpCredential(
+    node: Node,
+    serverId: string,
+    username: string,
+    password: string,
+  ) {
+    return this.request(node, 'POST', `/api/v1/servers/${serverId}/sftp`, {
+      username,
+      password,
+    });
+  }
+
   // ---- files (proxied to the agent's jailed file manager) ----------------
 
   async listFiles(

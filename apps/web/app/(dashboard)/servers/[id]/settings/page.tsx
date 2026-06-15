@@ -378,7 +378,8 @@ function SftpTab({ id }: { id: string }) {
       <CardHeader>
         <CardTitle>SFTP access</CardTitle>
         <CardDescription>
-          Connect with any SFTP client using your account password.
+          Connect with any SFTP client using the host, port and username below.
+          Click “Rotate password” to generate your SFTP password (shown once).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

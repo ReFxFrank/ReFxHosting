@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
+import { NodeAgentClient } from '../agent/agent.client';
 
 export interface SftpDetails {
   host: string;
@@ -10,9 +11,12 @@ export interface SftpDetails {
 
 @Injectable()
 export class SftpService {
+  private readonly logger = new Logger(SftpService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly agent: NodeAgentClient,
   ) {}
 
   /** SFTP connection details (never the password). */
@@ -33,7 +37,7 @@ export class SftpService {
   async rotate(serverId: string): Promise<{ password: string }> {
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
-      select: { id: true },
+      include: { node: true },
     });
     if (!server) throw new NotFoundException('Server not found');
 
@@ -42,8 +46,23 @@ export class SftpService {
       where: { id: serverId },
       data: { sftpPasswordEnc: this.crypto.encrypt(password) },
     });
-    // TODO(impl): push the new credential to the node-agent's SFTP subsystem so
-    // it takes effect on the next connection.
+
+    // Push the new credential to the node-agent so it works immediately. Best
+    // effort: if the node is unreachable the agent re-seeds it on next boot.
+    try {
+      await this.agent.setSftpCredential(
+        server.node,
+        serverId,
+        server.shortId,
+        password,
+      );
+    } catch (e) {
+      this.logger.warn(
+        `SFTP rotate: could not push credential to agent for ${serverId}: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
     return { password };
   }
 }

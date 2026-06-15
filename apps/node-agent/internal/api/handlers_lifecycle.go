@@ -9,6 +9,7 @@ import (
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
 	"github.com/refxfrank/refxhosting/node-agent/internal/server"
+	"github.com/refxfrank/refxhosting/node-agent/internal/sftp"
 )
 
 // handleInstall registers a server from a panel-supplied spec and kicks off the
@@ -30,6 +31,14 @@ func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	srv := s.deps.Manager.Register(dto.ToSpec())
+	// Seed the SFTP credential so it works immediately (no agent restart needed).
+	if s.deps.SFTPAuth != nil && dto.SFTPUsername != "" {
+		s.deps.SFTPAuth.Upsert(sftp.Credential{
+			Username: dto.SFTPUsername,
+			Password: dto.SFTPPassword,
+			JailDir:  srv.DataDir,
+		})
+	}
 	if err := s.deps.Installer.Prepare(srv); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return

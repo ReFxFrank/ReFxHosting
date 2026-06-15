@@ -179,6 +179,7 @@ func run(ctx context.Context, cfgPath string) error {
 		Panel:          pc,
 		SigningKey:     cfg.SigningKey,
 		MetricsHandler: promhttp.Handler(),
+		SFTPAuth:       sftpAuth,
 	})
 
 	// --- stats collector ---------------------------------------------------

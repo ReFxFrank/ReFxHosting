@@ -9,7 +9,34 @@ import (
 	"strconv"
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/files"
+	"github.com/refxfrank/refxhosting/node-agent/internal/sftp"
 )
+
+// handleSetSftpCred upserts (or, with an empty password, removes) the live SFTP
+// credential for this server so panel-rotated passwords take effect immediately.
+func (s *Server) handleSetSftpCred(w http.ResponseWriter, r *http.Request) {
+	srv := serverFrom(r.Context())
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if body.Username == "" {
+		writeError(w, http.StatusBadRequest, "username required")
+		return
+	}
+	if s.deps.SFTPAuth != nil {
+		s.deps.SFTPAuth.Upsert(sftp.Credential{
+			Username: body.Username,
+			Password: body.Password,
+			JailDir:  srv.DataDir,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
 
 // contextForServer returns a background context for long-running async jobs that
 // must outlive the originating HTTP request.
