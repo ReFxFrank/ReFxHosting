@@ -26,13 +26,17 @@ import {
   MapPin,
   Wifi,
   WifiOff,
+  Play,
+  RotateCw,
+  Square,
+  Server as ServerIcon,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { Badge, NodeStateBadge } from "@/components/ui/badge";
+import { Badge, NodeStateBadge, ServerStateBadge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -202,6 +206,13 @@ export default function AdminNodesPage() {
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["admin", "nodes"],
     queryFn: () => api.admin.nodes(),
+  });
+
+  // Regions for the create form's picker (avoids hand-typing a UUID).
+  const { data: regions } = useQuery({
+    queryKey: ["admin", "regions"],
+    queryFn: () => api.admin.regions(),
+    enabled: createOpen,
   });
 
   const invalidate = () =>
@@ -401,14 +412,28 @@ export default function AdminNodesPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="node-region">Region ID</Label>
-                <Input
-                  id="node-region"
-                  placeholder="reg_..."
+                <Label>Region</Label>
+                <Select
                   value={form.regionId}
-                  onChange={(e) => setForm((f) => ({ ...f, regionId: e.target.value }))}
-                  className="font-mono"
-                />
+                  onValueChange={(v) => setForm((f) => ({ ...f, regionId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a region" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {regions?.length ? (
+                      regions.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.name} · {r.country}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="__none" disabled>
+                        No regions configured
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label>Operating system</Label>
@@ -536,6 +561,7 @@ export default function AdminNodesPage() {
             </DialogDescription>
           </DialogHeader>
           {detailNode && <NodeDetailLive nodeId={detailNode.id} fallback={detailNode} />}
+          {detailNode && <NodeServersPower nodeId={detailNode.id} />}
           {detailNode && <NodeHeartbeatChart nodeId={detailNode.id} />}
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDetailNode(null)}>
@@ -594,6 +620,135 @@ function NodeDetailLive({ nodeId, fallback }: { nodeId: string; fallback: Node }
           {data?.latestHeartbeat &&
             ` · updated ${formatDateTime(data.latestHeartbeat.recordedAt)}`}
         </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Per-server power controls for every server hosted on this node. Each server is
+ * powered independently (start / restart / stop) — turning one off leaves the
+ * rest running. Admins pass the per-server permission guard, so this reuses the
+ * standard `/servers/:id/power` endpoint.
+ */
+function NodeServersPower({ nodeId }: { nodeId: string }) {
+  const queryClient = useQueryClient();
+
+  const { data: servers, isLoading } = useQuery({
+    queryKey: ["admin", "node-servers", nodeId],
+    // The admin server list isn't node-scoped server-side; filter client-side.
+    queryFn: async () => {
+      const all = await api.admin.servers();
+      return all.filter((s) => s.nodeId === nodeId);
+    },
+    refetchInterval: 10_000,
+  });
+
+  const [pending, setPending] = useState<string | null>(null);
+
+  const powerMutation = useMutation({
+    mutationFn: ({
+      id,
+      signal,
+    }: {
+      id: string;
+      signal: "start" | "stop" | "restart";
+    }) => api.servers.power(id, signal),
+    onMutate: ({ id, signal }) => setPending(`${id}:${signal}`),
+    onSuccess: (_d, { signal }) => {
+      toast.success(`${signal[0].toUpperCase()}${signal.slice(1)} signal sent`);
+      // State updates arrive via the agent; nudge a refetch shortly after.
+      setTimeout(
+        () =>
+          queryClient.invalidateQueries({
+            queryKey: ["admin", "node-servers", nodeId],
+          }),
+        1500,
+      );
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Power action failed"),
+    onSettled: () => setPending(null),
+  });
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="mb-3 flex items-center gap-2 text-sm font-medium">
+          <ServerIcon className="size-4 text-muted-foreground" />
+          Servers on this node
+          {servers && (
+            <Badge variant="secondary" className="ml-1">
+              {servers.length}
+            </Badge>
+          )}
+        </div>
+
+        {isLoading ? (
+          <Skeleton className="h-20 w-full" />
+        ) : !servers?.length ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No servers are hosted on this node.
+          </p>
+        ) : (
+          <div className="divide-y divide-border">
+            {servers.map((s) => {
+              const busy = powerMutation.isPending && pending?.startsWith(`${s.id}:`);
+              return (
+                <div
+                  key={s.id}
+                  className="flex flex-wrap items-center gap-3 py-2.5 first:pt-0 last:pb-0"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">{s.name}</div>
+                    <div className="font-mono text-xs text-muted-foreground">
+                      {s.shortId}
+                    </div>
+                  </div>
+                  <ServerStateBadge state={s.state} />
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      aria-label="Start"
+                      title="Start"
+                      disabled={busy || s.state === "RUNNING" || s.state === "STARTING"}
+                      onClick={() =>
+                        powerMutation.mutate({ id: s.id, signal: "start" })
+                      }
+                    >
+                      <Play className="size-3.5 text-success" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      aria-label="Restart"
+                      title="Restart"
+                      disabled={busy || s.state !== "RUNNING"}
+                      onClick={() =>
+                        powerMutation.mutate({ id: s.id, signal: "restart" })
+                      }
+                    >
+                      <RotateCw className="size-3.5 text-warning" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      aria-label="Stop"
+                      title="Stop"
+                      disabled={busy || s.state === "OFFLINE" || s.state === "STOPPING"}
+                      onClick={() =>
+                        powerMutation.mutate({ id: s.id, signal: "stop" })
+                      }
+                    >
+                      <Square className="size-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

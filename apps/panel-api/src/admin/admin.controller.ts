@@ -81,6 +81,12 @@ export class AdminController {
     return this.nodes.create(dto);
   }
 
+  // Static route must precede `nodes/:id` so it isn't captured as an id.
+  @Get('nodes/regions')
+  listRegions() {
+    return this.nodes.listRegions();
+  }
+
   @Get('nodes/:id')
   getNode(@Param('id') id: string) {
     return this.nodes.get(id);

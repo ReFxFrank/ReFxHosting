@@ -14,6 +14,7 @@ import type {
   Node,
   NodeHeartbeat,
   NodePing,
+  Region,
   Notification,
   Paginated,
   PaymentMethod,
@@ -495,6 +496,7 @@ export const api = {
   // -------------------------------------------------------------------------
   admin: {
     nodes: () => getList<Node>("/admin/nodes"),
+    regions: () => getList<Region>("/admin/nodes/regions"),
     node: (id: string) => http.get<Node>(`/admin/nodes/${id}`),
     nodeHeartbeats: (id: string, range = "1h") =>
       getList<NodeHeartbeat>(`/admin/nodes/${id}/heartbeats`, { query: { range } }),

@@ -92,6 +92,13 @@ export interface Allocation {
 export type NodeState = "PROVISIONING" | "ONLINE" | "OFFLINE" | "MAINTENANCE" | "DEGRADED";
 export type NodeOs = "LINUX" | "WINDOWS";
 
+export interface Region {
+  id: string;
+  code: string;
+  name: string;
+  country: string;
+}
+
 export interface Node {
   id: string;
   name: string;

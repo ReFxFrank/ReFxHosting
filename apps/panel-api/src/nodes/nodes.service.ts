@@ -19,6 +19,13 @@ import {
   UpdateNodeDto,
 } from './dto/node.dto';
 
+/** Loose UUID shape check (any version), used to avoid Prisma P2023 on bad ids. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function isUuid(v: string): boolean {
+  return UUID_RE.test(v);
+}
+
 @Injectable()
 export class NodesService {
   private readonly secretsEncKey: string;
@@ -32,14 +39,41 @@ export class NodesService {
     this.secretsEncKey = config.get<string>('secretsEncKey')!;
   }
 
+  /** All regions, for the admin node-create picker. */
+  listRegions() {
+    return this.prisma.region.findMany({
+      select: { id: true, code: true, name: true, country: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  /**
+   * Resolve a region reference that may be either the UUID `id` or the unique
+   * `code` (e.g. "us-east"). Throws a clean 400 rather than letting an invalid
+   * UUID surface as Prisma's cryptic P2023 ("inconsistent column data").
+   */
+  private async resolveRegionId(ref: string): Promise<string> {
+    const region = await this.prisma.region.findFirst({
+      where: { OR: [{ code: ref }, ...(isUuid(ref) ? [{ id: ref }] : [])] },
+      select: { id: true },
+    });
+    if (!region) {
+      throw new BadRequestException(
+        `Unknown region "${ref}". Pick an existing region.`,
+      );
+    }
+    return region.id;
+  }
+
   async create(dto: CreateNodeDto): Promise<{ node: Node; bootstrapToken: string }> {
     const bootstrapToken = this.crypto.token(32);
+    const regionId = await this.resolveRegionId(dto.regionId);
     const node = await this.prisma.node.create({
       data: {
         id: uuidv7(),
         name: dto.name,
         fqdn: dto.fqdn,
-        regionId: dto.regionId,
+        regionId,
         os: dto.os,
         // We store the SHA-256 of the bootstrap token; the agent is provisioned
         // with the same value as its HMAC signing secret (see NodeAgentClient).
