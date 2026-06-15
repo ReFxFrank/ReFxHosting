@@ -13,7 +13,7 @@ const TabsList = React.forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
+      "inline-flex h-9 items-center justify-center gap-0.5 rounded-lg border border-white/[0.06] bg-[linear-gradient(180deg,rgba(7,13,24,0.6),rgba(10,18,32,0.4))] p-1 text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)_inset]",
       className,
     )}
     {...props}
@@ -28,7 +28,7 @@ const TabsTrigger = React.forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm [&_svg]:size-4",
+      "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all duration-150 hover:text-foreground/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:border data-[state=active]:border-primary/30 data-[state=active]:bg-primary/15 data-[state=active]:text-[hsl(214_100%_85%)] data-[state=active]:shadow-[0_0_18px_-6px_rgba(0,114,255,0.6)] [&_svg]:size-4",
       className,
     )}
     {...props}

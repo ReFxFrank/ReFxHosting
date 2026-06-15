@@ -22,14 +22,17 @@ function NavLink({ item, collapsed }: { item: NavItem; collapsed: boolean }) {
     <Link
       href={item.href}
       className={cn(
-        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+        "group relative flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-150",
         active
-          ? "bg-primary/10 text-primary"
-          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-foreground",
+          ? "border border-primary/25 bg-primary/15 text-[hsl(214_100%_85%)] shadow-[0_0_18px_-8px_rgba(0,114,255,0.7)]"
+          : "border border-transparent text-sidebar-foreground hover:border-white/[0.06] hover:bg-white/[0.04] hover:text-foreground",
         collapsed && "justify-center px-2",
       )}
     >
-      <Icon className="size-[18px] shrink-0" />
+      {active && (
+        <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary shadow-[0_0_10px_0_rgba(0,114,255,0.8)]" />
+      )}
+      <Icon className={cn("size-[18px] shrink-0", active && "text-[hsl(213_100%_70%)]")} />
       {!collapsed && <span className="truncate">{item.label}</span>}
     </Link>
   );
@@ -52,18 +55,22 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "sticky top-0 hidden h-svh shrink-0 flex-col border-r bg-sidebar transition-all duration-200 md:flex",
+        "refx-beam sticky top-0 hidden h-svh shrink-0 flex-col border-r border-white/[0.06] bg-[linear-gradient(180deg,rgba(10,18,32,0.96),rgba(7,13,24,0.96))] transition-all duration-200 md:flex",
         sidebarCollapsed ? "w-[64px]" : "w-60",
       )}
     >
       <div
         className={cn(
-          "flex h-14 items-center gap-2 border-b px-4",
+          "flex h-14 items-center gap-2 border-b border-white/[0.06] px-4",
           sidebarCollapsed && "justify-center px-2",
         )}
       >
         <LogoMark size={28} />
-        {!sidebarCollapsed && <span className="truncate font-semibold">{BRAND}</span>}
+        {!sidebarCollapsed && (
+          <span className="truncate font-semibold tracking-tight text-[hsl(213_100%_97%)]">
+            {BRAND}
+          </span>
+        )}
       </div>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
@@ -72,7 +79,7 @@ export function Sidebar() {
         ))}
         {isAdmin && (
           <>
-            <div className={cn("my-2 px-3 text-xs font-medium uppercase text-muted-foreground", sidebarCollapsed && "hidden")}>
+            <div className={cn("refx-eyebrow my-2 px-3 pt-2", sidebarCollapsed && "hidden")}>
               Administration
             </div>
             {adminNav.map((item) => (
@@ -82,7 +89,7 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="border-t p-2">
+      <div className="border-t border-white/[0.06] p-2">
         <Button
           variant="ghost"
           size="sm"

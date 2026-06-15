@@ -4,17 +4,17 @@ import { cn } from "@/lib/utils";
 import type { ServerState, NodeState, TicketState, TicketPriority } from "@/lib/types";
 
 const badgeVariants = cva(
-  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+  "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[0.6875rem] font-semibold uppercase tracking-[0.06em] transition-colors",
   {
     variants: {
       variant: {
-        default: "border-transparent bg-primary/15 text-primary",
-        secondary: "border-transparent bg-secondary text-secondary-foreground",
-        outline: "text-foreground",
-        success: "border-transparent bg-success/15 text-success",
-        warning: "border-transparent bg-warning/15 text-warning",
-        destructive: "border-transparent bg-destructive/15 text-destructive",
-        muted: "border-transparent bg-muted text-muted-foreground",
+        default: "border-primary/25 bg-primary/15 text-[hsl(214_100%_78%)]",
+        secondary: "border-white/10 bg-white/[0.05] text-secondary-foreground",
+        outline: "border-white/15 text-foreground",
+        success: "border-success/25 bg-success/15 text-[hsl(152_60%_62%)]",
+        warning: "border-warning/25 bg-warning/15 text-[hsl(38_92%_66%)]",
+        destructive: "border-destructive/30 bg-destructive/15 text-[hsl(0_80%_72%)]",
+        muted: "border-white/10 bg-white/[0.04] text-muted-foreground",
       },
     },
     defaultVariants: { variant: "default" },

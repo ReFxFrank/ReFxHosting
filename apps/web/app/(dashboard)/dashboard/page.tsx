@@ -32,6 +32,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
+        eyebrow="Overview"
         title={`Welcome${user?.firstName ? `, ${user.firstName}` : ""}`}
         description="Here's what's happening across your services."
         actions={
@@ -104,7 +105,7 @@ export default function DashboardPage() {
                 <Link
                   key={server.id}
                   href={`/servers/${server.id}/console`}
-                  className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-accent"
+                  className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.015] p-3 transition-all hover:border-primary/30 hover:bg-primary/[0.06]"
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">

@@ -42,14 +42,14 @@ export function TopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="refx-beam sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-white/[0.06] bg-[rgba(7,13,24,0.7)] px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-[rgba(7,13,24,0.55)]">
       <Button variant="ghost" size="icon" className="md:hidden" onClick={toggleSidebar}>
         <Menu className="size-5" />
       </Button>
 
       <Link href="/dashboard" className="flex items-center gap-2 md:hidden">
         <LogoMark size={24} />
-        <span className="font-semibold">{BRAND}</span>
+        <span className="font-semibold tracking-tight">{BRAND}</span>
       </Link>
 
       <div className="ml-auto flex items-center gap-2">
@@ -108,12 +108,12 @@ export function MobileNav() {
   // Lightweight mobile drawer-less nav rendered below topnav on small screens.
   const adminVisible = useAuthStore((s) => s.isAdmin());
   return (
-    <nav className="flex gap-1 overflow-x-auto border-b px-2 py-2 md:hidden">
+    <nav className="flex gap-1 overflow-x-auto border-b border-white/[0.06] bg-[rgba(7,13,24,0.5)] px-2 py-2 backdrop-blur md:hidden">
       {[...mainNav, ...(adminVisible ? adminNav : [])].map((item) => (
         <Link
           key={item.href}
           href={item.href}
-          className="flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          className="flex shrink-0 items-center gap-1.5 rounded-md border border-transparent px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:border-white/[0.06] hover:bg-white/[0.04] hover:text-foreground"
         >
           <item.icon className="size-4" />
           {item.label}

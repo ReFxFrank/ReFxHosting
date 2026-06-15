@@ -15,7 +15,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="flex min-w-0 flex-1 flex-col">
         <TopNav />
         <MobileNav />
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6 lg:p-8">
+        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-5 lg:p-6">
           {authorized ? children : <LoadingShell />}
         </main>
       </div>

@@ -14,8 +14,8 @@ export default function StoreLayout({ children }: { children: React.ReactNode })
   const { authorized } = useRequireAuth();
 
   return (
-    <div className="flex min-h-svh flex-col bg-background">
-      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
+    <div className="flex min-h-svh flex-col">
+      <header className="refx-beam sticky top-0 z-40 border-b border-white/[0.06] bg-[rgba(7,13,24,0.7)] backdrop-blur-xl">
         <div className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4 sm:px-6">
           <Link href="/dashboard" className="flex items-center gap-2 text-base font-semibold tracking-tight">
             <LogoMark size={26} />
