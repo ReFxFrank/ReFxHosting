@@ -160,13 +160,26 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 		Labels:     map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
 	host := &container.HostConfig{
-		Mounts:     []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/mnt/server"}},
-		AutoRemove: true,
+		Mounts: []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/mnt/server"}},
+		// NOTE: deliberately NOT AutoRemove. With auto-remove the daemon deletes
+		// the container the instant it exits, which races ContainerWait and yields
+		// "No such container" — spuriously failing a successful install. We remove
+		// it ourselves below after reading the exit code.
 	}
 	created, err := d.cli.ContainerCreate(ctx, cfg, host, &network.NetworkingConfig{}, nil, containerName(s)+"-install")
 	if err != nil {
 		return fmt.Errorf("docker: create install container: %w", err)
 	}
+	// Always clean the install container up, even on error/cancel (use a detached
+	// context so cancellation of ctx can't skip the removal).
+	defer func() {
+		_ = d.cli.ContainerRemove(context.Background(), created.ID, container.RemoveOptions{Force: true})
+	}()
+
+	// Register the exit wait BEFORE starting so the exit event can never be missed
+	// (the daemon buffers it for us).
+	statusCh, errCh := d.cli.ContainerWait(ctx, created.ID, container.WaitConditionNotRunning)
+
 	if err := d.cli.ContainerStart(ctx, created.ID, container.StartOptions{}); err != nil {
 		return fmt.Errorf("docker: start install container: %w", err)
 	}
@@ -178,7 +191,6 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 		defer logs.Close()
 		streamDockerLogs(logs, func(line []byte) { ch <- InstallProgress{Line: string(line)} })
 	}
-	statusCh, errCh := d.cli.ContainerWait(ctx, created.ID, container.WaitConditionNotRunning)
 	select {
 	case err := <-errCh:
 		if err != nil {
