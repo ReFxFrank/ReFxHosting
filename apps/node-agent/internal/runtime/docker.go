@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
@@ -34,10 +35,6 @@ const (
 	containerUID  = 1000
 	containerGID  = 1000
 	containerUser = "1000:1000"
-	// windowsContainerUser forces root on Windows nodes: Docker Desktop's WSL2
-	// bind mounts ignore Linux ownership and aren't writable by an image's default
-	// non-root user, so install/runtime containers must run as root there.
-	windowsContainerUser = "0:0"
 )
 
 // DockerRuntime hosts servers as Docker containers. It is the preferred backend
@@ -176,12 +173,9 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 		WorkingDir: "/mnt/server",
 		Labels:     map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
-	// On Windows the WSL2 bind mount isn't writable by the install image's default
-	// non-root user (e.g. yolks runs as uid 1000), so `cd /mnt/server` fails with
-	// "Permission denied". Run the install as root there.
-	if goruntime.GOOS == "windows" {
-		cfg.User = windowsContainerUser
-	}
+	// Make /mnt/server writable by the install image's (non-root) user before it
+	// runs, so `cd /mnt/server` / writes succeed without running as root.
+	d.prepareDataDir(s.DataDir)
 	host := &container.HostConfig{
 		Mounts: []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/mnt/server"}},
 		// NOTE: deliberately NOT AutoRemove. With auto-remove the daemon deletes
@@ -267,6 +261,28 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 	return host, ports, bindings
 }
 
+// prepareDataDir makes a server's data dir writable by the non-root container
+// user (uid 1000), regardless of host OS:
+//   - Linux: chown the tree to 1000:1000.
+//   - Windows: Docker Desktop's WSL2 bind mount derives access from the Windows
+//     ACL and chown is a no-op, so grant the dir broad write via icacls. The dir
+//     is already per-server and jailed under the data root.
+// Both are best-effort; failures are logged, not fatal.
+func (d *DockerRuntime) prepareDataDir(dir string) {
+	if goruntime.GOOS == "windows" {
+		// *S-1-1-0 = Everyone; (OI)(CI)F = full control, inherited by files/dirs.
+		cmd := exec.Command("icacls", dir, "/grant", "*S-1-1-0:(OI)(CI)F", "/T", "/C", "/Q")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			d.log.Warn().Err(err).Str("out", strings.TrimSpace(string(out))).
+				Str("dir", dir).Msg("icacls grant on data dir failed")
+		}
+		return
+	}
+	if err := chownTree(dir, containerUID, containerGID); err != nil {
+		d.log.Warn().Err(err).Str("dir", dir).Msg("chown data dir failed")
+	}
+}
+
 // chownTree recursively sets ownership of root to uid:gid (best-effort). Used to
 // hand a server's data dir to the non-root container user after a root install.
 func chownTree(root string, uid, gid int) error {
@@ -293,6 +309,8 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 		Env:          append(envSlice(s.Spec.Env), "HOME=/home/container"),
 		ExposedPorts: ports,
 		WorkingDir:   "/home/container",
+		// Always run the game as a non-root user — never as root, on any OS.
+		User:         containerUser,
 		Tty:          false,
 		OpenStdin:    true,
 		AttachStdin:  true,
@@ -301,21 +319,8 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 		Labels:       map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
 
-	// Run the game as a non-root user on Linux nodes (the data dir is chowned to
-	// match below). On Windows, Docker Desktop's WSL2 bind mounts ignore Linux
-	// ownership and aren't writable by the image's default user (many images,
-	// e.g. the yolks/steamcmd ones, default to uid 1000) — so force root, or the
-	// server can't write its data dir and crashes.
-	if goruntime.GOOS == "windows" {
-		cfg.User = windowsContainerUser
-	} else {
-		cfg.User = containerUser
-		// The install step runs as root; make the data dir writable by the
-		// non-root runtime user before launching.
-		if err := chownTree(s.DataDir, containerUID, containerGID); err != nil {
-			d.log.Warn().Err(err).Str("server", s.ID()).Msg("chown data dir failed")
-		}
-	}
+	// Make the data dir writable by the non-root container user before launching.
+	d.prepareDataDir(s.DataDir)
 
 	name := containerName(s)
 	// Always (re)create the container from the current config so changes to the
