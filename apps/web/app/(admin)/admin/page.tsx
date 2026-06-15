@@ -22,6 +22,7 @@ import {
   Boxes,
   ScrollText,
   Megaphone,
+  Store,
   Package,
   Layers,
   ChevronRight,
@@ -40,7 +41,8 @@ const QUICK_LINKS: { href: string; label: string; description: string; icon: Luc
   { href: "/admin/products", label: "Products", description: "Plans & resources", icon: Package },
   { href: "/admin/templates", label: "Templates", description: "Game eggs", icon: Layers },
   { href: "/admin/audit", label: "Audit log", description: "Activity trail", icon: ScrollText },
-  { href: "/admin/alerts", label: "Alerts", description: "Global notices", icon: Megaphone },
+  { href: "/admin/alerts", label: "Alerts", description: "Internal dashboard notices", icon: Megaphone },
+  { href: "/admin/homepage-alerts", label: "Homepage alerts", description: "Public storefront notices", icon: Store },
 ];
 
 function indicatorClass(value: number) {

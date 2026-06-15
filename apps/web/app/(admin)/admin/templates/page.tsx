@@ -27,8 +27,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { formatMb } from "@/lib/utils";
+import { formatMb, cn } from "@/lib/utils";
+import { GameImage } from "@/components/public/game-image";
 import type { GameTemplate } from "@/lib/types";
+
+const IMAGE_PRESETS = [
+  "/games/presets/default.svg",
+  "/games/presets/survival.svg",
+  "/games/presets/sandbox.svg",
+  "/games/presets/shooter.svg",
+];
 
 interface TemplateForm {
   id?: string;
@@ -44,6 +52,15 @@ interface TemplateForm {
   recDiskMb: number;
   supportsLinux: boolean;
   supportsWindows: boolean;
+  // Storefront metadata
+  isPublished: boolean;
+  featured: boolean;
+  sortOrder: number;
+  longDescription: string;
+  cardImageUrl: string;
+  heroImageUrl: string;
+  iconUrl: string;
+  tags: string; // comma-separated in the form
 }
 
 const emptyForm: TemplateForm = {
@@ -59,6 +76,14 @@ const emptyForm: TemplateForm = {
   recDiskMb: 10240,
   supportsLinux: true,
   supportsWindows: false,
+  isPublished: false,
+  featured: false,
+  sortOrder: 0,
+  longDescription: "",
+  cardImageUrl: "",
+  heroImageUrl: "",
+  iconUrl: "",
+  tags: "",
 };
 
 export default function AdminTemplatesPage() {
@@ -82,6 +107,18 @@ export default function AdminTemplatesPage() {
       toast.error(e instanceof ApiError ? e.message : "Failed to save template"),
   });
 
+  // Inline publish toggle from the table (doesn't open the editor).
+  const publishMutation = useMutation({
+    mutationFn: (input: { id: string; isPublished: boolean }) =>
+      api.admin.saveTemplate(input),
+    onSuccess: (_d, vars) => {
+      toast.success(vars.isPublished ? "Published to storefront" : "Hidden from storefront");
+      queryClient.invalidateQueries({ queryKey: ["admin", "templates"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to update visibility"),
+  });
+
   function openNew() {
     setForm(emptyForm);
     setEditOpen(true);
@@ -102,6 +139,14 @@ export default function AdminTemplatesPage() {
       recDiskMb: t.recDiskMb,
       supportsLinux: t.supportsLinux,
       supportsWindows: t.supportsWindows,
+      isPublished: t.isPublished ?? false,
+      featured: t.featured ?? false,
+      sortOrder: t.sortOrder ?? 0,
+      longDescription: t.longDescription ?? "",
+      cardImageUrl: t.cardImageUrl ?? "",
+      heroImageUrl: t.heroImageUrl ?? "",
+      iconUrl: t.iconUrl ?? "",
+      tags: (t.tags ?? []).join(", "),
     });
     setEditOpen(true);
   }
@@ -132,6 +177,17 @@ export default function AdminTemplatesPage() {
       recDiskMb: form.recDiskMb,
       supportsLinux: form.supportsLinux,
       supportsWindows: form.supportsWindows,
+      isPublished: form.isPublished,
+      featured: form.featured,
+      sortOrder: Number(form.sortOrder) || 0,
+      longDescription: form.longDescription || null,
+      cardImageUrl: form.cardImageUrl || null,
+      heroImageUrl: form.heroImageUrl || null,
+      iconUrl: form.iconUrl || null,
+      tags: form.tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
       // stopCommand is part of the larger config payload. TODO(impl).
     });
   }
@@ -162,6 +218,7 @@ export default function AdminTemplatesPage() {
                   <TableHead>Version</TableHead>
                   <TableHead>Deploy</TableHead>
                   <TableHead>Recommended</TableHead>
+                  <TableHead>Public</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -188,6 +245,19 @@ export default function AdminTemplatesPage() {
                     <TableCell className="text-xs text-muted-foreground">
                       {t.recCpuCores} vCPU · {formatMb(t.recMemoryMb)} ·{" "}
                       {formatMb(t.recDiskMb)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Switch
+                          checked={t.isPublished ?? false}
+                          disabled={publishMutation.isPending}
+                          onCheckedChange={(v: boolean) =>
+                            publishMutation.mutate({ id: t.id, isPublished: v })
+                          }
+                          aria-label="Show on storefront"
+                        />
+                        {t.featured && <Badge variant="secondary">Featured</Badge>}
+                      </div>
                     </TableCell>
                     <TableCell>
                       <Button
@@ -371,6 +441,146 @@ export default function AdminTemplatesPage() {
                     setForm((f) => ({ ...f, supportsWindows: v }))
                   }
                 />
+              </div>
+            </div>
+
+            {/* ---- Public storefront --------------------------------------- */}
+            <div className="space-y-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+              <div>
+                <p className="text-sm font-semibold">Public storefront</p>
+                <p className="text-xs text-muted-foreground">
+                  Controls how this game appears on the public site. Unpublished games
+                  stay hidden from customers but remain here.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="flex flex-1 items-center justify-between rounded-lg border p-3">
+                  <span className="text-sm font-medium">Published</span>
+                  <Switch
+                    checked={form.isPublished}
+                    onCheckedChange={(v: boolean) =>
+                      setForm((f) => ({ ...f, isPublished: v }))
+                    }
+                  />
+                </div>
+                <div className="flex flex-1 items-center justify-between rounded-lg border p-3">
+                  <span className="text-sm font-medium">Featured</span>
+                  <Switch
+                    checked={form.featured}
+                    onCheckedChange={(v: boolean) =>
+                      setForm((f) => ({ ...f, featured: v }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5 sm:w-32">
+                  <Label htmlFor="tpl-sort">Sort order</Label>
+                  <Input
+                    id="tpl-sort"
+                    type="number"
+                    value={form.sortOrder}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, sortOrder: Number(e.target.value) }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="tpl-long">Long description (detail page)</Label>
+                <Textarea
+                  id="tpl-long"
+                  placeholder="Marketing copy shown on the game's detail page…"
+                  value={form.longDescription}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, longDescription: e.target.value }))
+                  }
+                  className="min-h-[80px]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="tpl-tags">Tags (comma-separated)</Label>
+                <Input
+                  id="tpl-tags"
+                  placeholder="survival, multiplayer, modded"
+                  value={form.tags}
+                  onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Card image</Label>
+                <div className="flex flex-wrap gap-2">
+                  {IMAGE_PRESETS.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          cardImageUrl: p,
+                          heroImageUrl: f.heroImageUrl || p,
+                        }))
+                      }
+                      className={cn(
+                        "h-12 w-20 overflow-hidden rounded-md border",
+                        form.cardImageUrl === p
+                          ? "border-primary refx-glow"
+                          : "border-white/10",
+                      )}
+                    >
+                      <GameImage src={p} alt="preset" />
+                    </button>
+                  ))}
+                </div>
+                <Input
+                  placeholder="…or paste a custom card image URL"
+                  value={form.cardImageUrl}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, cardImageUrl: e.target.value }))
+                  }
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="tpl-hero">Hero image URL</Label>
+                  <Input
+                    id="tpl-hero"
+                    placeholder="/games/presets/survival.svg"
+                    value={form.heroImageUrl}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, heroImageUrl: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="tpl-icon">Icon URL</Label>
+                  <Input
+                    id="tpl-icon"
+                    placeholder="optional"
+                    value={form.iconUrl}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, iconUrl: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Card preview</Label>
+                <div className="max-w-[260px] overflow-hidden rounded-2xl border border-white/[0.06]">
+                  <div className="relative aspect-[16/9]">
+                    <GameImage src={form.cardImageUrl} alt={form.name || "preview"} />
+                  </div>
+                  <div className="p-3">
+                    <p className="font-semibold">{form.name || "Game name"}</p>
+                    <p className="line-clamp-2 text-xs text-muted-foreground">
+                      {form.description || "Short description"}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
