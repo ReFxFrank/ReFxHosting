@@ -59,12 +59,20 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
       cohesive per-category preset art + per-game tags & long descriptions.
       Re-seed on the VPS to apply (migrate service re-runs the seed).
 
-## 🅿️ Parked (resume after storefront)
-- **Modrinth mod browser.** Decision: Mods tab on **all** Minecraft servers (`mods/` for
-  Fabric/Forge/NeoForge, `plugins/` for Paper). Mechanism already scoped: reuse the agent's
-  binary-safe `/files/write` + `/files/mkdir` (NO agent rebuild) — add a panel endpoint that
-  downloads a chosen Modrinth jar and streams the raw bytes to the agent write (sign over the
-  exact bytes). Then a `Mods` tab in the server UI (search → install → list/remove).
+## ✅ Unified Minecraft (done)
+- Single `minecraft` egg; loader (vanilla/paper/fabric/forge/neoforge) + version chosen
+  post-purchase via Settings → Minecraft card (`PATCH /servers/:id/minecraft`). Old per-loader
+  eggs hidden (kept for existing servers). Re-seed on the VPS to apply.
+
+## 🅿️ In progress — Modrinth mod browser
+- **Groundwork committed** (not yet wired): `signRequestRaw` + `NodeAgentClient.uploadFileBytes`
+  (stream jar bytes to the agent `/files/write`, no agent rebuild) and `ModrinthService`
+  (search/versions proxy).
+- **Remaining:** a `ModsService` + routes (`GET …/mods/search|versions`, `POST …/mods/install`,
+  `GET …/mods/installed`, `DELETE …/mods/:file`); wire into ServersModule; then a `Mods` tab in
+  the server UI (search → pick version → install → list/remove).
+- **Loader detection note:** now that Minecraft is unified, derive the loader from the server's
+  `LOADER` env var (fallback to template slug); target dir = `plugins/` for paper, else `mods/`.
 
 ## Notes
 - Existing dashboard/admin/billing/server/node functionality is untouched.
