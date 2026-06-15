@@ -55,8 +55,9 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
       (Couldn't run a real browser in the build container — needs the live stack.)
 - [x] Mobile/responsive pass (scrollable category tabs, touch-visible card CTA,
       full-width hero/detail CTAs, plans-before-about on mobile). tsc + build green.
-- [ ] Optionally add more `GameCategory` rows (currently survival/sandbox/shooter)
-      + matching preset SVGs for richer category tabs.
+- [x] Richer categories (Survival/Modded/Sandbox/Simulation/Roleplay/FPS) +
+      cohesive per-category preset art + per-game tags & long descriptions.
+      Re-seed on the VPS to apply (migrate service re-runs the seed).
 
 ## 🅿️ Parked (resume after storefront)
 - **Modrinth mod browser.** Decision: Mods tab on **all** Minecraft servers (`mods/` for
