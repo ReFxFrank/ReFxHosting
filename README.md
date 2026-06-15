@@ -411,6 +411,37 @@ In **Admin → Nodes** the node flips to **ONLINE** within a few seconds and sta
 streaming **CPU / RAM / disk / container** gauges. Use the **Ping** button to
 measure panel→agent latency, and open a node to see its live heartbeat graphs.
 
+### Restart / update the agent
+
+A restart is safe: the agent re-registers from its persisted `<data_dir>/agent.state`
+(no token needed) and re-fetches its assigned servers, so **running game servers
+keep running** and the agent re-attaches to them.
+
+**systemd (installed via `install-node.sh`):**
+
+```bash
+sudo systemctl restart refx-agent                       # restart
+sudo systemctl status refx-agent                        # verify active (running)
+sudo systemctl kill -s SIGKILL refx-agent && \
+  sudo systemctl start refx-agent                       # force-kill if wedged
+```
+
+**Manual / foreground run:**
+
+```bash
+pkill -f refx-agent                                     # stop (use -9 to force)
+pgrep -af refx-agent                                    # confirm it's gone
+nohup ./refx-agent --config config.yaml > agent.log 2>&1 &   # relaunch detached
+```
+
+**Update to a new agent build**, then restart with whichever method above applies:
+
+```bash
+git pull origin main
+cd apps/node-agent && go build -o /usr/local/bin/refx-agent ./cmd/refx-agent
+# cross-compile for Windows: GOOS=windows GOARCH=amd64 go build ./cmd/refx-agent
+```
+
 ### Manual install (no release binary yet)
 
 Releases aren't published? Build the binary and run it yourself:
