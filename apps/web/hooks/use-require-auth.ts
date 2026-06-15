@@ -17,7 +17,10 @@ export function useRequireAuth(opts?: { roles?: GlobalRole[] }) {
 
   useEffect(() => {
     if (status === "unauthenticated") {
-      const next = encodeURIComponent(pathname ?? "/dashboard");
+      // Preserve the full target incl. query (e.g. /order?game=…&plan=…) so the
+      // storefront → checkout preselection survives the login/register round-trip.
+      const search = typeof window !== "undefined" ? window.location.search : "";
+      const next = encodeURIComponent(`${pathname ?? "/dashboard"}${search}`);
       router.replace(`/login?next=${next}`);
     }
   }, [status, pathname, router]);

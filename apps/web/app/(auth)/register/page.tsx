@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -28,6 +28,13 @@ type FormValues = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const router = useRouter();
+  // Read ?next from the URL without useSearchParams (avoids a Suspense boundary
+  // requirement on this static page); preserves storefront → checkout target.
+  const [next, setNext] = useState("/dashboard");
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    setNext(sp.get("next") || "/dashboard");
+  }, []);
   const setSession = useAuthStore((s) => s.setSession);
   const [submitting, setSubmitting] = useState(false);
   const {
@@ -47,10 +54,12 @@ export default function RegisterPage() {
       });
       if (res.accessToken && res.refreshToken) {
         await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
-        router.replace("/dashboard");
+        router.replace(next);
       } else {
         toast.success("Account created. Check your inbox to verify your email.");
-        router.push("/login");
+        router.push(
+          next !== "/dashboard" ? `/login?next=${encodeURIComponent(next)}` : "/login",
+        );
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : "Registration failed");
@@ -100,7 +109,10 @@ export default function RegisterPage() {
 
       <p className="text-center text-sm text-muted-foreground">
         Already have an account?{" "}
-        <Link href="/login" className="font-medium text-primary hover:underline">
+        <Link
+          href={next && next !== "/dashboard" ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+          className="font-medium text-primary hover:underline"
+        >
           Sign in
         </Link>
       </p>
