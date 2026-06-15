@@ -187,12 +187,25 @@ export default function AdminUserDetailPage() {
                 )}
               </span>
             </Row>
+            {user.phone && <Row label="Phone">{user.phone}</Row>}
             <Row label="Locale">{user.locale}</Row>
             <Row label="Timezone">{user.timezone}</Row>
             <Row label="Joined">{formatDate(user.createdAt)}</Row>
-            <p className="pt-1 text-xs text-muted-foreground">
-              Postal address isn&apos;t collected by the platform; reach customers via email.
-            </p>
+            {(user.addressLine1 || user.city || user.country) && (
+              <div className="border-t pt-3">
+                <p className="refx-eyebrow mb-1">Address</p>
+                <address className="not-italic text-sm leading-relaxed text-foreground">
+                  {user.addressLine1 && <div>{user.addressLine1}</div>}
+                  {user.addressLine2 && <div>{user.addressLine2}</div>}
+                  {(user.city || user.region || user.postalCode) && (
+                    <div>
+                      {[user.city, user.region, user.postalCode].filter(Boolean).join(", ")}
+                    </div>
+                  )}
+                  {user.country && <div>{user.country}</div>}
+                </address>
+              </div>
+            )}
           </CardContent>
         </Card>
 

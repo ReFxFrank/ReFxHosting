@@ -34,6 +34,15 @@ export class BillingController {
 
   // ---- Catalog -----------------------------------------------------------
 
+  /**
+   * Public-safe payment config for the client checkout: whether each gateway is
+   * enabled + the Stripe publishable key (not a secret). No secrets returned.
+   */
+  @Get('config')
+  paymentConfig() {
+    return this.billing.gatewayStatus();
+  }
+
   @Get('products')
   listProducts() {
     return this.billing.listProducts();

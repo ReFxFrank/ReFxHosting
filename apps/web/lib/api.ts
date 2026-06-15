@@ -45,6 +45,7 @@ import type {
   AdminPayment,
   AdminBillingSummary,
   GatewayStatus,
+  ProfileUpdate,
 } from "@/lib/types";
 
 export const API_URL =
@@ -101,7 +102,14 @@ async function doRefresh(): Promise<AuthTokens | null> {
     // Only a definitive auth rejection means the refresh token is actually
     // invalid → clear it. Transient failures (panel restarting: 5xx / network)
     // keep the session so the user stays signed in once the panel returns.
-    if (res.status === 401 || res.status === 403) clearTokens();
+    if (res.status === 401 || res.status === 403) {
+      clearTokens();
+      // Tell the app the session is truly over so it can redirect to /login
+      // immediately rather than showing empty data until a manual refresh.
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("refx:session-expired"));
+      }
+    }
     return null;
   } catch {
     // Network error (e.g. the panel is mid-rebuild) — transient, keep tokens.
@@ -249,8 +257,7 @@ export const api = {
   },
 
   account: {
-    update: (input: Partial<Pick<User, "firstName" | "lastName" | "locale" | "timezone" | "avatarUrl">>) =>
-      http.patch<User>("/account", input),
+    update: (input: ProfileUpdate) => http.patch<User>("/account", input),
     changePassword: (currentPassword: string, newPassword: string) =>
       http.post<void>("/account/password", { currentPassword, newPassword }),
     sessions: () => getList<Session>("/account/sessions"),
@@ -453,6 +460,8 @@ export const api = {
   },
 
   billing: {
+    /** Public-safe gateway config for the checkout button (Stripe publishable key). */
+    config: () => http.get<GatewayStatus>("/billing/config"),
     invoices: () => getList<Invoice>("/billing/invoices"),
     invoice: (id: string) => http.get<Invoice>(`/billing/invoices/${id}`),
     payInvoice: (id: string) =>

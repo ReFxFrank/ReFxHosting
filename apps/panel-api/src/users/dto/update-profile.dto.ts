@@ -35,4 +35,48 @@ export class UpdateProfileDto {
   @IsUrl()
   @MaxLength(2048)
   avatarUrl?: string;
+
+  // ---- Contact / billing address (all optional) -------------------------
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  phone?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  addressLine1?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  addressLine2?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  city?: string;
+
+  @ApiPropertyOptional({ description: 'State / province' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  region?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  postalCode?: string;
+
+  @ApiPropertyOptional({ description: 'ISO country code or name' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  country?: string;
 }

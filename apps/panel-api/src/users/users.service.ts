@@ -41,6 +41,14 @@ export class UsersService {
     if (dto.locale !== undefined) data.locale = dto.locale;
     if (dto.timezone !== undefined) data.timezone = dto.timezone;
     if (dto.avatarUrl !== undefined) data.avatarUrl = dto.avatarUrl;
+    // Contact / billing address.
+    if (dto.phone !== undefined) data.phone = dto.phone;
+    if (dto.addressLine1 !== undefined) data.addressLine1 = dto.addressLine1;
+    if (dto.addressLine2 !== undefined) data.addressLine2 = dto.addressLine2;
+    if (dto.city !== undefined) data.city = dto.city;
+    if (dto.region !== undefined) data.region = dto.region;
+    if (dto.postalCode !== undefined) data.postalCode = dto.postalCode;
+    if (dto.country !== undefined) data.country = dto.country;
 
     return this.prisma.user.update({ where: { id: userId }, data });
   }

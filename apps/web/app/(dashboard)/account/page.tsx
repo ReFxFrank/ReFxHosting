@@ -95,6 +95,13 @@ const profileSchema = z.object({
   lastName: z.string().optional(),
   locale: z.string().min(1, "Required"),
   timezone: z.string().min(1, "Required"),
+  phone: z.string().optional(),
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  city: z.string().optional(),
+  region: z.string().optional(),
+  postalCode: z.string().optional(),
+  country: z.string().optional(),
 });
 type ProfileValues = z.infer<typeof profileSchema>;
 
@@ -115,17 +122,18 @@ function ProfileTab() {
       lastName: user?.lastName ?? "",
       locale: user?.locale ?? "",
       timezone: user?.timezone ?? "",
+      phone: user?.phone ?? "",
+      addressLine1: user?.addressLine1 ?? "",
+      addressLine2: user?.addressLine2 ?? "",
+      city: user?.city ?? "",
+      region: user?.region ?? "",
+      postalCode: user?.postalCode ?? "",
+      country: user?.country ?? "",
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: (values: ProfileValues) =>
-      api.account.update({
-        firstName: values.firstName,
-        lastName: values.lastName,
-        locale: values.locale,
-        timezone: values.timezone,
-      }),
+    mutationFn: (values: ProfileValues) => api.account.update(values),
     onSuccess: async () => {
       await refreshUser();
       toast.success("Profile updated");
@@ -194,6 +202,43 @@ function ProfileTab() {
               {errors.timezone && (
                 <p className="text-xs text-destructive">{errors.timezone.message}</p>
               )}
+            </div>
+          </div>
+
+          <div className="space-y-1.5 border-t pt-5">
+            <p className="text-sm font-medium">Contact & billing address</p>
+            <p className="text-xs text-muted-foreground">
+              Optional — used for support and billing. We never share it.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="phone">Phone</Label>
+              <Input id="phone" placeholder="+1 555 123 4567" {...register("phone")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="country">Country</Label>
+              <Input id="country" placeholder="US" {...register("country")} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="addressLine1">Address line 1</Label>
+              <Input id="addressLine1" {...register("addressLine1")} />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="addressLine2">Address line 2</Label>
+              <Input id="addressLine2" {...register("addressLine2")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="city">City</Label>
+              <Input id="city" {...register("city")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="region">State / province</Label>
+              <Input id="region" {...register("region")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="postalCode">Postal code</Label>
+              <Input id="postalCode" {...register("postalCode")} />
             </div>
           </div>
           <div className="flex justify-end">

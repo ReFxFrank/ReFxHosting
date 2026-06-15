@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -27,6 +27,12 @@ function LoginForm() {
   const setSession = useAuthStore((s) => s.setSession);
   const [submitting, setSubmitting] = useState(false);
   const [remember, setRemember] = useState(true);
+
+  useEffect(() => {
+    if (params.get("reason") === "timeout") {
+      toast.info("You were signed out due to inactivity. Please sign in again.");
+    }
+  }, [params]);
 
   const {
     register,

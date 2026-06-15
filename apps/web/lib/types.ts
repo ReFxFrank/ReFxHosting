@@ -19,8 +19,35 @@ export interface User {
   timezone: string;
   avatarUrl: string | null;
   totpEnabledAt: string | null;
+  // Contact / billing address (self-service, optional).
+  phone: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  region: string | null;
+  postalCode: string | null;
+  country: string | null;
   createdAt: string;
 }
+
+/** Editable contact/address profile fields. */
+export type ProfileUpdate = Partial<
+  Pick<
+    User,
+    | "firstName"
+    | "lastName"
+    | "locale"
+    | "timezone"
+    | "avatarUrl"
+    | "phone"
+    | "addressLine1"
+    | "addressLine2"
+    | "city"
+    | "region"
+    | "postalCode"
+    | "country"
+  >
+>;
 
 export type ServerState =
   | "INSTALLING"

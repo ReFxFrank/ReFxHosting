@@ -3,6 +3,7 @@
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopNav, MobileNav } from "@/components/layout/topnav";
 import { useRequireAuth } from "@/hooks/use-require-auth";
+import { IdleSessionGuard } from "@/components/auth/idle-session-guard";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -10,6 +11,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-svh">
+      <IdleSessionGuard />
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopNav />

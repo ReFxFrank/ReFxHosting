@@ -57,6 +57,16 @@ model User {
   timezone          String      @default("UTC")
   avatarUrl         String?
 
+  // Contact / billing address — self-service, all optional. Useful for support
+  // and for billing/tax. No PII beyond what the customer chooses to provide.
+  phone             String?
+  addressLine1      String?
+  addressLine2      String?
+  city              String?
+  region            String?     // state / province
+  postalCode        String?
+  country           String?     // ISO country code or name
+
   // MFA
   totpSecretEnc     String?     // AES-256-GCM encrypted TOTP seed
   totpEnabledAt     DateTime?

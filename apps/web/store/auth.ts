@@ -6,6 +6,14 @@ import { api } from "@/lib/api";
 import { clearTokens, getTokens, setTokens } from "@/lib/auth";
 import type { AuthTokens, GlobalRole, User } from "@/lib/types";
 
+/** Role hierarchy, identical to the panel-api RolesGuard. */
+const ROLE_RANK: Record<GlobalRole, number> = {
+  CUSTOMER: 0,
+  SUPPORT: 1,
+  ADMIN: 2,
+  OWNER: 3,
+};
+
 interface AuthState {
   user: User | null;
   status: "idle" | "loading" | "authenticated" | "unauthenticated";
@@ -76,7 +84,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   hasRole(...roles) {
     const role = get().user?.globalRole;
-    return !!role && roles.includes(role);
+    if (!role) return false;
+    // Rank-based, mirroring the backend RolesGuard: a higher role satisfies a
+    // requirement for any lower one (OWNER > ADMIN > SUPPORT > CUSTOMER). So
+    // hasRole("ADMIN") is true for an OWNER, while hasRole("OWNER") is not for
+    // an ADMIN.
+    const min = Math.min(...roles.map((r) => ROLE_RANK[r]));
+    return ROLE_RANK[role] >= min;
   },
 
   isAdmin() {

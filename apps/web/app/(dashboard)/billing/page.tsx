@@ -203,11 +203,19 @@ function InvoicesTab({
   const queryClient = useQueryClient();
   const [viewId, setViewId] = useState<string | null>(null);
 
+  // Whether online checkout is available (Stripe publishable key / PayPal set).
+  const { data: payCfg } = useQuery({
+    queryKey: ["billing", "config"],
+    queryFn: () => api.billing.config(),
+    retry: false,
+  });
+  const checkoutEnabled = !!(payCfg?.stripe.configured || payCfg?.paypal.configured);
+
   const payMutation = useMutation({
     mutationFn: (id: string) => api.billing.payInvoice(id),
     onSuccess: (res) => {
       if (res?.checkoutUrl) {
-        // TODO(impl): hand off to Stripe-hosted checkout.
+        // Hand off to the gateway's hosted checkout (Stripe Checkout / PayPal).
         window.location.href = res.checkoutUrl;
         return;
       }
@@ -267,6 +275,12 @@ function InvoicesTab({
                       {invoice.state === "OPEN" && (
                         <Button
                           size="sm"
+                          disabled={!checkoutEnabled}
+                          title={
+                            checkoutEnabled
+                              ? undefined
+                              : "Online payments aren't enabled yet"
+                          }
                           loading={
                             payMutation.isPending &&
                             payMutation.variables === invoice.id
