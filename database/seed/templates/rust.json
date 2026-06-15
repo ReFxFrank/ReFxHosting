@@ -11,15 +11,15 @@
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
-    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian",
-    "uMod": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+    "Default": "ghcr.io/parkervcp/steamcmd:debian",
+    "uMod": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "steamAppId": 258550,
   "startupCommand": "./RustDedicated -batchmode +server.port {{SERVER_PORT}} +server.identity rust +rcon.port {{RCON_PORT}} +rcon.web 1 +rcon.password \"{{RCON_PASS}}\" +server.hostname \"{{SERVER_NAME}}\" +server.level \"{{LEVEL}}\" +server.worldsize {{WORLD_SIZE}} +server.seed {{SERVER_SEED}} +server.maxplayers {{MAX_PLAYERS}} +server.saveinterval 300",
   "startupDetect": "Server startup complete",
   "stopCommand": "quit",
   "installScript": {
-    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server/steamcmd\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 258550 validate +quit\nif [ \"${OXIDE}\" = \"true\" ]; then\n  curl -fsSL -o oxide.zip https://umod.org/games/rust/download/develop\n  unzip -o oxide.zip -d /mnt/server && rm -f oxide.zip\nfi\necho 'Rust install complete.'\n"
   },

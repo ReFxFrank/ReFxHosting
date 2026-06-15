@@ -11,15 +11,15 @@
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
-    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian",
-    "Java 17": "ghcr.io/refxfrank/yolks/java:17"
+    "Default": "ghcr.io/parkervcp/steamcmd:debian",
+    "Java 17": "ghcr.io/pterodactyl/yolks:java_17"
   },
   "steamAppId": 380870,
   "startupCommand": "./start-server.sh -servername \"{{SERVER_NAME}}\" -adminpassword \"{{ADMIN_PASS}}\" -port {{SERVER_PORT}} -udpport {{UDP_PORT}} -cachedir=/mnt/server/Zomboid",
   "startupDetect": "SERVER STARTED|Server Steam ID",
   "stopCommand": "quit",
   "installScript": {
-    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 380870 validate +quit\nmkdir -p /mnt/server/Zomboid/Server\nchmod +x start-server.sh || true\necho 'Project Zomboid install complete.'\n"
   },

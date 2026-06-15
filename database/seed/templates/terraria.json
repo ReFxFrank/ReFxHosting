@@ -11,8 +11,8 @@
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
-    "TShock (Mono)": "ghcr.io/refxfrank/yolks/mono:latest",
-    "ReFx Yolk (Dotnet)": "ghcr.io/refxfrank/yolks/dotnet:8"
+    "TShock (Mono)": "ghcr.io/parkervcp/yolks:mono_latest",
+    "ReFx Yolk (Dotnet)": "ghcr.io/parkervcp/yolks:dotnet_8"
   },
   "steamAppId": null,
   "startupCommand": "./TShock.Server -port {{SERVER_PORT}} -maxplayers {{MAX_PLAYERS}} -world \"/mnt/server/worlds/{{WORLD_NAME}}.wld\" -autocreate {{WORLD_SIZE}} -worldname \"{{WORLD_NAME}}\" -difficulty {{DIFFICULTY}} -password \"{{SERVER_PASS}}\"",

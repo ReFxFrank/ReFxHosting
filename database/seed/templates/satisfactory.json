@@ -11,15 +11,15 @@
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
-    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian",
-    "ReFx SteamCMD": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+    "Default": "ghcr.io/parkervcp/steamcmd:debian",
+    "ReFx SteamCMD": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "steamAppId": 1690800,
   "startupCommand": "./FactoryServer.sh -unattended -Port={{SERVER_PORT}} -ServerQueryPort={{QUERY_PORT}} -BeaconPort={{BEACON_PORT}} -maxplayers={{MAX_PLAYERS}}",
   "startupDetect": "Server is ready|Game state updated to Running",
   "stopCommand": "^C",
   "installScript": {
-    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nBRANCH_ARGS=\"\"\nif [ \"${EXPERIMENTAL}\" = \"true\" ]; then BRANCH_ARGS=\"-beta experimental\"; fi\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 1690800 ${BRANCH_ARGS} validate +quit\nchmod +x FactoryServer.sh || true\necho 'Satisfactory install complete.'\n"
   },

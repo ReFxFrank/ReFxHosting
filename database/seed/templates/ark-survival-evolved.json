@@ -11,14 +11,14 @@
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
-    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "steamAppId": 376030,
   "startupCommand": "./ShooterGame/Binaries/Linux/ShooterGameServer {{MAP}}?listen?SessionName=\"{{SERVER_NAME}}\"?Port={{SERVER_PORT}}?QueryPort={{QUERY_PORT}}?RCONPort={{RCON_PORT}}?RCONEnabled=True?ServerAdminPassword=\"{{ADMIN_PASS}}\"?MaxPlayers={{MAX_PLAYERS}} -server -log",
   "startupDetect": "Server has completed startup",
   "stopCommand": "DoExit",
   "installScript": {
-    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 376030 validate +quit\necho 'ARK install complete.'\n"
   },

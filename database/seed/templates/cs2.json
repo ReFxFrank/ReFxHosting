@@ -12,14 +12,14 @@
   "supportsWindows": false,
   "dockerImages": {
     "Default": "cm2network/cs2:latest",
-    "ReFx SteamCMD": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+    "ReFx SteamCMD": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "steamAppId": 730,
   "startupCommand": "./game/bin/linuxsteamrt64/cs2 -dedicated -port {{SERVER_PORT}} +map {{MAP}} +game_type {{GAME_TYPE}} +game_mode {{GAME_MODE}} +sv_setsteamaccount {{STEAM_ACC}} -maxplayers_override {{MAX_PLAYERS}} +rcon_password \"{{RCON_PASS}}\"",
   "startupDetect": "Connection to Steam servers successful|GC Connection established",
   "stopCommand": "quit",
   "installScript": {
-    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 730 validate +quit\nmkdir -p /mnt/server/game/csgo/cfg\nchmod +x ./game/bin/linuxsteamrt64/cs2 || true\necho 'CS2 install complete.'\n"
   },

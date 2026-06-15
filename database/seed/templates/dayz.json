@@ -11,14 +11,14 @@
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
-    "Default": "ghcr.io/refxfrank/yolks/steamcmd:debian"
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "steamAppId": 223350,
   "startupCommand": "./DayZServer -config=serverDZ.cfg -port={{SERVER_PORT}} -profiles=profiles -dologs -adminlog -netlog -freezecheck {{MODS}}",
   "startupDetect": "Server is now listening",
   "stopCommand": "^C",
   "installScript": {
-    "container": "ghcr.io/refxfrank/yolks/steamcmd:debian",
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 223350 validate +quit\nif [ ! -f /mnt/server/serverDZ.cfg ]; then cp /mnt/server/serverDZ.server.cfg /mnt/server/serverDZ.cfg 2>/dev/null || true; fi\necho 'DayZ install complete.'\n"
   },

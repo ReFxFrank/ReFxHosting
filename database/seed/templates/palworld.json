@@ -11,15 +11,15 @@
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
-    "Default": "ghcr.io/refxfrank/yolks/steamcmd:proton",
-    "Proton": "ghcr.io/refxfrank/yolks/steamcmd:proton"
+    "Default": "ghcr.io/parkervcp/steamcmd:proton",
+    "Proton": "ghcr.io/parkervcp/steamcmd:proton"
   },
   "steamAppId": 2394010,
   "startupCommand": "./PalServer.sh -port={{SERVER_PORT}} -players={{MAX_PLAYERS}} -servername=\"{{SERVER_NAME}}\" -RCONEnabled={{RCON_ENABLED}} -RCONPort={{RCON_PORT}} -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS",
   "startupDetect": "Setting breakpad minidump|Running Palworld dedicated server",
   "stopCommand": "^C",
   "installScript": {
-    "container": "ghcr.io/refxfrank/yolks/steamcmd:proton",
+    "container": "ghcr.io/parkervcp/steamcmd:proton",
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 2394010 validate +quit\nmkdir -p /mnt/server/Pal/Saved/Config/LinuxServer\nchmod +x PalServer.sh || true\necho 'Palworld install complete.'\n"
   },

@@ -11,14 +11,14 @@
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
-    "Default": "ghcr.io/refxfrank/yolks/debian:bullseye"
+    "Default": "ghcr.io/parkervcp/yolks:debian"
   },
   "steamAppId": null,
   "startupCommand": "./run.sh +exec server.cfg +set serverProfile default +set sv_maxClients {{MAX_PLAYERS}} +set sv_hostname \"{{SERVER_NAME}}\" +set sv_licenseKey {{LICENSE_KEY}} +set endpoint_add_tcp \"0.0.0.0:{{SERVER_PORT}}\" +set endpoint_add_udp \"0.0.0.0:{{SERVER_PORT}}\"",
   "startupDetect": "Server started",
   "stopCommand": "quit",
   "installScript": {
-    "container": "ghcr.io/refxfrank/yolks/debian:bullseye",
+    "container": "ghcr.io/parkervcp/yolks:debian",
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nARTIFACT_URL=\"https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/${FX_VERSION:-latest}/fx.tar.xz\"\nif [ \"${FX_VERSION:-latest}\" = \"latest\" ]; then\n  ARTIFACT_URL=\"https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/fx.tar.xz\"\nfi\ncurl -fsSL -o fx.tar.xz \"$ARTIFACT_URL\"\ntar xf fx.tar.xz && rm -f fx.tar.xz\nif [ ! -d resources ]; then\n  git clone --depth 1 https://github.com/citizenfx/cfx-server-data.git tmp_data && cp -r tmp_data/resources . && cp tmp_data/server.cfg . 2>/dev/null || true && rm -rf tmp_data\nfi\necho 'FiveM (FXServer) install complete.'\n"
   },
