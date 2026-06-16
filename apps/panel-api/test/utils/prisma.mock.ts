@@ -33,6 +33,14 @@ const MODELS = [
   'globalAlert',
   'homepageAlert',
   'node',
+  'nodeHeartbeat',
+  'platformSetting',
+  'role',
+  'notification',
+  'ticket',
+  'ticketMessage',
+  'ticketCategory',
+  'cannedResponse',
 ] as const;
 
 type AnyFn = jest.Mock;

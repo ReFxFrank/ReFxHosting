@@ -27,6 +27,7 @@ import { AlertsService } from '../platform/alerts.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 import { AuditService } from '../platform/audit.service';
 import { SettingsService } from '../platform/settings.service';
+import { EmailService } from '../email/email.service';
 import { RolesService } from './roles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminPermissionGuard } from '../auth/guards/admin-permission.guard';
@@ -53,8 +54,10 @@ import {
 import {
   AdminCreateServerDto,
   CreateRoleDto,
+  SetEmailConfigDto,
   SetGatewayConfigDto,
   SetUserRoleDto,
+  TestEmailDto,
   UpdateAlertDto,
   UpdateProductDto,
   UpdateRoleDto,
@@ -84,6 +87,7 @@ export class AdminController {
     private readonly audit: AuditService,
     private readonly roles: RolesService,
     private readonly settings: SettingsService,
+    private readonly email: EmailService,
   ) {}
 
   // ---- Nodes -------------------------------------------------------------
@@ -323,6 +327,29 @@ export class AdminController {
   @Audit({ action: 'admin.gateways.update', targetType: 'PlatformSetting' })
   setGatewayConfig(@Body() dto: SetGatewayConfigDto) {
     return this.settings.setGatewayConfig(dto);
+  }
+
+  // ---- Email (SMTP) settings --------------------------------------------
+
+  @Get('settings/email')
+  @RequirePerm('settings.manage')
+  emailConfig() {
+    return this.settings.emailConfigMasked();
+  }
+
+  @Patch('settings/email')
+  @RequirePerm('settings.manage')
+  @Audit({ action: 'admin.email.update', targetType: 'PlatformSetting' })
+  setEmailConfig(@Body() dto: SetEmailConfigDto) {
+    return this.settings.setEmailConfig(dto);
+  }
+
+  @Post('settings/email/test')
+  @HttpCode(200)
+  @RequirePerm('settings.manage')
+  @Audit({ action: 'admin.email.test', targetType: 'PlatformSetting' })
+  sendTestEmail(@Body() dto: TestEmailDto) {
+    return this.email.sendTest(dto.to);
   }
 
   // ---- Products ----------------------------------------------------------

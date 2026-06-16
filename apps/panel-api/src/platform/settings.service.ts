@@ -12,6 +12,12 @@ const KEY = {
   stripeStatementDescriptor: 'gateway.stripe.statementDescriptor',
   paypalClientId: 'gateway.paypal.clientId',
   paypalClientSecret: 'gateway.paypal.clientSecret',
+  smtpHost: 'email.smtp.host',
+  smtpPort: 'email.smtp.port',
+  smtpUser: 'email.smtp.user',
+  smtpPassword: 'email.smtp.password',
+  smtpFrom: 'email.smtp.from',
+  smtpSecure: 'email.smtp.secure',
 } as const;
 
 export interface GatewayConfigInput {
@@ -22,6 +28,24 @@ export interface GatewayConfigInput {
   stripeStatementDescriptor?: string;
   paypalClientId?: string;
   paypalClientSecret?: string;
+}
+
+export interface EmailConfigInput {
+  host?: string;
+  port?: number;
+  user?: string;
+  password?: string;
+  from?: string;
+  secure?: boolean;
+}
+
+export interface EffectiveEmailConfig {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
+  secure: boolean;
 }
 
 /**
@@ -109,6 +133,50 @@ export class SettingsService {
         clientSecretSet: !!paypal.clientSecret,
       },
     };
+  }
+
+  // ---- Email (SMTP) ------------------------------------------------------
+
+  /** Effective SMTP config (DB override → env fallback). */
+  async emailConfig(): Promise<EffectiveEmailConfig> {
+    const env = this.config.get<AppConfig['email']>('email')!;
+    const portStr = await this.get(KEY.smtpPort);
+    const secureStr = await this.get(KEY.smtpSecure);
+    return {
+      host: (await this.get(KEY.smtpHost)) || env.host || '',
+      port: portStr ? Number(portStr) : env.port || 587,
+      user: (await this.get(KEY.smtpUser)) || env.user || '',
+      password: (await this.get(KEY.smtpPassword)) || env.password || '',
+      from: (await this.get(KEY.smtpFrom)) || env.from || '',
+      secure: secureStr ? secureStr === 'true' : !!env.secure,
+    };
+  }
+
+  /** Masked SMTP config for the owner UI — never returns the raw password. */
+  async emailConfigMasked() {
+    const cfg = await this.emailConfig();
+    return {
+      configured: !!cfg.host,
+      host: cfg.host,
+      port: cfg.port,
+      user: cfg.user,
+      from: cfg.from,
+      secure: cfg.secure,
+      passwordSet: !!cfg.password,
+    };
+  }
+
+  /** Apply owner email edits; only provided fields change. Password is encrypted. */
+  async setEmailConfig(dto: EmailConfigInput): Promise<void> {
+    if (dto.host !== undefined) await this.set(KEY.smtpHost, dto.host.trim(), false);
+    if (dto.port !== undefined)
+      await this.set(KEY.smtpPort, String(dto.port), false);
+    if (dto.user !== undefined) await this.set(KEY.smtpUser, dto.user.trim(), false);
+    if (dto.password !== undefined)
+      await this.set(KEY.smtpPassword, dto.password, true);
+    if (dto.from !== undefined) await this.set(KEY.smtpFrom, dto.from.trim(), false);
+    if (dto.secure !== undefined)
+      await this.set(KEY.smtpSecure, dto.secure ? 'true' : 'false', false);
   }
 
   /** Apply owner edits; only provided fields are changed. Secrets are encrypted. */

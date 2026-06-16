@@ -168,6 +168,17 @@ export interface GatewayConfigDetail {
   paypal: { configured: boolean; clientId: string; clientSecretSet: boolean };
 }
 
+/** Masked SMTP/email settings for the owner editor. */
+export interface EmailConfigDetail {
+  configured: boolean;
+  host: string;
+  port: number;
+  user: string;
+  from: string;
+  secure: boolean;
+  passwordSet: boolean;
+}
+
 /** Full account view for the admin user-detail page. */
 export interface AdminUserDetail extends User {
   ownedServers?: Array<

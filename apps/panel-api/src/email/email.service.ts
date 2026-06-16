@@ -1,8 +1,8 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter, SendMailOptions } from 'nodemailer';
-import { AppConfig } from '../config/configuration';
+import { SettingsService } from '../platform/settings.service';
 
 export interface MailRecipient {
   email: string;
@@ -20,44 +20,77 @@ export interface MailRecipient {
  * are logged instead.
  */
 @Injectable()
-export class EmailService implements OnModuleInit {
+export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private transporter!: Transporter;
-  private readonly from: string;
   private readonly panelUrl: string;
-  private readonly smtpConfigured: boolean;
+  /** Cached transporter + the config signature it was built from. */
+  private transporter?: Transporter;
+  private cachedSig = '';
+  private cachedConfigured = false;
 
-  constructor(private readonly config: ConfigService) {
-    const email = this.config.get<AppConfig['email']>('email')!;
-    this.from = email.from;
+  constructor(
+    private readonly config: ConfigService,
+    private readonly settings: SettingsService,
+  ) {
     this.panelUrl = (
       this.config.get<string>('panelUrl') ?? 'http://localhost:3000'
     ).replace(/\/+$/, '');
-    this.smtpConfigured = Boolean(email.host);
   }
 
-  onModuleInit(): void {
-    const email = this.config.get<AppConfig['email']>('email')!;
-    if (this.smtpConfigured) {
-      this.transporter = nodemailer.createTransport({
-        host: email.host,
-        port: email.port,
-        secure: email.secure,
-        auth:
-          email.user || email.password
-            ? { user: email.user, pass: email.password }
-            : undefined,
-      });
+  /**
+   * Build (or reuse) a transporter from the EFFECTIVE SMTP config (the
+   * owner-editable settings, falling back to env). Rebuilds only when the config
+   * changes, so saving new SMTP settings in the panel takes effect immediately
+   * without a restart. With no host configured it uses jsonTransport (logs only).
+   */
+  private async transport(): Promise<{ transporter: Transporter; from: string; configured: boolean }> {
+    const cfg = await this.settings.emailConfig();
+    const configured = Boolean(cfg.host);
+    const sig = JSON.stringify([
+      cfg.host,
+      cfg.port,
+      cfg.user,
+      cfg.password ? 'set' : '',
+      cfg.secure,
+    ]);
+    if (!this.transporter || sig !== this.cachedSig) {
+      this.transporter = configured
+        ? nodemailer.createTransport({
+            host: cfg.host,
+            port: cfg.port,
+            secure: cfg.secure,
+            auth:
+              cfg.user || cfg.password
+                ? { user: cfg.user, pass: cfg.password }
+                : undefined,
+          })
+        : nodemailer.createTransport({ jsonTransport: true });
+      this.cachedSig = sig;
+      this.cachedConfigured = configured;
       this.logger.log(
-        `SMTP transport configured (${email.host}:${email.port})`,
-      );
-    } else {
-      // Dev/test fallback: serialize messages instead of sending them.
-      this.transporter = nodemailer.createTransport({ jsonTransport: true });
-      this.logger.warn(
-        'SMTP not configured (SMTP_HOST empty) — using jsonTransport; emails are logged, not delivered.',
+        configured
+          ? `SMTP transport ready (${cfg.host}:${cfg.port})`
+          : 'SMTP not configured — using jsonTransport (emails logged, not sent).',
       );
     }
+    return {
+      transporter: this.transporter,
+      from: cfg.from || 'ReFx Hosting <no-reply@refx.example>',
+      configured: this.cachedConfigured,
+    };
+  }
+
+  /** Send a test email to verify SMTP settings. Throws on failure (so the UI can report it). */
+  async sendTest(to: string): Promise<{ delivered: boolean }> {
+    const { transporter, from, configured } = await this.transport();
+    await transporter.sendMail({
+      from,
+      to,
+      subject: 'ReFx Hosting — SMTP test',
+      text: 'This is a test email confirming your SMTP settings work. 🎉',
+      html: '<p>This is a test email confirming your SMTP settings work. 🎉</p>',
+    });
+    return { delivered: configured };
   }
 
   // ---- public helpers ----------------------------------------------------
@@ -188,16 +221,25 @@ export class EmailService implements OnModuleInit {
     text: string;
     html?: string;
   }): Promise<void> {
+    let transporter: Transporter;
+    let from: string;
+    let configured: boolean;
+    try {
+      ({ transporter, from, configured } = await this.transport());
+    } catch (err) {
+      this.logger.error(`Email transport unavailable: ${(err as Error).message}`);
+      return; // never break the calling flow
+    }
     const message: SendMailOptions = {
-      from: this.from,
+      from,
       to: opts.to,
       subject: opts.subject,
       text: opts.text,
       html: opts.html,
     };
     try {
-      const info = await this.transporter.sendMail(message);
-      if (!this.smtpConfigured) {
+      const info = await transporter.sendMail(message);
+      if (!configured) {
         // jsonTransport: `message` is the serialized JSON of the email — the
         // only place we are allowed to surface the (dev) email body/link.
         this.logger.debug(

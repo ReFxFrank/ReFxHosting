@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsEmail,
   IsEnum,
   IsInt,
   IsNumber,
@@ -9,6 +10,7 @@ import {
   IsOptional,
   IsString,
   Length,
+  Max,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -83,6 +85,51 @@ export class SetGatewayConfigDto {
   @IsString()
   @MaxLength(255)
   paypalClientSecret?: string;
+}
+
+/** Owner-editable SMTP / email settings. */
+export class SetEmailConfigDto {
+  @ApiPropertyOptional({ description: 'SMTP host (blank disables real delivery).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  host?: string;
+
+  @ApiPropertyOptional({ description: 'SMTP port.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(65535)
+  port?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  user?: string;
+
+  @ApiPropertyOptional({ description: 'SMTP password (write-only; stored encrypted).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  password?: string;
+
+  @ApiPropertyOptional({ description: 'From address, e.g. "ReFx <no-reply@refx.gg>".' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  from?: string;
+
+  @ApiPropertyOptional({ description: 'Use TLS on connect (port 465).' })
+  @IsOptional()
+  @IsBoolean()
+  secure?: boolean;
+}
+
+export class TestEmailDto {
+  @ApiProperty({ description: 'Recipient for the test email.' })
+  @IsEmail()
+  to!: string;
 }
 
 export class CreateRoleDto {

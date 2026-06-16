@@ -51,6 +51,7 @@ import type {
   AdminBillingSummary,
   GatewayStatus,
   GatewayConfigDetail,
+  EmailConfigDetail,
   ProfileUpdate,
   AdminRole,
 } from "@/lib/types";
@@ -637,6 +638,19 @@ export const api = {
       paypalClientId?: string;
       paypalClientSecret?: string;
     }) => http.patch<void>("/admin/payments/gateways/config", input),
+
+    // Email / SMTP settings (settings.manage).
+    emailConfig: () => http.get<EmailConfigDetail>("/admin/settings/email"),
+    setEmailConfig: (input: {
+      host?: string;
+      port?: number;
+      user?: string;
+      password?: string;
+      from?: string;
+      secure?: boolean;
+    }) => http.patch<void>("/admin/settings/email", input),
+    sendTestEmail: (to: string) =>
+      http.post<{ delivered: boolean }>("/admin/settings/email/test", { to }),
 
     products: () => getList<Product>("/admin/products"),
     // Strip `id` from the body — it's in the URL on update, and the API rejects
