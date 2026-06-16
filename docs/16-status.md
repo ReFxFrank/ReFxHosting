@@ -38,7 +38,7 @@ Legend:
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Auth (Argon2id, JWT access+refresh rotation, sessions) | **Done** | Reuse-detection on refresh. |
+| Auth (Argon2id, JWT access+refresh rotation, sessions) | **Done** | Refresh-token rotation with reuse-detection (revokes the session family), plus a **60s concurrent-refresh grace window** so two tabs refreshing at once aren't logged out; login runs a constant-time Argon2 verify (no user-enumeration timing); registration handles the duplicate-email race as a clean 409. |
 | Password reset + email verification (token email, hashed at rest) | **Done** | `/auth/forgot-password`, `/reset-password`, `/verify-email`, `/resend-verification`; SHA-256-hashed single-use tokens, real SMTP transport (jsonTransport fallback in dev/test). |
 | 2FA (TOTP + recovery codes, WebAuthn) | **Done** | End-to-end: TOTP enrol with a **scannable QR** (Authy / Google Authenticator / 1Password) + manual key, one-time recovery codes, and a login challenge. **Passkeys (WebAuthn)** register/list/remove in account security and act as a second factor at sign-in; login requires MFA when the user has TOTP **or** any passkey. Login MFA uses a signed, short-lived (`mfa`-type) challenge JWT. WebAuthn challenge store is in-memory (`TODO(impl)`: Redis-backed for multi-instance); production must set `PANEL_RP_ID` + `PANEL_URL` to the web origin. |
 | API keys (scoped, IP allowlist) | **Done** | Hash lookup + scope/IP checks. |

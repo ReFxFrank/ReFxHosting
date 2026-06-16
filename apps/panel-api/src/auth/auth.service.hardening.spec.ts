@@ -24,11 +24,16 @@ describe('AuthService hardening', () => {
       user: {
         findUnique: jest.fn().mockResolvedValue(null),
         findFirst: jest.fn().mockResolvedValue(null),
+        findFirstOrThrow: jest
+          .fn()
+          .mockResolvedValue({ id: USER_ID, email: 'u@e.com', globalRole: 'CUSTOMER' }),
         create: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({}),
       },
       session: {
-        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockResolvedValue({}),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         create: jest.fn().mockResolvedValue({}),
       },
       passwordResetToken: {
@@ -326,6 +331,112 @@ describe('AuthService hardening', () => {
         { secret: MFA_SECRET, expiresIn: 300 },
       );
       await expect(service.verifyMfaChallenge(wrongType)).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+    });
+  });
+
+  // ---- refresh rotation + reuse-detection grace ---------------------------
+
+  describe('refresh', () => {
+    const SID = 'sess-1';
+    const future = new Date(Date.now() + 86_400_000);
+
+    async function mintRefresh() {
+      return jwt.signAsync({ sub: USER_ID, sid: SID, type: 'refresh' }, { secret: 'r' });
+    }
+    /** Did we revoke the whole family (where keyed only by userId)? */
+    function familyRevoked() {
+      return (prisma.session.updateMany as jest.Mock).mock.calls.some(
+        ([arg]) => arg?.where?.userId && !arg?.where?.id,
+      );
+    }
+
+    it('rotates a valid token (guarded on revokedAt:null) and issues fresh tokens', async () => {
+      const token = await mintRefresh();
+      prisma.session.findUnique.mockResolvedValueOnce({
+        id: SID,
+        userId: USER_ID,
+        refreshHash: `hash(${token})`,
+        expiresAt: future,
+        revokedAt: null,
+        rotatedAt: null,
+      });
+
+      const res = await service.refresh(token, {});
+
+      expect(res.accessToken).toEqual(expect.any(String));
+      expect(prisma.session.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: SID, revokedAt: null } }),
+      );
+      expect(familyRevoked()).toBe(false);
+      expect(prisma.session.create).toHaveBeenCalled(); // new session issued
+    });
+
+    it('tolerates a benign concurrent refresh of a just-rotated token (no family revoke)', async () => {
+      const token = await mintRefresh();
+      prisma.session.findUnique.mockResolvedValueOnce({
+        id: SID,
+        userId: USER_ID,
+        refreshHash: `hash(${token})`,
+        expiresAt: future,
+        revokedAt: new Date(Date.now() - 1_000), // already rotated…
+        rotatedAt: new Date(Date.now() - 1_000), // …1s ago (within grace)
+      });
+
+      const res = await service.refresh(token, {});
+
+      expect(res.accessToken).toEqual(expect.any(String));
+      expect(familyRevoked()).toBe(false);
+      expect(prisma.session.create).toHaveBeenCalled();
+    });
+
+    it('treats a token rotated beyond the grace window as reuse → revokes the family', async () => {
+      const token = await mintRefresh();
+      prisma.session.findUnique.mockResolvedValueOnce({
+        id: SID,
+        userId: USER_ID,
+        refreshHash: `hash(${token})`,
+        expiresAt: future,
+        revokedAt: new Date(Date.now() - 5 * 60_000),
+        rotatedAt: new Date(Date.now() - 5 * 60_000), // 5 min ago > 60s grace
+      });
+
+      await expect(service.refresh(token, {})).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(familyRevoked()).toBe(true);
+    });
+
+    it('treats a revoked-by-logout token (no rotatedAt) as reuse → revokes the family', async () => {
+      const token = await mintRefresh();
+      prisma.session.findUnique.mockResolvedValueOnce({
+        id: SID,
+        userId: USER_ID,
+        refreshHash: `hash(${token})`,
+        expiresAt: future,
+        revokedAt: new Date(Date.now() - 1_000),
+        rotatedAt: null,
+      });
+
+      await expect(service.refresh(token, {})).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(familyRevoked()).toBe(true);
+    });
+
+    it('rejects a token whose hash does not match the session', async () => {
+      const token = await mintRefresh();
+      prisma.session.findUnique.mockResolvedValueOnce({
+        id: SID,
+        userId: USER_ID,
+        refreshHash: 'hash(some-other-token)',
+        expiresAt: future,
+        revokedAt: null,
+        rotatedAt: null,
+      });
+
+      await expect(service.refresh(token, {})).rejects.toBeInstanceOf(
         UnauthorizedException,
       );
     });

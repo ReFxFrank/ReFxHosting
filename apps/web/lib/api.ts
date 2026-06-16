@@ -181,9 +181,18 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 
   // Transparent refresh-and-retry on a single 401.
   if (res.status === 401 && !anonymous && !_retry) {
+    // Another tab may have rotated the token while this request was in flight.
+    // If the stored access token is now different from the one we sent, just
+    // retry with it — no refresh needed (avoids redundant concurrent refreshes).
+    const latest = getTokens()?.accessToken;
+    if (latest && `Bearer ${latest}` !== finalHeaders["Authorization"]) {
+      return request<T>(path, { ...opts, _retry: true });
+    }
+    // Single-flight: concurrent 401s in this tab share one refresh.
     refreshPromise = refreshPromise ?? doRefresh();
-    const refreshed = await refreshPromise;
-    refreshPromise = null;
+    const refreshed = await refreshPromise.finally(() => {
+      refreshPromise = null;
+    });
     if (refreshed) {
       return request<T>(path, { ...opts, _retry: true });
     }

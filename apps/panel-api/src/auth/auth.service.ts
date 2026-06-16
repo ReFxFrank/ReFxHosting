@@ -9,7 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { authenticator } from 'otplib';
-import { User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { EmailService } from '../email/email.service';
@@ -19,6 +19,11 @@ import { LoginDto, RegisterDto, TokenResponseDto } from './dto/auth.dto';
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+// Grace window in which a just-rotated refresh token may be presented again
+// (e.g. a second browser tab refreshing concurrently) without tripping
+// reuse-detection. Long enough for slow tabs/networks, short enough to bound a
+// genuine replay.
+const REFRESH_ROTATION_GRACE_MS = 60 * 1000; // 60s
 
 /** Claims carried by the short-lived MFA login-challenge JWT. */
 interface MfaChallengeClaims {
@@ -61,23 +66,37 @@ export class AuthService {
       });
     }
 
-    const user = await this.prisma.user.create({
-      data: {
-        id: uuidv7(),
-        email,
-        passwordHash: await argon2.hash(dto.password, ARGON_OPTS),
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        addressLine1: dto.addressLine1,
-        addressLine2: dto.addressLine2,
-        city: dto.city,
-        region: dto.region,
-        postalCode: dto.postalCode,
-        country: dto.country.toUpperCase(),
-        state: 'PENDING_VERIFICATION',
-      },
-      select: { id: true, email: true, firstName: true },
-    });
+    let user: { id: string; email: string; firstName: string | null };
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          id: uuidv7(),
+          email,
+          passwordHash: await argon2.hash(dto.password, ARGON_OPTS),
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          addressLine1: dto.addressLine1,
+          addressLine2: dto.addressLine2,
+          city: dto.city,
+          region: dto.region,
+          postalCode: dto.postalCode,
+          country: dto.country.toUpperCase(),
+          state: 'PENDING_VERIFICATION',
+        },
+        select: { id: true, email: true, firstName: true },
+      });
+    } catch (e) {
+      // Two concurrent registrations for the same new address both pass the
+      // pre-check, then one loses the unique-email constraint — return a clean
+      // 409 instead of a raw 500.
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException('Email already registered');
+      }
+      throw e;
+    }
 
     // Mint + dispatch the email-verification token. Email delivery never throws.
     await this.issueEmailVerification(user);
@@ -114,11 +133,15 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: { email: dto.email.toLowerCase(), deletedAt: null },
     });
-    if (!user || !user.passwordHash) {
+    // Always run a verify (against a dummy hash of the same cost when the
+    // user/credential is missing) so response time doesn't reveal whether an
+    // email is registered.
+    const ok = await argon2
+      .verify(user?.passwordHash ?? (await this.dummyPasswordHash()), dto.password)
+      .catch(() => false);
+    if (!user || !user.passwordHash || !ok) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    const ok = await argon2.verify(user.passwordHash, dto.password);
-    if (!ok) throw new UnauthorizedException('Invalid credentials');
     if (user.state === 'BANNED' || user.state === 'SUSPENDED') {
       throw new UnauthorizedException(`Account ${user.state.toLowerCase()}`);
     }
@@ -258,36 +281,75 @@ export class AuthService {
       throw new UnauthorizedException('Invalid token type');
     }
 
+    const now = new Date();
     const session = await this.prisma.session.findUnique({
       where: { id: payload.sid },
     });
-    if (
-      !session ||
-      session.revokedAt ||
-      session.expiresAt < new Date() ||
-      session.refreshHash !== this.crypto.hash(refreshToken)
-    ) {
-      // Reuse detection: a presented-but-invalid refresh token revokes the
-      // whole session family for safety.
-      if (session) {
-        await this.prisma.session.updateMany({
-          where: { userId: session.userId, revokedAt: null },
-          data: { revokedAt: new Date() },
-        });
+    const hashOk =
+      !!session && session.refreshHash === this.crypto.hash(refreshToken);
+
+    // Unknown sid, expired, or a token whose hash doesn't match the session →
+    // genuinely bad. If it matched a real session we still treat a hash/expiry
+    // failure as possible reuse and revoke the family for safety.
+    if (!session || !hashOk || session.expiresAt < now) {
+      if (session && hashOk) {
+        await this.revokeFamily(session.userId);
       }
       throw new UnauthorizedException('Refresh token rejected');
+    }
+
+    // The presented token is genuine (hash matches an unexpired session).
+    if (session.revokedAt) {
+      // Tolerate a BENIGN concurrent refresh: if this session was revoked by a
+      // ROTATION moments ago (another tab/request already rotated this exact
+      // token), issue a fresh session instead of nuking the family. Outside the
+      // grace window — or if it was revoked by logout/reset (no rotatedAt) — this
+      // is real reuse, so revoke the family.
+      const rotatedRecently =
+        session.rotatedAt &&
+        now.getTime() - session.rotatedAt.getTime() <= REFRESH_ROTATION_GRACE_MS;
+      if (!rotatedRecently) {
+        await this.revokeFamily(session.userId);
+        throw new UnauthorizedException('Refresh token rejected');
+      }
+      const user = await this.prisma.user.findFirstOrThrow({
+        where: { id: payload.sub, deletedAt: null },
+      });
+      return this.issueTokens(user, ctx);
     }
 
     const user = await this.prisma.user.findFirstOrThrow({
       where: { id: payload.sub, deletedAt: null },
     });
 
-    // Rotate: revoke the old session, issue a fresh one.
-    await this.prisma.session.update({
-      where: { id: session.id },
-      data: { revokedAt: new Date() },
+    // Rotate: revoke the old session (marking it rotated), issue a fresh one.
+    // Guard the update on revokedAt:null so two concurrent rotations can't both
+    // "win" — the loser falls into the grace path above on its retry.
+    await this.prisma.session.updateMany({
+      where: { id: session.id, revokedAt: null },
+      data: { revokedAt: now, rotatedAt: now },
     });
     return this.issueTokens(user, ctx);
+  }
+
+  /** Cached argon2id hash (same cost as real passwords) for login timing parity. */
+  private dummyHashCache?: string;
+  private async dummyPasswordHash(): Promise<string> {
+    if (!this.dummyHashCache) {
+      this.dummyHashCache = await argon2.hash(
+        'refx-login-timing-equalizer',
+        ARGON_OPTS,
+      );
+    }
+    return this.dummyHashCache;
+  }
+
+  /** Revoke every active session for a user (reuse-detection / security events). */
+  private async revokeFamily(userId: string): Promise<void> {
+    await this.prisma.session.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 
   async logout(refreshToken: string): Promise<void> {

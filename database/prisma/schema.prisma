@@ -134,6 +134,11 @@ model Session {
   ip           String?
   expiresAt    DateTime
   revokedAt    DateTime?
+  // Set when this session was revoked specifically by refresh-token ROTATION
+  // (vs. logout / password reset). Lets refresh tolerate a benign concurrent
+  // refresh of a just-rotated token within a short grace window instead of
+  // tripping reuse-detection and nuking the whole session family.
+  rotatedAt    DateTime?
   createdAt    DateTime @default(now())
 
   @@index([userId])
