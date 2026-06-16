@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { WebAuthnService } from './webauthn.service';
 import { ApiKeyService } from './api-key.service';
+import { RedisService } from '../common/redis/redis.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
@@ -22,6 +23,7 @@ import { PermissionGuard } from './guards/permission.guard';
   providers: [
     AuthService,
     WebAuthnService,
+    RedisService,
     ApiKeyService,
     JwtStrategy,
     JwtAuthGuard,

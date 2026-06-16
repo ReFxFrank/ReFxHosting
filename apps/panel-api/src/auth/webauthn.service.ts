@@ -13,26 +13,30 @@ import type {
 } from '@simplewebauthn/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
+import { RedisService } from '../common/redis/redis.service';
 import { uuidv7 } from '../common/util/uuid';
 import { AppConfig } from '../config/configuration';
+
+/** Per-ceremony challenges expire quickly; this bounds the Redis key TTL. */
+const CHALLENGE_TTL_SECONDS = 300;
 
 /**
  * WebAuthn (passkey) registration + authentication using
  * @simplewebauthn/server v9. credentialId is stored as a base64url string; the
- * per-ceremony challenge is cached in-process keyed by userId. TODO(impl): move
- * the challenge store to Redis so it survives multiple API instances.
+ * per-ceremony challenge is held in Redis (keyed by userId, short TTL) so it
+ * survives across multiple API instances.
  */
 @Injectable()
 export class WebAuthnService {
   private readonly rpId: string;
   private readonly rpName: string;
   private readonly origin: string;
-  private challenges = new Map<string, string>();
 
   constructor(
     config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly redis: RedisService,
   ) {
     this.rpId = config.get<AppConfig['rpId']>('rpId')!;
     this.rpName = config.get<AppConfig['rpName']>('rpName')!;
@@ -41,6 +45,27 @@ export class WebAuthnService {
 
   private b64url(buf: Uint8Array): string {
     return Buffer.from(buf).toString('base64url');
+  }
+
+  private challengeKey(kind: 'reg' | 'auth', userId: string): string {
+    return `webauthn:${kind}:${userId}`;
+  }
+
+  private setChallenge(kind: 'reg' | 'auth', userId: string, challenge: string) {
+    return this.redis.client.set(
+      this.challengeKey(kind, userId),
+      challenge,
+      'EX',
+      CHALLENGE_TTL_SECONDS,
+    );
+  }
+
+  private takeChallenge(kind: 'reg' | 'auth', userId: string) {
+    // Read-and-delete so a challenge is single-use.
+    const key = this.challengeKey(kind, userId);
+    return this.redis.client
+      .getdel(key)
+      .catch(() => this.redis.client.get(key)); // fallback for older Redis
   }
 
   async registrationOptions(userId: string, email: string) {
@@ -63,7 +88,7 @@ export class WebAuthnService {
         userVerification: 'preferred',
       },
     });
-    this.challenges.set(`reg:${userId}`, options.challenge);
+    await this.setChallenge('reg', userId, options.challenge);
     return options;
   }
 
@@ -72,7 +97,7 @@ export class WebAuthnService {
     response: RegistrationResponseJSON,
     label?: string,
   ) {
-    const expectedChallenge = this.challenges.get(`reg:${userId}`);
+    const expectedChallenge = await this.takeChallenge('reg', userId);
     if (!expectedChallenge) {
       throw new BadRequestException('No registration in progress');
     }
@@ -86,7 +111,6 @@ export class WebAuthnService {
     if (!verification.verified || !verification.registrationInfo) {
       throw new BadRequestException('Registration verification failed');
     }
-    this.challenges.delete(`reg:${userId}`);
 
     const { credentialID, credentialPublicKey, counter, credentialDeviceType } =
       verification.registrationInfo;
@@ -139,12 +163,12 @@ export class WebAuthnService {
       })),
       userVerification: 'preferred',
     });
-    this.challenges.set(`auth:${userId}`, options.challenge);
+    await this.setChallenge('auth', userId, options.challenge);
     return options;
   }
 
   async verifyAuthentication(userId: string, response: AuthenticationResponseJSON) {
-    const expectedChallenge = this.challenges.get(`auth:${userId}`);
+    const expectedChallenge = await this.takeChallenge('auth', userId);
     if (!expectedChallenge) {
       throw new BadRequestException('No authentication in progress');
     }
@@ -171,7 +195,6 @@ export class WebAuthnService {
     if (!verification.verified) {
       throw new BadRequestException('Authentication verification failed');
     }
-    this.challenges.delete(`auth:${userId}`);
 
     await this.prisma.webAuthnCredential.update({
       where: { id: cred.id },
