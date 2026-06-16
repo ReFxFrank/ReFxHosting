@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { startRegistration } from "@simplewebauthn/browser";
 import QRCode from "qrcode";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -34,6 +34,14 @@ import { Input, Textarea, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { COUNTRIES, US_STATES } from "@/lib/geo";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -116,6 +124,8 @@ function ProfileTab() {
   const {
     register,
     handleSubmit,
+    control,
+    watch,
     formState: { errors, isDirty },
   } = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
@@ -220,7 +230,20 @@ function ProfileTab() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="country">Country</Label>
-              <Input id="country" placeholder="US" {...register("country")} />
+              <Controller
+                control={control}
+                name="country"
+                render={({ field }) => (
+                  <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                    <SelectTrigger id="country"><SelectValue placeholder="Select…" /></SelectTrigger>
+                    <SelectContent>
+                      {COUNTRIES.map((c) => (
+                        <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="addressLine1">Address line 1</Label>
@@ -236,7 +259,24 @@ function ProfileTab() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="region">State / province</Label>
-              <Input id="region" {...register("region")} />
+              {watch("country") === "US" ? (
+                <Controller
+                  control={control}
+                  name="region"
+                  render={({ field }) => (
+                    <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                      <SelectTrigger id="region"><SelectValue placeholder="Select state…" /></SelectTrigger>
+                      <SelectContent>
+                        {US_STATES.map((s) => (
+                          <SelectItem key={s.code} value={s.code}>{s.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              ) : (
+                <Input id="region" {...register("region")} />
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="postalCode">Postal code</Label>

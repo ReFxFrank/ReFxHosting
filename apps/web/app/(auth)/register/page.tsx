@@ -3,13 +3,21 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { api, ApiError } from "@/lib/api";
+import { COUNTRIES, US_STATES } from "@/lib/geo";
 import { useAuthStore } from "@/store/auth";
 
 const schema = z
@@ -50,8 +58,11 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
+    control,
+    watch,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: { country: "US" } });
+  const country = watch("country");
 
   async function onSubmit(values: FormValues) {
     setSubmitting(true);
@@ -141,21 +152,51 @@ export default function RegisterPage() {
             {errors.city && <p className="text-xs text-destructive">{errors.city.message}</p>}
           </div>
           <div className="space-y-2">
-            <Label htmlFor="region">State / province</Label>
-            <Input id="region" autoComplete="address-level1" {...register("region")} />
-            {errors.region && <p className="text-xs text-destructive">{errors.region.message}</p>}
+            <Label htmlFor="country">Country</Label>
+            <Controller
+              control={control}
+              name="country"
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger id="country"><SelectValue placeholder="Select…" /></SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((c) => (
+                      <SelectItem key={c.code} value={c.code}>{c.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {errors.country && <p className="text-xs text-destructive">{errors.country.message}</p>}
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
+            <Label htmlFor="region">State / province</Label>
+            {country === "US" ? (
+              <Controller
+                control={control}
+                name="region"
+                render={({ field }) => (
+                  <Select value={field.value ?? ""} onValueChange={field.onChange}>
+                    <SelectTrigger id="region"><SelectValue placeholder="Select state…" /></SelectTrigger>
+                    <SelectContent>
+                      {US_STATES.map((s) => (
+                        <SelectItem key={s.code} value={s.code}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            ) : (
+              <Input id="region" autoComplete="address-level1" {...register("region")} />
+            )}
+            {errors.region && <p className="text-xs text-destructive">{errors.region.message}</p>}
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="postalCode">Postal code</Label>
             <Input id="postalCode" autoComplete="postal-code" {...register("postalCode")} />
             {errors.postalCode && <p className="text-xs text-destructive">{errors.postalCode.message}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="country">Country (ISO)</Label>
-            <Input id="country" autoComplete="country" placeholder="US" maxLength={2} className="uppercase" {...register("country")} />
-            {errors.country && <p className="text-xs text-destructive">{errors.country.message}</p>}
           </div>
         </div>
 

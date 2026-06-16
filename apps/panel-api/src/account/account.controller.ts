@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -12,12 +13,14 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthService } from '../auth/auth.service';
 import { ApiKeyService } from '../auth/api-key.service';
+import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../platform/notifications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateApiKeyDto, TotpVerifyDto } from '../auth/dto/auth.dto';
+import { UpdateProfileDto } from '../users/dto/update-profile.dto';
 import { ChangePasswordDto, TotpEnableDto } from './dto/account.dto';
 
 /**
@@ -33,8 +36,25 @@ export class AccountController {
   constructor(
     private readonly auth: AuthService,
     private readonly apiKeys: ApiKeyService,
+    private readonly users: UsersService,
     private readonly notifications: NotificationsService,
   ) {}
+
+  // ---- Profile -----------------------------------------------------------
+
+  @Get()
+  getProfile(@CurrentUser('id') userId: string) {
+    return this.users.getProfile(userId);
+  }
+
+  @Patch()
+  @Audit({ action: 'account.profile.update', targetType: 'User' })
+  updateProfile(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    return this.users.updateProfile(userId, dto);
+  }
 
   // ---- API keys ----------------------------------------------------------
 
