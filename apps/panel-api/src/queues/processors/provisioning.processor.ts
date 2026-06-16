@@ -50,7 +50,27 @@ export class ProvisioningProcessor extends WorkerHost {
       wipe: true,
       sftpPassword,
     });
-    await this.agent.install(server.node, spec);
+
+    try {
+      await this.agent.install(server.node, spec);
+    } catch (err) {
+      const attempts = job.opts.attempts ?? 1;
+      const lastAttempt = job.attemptsMade + 1 >= attempts;
+      this.logger.error(
+        `install failed for ${serverId} on node ${server.node?.name ?? server.nodeId} ` +
+          `(attempt ${job.attemptsMade + 1}/${attempts}): ${(err as Error).message}`,
+      );
+      // On the final attempt, surface the failure instead of leaving the server
+      // stuck on INSTALLING forever. CRASHED is visible to the owner/admin, who
+      // can retry via reinstall once the node agent is reachable.
+      if (lastAttempt) {
+        await this.prisma.server.update({
+          where: { id: serverId },
+          data: { state: 'CRASHED' },
+        });
+      }
+      throw err; // let BullMQ retry (until attempts exhausted) + record the failure
+    }
 
     await this.prisma.server.update({
       where: { id: serverId },
