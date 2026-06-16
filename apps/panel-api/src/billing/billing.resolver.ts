@@ -63,7 +63,22 @@ export class BillingResolver {
     };
   }
 
-  private static toSubscription(s: Subscription): SubscriptionModel {
+  private static toSubscription(
+    s: Pick<
+      Subscription,
+      | 'id'
+      | 'productId'
+      | 'priceId'
+      | 'interval'
+      | 'state'
+      | 'currentPeriodStart'
+      | 'currentPeriodEnd'
+      | 'cancelAtPeriodEnd'
+      | 'autoRenew'
+      | 'gateway'
+      | 'createdAt'
+    >,
+  ): SubscriptionModel {
     return {
       id: s.id,
       productId: s.productId,

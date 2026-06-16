@@ -601,9 +601,10 @@ export type SubscriptionState =
 export interface Subscription {
   id: string;
   productId: string;
-  product?: Pick<Product, "id" | "name" | "type">;
+  product?: Pick<Product, "id" | "name" | "type"> & { perSlot?: boolean };
   priceId: string;
   interval: BillingInterval;
+  slots?: number;
   state: SubscriptionState;
   currentPeriodStart: string;
   currentPeriodEnd: string;
@@ -611,6 +612,11 @@ export interface Subscription {
   autoRenew: boolean;
   gateway: string;
   createdAt: string;
+  /** Recurring amount billed at renewal (per-slot rate × slots), minor units. */
+  renewalAmountMinor?: number;
+  currency?: string;
+  /** Servers this subscription funds. */
+  servers?: Array<{ id: string; shortId: string; name: string; state: ServerState }>;
 }
 
 export type InvoiceState = "DRAFT" | "OPEN" | "PAID" | "VOID" | "UNCOLLECTIBLE" | "REFUNDED";

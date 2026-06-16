@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -575,9 +576,24 @@ function SubscriptionsTab({
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2 text-sm">
+                  {!!sub.renewalAmountMinor && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">
+                        {sub.cancelAtPeriodEnd ? "Was" : "Renews for"}
+                      </span>
+                      <span className="font-medium">
+                        {formatMoney(sub.renewalAmountMinor, sub.currency)}
+                        <span className="text-muted-foreground"> {intervalLabel[sub.interval]}</span>
+                        {sub.product?.perSlot && sub.slots ? (
+                          <span className="text-xs text-muted-foreground"> · {sub.slots} slots</span>
+                        ) : null}
+                      </span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-2 text-muted-foreground">
-                      <CalendarClock className="size-4" /> Current period ends
+                      <CalendarClock className="size-4" />
+                      {sub.cancelAtPeriodEnd ? "Access until" : "Renews on"}
                     </span>
                     <span className="font-medium">
                       {formatDate(sub.currentPeriodEnd)}
@@ -593,6 +609,17 @@ function SubscriptionsTab({
                       <Badge variant="muted">Manual</Badge>
                     )}
                   </div>
+                  {!!sub.servers?.length && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Server</span>
+                      <Link
+                        href={`/servers/${sub.servers[0].id}/console`}
+                        className="truncate font-medium text-primary hover:underline"
+                      >
+                        {sub.servers[0].name}
+                      </Link>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end gap-2">

@@ -300,11 +300,47 @@ export class BillingService {
     });
   }
 
-  listSubscriptions(userId: string): Promise<Subscription[]> {
-    return this.prisma.subscription.findMany({
+  async listSubscriptions(userId: string) {
+    const subs = await this.prisma.subscription.findMany({
       where: { userId },
-      include: { product: true },
+      include: {
+        product: { include: { prices: true } },
+        servers: {
+          where: { deletedAt: null },
+          select: { id: true, shortId: true, name: true, state: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
+    });
+    // Enrich with the recurring amount the customer will be billed at renewal
+    // (per-slot rate × slots) + the linked server(s), without leaking the full
+    // price table to the client.
+    return subs.map((s) => {
+      const price = s.product.prices.find((p) => p.id === s.priceId);
+      const quantity = s.product.perSlot && s.slots > 0 ? s.slots : 1;
+      return {
+        id: s.id,
+        productId: s.productId,
+        priceId: s.priceId,
+        interval: s.interval,
+        slots: s.slots,
+        state: s.state,
+        currentPeriodStart: s.currentPeriodStart,
+        currentPeriodEnd: s.currentPeriodEnd,
+        cancelAtPeriodEnd: s.cancelAtPeriodEnd,
+        autoRenew: s.autoRenew,
+        gateway: s.gateway,
+        createdAt: s.createdAt,
+        product: {
+          id: s.product.id,
+          name: s.product.name,
+          type: s.product.type,
+          perSlot: s.product.perSlot,
+        },
+        servers: s.servers,
+        renewalAmountMinor: (price?.amountMinor ?? 0) * quantity,
+        currency: price?.currency ?? this.billingCfg.defaultCurrency,
+      };
     });
   }
 
