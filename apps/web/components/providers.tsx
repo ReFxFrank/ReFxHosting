@@ -30,7 +30,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+      {/* The UI is designed dark-first; light mode isn't fully styled, so we
+          force dark site-wide. forcedTheme also overrides any previously stored
+          preference, so a stuck "light" choice can't lock anyone out. */}
+      <ThemeProvider attribute="class" forcedTheme="dark" defaultTheme="dark" disableTransitionOnChange>
         <TooltipProvider delayDuration={200}>
           {children}
           <Toaster position="top-right" richColors closeButton />
