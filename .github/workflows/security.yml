@@ -3,14 +3,31 @@ name: Security
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "apps/web/public/**"
+      - "LICENSE"
+      - ".gitignore"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "apps/web/public/**"
+      - "LICENSE"
+      - ".gitignore"
   schedule:
     - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
 
 permissions:
   contents: read
   security-events: write
+
+# Cancel superseded runs when commits land in quick succession.
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   codeql:
