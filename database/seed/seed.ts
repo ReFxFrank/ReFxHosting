@@ -572,6 +572,98 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
   console.log(`  • Game templates: ${count} loaded from ${TEMPLATES_DIR}`);
 }
 
+/**
+ * Create a GPortal-style per-slot Product for each game template, deriving
+ * per-slot resources from the template's recommended specs and pricing each
+ * billing interval (with longer terms discounted). Idempotent: products/prices
+ * are only written on first creation, so admin tuning persists across re-seeds.
+ * Legacy per-loader Minecraft eggs are skipped (the unified `minecraft` covers them).
+ */
+async function seedPerSlotProducts() {
+  const LEGACY = new Set([
+    'minecraft-paper',
+    'minecraft-fabric',
+    'minecraft-forge',
+    'minecraft-neoforge',
+  ]);
+  const BASE_SLOTS = 8; // rec resources are treated as ~8 slots' worth
+  const templates = await prisma.gameTemplate.findMany({
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      recCpuCores: true,
+      recMemoryMb: true,
+      recDiskMb: true,
+    },
+  });
+
+  let count = 0;
+  for (const t of templates) {
+    if (LEGACY.has(t.slug)) continue;
+
+    const memoryMbPerSlot = Math.max(256, Math.round(t.recMemoryMb / BASE_SLOTS));
+    const cpuPerSlot = Math.max(0.1, Math.round((t.recCpuCores / BASE_SLOTS) * 100) / 100);
+    const diskMbPerSlot = Math.max(512, Math.round(t.recDiskMb / BASE_SLOTS));
+    // ~$1.50 per GB-of-RAM per slot per month, floored at $0.50.
+    const monthly = Math.max(50, Math.round((memoryMbPerSlot / 1024) * 150));
+
+    const slug = `gs-${t.slug}`;
+    const product = await prisma.product.upsert({
+      where: { slug },
+      // Don't clobber admin-tuned products on re-seed; just ensure the link.
+      update: { gameTemplateId: t.id, perSlot: true },
+      create: {
+        id: uuidv7(),
+        type: 'GAME_SERVER',
+        name: t.name,
+        slug,
+        description: `${t.name} game server — pay per slot.`,
+        isActive: true,
+        perSlot: true,
+        gameTemplateId: t.id,
+        allowedTemplateIds: [t.id],
+        minSlots: 2,
+        maxSlots: 64,
+        slotStep: 2,
+        cpuPerSlot,
+        memoryMbPerSlot,
+        diskMbPerSlot,
+      },
+    });
+
+    // Per-slot price per interval (discounts grow with term length).
+    const prices: Array<[string, number]> = [
+      ['MONTHLY', monthly],
+      ['QUARTERLY', Math.round(monthly * 3 * 0.9)],
+      ['SEMIANNUAL', Math.round(monthly * 6 * 0.85)],
+      ['ANNUAL', Math.round(monthly * 12 * 0.8)],
+    ];
+    for (const [interval, amountMinor] of prices) {
+      await prisma.price.upsert({
+        where: {
+          productId_interval_currency: {
+            productId: product.id,
+            interval: interval as Prisma.PriceCreateInput['interval'],
+            currency: 'USD',
+          },
+        },
+        update: {}, // preserve admin-tuned prices on re-seed
+        create: {
+          id: uuidv7(),
+          productId: product.id,
+          interval: interval as Prisma.PriceCreateInput['interval'],
+          currency: 'USD',
+          amountMinor,
+          isActive: true,
+        },
+      });
+    }
+    count += 1;
+  }
+  console.log(`  • Per-slot products: ${count}`);
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -614,6 +706,13 @@ async function main() {
       'Demo content: skipped (already initialised; set SEED_DEMO=true to force).',
     );
   }
+
+  // Ensure a per-slot storefront product exists for every game template that's
+  // present. Runs every deploy (create-only — never clobbers admin tuning and
+  // respects deactivation), so the order page has a plan per game without forcing
+  // SEED_DEMO and without resurrecting other demo content.
+  console.log('Storefront plans:');
+  await seedPerSlotProducts();
 
   console.log('Seed complete.');
 }
