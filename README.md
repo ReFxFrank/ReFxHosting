@@ -155,6 +155,31 @@ Each is a JSON template in [`database/seed/templates/`](database/seed/templates)
 
 > **Minecraft, unified:** there's now a **single Minecraft product**. After buying, open the server's **Minecraft** tab to choose the loader — **Vanilla, Paper, Fabric, Forge or NeoForge** — and the **exact version** (resolved live from each project's API; Mojang's manifest for Vanilla), switching between them whenever you like without losing the server. The panel **auto-picks the right `eclipse-temurin` JVM** for the chosen version (Java 11 → 25), so newer releases boot without manual image fiddling, and loader builds can be pinned or left as `latest`/`recommended` (auto-resolved at install). On modded/plugin loaders, the **Mods** tab adds Modrinth search + one-click install.
 
+### 💰 Storefront pricing (seeded per-slot defaults)
+
+The GPortal-style order page sells **per-slot products** — one is **auto-seeded for every game egg** (`seedPerSlotProducts()` in `database/seed/seed.ts`). The seeded numbers below are **starting defaults**; edit any of them per game in **Admin → Products** (the seeder is create-only and never overwrites your edits, nor reactivates a product you deactivate).
+
+**Per-slot resources** (derived from each template's *recommended* specs, treated as ~**8 slots'** worth, with floors):
+
+| Resource | Formula | Floor |
+|----------|---------|-------|
+| vCPU / slot | `recCpuCores ÷ 8` (2 dp) | `0.10` |
+| RAM / slot | `recMemoryMb ÷ 8` | `256 MB` |
+| Disk / slot | `recDiskMb ÷ 8` | `512 MB` |
+
+A server's provisioned resources are **per-slot × slot count**. Slot slider defaults: **min 2, max 64, step 2**.
+
+**Price** — the base **monthly per-slot** rate is `max($0.50, RAM_GB_per_slot × $1.50)`. Each billing term is priced from that with a discount, and the order total is **per-slot price × slots**:
+
+| Term | Multiplier | Discount | Per-slot amount |
+|------|-----------|----------|-----------------|
+| Monthly | × 1 | — | `monthly` |
+| Quarterly | × 3 | **−10%** | `monthly × 3 × 0.90` |
+| Semi-annual | × 6 | **−15%** | `monthly × 6 × 0.85` |
+| Annual | × 12 | **−20%** | `monthly × 12 × 0.80` |
+
+_Example — a game with **8 GB** recommended RAM → **1 GB/slot** → **$1.50/slot/month**. A 10-slot monthly server = **$15.00/mo**; the same annually = `1.50 × 12 × 0.80 × 10` = **$144.00/yr** (≈ $12/mo). All amounts are stored as integer minor units (cents)._
+
 ---
 
 ## 🧰 Tech stack
