@@ -1,0 +1,65 @@
+{
+  "name": "Mordhau",
+  "slug": "mordhau",
+  "author": "ops@refx.example",
+  "description": "Medieval melee combat. SteamCMD-installed dedicated server with frontline, deathmatch and duel modes.",
+  "category": "shooter",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 629800,
+  "startupCommand": "./Mordhau/Binaries/Linux/MordhauServer-Linux-Shipping Mordhau -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -BeaconPort={{BEACON_PORT}}",
+  "startupDetect": "Server is ready",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 629800 validate +quit\necho 'Mordhau install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "Mordhau/Saved/Config/LinuxServer/Game.ini", "parser": "ini", "find": {} }
+  ],
+  "recCpuCores": 3,
+  "recMemoryMb": 6144,
+  "recDiskMb": 15360,
+  "variables": [
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "48",
+      "rules": { "required": true, "min": 2, "max": 80 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query Port",
+      "description": "Steam query/browser port.",
+      "type": "NUMBER",
+      "defaultValue": "27015",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "BEACON_PORT",
+      "displayName": "Beacon Port",
+      "description": "UDP beacon port used for matchmaking.",
+      "type": "NUMBER",
+      "defaultValue": "15000",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 2
+    }
+  ],
+  "tags": ["fps", "melee", "pvp", "multiplayer"],
+  "longDescription": "Host massive 64-player Frontline battles and duel servers on a dedicated Mordhau server."
+}

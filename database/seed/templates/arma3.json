@@ -1,0 +1,76 @@
+{
+  "name": "Arma 3",
+  "slug": "arma3",
+  "author": "ops@refx.example",
+  "description": "Bohemia's military sandbox. SteamCMD-installed dedicated server with mod and mission support.",
+  "category": "shooter",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 233780,
+  "startupCommand": "./arma3server_x64 -port={{SERVER_PORT}} -config=server.cfg -cfg=basic.cfg -name=refx -mod={{MODS}}",
+  "startupDetect": "Host identity created",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 233780 validate +quit\necho 'Arma 3 install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "server.cfg", "parser": "file", "find": {} }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 6144,
+  "recDiskMb": 20480,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting Arma 3 Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "32",
+      "rules": { "required": true, "min": 2, "max": 200 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SERVER_PASSWORD",
+      "displayName": "Server Password",
+      "description": "Leave blank for a public server.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 2
+    },
+    {
+      "envName": "MODS",
+      "displayName": "Mods",
+      "description": "Semicolon-separated mod folder list (e.g. @cba_a3;@ace).",
+      "type": "STRING",
+      "defaultValue": "",
+      "rules": { "maxLength": 1024 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    }
+  ],
+  "tags": ["fps", "milsim", "tactical", "moddable", "multiplayer"],
+  "longDescription": "Run large-scale milsim operations with full mod support on a dedicated Arma 3 server."
+}

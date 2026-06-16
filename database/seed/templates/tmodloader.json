@@ -1,0 +1,76 @@
+{
+  "name": "tModLoader (Terraria)",
+  "slug": "tmodloader",
+  "author": "ops@refx.example",
+  "description": "Terraria with mod support. SteamCMD-installed tModLoader dedicated server with workshop modpacks.",
+  "category": "modded",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 1281930,
+  "startupCommand": "./start-tModLoaderServer.sh -nosteam -config serverconfig.txt",
+  "startupDetect": "Server started",
+  "stopCommand": "exit",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 1281930 validate +quit\nchmod +x start-tModLoaderServer.sh || true\necho 'tModLoader install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "serverconfig.txt", "parser": "properties", "find": {} }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 3072,
+  "recDiskMb": 5120,
+  "variables": [
+    {
+      "envName": "WORLD_NAME",
+      "displayName": "World Name",
+      "description": "Name of the world file to load or create.",
+      "type": "STRING",
+      "defaultValue": "world",
+      "rules": { "required": true, "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "8",
+      "rules": { "required": true, "min": 1, "max": 255 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "AUTOCREATE",
+      "displayName": "World Size",
+      "description": "Size used when auto-creating a new world: 1 small, 2 medium, 3 large.",
+      "type": "ENUM",
+      "defaultValue": "2",
+      "rules": { "required": true, "options": ["1", "2", "3"] },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "SERVER_PASSWORD",
+      "displayName": "Server Password",
+      "description": "Leave blank for an open server.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 3
+    }
+  ],
+  "tags": ["sandbox", "modded", "co-op", "multiplayer"],
+  "longDescription": "Run modded Terraria with tModLoader and Steam Workshop modpacks on a dedicated server."
+}

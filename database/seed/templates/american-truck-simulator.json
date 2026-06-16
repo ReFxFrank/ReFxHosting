@@ -1,0 +1,65 @@
+{
+  "name": "American Truck Simulator",
+  "slug": "american-truck-simulator",
+  "author": "ops@refx.example",
+  "description": "Convoy multiplayer trucking. SteamCMD-installed ATS dedicated server (server_config.sii).",
+  "category": "simulation",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 2239530,
+  "startupCommand": "./bin/linux_x64/amtrucks_server",
+  "startupDetect": "Server is now ready",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 2239530 validate +quit\necho 'American Truck Simulator dedicated server install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "server_config.sii", "parser": "file", "find": {} }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 10240,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the convoy server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting ATS Convoy",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum convoy player slots (ATS supports up to 8).",
+      "type": "NUMBER",
+      "defaultValue": "8",
+      "rules": { "required": true, "min": 2, "max": 8 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SERVER_PASSWORD",
+      "displayName": "Server Password",
+      "description": "Leave blank for an open server.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 2
+    }
+  ],
+  "tags": ["simulation", "driving", "co-op", "multiplayer"],
+  "longDescription": "Run a private convoy and haul freight across America with friends on a dedicated ATS server."
+}

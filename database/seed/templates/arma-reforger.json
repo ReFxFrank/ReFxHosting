@@ -1,0 +1,76 @@
+{
+  "name": "Arma Reforger",
+  "slug": "arma-reforger",
+  "author": "ops@refx.example",
+  "description": "Bohemia's Enfusion-engine military sandbox. SteamCMD-installed dedicated server driven by a JSON config.",
+  "category": "shooter",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 1890870,
+  "startupCommand": "./ArmaReforgerServer -config ./configs/server.json -maxFPS 60 -backendlog -nothrow",
+  "startupDetect": "Game successfully created",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server/configs\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 1890870 validate +quit\necho 'Arma Reforger install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "configs/server.json", "parser": "json", "find": {} }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 8192,
+  "recDiskMb": 10240,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting Reforger Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "32",
+      "rules": { "required": true, "min": 2, "max": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SERVER_PASSWORD",
+      "displayName": "Server Password",
+      "description": "Leave blank for a public server.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 2
+    },
+    {
+      "envName": "SCENARIO_ID",
+      "displayName": "Scenario ID",
+      "description": "Mission/scenario to load (e.g. {ECC61978EDCC2B5A}Missions/23_Campaign.conf).",
+      "type": "STRING",
+      "defaultValue": "{ECC61978EDCC2B5A}Missions/23_Campaign.conf",
+      "rules": { "maxLength": 256 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    }
+  ],
+  "tags": ["fps", "milsim", "moddable", "multiplayer"],
+  "longDescription": "Host Conflict and Game Master scenarios with cross-platform mod support on a dedicated Arma Reforger server."
+}
