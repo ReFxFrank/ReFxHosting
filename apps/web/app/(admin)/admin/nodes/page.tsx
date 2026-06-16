@@ -110,10 +110,10 @@ function EditCapacityDialog({
   const queryClient = useQueryClient();
 
   const save = useMutation({
-    mutationFn: (v: { cpuCores: number; memoryMb: number; diskMb: number }) =>
+    mutationFn: (v: Parameters<typeof api.admin.updateNode>[1]) =>
       api.admin.updateNode(node!.id, v),
     onSuccess: () => {
-      toast.success("Node capacity updated");
+      toast.success("Node updated");
       queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
       onClose();
     },
@@ -130,10 +130,10 @@ function EditCapacityDialog({
     >
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit capacity — {node?.name}</DialogTitle>
+          <DialogTitle>Edit node — {node?.name}</DialogTitle>
           <DialogDescription>
-            Schedulable capacity the placement engine reserves against (independent
-            of live host telemetry). Set it to what this node may hand out.
+            The connection address the panel uses to reach this node&apos;s agent
+            (FQDN/port), and the schedulable capacity the placement engine reserves.
           </DialogDescription>
         </DialogHeader>
         {node && (
@@ -149,63 +149,114 @@ function EditCapacityDialog({
   );
 }
 
-/** Controlled capacity inputs, initialised from the node. */
+/** Controlled connection + capacity inputs, initialised from the node. */
 function CapacityForm({
   node,
   onSubmit,
   saving,
 }: {
   node: Node;
-  onSubmit: (v: { cpuCores: number; memoryMb: number; diskMb: number }) => void;
+  onSubmit: (v: Parameters<typeof api.admin.updateNode>[1]) => void;
   saving: boolean;
 }) {
+  const [fqdn, setFqdn] = useState(node.fqdn ?? "");
+  const [scheme, setScheme] = useState<"http" | "https">(
+    (node.scheme as "http" | "https") ?? "https",
+  );
+  const [daemonPort, setDaemonPort] = useState(node.daemonPort ?? 8443);
   const [cpuCores, setCpuCores] = useState(node.cpuCores ?? 1);
   const [memoryMb, setMemoryMb] = useState(node.memoryMb ?? 1024);
   const [diskMb, setDiskMb] = useState(node.diskMb ?? 10240);
 
   return (
-    <>
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="cap-cpu">vCPU cores</Label>
-          <Input
-            id="cap-cpu"
-            type="number"
-            min={1}
-            value={cpuCores}
-            onChange={(e) => setCpuCores(Number(e.target.value))}
-          />
+    <div className="space-y-5">
+      <div className="space-y-3">
+        <p className="refx-eyebrow">Connection</p>
+        <div className="grid gap-4 sm:grid-cols-[1fr_110px_120px]">
+          <div className="space-y-1.5">
+            <Label htmlFor="node-fqdn">FQDN / IP</Label>
+            <Input
+              id="node-fqdn"
+              value={fqdn}
+              placeholder="node1.example.com or 1.2.3.4"
+              onChange={(e) => setFqdn(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="node-scheme">Scheme</Label>
+            <Select value={scheme} onValueChange={(v) => setScheme(v as "http" | "https")}>
+              <SelectTrigger id="node-scheme"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="https">https</SelectItem>
+                <SelectItem value="http">http</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="node-port">Agent port</Label>
+            <Input
+              id="node-port"
+              type="number"
+              min={1}
+              value={daemonPort}
+              onChange={(e) => setDaemonPort(Number(e.target.value))}
+            />
+          </div>
         </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="cap-mem">Memory (MB)</Label>
-          <Input
-            id="cap-mem"
-            type="number"
-            min={256}
-            value={memoryMb}
-            onChange={(e) => setMemoryMb(Number(e.target.value))}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="cap-disk">Disk (MB)</Label>
-          <Input
-            id="cap-disk"
-            type="number"
-            min={1024}
-            value={diskMb}
-            onChange={(e) => setDiskMb(Number(e.target.value))}
-          />
+        <p className="text-xs text-muted-foreground">
+          The panel reaches the agent at{" "}
+          <span className="font-mono">{scheme}://{fqdn || "…"}:{daemonPort}</span>.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <p className="refx-eyebrow">Schedulable capacity</p>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="cap-cpu">vCPU cores</Label>
+            <Input
+              id="cap-cpu"
+              type="number"
+              min={1}
+              value={cpuCores}
+              onChange={(e) => setCpuCores(Number(e.target.value))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cap-mem">Memory (MB)</Label>
+            <Input
+              id="cap-mem"
+              type="number"
+              min={256}
+              value={memoryMb}
+              onChange={(e) => setMemoryMb(Number(e.target.value))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cap-disk">Disk (MB)</Label>
+            <Input
+              id="cap-disk"
+              type="number"
+              min={1024}
+              value={diskMb}
+              onChange={(e) => setDiskMb(Number(e.target.value))}
+            />
+          </div>
         </div>
       </div>
+
       <DialogFooter>
         <Button
           loading={saving}
-          onClick={() => onSubmit({ cpuCores, memoryMb, diskMb })}
+          disabled={!fqdn.trim()}
+          onClick={() =>
+            onSubmit({ fqdn: fqdn.trim(), scheme, daemonPort, cpuCores, memoryMb, diskMb })
+          }
         >
-          Save capacity
+          Save node
         </Button>
       </DialogFooter>
-    </>
+    </div>
   );
 }
 

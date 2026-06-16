@@ -287,6 +287,9 @@ export interface Node {
   id: string;
   name: string;
   fqdn: string;
+  scheme?: string;
+  daemonPort?: number;
+  sftpPort?: number;
   regionId: string;
   region?: { id: string; code: string; name: string; country?: string | null };
   os: NodeOs;

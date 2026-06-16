@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -70,6 +71,28 @@ export class UpdateNodeDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @ApiPropertyOptional({ description: 'Address the panel reaches the agent at (IP or hostname).' })
+  @IsOptional()
+  @IsString()
+  fqdn?: string;
+
+  @ApiPropertyOptional({ enum: ['http', 'https'] })
+  @IsOptional()
+  @IsIn(['http', 'https'])
+  scheme?: string;
+
+  @ApiPropertyOptional({ description: 'Agent control-API port (default 8443).' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  daemonPort?: number;
+
+  @ApiPropertyOptional({ description: 'Agent SFTP port (default 2022).' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  sftpPort?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

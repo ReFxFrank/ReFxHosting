@@ -262,7 +262,7 @@ export class NodesService {
     return { restarting: true };
   }
 
-  update(id: string, dto: UpdateNodeDto): Promise<Node> {
+  async update(id: string, dto: UpdateNodeDto): Promise<Node> {
     if (
       dto.allocationPortStart != null &&
       dto.allocationPortEnd != null &&
@@ -272,7 +272,19 @@ export class NodesService {
         'allocationPortStart must be <= allocationPortEnd',
       );
     }
-    return this.prisma.node.update({ where: { id }, data: dto });
+    const data: UpdateNodeDto = { ...dto };
+    if (data.fqdn !== undefined) data.fqdn = data.fqdn.trim();
+    try {
+      return await this.prisma.node.update({ where: { id }, data });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new BadRequestException('Another node already uses that FQDN');
+      }
+      throw e;
+    }
   }
 
   setMaintenance(id: string, on: boolean): Promise<Node> {

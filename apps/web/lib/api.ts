@@ -668,6 +668,11 @@ export const api = {
     updateNode: (
       id: string,
       input: Partial<{
+        name: string;
+        fqdn: string;
+        scheme: "http" | "https";
+        daemonPort: number;
+        sftpPort: number;
         cpuCores: number;
         memoryMb: number;
         diskMb: number;
