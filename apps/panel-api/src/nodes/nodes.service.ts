@@ -231,21 +231,33 @@ export class NodesService {
   }
 
   /**
-   * Measure panel -> agent round-trip latency by hitting a cheap agent endpoint
-   * (its `/api/v1/system` status route). Returns the elapsed milliseconds and a
-   * `reachable` flag; on timeout / connection failure `reachable` is false.
+   * Measure panel -> agent round-trip latency by hitting the agent's `/healthz`
+   * route (panel → agent, inbound on the daemon port). Returns elapsed ms + a
+   * `reachable` flag. Also returns the age of the node's latest heartbeat (agent
+   * → panel, outbound) so the UI can distinguish "agent alive but its API port
+   * is unreachable" (firewall) from "agent down". `reachable` false on
+   * timeout/connection failure.
    */
-  async ping(id: string): Promise<{ ms: number | null; reachable: boolean }> {
+  async ping(id: string): Promise<{
+    ms: number | null;
+    reachable: boolean;
+    heartbeatAgeMs: number | null;
+  }> {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
+      include: { heartbeats: { orderBy: { recordedAt: 'desc' }, take: 1 } },
     });
     if (!node) throw new NotFoundException('Node not found');
+    const hb = node.heartbeats[0];
+    const heartbeatAgeMs = hb
+      ? Date.now() - new Date(hb.recordedAt).getTime()
+      : null;
     const started = Date.now();
     try {
       await this.agent.fetchAgentStatus(node);
-      return { ms: Date.now() - started, reachable: true };
+      return { ms: Date.now() - started, reachable: true, heartbeatAgeMs };
     } catch {
-      return { ms: null, reachable: false };
+      return { ms: null, reachable: false, heartbeatAgeMs };
     }
   }
 

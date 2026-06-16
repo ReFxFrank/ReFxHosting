@@ -26,6 +26,7 @@ import {
   MapPin,
   Wifi,
   WifiOff,
+  AlertTriangle,
   Play,
   RotateCw,
   Square,
@@ -307,18 +308,38 @@ function CapacityForm({
 
 /** Live panel->agent latency probe, polled while visible. */
 function NodePing({ nodeId, poll }: { nodeId: string; poll?: boolean }) {
+  // Poll everywhere so a transient blip (e.g. an agent restart) self-corrects
+  // without a manual reload. The detail drawer refreshes a little faster.
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "node-ping", nodeId],
     queryFn: () => api.admin.nodePing(nodeId),
-    refetchInterval: poll ? 10_000 : false,
+    refetchInterval: poll ? 10_000 : 30_000,
     retry: false,
   });
 
   if (isLoading) return <Skeleton className="h-4 w-12" />;
 
   if (!data?.reachable || data.ms == null) {
+    // Distinguish "agent is alive (a recent heartbeat arrived) but the panel
+    // can't reach its API port" — a firewall/binding issue, not a dead agent —
+    // from a genuinely offline node.
+    const recentHeartbeat =
+      data?.heartbeatAgeMs != null && data.heartbeatAgeMs < 120_000;
+    if (recentHeartbeat) {
+      return (
+        <span
+          className="flex items-center gap-1 text-xs font-medium text-warning"
+          title="The agent is alive (heartbeat received in the last 2 min) but the panel can't reach its API port. Check the node's firewall on the daemon port (default 8443) and that the agent binds to a public interface."
+        >
+          <AlertTriangle className="size-3" /> unreachable
+        </span>
+      );
+    }
     return (
-      <span className="flex items-center gap-1 text-xs font-medium text-destructive">
+      <span
+        className="flex items-center gap-1 text-xs font-medium text-destructive"
+        title="No response from the agent and no recent heartbeat — the agent is likely down or the node is unreachable."
+      >
         <WifiOff className="size-3" /> offline
       </span>
     );

@@ -324,6 +324,8 @@ export interface NodeHeartbeat {
 export interface NodePing {
   ms: number | null;
   reachable: boolean;
+  /** Age of the latest heartbeat (agent → panel), or null if none yet. */
+  heartbeatAgeMs?: number | null;
 }
 
 export interface GameCategory {

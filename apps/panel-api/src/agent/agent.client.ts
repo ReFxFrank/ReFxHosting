@@ -485,8 +485,9 @@ export class NodeAgentClient {
 
   fetchAgentStatus(node: Node) {
     // /healthz is the agent's always-available liveness route (unauthenticated);
-    // used for the panel->agent ping. (/api/v1/system is not served.)
-    return this.request(node, 'GET', `/healthz`);
+    // used for the panel->agent ping. A short timeout keeps "offline" snappy
+    // rather than hanging on the full request timeout.
+    return this.request(node, 'GET', `/healthz`, undefined, { timeoutMs: 6000 });
   }
 
   // ---- internals ----------------------------------------------------------
@@ -508,7 +509,7 @@ export class NodeAgentClient {
     method: string,
     path: string,
     body?: unknown,
-    opts?: { rawBody?: boolean },
+    opts?: { rawBody?: boolean; timeoutMs?: number },
   ): Promise<T> {
     const url = `${this.baseUrl(node)}${path}`;
     const serialized =
@@ -527,7 +528,7 @@ export class NodeAgentClient {
     );
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), opts?.timeoutMs ?? this.timeoutMs);
 
     try {
       const res = await fetch(url, {
