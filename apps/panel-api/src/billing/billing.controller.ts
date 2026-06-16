@@ -142,6 +142,17 @@ export class BillingController {
     return this.billing.payInvoice(userId, id, gateway);
   }
 
+  /** Capture an approved PayPal order on return and settle the invoice. */
+  @Post('paypal/capture')
+  @HttpCode(200)
+  @Audit({ action: 'billing.paypal.capture', targetType: 'Invoice' })
+  capturePaypal(
+    @CurrentUser('id') userId: string,
+    @Query('token') token: string,
+  ) {
+    return this.billing.capturePayPal(userId, token);
+  }
+
   /** Pay the open invoice for one of the caller's servers (Pay-now button). */
   @Post('servers/:serverId/pay')
   @HttpCode(200)

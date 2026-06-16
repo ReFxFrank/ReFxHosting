@@ -453,6 +453,15 @@ export const api = {
   catalog: {
     products: (query?: { type?: string }) => getList<Product>("/catalog/products", { query }),
     product: (slug: string) => http.get<Product>(`/catalog/products/${slug}`),
+    // Regions with an online node that has room for the given config.
+    locations: (limits: { cpuCores: number; memoryMb: number; diskMb: number }) =>
+      getList<Region>("/catalog/locations", {
+        query: {
+          cpuCores: limits.cpuCores,
+          memoryMb: limits.memoryMb,
+          diskMb: limits.diskMb,
+        },
+      }),
     categories: () => getList<GameCategory>("/catalog/categories"),
     templates: (query?: { categoryId?: string; search?: string }) =>
       getList<GameTemplate>("/catalog/templates", { query }),
@@ -475,6 +484,7 @@ export const api = {
       priceId: string;
       templateId: string;
       regionId?: string;
+      slots?: number;
       name: string;
       gateway?: "stripe" | "paypal";
     }) => http.post<{ checkoutUrl?: string; serverId?: string; invoiceId?: string }>("/orders", input),
@@ -497,6 +507,11 @@ export const api = {
         undefined,
         { query: gateway ? { gateway } : undefined },
       ),
+    // Capture an approved PayPal order on return (token = PayPal order id).
+    capturePaypal: (token: string) =>
+      http.post<{ paid: boolean }>(`/billing/paypal/capture`, undefined, {
+        query: { token },
+      }),
     subscriptions: () => getList<Subscription>("/billing/subscriptions"),
     cancelSubscription: (id: string, atPeriodEnd = true) =>
       http.post<Subscription>(`/billing/subscriptions/${id}/cancel`, { atPeriodEnd }),

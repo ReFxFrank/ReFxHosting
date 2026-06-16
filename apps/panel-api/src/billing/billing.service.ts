@@ -643,6 +643,47 @@ export class BillingService {
     return this.payInvoice(userId, invoice.id, gateway);
   }
 
+  /**
+   * Complete a PayPal checkout after the buyer approves: capture the order (the
+   * actual money movement) and mark the linked invoice paid. `orderId` is the
+   * PayPal order token returned to the approval return URL.
+   */
+  async capturePayPal(
+    userId: string,
+    orderId: string,
+  ): Promise<{ paid: boolean }> {
+    let result;
+    try {
+      result = await this.paypal.captureOrder(orderId);
+    } catch (e) {
+      this.logger.error(`PayPal capture failed: ${(e as Error).message}`);
+      throw new BadGatewayException(
+        `PayPal capture failed: ${(e as Error).message}`,
+      );
+    }
+    if (result.status !== 'COMPLETED') {
+      throw new BadRequestException(
+        `PayPal payment not completed (status: ${result.status})`,
+      );
+    }
+    if (!result.invoiceId) {
+      throw new BadRequestException('Could not resolve the invoice for this payment');
+    }
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: result.invoiceId, userId },
+      select: { id: true },
+    });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+
+    await this.markInvoicePaid(invoice.id, {
+      gateway: 'paypal',
+      gatewayRef: result.captureId ?? orderId,
+      amountMinor: result.amountMinor,
+      currency: result.currency,
+    });
+    return { paid: true };
+  }
+
   /** Charge a saved default method, else hand off to a hosted Stripe checkout. */
   private async chargeOrCheckout(
     userId: string,

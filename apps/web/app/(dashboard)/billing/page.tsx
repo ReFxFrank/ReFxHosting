@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CreditCard,
@@ -94,6 +94,29 @@ const intervalLabel: Record<BillingInterval, string> = {
 };
 
 export default function BillingPage() {
+  const queryClient = useQueryClient();
+  // On return from PayPal approval, the order id arrives as ?token=...&PayerID=...
+  // Capture it once, then clean the URL.
+  const captured = useRef(false);
+  useEffect(() => {
+    if (captured.current || typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    const token = sp.get("token");
+    if (token && sp.get("PayerID")) {
+      captured.current = true;
+      window.history.replaceState({}, "", "/billing");
+      api.billing
+        .capturePaypal(token)
+        .then(() => {
+          toast.success("PayPal payment received — thank you!");
+          queryClient.invalidateQueries({ queryKey: ["billing"] });
+        })
+        .catch((e) =>
+          toast.error(e instanceof ApiError ? e.message : "PayPal capture failed"),
+        );
+    }
+  }, [queryClient]);
+
   const invoicesQuery = useQuery({
     queryKey: ["billing", "invoices"],
     queryFn: () => api.billing.invoices(),

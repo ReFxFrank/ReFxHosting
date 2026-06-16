@@ -205,4 +205,42 @@ export class PayPalGateway implements PaymentGateway {
     const approve = order.links.find((l) => l.rel === 'approve');
     return { sessionId: order.id, url: approve?.href ?? '' };
   }
+
+  /**
+   * Capture an approved PayPal order (the money movement) and return the linked
+   * invoice + capture details. Called when the buyer returns from approval.
+   */
+  async captureOrder(orderId: string): Promise<{
+    status: string;
+    invoiceId?: string;
+    captureId?: string;
+    amountMinor?: number;
+    currency?: string;
+  }> {
+    const res = await this.api<{
+      id: string;
+      status: string;
+      purchase_units?: Array<{
+        custom_id?: string;
+        payments?: {
+          captures?: Array<{
+            id: string;
+            amount?: { value?: string; currency_code?: string };
+          }>;
+        };
+      }>;
+    }>(`/v2/checkout/orders/${orderId}/capture`, { method: 'POST' });
+
+    const unit = res.purchase_units?.[0];
+    const capture = unit?.payments?.captures?.[0];
+    return {
+      status: res.status,
+      invoiceId: unit?.custom_id,
+      captureId: capture?.id,
+      amountMinor: capture?.amount?.value
+        ? Math.round(parseFloat(capture.amount.value) * 100)
+        : undefined,
+      currency: capture?.amount?.currency_code,
+    };
+  }
 }

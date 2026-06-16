@@ -516,6 +516,15 @@ export interface Product {
   slots: number | null;
   allowedTemplateIds: string[];
   prices: Price[];
+  // GPortal-style per-slot pricing.
+  perSlot: boolean;
+  gameTemplateId: string | null;
+  minSlots: number;
+  maxSlots: number;
+  slotStep: number;
+  cpuPerSlot: number;
+  memoryMbPerSlot: number;
+  diskMbPerSlot: number;
 }
 
 export type SubscriptionState =
