@@ -21,7 +21,7 @@ import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateApiKeyDto, TotpVerifyDto } from '../auth/dto/auth.dto';
 import { UpdateProfileDto } from '../users/dto/update-profile.dto';
-import { ChangePasswordDto, TotpEnableDto } from './dto/account.dto';
+import { ChangePasswordDto, SetAvatarDto, TotpEnableDto } from './dto/account.dto';
 
 /**
  * Account self-service surface the web calls under `/account/*`. Thin aliases
@@ -54,6 +54,13 @@ export class AccountController {
     @Body() dto: UpdateProfileDto,
   ) {
     return this.users.updateProfile(userId, dto);
+  }
+
+  /** Upload an avatar (downscaled data URL from the browser). */
+  @Post('avatar')
+  @Audit({ action: 'account.avatar.update', targetType: 'User' })
+  setAvatar(@CurrentUser('id') userId: string, @Body() dto: SetAvatarDto) {
+    return this.users.setAvatar(userId, dto.dataUrl);
   }
 
   /** GDPR data export: everything we hold for the caller, as JSON. */

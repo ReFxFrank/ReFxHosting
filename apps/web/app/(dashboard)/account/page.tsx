@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { startRegistration } from "@simplewebauthn/browser";
@@ -66,7 +66,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { cn, formatRelative, formatDate, initials, copyToClipboard } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
-import type { ApiKey } from "@/lib/types";
+import type { ApiKey, User } from "@/lib/types";
 
 const SCOPES: ApiKey["scopes"] = ["READ", "WRITE", "ADMIN"];
 
@@ -107,7 +107,6 @@ export default function AccountPage() {
 const profileSchema = z.object({
   firstName: z.string().min(1, "Required"),
   lastName: z.string().optional(),
-  avatarUrl: z.string().url("Enter a valid image URL").or(z.literal("")).optional(),
   timezone: z.string().min(1, "Required"),
   phone: z.string().optional(),
   addressLine1: z.string().optional(),
@@ -130,14 +129,12 @@ function ProfileTab() {
     handleSubmit,
     control,
     watch,
-    setValue,
     formState: { errors, isDirty },
   } = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
     values: {
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
-      avatarUrl: user?.avatarUrl ?? "",
       timezone: user?.timezone ?? "",
       phone: user?.phone ?? "",
       addressLine1: user?.addressLine1 ?? "",
@@ -168,44 +165,7 @@ function ProfileTab() {
         <CardDescription>Update your personal details.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Avatar className="size-16 text-base">
-            {(watch("avatarUrl") || user.avatarUrl) && (
-              <AvatarImage src={watch("avatarUrl") || user.avatarUrl || ""} alt={fullName} />
-            )}
-            <AvatarFallback>{initials(fullName, user.email)}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <div className="flex items-center gap-2">
-              <p className="font-medium">{fullName || user.email}</p>
-              {user.emailVerifiedAt ? (
-                <Badge variant="success">Verified</Badge>
-              ) : (
-                <Badge variant="warning">Unverified</Badge>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder="Profile picture URL (https://…)"
-                className="h-8 text-xs"
-                {...register("avatarUrl")}
-              />
-              {watch("avatarUrl") ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setValue("avatarUrl", "", { shouldDirty: true })}
-                >
-                  Clear
-                </Button>
-              ) : null}
-            </div>
-            {errors.avatarUrl && (
-              <p className="text-xs text-destructive">{errors.avatarUrl.message}</p>
-            )}
-          </div>
-        </div>
+        <AvatarEditor user={user} onChanged={refreshUser} fullName={fullName} />
 
         <form
           onSubmit={handleSubmit((v) => updateMutation.mutate(v))}
@@ -331,6 +291,143 @@ function ProfileTab() {
         </form>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * Downscale a chosen image to a small square data URL entirely in the browser,
+ * so uploads stay tiny regardless of the source file.
+ */
+function fileToAvatarDataUrl(file: File, size = 256): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Couldn't read that file"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("That file isn't a valid image"));
+      img.onload = () => {
+        const side = Math.min(img.width, img.height);
+        const sx = (img.width - side) / 2;
+        const sy = (img.height - side) / 2;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("Canvas unsupported"));
+        ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function AvatarEditor({
+  user,
+  onChanged,
+  fullName,
+}: {
+  user: User;
+  onChanged: () => Promise<void> | void;
+  fullName: string;
+}) {
+  const [urlInput, setUrlInput] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const isUploaded = (user.avatarUrl ?? "").startsWith("data:");
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Please choose an image under 8 MB");
+      return;
+    }
+    setBusy(true);
+    try {
+      const dataUrl = await fileToAvatarDataUrl(file);
+      await api.account.uploadAvatar(dataUrl);
+      await onChanged();
+      toast.success("Profile picture updated");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : (err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function save(avatarUrl: string) {
+    setBusy(true);
+    try {
+      await api.account.update({ avatarUrl });
+      await onChanged();
+      toast.success(avatarUrl ? "Profile picture updated" : "Profile picture removed");
+      setUrlInput("");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Couldn't update picture");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <Avatar className="size-16 text-base">
+        {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={fullName} />}
+        <AvatarFallback>{initials(fullName, user.email)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="flex items-center gap-2">
+          <p className="font-medium">{fullName || user.email}</p>
+          {user.emailVerifiedAt ? (
+            <Badge variant="success">Verified</Badge>
+          ) : (
+            <Badge variant="warning">Unverified</Badge>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif"
+            className="hidden"
+            onChange={onFile}
+          />
+          <Button type="button" variant="outline" size="sm" loading={busy} onClick={() => fileRef.current?.click()}>
+            <Plus className="size-4" /> Upload
+          </Button>
+          {user.avatarUrl && (
+            <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => save("")}>
+              Remove
+            </Button>
+          )}
+          {!isUploaded && (
+            <span className="flex items-center gap-2">
+              <Input
+                placeholder="…or paste an image URL"
+                className="h-8 w-56 text-xs"
+                value={urlInput}
+                onChange={(e) => setUrlInput(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={busy || !/^https?:\/\//i.test(urlInput.trim())}
+                onClick={() => save(urlInput.trim())}
+              >
+                Set
+              </Button>
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          JPG, PNG, WebP or GIF — auto-cropped to a square and resized.
+        </p>
+      </div>
+    </div>
   );
 }
 

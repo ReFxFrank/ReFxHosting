@@ -301,6 +301,8 @@ export const api = {
     update: (input: ProfileUpdate) => http.patch<User>("/account", input),
     changePassword: (currentPassword: string, newPassword: string) =>
       http.post<void>("/account/password", { currentPassword, newPassword }),
+    // Avatar upload (browser-downscaled data URL).
+    uploadAvatar: (dataUrl: string) => http.post<User>("/account/avatar", { dataUrl }),
     // GDPR: export everything we hold, or delete the account.
     exportData: () => http.get<Record<string, unknown>>("/account/export"),
     deleteAccount: () => http.delete<void>("/account"),

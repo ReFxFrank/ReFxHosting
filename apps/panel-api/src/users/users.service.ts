@@ -58,6 +58,15 @@ export class UsersService {
   }
 
   /** Update the caller's own editable profile fields (PATCH semantics). */
+  /** Set the avatar from an uploaded (already-downscaled) base64 data URL. */
+  async setAvatar(userId: string, dataUrl: string): Promise<User> {
+    await this.getProfile(userId);
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarUrl: dataUrl },
+    });
+  }
+
   async updateProfile(userId: string, dto: UpdateProfileDto): Promise<User> {
     // Ensure the user exists / isn't soft-deleted before writing.
     await this.getProfile(userId);
