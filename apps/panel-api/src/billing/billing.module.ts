@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { BillingService } from './billing.service';
 import { CouponsService } from './coupons.service';
 import { GiftCardsService } from './gift-cards.service';
+import { CreditService } from './credit.service';
 import { BillingController } from './billing.controller';
 import { BillingResolver } from './billing.resolver';
 import { StripeWebhookController } from './webhooks/stripe-webhook.controller';
@@ -34,11 +35,12 @@ import { QUEUE } from '../queues/queue.constants';
     BillingService,
     CouponsService,
     GiftCardsService,
+    CreditService,
     BillingResolver,
     StripeGateway,
     PayPalGateway,
     { provide: PAYMENT_GATEWAY, useExisting: StripeGateway },
   ],
-  exports: [BillingService, CouponsService, GiftCardsService],
+  exports: [BillingService, CouponsService, GiftCardsService, CreditService],
 })
 export class BillingModule {}

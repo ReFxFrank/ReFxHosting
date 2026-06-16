@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import {
   BillingInterval,
+  CreditReason,
   GlobalRole,
   InvoiceState,
   UserState,
@@ -30,6 +31,7 @@ import { SettingsService } from '../platform/settings.service';
 import { EmailService } from '../email/email.service';
 import { CouponsService } from '../billing/coupons.service';
 import { GiftCardsService } from '../billing/gift-cards.service';
+import { CreditService } from '../billing/credit.service';
 import {
   CreateCouponDto,
   UpdateCouponDto,
@@ -42,6 +44,7 @@ import { RolesService } from './roles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminPermissionGuard } from '../auth/guards/admin-permission.guard';
 import { RequirePerm } from '../common/decorators/require-permission.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateNodeDto, UpdateNodeDto } from '../nodes/dto/node.dto';
@@ -64,6 +67,7 @@ import {
 import {
   AdminCreateServerDto,
   CreateRoleDto,
+  GrantCreditDto,
   SetEmailConfigDto,
   SetGatewayConfigDto,
   SetUserRoleDto,
@@ -100,6 +104,7 @@ export class AdminController {
     private readonly email: EmailService,
     private readonly coupons: CouponsService,
     private readonly giftCards: GiftCardsService,
+    private readonly credit: CreditService,
   ) {}
 
   // ---- Coupons -----------------------------------------------------------
@@ -291,6 +296,35 @@ export class AdminController {
   @Audit({ action: 'admin.user.delete', targetType: 'User', targetParam: 'id' })
   deleteUser(@Param('id') id: string) {
     return this.users.deleteUser(id);
+  }
+
+  /** A user's store-credit balance + ledger (admin account view). */
+  @Get('users/:id/credit')
+  @RequirePerm('users.read')
+  async userCredit(@Param('id') id: string) {
+    const [balanceMinor, transactions] = await Promise.all([
+      this.credit.balance(id),
+      this.credit.listTransactions(id),
+    ]);
+    return { balanceMinor, transactions };
+  }
+
+  /** Grant (or deduct, with a negative amount) store credit for a user. */
+  @Post('users/:id/credit')
+  @HttpCode(200)
+  @RequirePerm('users.manage')
+  @Audit({ action: 'admin.user.credit', targetType: 'User', targetParam: 'id' })
+  grantCredit(
+    @Param('id') id: string,
+    @Body() dto: GrantCreditDto,
+    @CurrentUser('id') actorId: string,
+  ) {
+    return this.credit.adjust(
+      id,
+      dto.amountMinor,
+      dto.reason ?? CreditReason.ADMIN_GRANT,
+      { note: dto.note, actorId },
+    );
   }
 
   // ---- Roles & permissions (owner) --------------------------------------

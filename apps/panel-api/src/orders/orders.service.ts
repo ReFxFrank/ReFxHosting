@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { CouponsService } from '../billing/coupons.service';
 import { GiftCardsService } from '../billing/gift-cards.service';
+import { CreditService } from '../billing/credit.service';
 import { ServersService } from '../servers/servers.service';
 
 export interface OrderResult {
@@ -11,6 +12,8 @@ export interface OrderResult {
   invoiceId: string;
   /** Set when payment must be completed in a hosted flow before activation. */
   checkoutUrl?: string;
+  /** True when the order is already settled (free/fully-covered) and provisioning. */
+  paid: boolean;
 }
 
 /**
@@ -25,6 +28,7 @@ export class OrdersService {
     private readonly billing: BillingService,
     private readonly coupons: CouponsService,
     private readonly giftCards: GiftCardsService,
+    private readonly credit: CreditService,
     private readonly servers: ServersService,
   ) {}
 
@@ -42,6 +46,7 @@ export class OrdersService {
       environment?: Record<string, string>;
       couponCode?: string;
       giftCardCode?: string;
+      useCredit?: boolean;
     },
   ): Promise<OrderResult> {
     const price = await this.prisma.price.findUnique({
@@ -89,30 +94,41 @@ export class OrdersService {
       await this.coupons.recordRedemption(couponId, userId, invoice.id, discountMinor);
     }
 
-    // 3) Apply a gift card toward the (discounted) total, then settle the rest.
+    // 3) Apply a gift card, then account credit, toward the (discounted) total,
+    //    then settle the remaining balance through the gateway.
     let paidNow = false;
     let checkoutUrl: string | undefined;
-    let creditApplied = 0;
+    let applied = 0; // total non-gateway credit applied (gift card + store credit)
     if (dto.giftCardCode?.trim()) {
-      creditApplied = await this.giftCards.redeemForInvoice(
+      applied += await this.giftCards.redeemForInvoice(
         dto.giftCardCode,
         userId,
         invoice.id,
         invoice.totalMinor,
       );
     }
+    if (dto.useCredit) {
+      // Draw down store credit for whatever the gift card didn't cover.
+      applied += await this.credit.applyToInvoice(
+        userId,
+        invoice.id,
+        Math.max(0, invoice.totalMinor - applied),
+      );
+    }
 
-    if (creditApplied >= invoice.totalMinor && invoice.totalMinor > 0) {
-      // Gift card covers the whole order → settle without a gateway.
+    if (invoice.totalMinor > 0 && applied >= invoice.totalMinor) {
+      // Gift card and/or credit cover the whole order → settle without a gateway.
       await this.billing.markInvoicePaid(invoice.id, {
-        gateway: 'giftcard',
-        gatewayRef: `gc-${invoice.id}`,
+        gateway: 'credit',
+        gatewayRef: `credit-${invoice.id}`,
         amountMinor: invoice.totalMinor,
         currency: invoice.currency,
       });
       paidNow = true;
     } else {
-      // Charge the outstanding balance (total − any gift credit) via the gateway.
+      // Charge the outstanding balance (total − any applied credit) via the
+      // gateway. payInvoice settles directly if the balance is already zero
+      // (e.g. a 100%-off coupon), so a $0 order never hits a hosted checkout.
       try {
         const pay = await this.billing.payInvoice(userId, invoice.id, dto.gateway);
         checkoutUrl = pay.checkoutUrl;
@@ -142,6 +158,7 @@ export class OrdersService {
       subscriptionId: subscription.id,
       invoiceId: invoice.id,
       checkoutUrl,
+      paid: paidNow,
     };
   }
 }

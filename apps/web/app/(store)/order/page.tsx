@@ -64,6 +64,11 @@ export default function OrderPage() {
     queryFn: () => api.billing.config(),
     retry: false,
   });
+  const creditQ = useQuery({
+    queryKey: ["billing", "credit"],
+    queryFn: () => api.billing.credit(),
+    retry: false,
+  });
 
   const templatesById = useMemo(
     () => Object.fromEntries((templatesQ.data ?? []).map((t) => [t.id, t])),
@@ -85,6 +90,7 @@ export default function OrderPage() {
   const [coupon, setCoupon] = useState<{ code: string; discountMinor: number } | null>(null);
   const [giftInput, setGiftInput] = useState("");
   const [gift, setGift] = useState<{ code: string; balanceMinor: number } | null>(null);
+  const [useCredit, setUseCredit] = useState(false);
 
   const product = games.find((p) => p.id === productId) ?? null;
   const template = product ? templatesById[product.gameTemplateId ?? ""] : null;
@@ -151,7 +157,10 @@ export default function OrderPage() {
   const discountMinor = coupon ? Math.min(coupon.discountMinor, subtotalMinor) : 0;
   const afterDiscount = Math.max(0, subtotalMinor - discountMinor);
   const giftCredit = gift ? Math.min(gift.balanceMinor, afterDiscount) : 0;
-  const dueTodayMinor = Math.max(0, afterDiscount - giftCredit);
+  const afterGift = Math.max(0, afterDiscount - giftCredit);
+  const creditBalance = creditQ.data?.balanceMinor ?? 0;
+  const creditUsed = useCredit ? Math.min(creditBalance, afterGift) : 0;
+  const dueTodayMinor = Math.max(0, afterGift - creditUsed);
   const currency = price?.currency ?? "USD";
 
   // A coupon discount depends on the subtotal, so clear it if slots/price change.
@@ -196,10 +205,16 @@ export default function OrderPage() {
         environment: Object.keys(config).length ? config : undefined,
         couponCode: coupon?.code,
         giftCardCode: gift?.code,
+        useCredit: useCredit && creditBalance > 0 ? true : undefined,
       }),
     onSuccess: (res) => {
       if (res?.checkoutUrl) {
         window.location.assign(res.checkoutUrl);
+        return;
+      }
+      if (res?.paid) {
+        toast.success("Order placed — your server is provisioning.");
+        router.push("/servers");
         return;
       }
       toast.success("Order placed. Complete payment in Billing to start your server.");
@@ -509,6 +524,19 @@ export default function OrderPage() {
               )}
             </div>
 
+            {/* Account credit */}
+            {creditBalance > 0 && (
+              <div className="flex items-center justify-between rounded-md border px-2.5 py-1.5">
+                <div className="text-sm">
+                  <span>Use account credit</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {formatMoney(creditBalance, currency)} available
+                  </span>
+                </div>
+                <Switch checked={useCredit} onCheckedChange={setUseCredit} />
+              </div>
+            )}
+
             <div className="space-y-1 border-t pt-3 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
@@ -524,6 +552,12 @@ export default function OrderPage() {
                 <div className="flex justify-between text-success">
                   <span>Gift card</span>
                   <span>−{formatMoney(giftCredit, currency)}</span>
+                </div>
+              )}
+              {creditUsed > 0 && (
+                <div className="flex justify-between text-success">
+                  <span>Account credit</span>
+                  <span>−{formatMoney(creditUsed, currency)}</span>
                 </div>
               )}
               <div className="flex items-center justify-between pt-1 font-medium">

@@ -5,6 +5,7 @@ import { BillingController } from '../src/billing/billing.controller';
 import { BillingService } from '../src/billing/billing.service';
 import { CouponsService } from '../src/billing/coupons.service';
 import { GiftCardsService } from '../src/billing/gift-cards.service';
+import { CreditService } from '../src/billing/credit.service';
 import { AuditController } from '../src/platform/audit.controller';
 import { AuditService } from '../src/platform/audit.service';
 import { StripeGateway } from '../src/billing/gateways/stripe.gateway';
@@ -24,7 +25,7 @@ describe('Validation (e2e)', () => {
   beforeAll(async () => {
     h = await buildTestApp({
       controllers: [BillingController, AuditController],
-      providers: [BillingService, AuditService, CouponsService, GiftCardsService],
+      providers: [BillingService, AuditService, CouponsService, GiftCardsService, CreditService],
       overrides: [
         { token: StripeGateway, useValue: { name: 'stripe', verifyWebhook: jest.fn() } },
         { token: PayPalGateway, useValue: { name: 'paypal', createCheckoutSession: jest.fn() } },

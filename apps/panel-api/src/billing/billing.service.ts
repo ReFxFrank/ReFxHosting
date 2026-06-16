@@ -582,6 +582,23 @@ export class BillingService {
       throw new BadRequestException(`Invoice is ${invoice.state}, not payable`);
     }
 
+    // If the balance is already fully covered (e.g. a 100%-off coupon, a gift
+    // card, or store credit settled the whole amount), there is nothing for the
+    // gateway to charge — settle it directly. Stripe/PayPal reject a zero (and
+    // sub-minimum) amount, so handing a $0 balance to a hosted checkout would
+    // 500 and break the flow. This runs before any gateway branch so it covers
+    // both card and PayPal.
+    const outstanding = invoice.totalMinor - (invoice.amountPaidMinor ?? 0);
+    if (outstanding <= 0) {
+      await this.markInvoicePaid(invoice.id, {
+        gateway: 'credit',
+        gatewayRef: `comp-${invoice.id}`,
+        amountMinor: invoice.totalMinor,
+        currency: invoice.currency,
+      });
+      return { paid: true };
+    }
+
     // Hosted-checkout redirect targets — these are WEB routes (PANEL_URL).
     const successUrl = `${this.panelUrl}/billing?paid=1`;
     const cancelUrl = `${this.panelUrl}/billing`;

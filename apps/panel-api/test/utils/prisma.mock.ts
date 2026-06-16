@@ -41,6 +41,11 @@ const MODELS = [
   'ticketMessage',
   'ticketCategory',
   'cannedResponse',
+  'coupon',
+  'couponRedemption',
+  'giftCard',
+  'giftCardTransaction',
+  'creditTransaction',
 ] as const;
 
 type AnyFn = jest.Mock;

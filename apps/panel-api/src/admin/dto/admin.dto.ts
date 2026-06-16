@@ -15,7 +15,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { GlobalRole, UserState } from '@prisma/client';
+import { CreditReason, GlobalRole, UserState } from '@prisma/client';
 import { CreateProductDto } from '../../billing/dto/create-product.dto';
 import { CreateAlertDto } from '../../platform/dto/create-alert.dto';
 
@@ -186,6 +186,28 @@ export class UpdateRoleDto {
   @IsArray()
   @IsString({ each: true })
   permissions?: string[];
+}
+
+/**
+ * Adjust a user's store-credit balance. A positive amount grants credit (e.g. a
+ * goodwill gesture or refund-to-credit); a negative amount deducts it. Money is
+ * in integer minor units (cents).
+ */
+export class GrantCreditDto {
+  @ApiProperty({ description: 'Signed amount in minor units (cents). Positive grants, negative deducts.' })
+  @IsInt()
+  amountMinor!: number;
+
+  @ApiPropertyOptional({ enum: CreditReason })
+  @IsOptional()
+  @IsEnum(CreditReason)
+  reason?: CreditReason;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  note?: string;
 }
 
 /**

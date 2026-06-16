@@ -18,6 +18,9 @@ import {
   ShieldCheck,
   CheckCircle2,
   XCircle,
+  Wallet,
+  Plus,
+  Minus,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
@@ -41,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input, Label } from "@/components/ui/input";
 import { toast } from "@/components/ui/sonner";
 import { useAuthStore } from "@/store/auth";
 import { formatDate, formatMoney } from "@/lib/utils";
@@ -62,6 +66,10 @@ export default function AdminUserDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [creditOpen, setCreditOpen] = useState(false);
+  const [creditMode, setCreditMode] = useState<"grant" | "deduct">("grant");
+  const [creditAmount, setCreditAmount] = useState("10.00");
+  const [creditNote, setCreditNote] = useState("");
   // SUPPORT staff see a read-only account view; account actions are ADMIN+.
   const canManage = useAuthStore((s) => s.hasRole("ADMIN"));
 
@@ -70,7 +78,41 @@ export default function AdminUserDetailPage() {
     queryFn: () => api.admin.userDetail(id),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["admin", "user", id] });
+  const { data: credit } = useQuery({
+    queryKey: ["admin", "user", id, "credit"],
+    queryFn: () => api.admin.userCredit(id),
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin", "user", id] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "user", id, "credit"] });
+  };
+
+  const creditMutation = useMutation({
+    mutationFn: () => {
+      const cents = Math.round(parseFloat(creditAmount || "0") * 100);
+      const signed = creditMode === "deduct" ? -cents : cents;
+      return api.admin.grantCredit(id, {
+        amountMinor: signed,
+        reason: creditMode === "deduct" ? "ADJUSTMENT" : "ADMIN_GRANT",
+        note: creditNote.trim() || undefined,
+      });
+    },
+    onSuccess: (res) => {
+      toast.success(`Credit updated — new balance ${formatMoney(res.balanceMinor, "USD")}`);
+      setCreditOpen(false);
+      setCreditNote("");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to update credit"),
+  });
+
+  const openCredit = (mode: "grant" | "deduct") => {
+    setCreditMode(mode);
+    setCreditAmount("10.00");
+    setCreditNote("");
+    setCreditOpen(true);
+  };
 
   const stateMutation = useMutation({
     mutationFn: (state: UserState) => api.admin.setUserState(id, state),
@@ -297,8 +339,112 @@ export default function AdminUserDetailPage() {
               </div>
             </Section>
           )}
+
+          {/* Store / account credit */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Wallet className="size-4" /> Account credit
+              </CardTitle>
+              {canManage && (
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => openCredit("grant")}>
+                    <Plus className="size-4" /> Grant
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={(credit?.balanceMinor ?? 0) <= 0}
+                    onClick={() => openCredit("deduct")}
+                  >
+                    <Minus className="size-4" /> Deduct
+                  </Button>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="refx-eyebrow">Balance</p>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatMoney(credit?.balanceMinor ?? user.creditBalanceMinor ?? 0, "USD")}
+                </p>
+              </div>
+              {!!credit?.transactions?.length && (
+                <div className="border-t pt-2">
+                  <p className="refx-eyebrow mb-1">Recent activity</p>
+                  <div className="space-y-1.5">
+                    {credit.transactions.slice(0, 8).map((t) => (
+                      <div key={t.id} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {t.reason.replace(/_/g, " ").toLowerCase()}
+                          {t.note ? ` · ${t.note}` : ""}
+                        </span>
+                        <span
+                          className={
+                            t.amountMinor >= 0
+                              ? "tabular-nums text-success"
+                              : "tabular-nums text-muted-foreground"
+                          }
+                        >
+                          {t.amountMinor >= 0 ? "+" : "−"}
+                          {formatMoney(Math.abs(t.amountMinor), "USD")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      <Dialog open={creditOpen} onOpenChange={setCreditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {creditMode === "grant" ? "Grant credit" : "Deduct credit"}
+            </DialogTitle>
+            <DialogDescription>
+              {creditMode === "grant"
+                ? "Add store credit to this account (e.g. a refund or goodwill gesture). It applies automatically at the customer's next checkout."
+                : "Remove store credit from this account. Cannot reduce the balance below zero."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Amount ($)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={creditAmount}
+                onChange={(e) => setCreditAmount(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Note (optional)</Label>
+              <Input
+                value={creditNote}
+                onChange={(e) => setCreditNote(e.target.value)}
+                placeholder="e.g. refund for INV-2026-0007"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCreditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={creditMutation.isPending}
+              disabled={!creditAmount || parseFloat(creditAmount) <= 0}
+              onClick={() => creditMutation.mutate()}
+            >
+              {creditMode === "grant" ? "Grant credit" : "Deduct credit"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent>

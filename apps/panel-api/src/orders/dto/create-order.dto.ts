@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsIn,
   IsInt,
   IsObject,
@@ -50,6 +51,11 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   giftCardCode?: string;
+
+  @ApiPropertyOptional({ description: 'Apply the buyer’s account/store credit balance.' })
+  @IsOptional()
+  @IsBoolean()
+  useCredit?: boolean;
 
   @ApiPropertyOptional({ description: 'Stored payment method to charge' })
   @IsOptional()

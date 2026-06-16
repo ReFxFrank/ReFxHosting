@@ -14,6 +14,7 @@ import { GlobalRole } from '@prisma/client';
 import { BillingService } from './billing.service';
 import { CouponsService } from './coupons.service';
 import { GiftCardsService } from './gift-cards.service';
+import { CreditService } from './credit.service';
 import { ValidateCouponDto } from './dto/coupon.dto';
 import { RedeemGiftCardDto } from './dto/gift-card.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -38,7 +39,18 @@ export class BillingController {
     private readonly billing: BillingService,
     private readonly coupons: CouponsService,
     private readonly giftCards: GiftCardsService,
+    private readonly credit: CreditService,
   ) {}
+
+  /** The caller's store-credit balance + recent ledger (account credit panel). */
+  @Get('credit')
+  async myCredit(@CurrentUser('id') userId: string) {
+    const [balanceMinor, transactions] = await Promise.all([
+      this.credit.balance(userId),
+      this.credit.listTransactions(userId),
+    ]);
+    return { balanceMinor, transactions };
+  }
 
   /** Validate a coupon for a given subtotal (order-page preview). */
   @Post('coupons/validate')

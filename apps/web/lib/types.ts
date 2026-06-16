@@ -27,10 +27,35 @@ export interface User {
   region: string | null;
   postalCode: string | null;
   country: string | null;
+  /** Store/account credit balance in minor units (cents). */
+  creditBalanceMinor?: number;
   /** Effective admin permissions (present on /auth/me; gates the admin UI). */
   permissions?: string[];
   roleId?: string | null;
   createdAt: string;
+}
+
+export type CreditReason =
+  | "ADMIN_GRANT"
+  | "REFUND"
+  | "GIFT_CARD"
+  | "INVOICE_PAYMENT"
+  | "ADJUSTMENT";
+
+export interface CreditTransaction {
+  id: string;
+  userId: string;
+  amountMinor: number;
+  reason: CreditReason;
+  note: string | null;
+  invoiceId: string | null;
+  actorId: string | null;
+  createdAt: string;
+}
+
+export interface CreditLedger {
+  balanceMinor: number;
+  transactions: CreditTransaction[];
 }
 
 export interface AdminRole {

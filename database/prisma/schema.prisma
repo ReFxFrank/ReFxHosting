@@ -71,6 +71,10 @@ model User {
   postalCode        String?
   country           String?     // ISO country code or name
 
+  // Store credit (minor units, platform default currency). Applied to invoices.
+  creditBalanceMinor Int        @default(0)
+  creditTransactions CreditTransaction[]
+
   // MFA
   totpSecretEnc     String?     // AES-256-GCM encrypted TOTP seed
   totpEnabledAt     DateTime?
@@ -866,6 +870,28 @@ model GiftCardTransaction {
   createdAt   DateTime @default(now())
 
   @@index([giftCardId])
+}
+
+enum CreditReason {
+  ADMIN_GRANT
+  REFUND
+  GIFT_CARD
+  INVOICE_PAYMENT
+  ADJUSTMENT
+}
+
+model CreditTransaction {
+  id          String       @id @db.Uuid
+  userId      String       @db.Uuid
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountMinor Int          // positive = credit added, negative = spent
+  reason      CreditReason @default(ADJUSTMENT)
+  note        String?
+  invoiceId   String?      @db.Uuid
+  actorId     String?      @db.Uuid // admin who made the adjustment, if any
+  createdAt   DateTime     @default(now())
+
+  @@index([userId])
 }
 
 model InvoiceLineItem {

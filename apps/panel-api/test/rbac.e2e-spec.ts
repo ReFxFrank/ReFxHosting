@@ -7,6 +7,7 @@ import { BillingController } from '../src/billing/billing.controller';
 import { BillingService } from '../src/billing/billing.service';
 import { CouponsService } from '../src/billing/coupons.service';
 import { GiftCardsService } from '../src/billing/gift-cards.service';
+import { CreditService } from '../src/billing/credit.service';
 import { StripeGateway } from '../src/billing/gateways/stripe.gateway';
 import { PayPalGateway } from '../src/billing/gateways/paypal.gateway';
 import { QUEUE } from '../src/queues/queue.constants';
@@ -24,6 +25,7 @@ describe('RBAC (e2e)', () => {
         BillingService,
         CouponsService,
         GiftCardsService,
+        CreditService,
       ],
       overrides: [
         { token: StripeGateway, useValue: { name: 'stripe', verifyWebhook: jest.fn() } },

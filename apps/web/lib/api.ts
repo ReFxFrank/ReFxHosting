@@ -55,6 +55,8 @@ import type {
   Coupon,
   CouponKind,
   GiftCard,
+  CreditLedger,
+  CreditReason,
   ProfileUpdate,
   AdminRole,
 } from "@/lib/types";
@@ -493,7 +495,8 @@ export const api = {
       environment?: Record<string, string>;
       couponCode?: string;
       giftCardCode?: string;
-    }) => http.post<{ checkoutUrl?: string; serverId?: string; invoiceId?: string }>("/orders", input),
+      useCredit?: boolean;
+    }) => http.post<{ checkoutUrl?: string; serverId?: string; invoiceId?: string; paid?: boolean }>("/orders", input),
   },
 
   billing: {
@@ -509,6 +512,8 @@ export const api = {
         "/billing/gift-cards/lookup",
         { code },
       ),
+    /** The caller's store-credit balance + recent ledger. */
+    credit: () => http.get<CreditLedger>("/billing/credit"),
     invoices: () => getList<Invoice>("/billing/invoices"),
     invoice: (id: string) => http.get<Invoice>(`/billing/invoices/${id}`),
     payInvoice: (id: string, gateway?: "stripe" | "paypal") =>
@@ -636,6 +641,13 @@ export const api = {
     setUserRole: (id: string, input: { role?: User["globalRole"]; roleId?: string }) =>
       http.patch<User>(`/admin/users/${id}/role`, input),
     deleteUser: (id: string) => http.delete<void>(`/admin/users/${id}`),
+
+    // Store credit (account balance) — view ledger + grant/deduct.
+    userCredit: (id: string) => http.get<CreditLedger>(`/admin/users/${id}/credit`),
+    grantCredit: (
+      id: string,
+      input: { amountMinor: number; reason?: CreditReason; note?: string },
+    ) => http.post<{ balanceMinor: number }>(`/admin/users/${id}/credit`, input),
 
     // Roles & permissions (RBAC)
     roles: () => getList<AdminRole>("/admin/roles"),
