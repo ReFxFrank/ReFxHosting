@@ -364,6 +364,50 @@ export class NodesService {
   }
 
   /**
+   * Human-readable explanation of why no node fit a placement request. The
+   * scheduler reserves each server's PROVISIONED resources against a node's
+   * CONFIGURED capacity (cpuCores/memoryMb/diskMb on the node) — which is
+   * independent of live host telemetry — so this points at the real constraint.
+   */
+  async capacityShortfall(limits: {
+    cpuCores: number;
+    memoryMb: number;
+    diskMb: number;
+  }): Promise<string> {
+    const candidates = await this.prisma.node.findMany({
+      where: { deletedAt: null },
+    });
+    const online = candidates.filter(
+      (n) => n.state === 'ONLINE' && !n.maintenance,
+    );
+    const needs = `Plan reserves ${limits.cpuCores} vCPU / ${limits.memoryMb} MB RAM / ${limits.diskMb} MB disk.`;
+
+    if (candidates.length === 0) return `${needs} No nodes exist yet.`;
+    if (online.length === 0) {
+      return `${needs} No nodes are ONLINE and out of maintenance.`;
+    }
+
+    // Report the most-free node so the operator can see the gap.
+    let bestLine = '';
+    let bestFree = -Infinity;
+    for (const node of online) {
+      const cap = await this.capacity(node.id);
+      const freeScore = Math.min(
+        cap.cpu.free / Math.max(1, limits.cpuCores),
+        cap.memory.free / Math.max(1, limits.memoryMb),
+        cap.disk.free / Math.max(1, limits.diskMb),
+      );
+      if (freeScore > bestFree) {
+        bestFree = freeScore;
+        bestLine =
+          `Closest node "${node.name}" has ${cap.cpu.free} vCPU / ` +
+          `${cap.memory.free} MB RAM / ${cap.disk.free} MB disk free.`;
+      }
+    }
+    return `${needs} ${bestLine} Raise the node's capacity in Admin → Nodes (Edit), or lower the plan's resources.`;
+  }
+
+  /**
    * Heartbeat history for a node within a relative range ("1h" | "6h" | "24h" |
    * "7d"), newest first. Powers the admin node detail graphs.
    */

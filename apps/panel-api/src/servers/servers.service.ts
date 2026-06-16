@@ -140,7 +140,12 @@ export class ServersService {
     let nodeId = dto.nodeId;
     if (!nodeId) {
       const node = await this.nodes.pickNodeFor(limits);
-      if (!node) throw new ConflictException('No node has capacity for this plan');
+      if (!node) {
+        // Surface WHY nothing fit (configured capacity vs. the plan's reserved
+        // resources — not host telemetry), so it's actionable.
+        const detail = await this.nodes.capacityShortfall(limits);
+        throw new ConflictException(`No node has capacity for this plan. ${detail}`);
+      }
       nodeId = node.id;
     }
 

@@ -577,6 +577,17 @@ export const api = {
       http.post<Node & { bootstrapToken: string }>("/admin/nodes", input),
     setNodeMaintenance: (id: string, maintenance: boolean) =>
       http.patch<Node>(`/admin/nodes/${id}`, { maintenance }),
+    updateNode: (
+      id: string,
+      input: Partial<{
+        cpuCores: number;
+        memoryMb: number;
+        diskMb: number;
+        cpuOvercommit: number;
+        memOvercommit: number;
+        maintenance: boolean;
+      }>,
+    ) => http.patch<Node>(`/admin/nodes/${id}`, input),
     deleteNode: (id: string) => http.delete<void>(`/admin/nodes/${id}`),
 
     users: (query?: { q?: string; role?: string; state?: string }) =>

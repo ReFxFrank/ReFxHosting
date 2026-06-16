@@ -99,6 +99,116 @@ function UsageBar({
   );
 }
 
+/** Edit a node's schedulable capacity (what the placement engine reserves against). */
+function EditCapacityDialog({
+  node,
+  onClose,
+}: {
+  node: Node | null;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+
+  const save = useMutation({
+    mutationFn: (v: { cpuCores: number; memoryMb: number; diskMb: number }) =>
+      api.admin.updateNode(node!.id, v),
+    onSuccess: () => {
+      toast.success("Node capacity updated");
+      queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
+      onClose();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to update node"),
+  });
+
+  return (
+    <Dialog
+      open={!!node}
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit capacity — {node?.name}</DialogTitle>
+          <DialogDescription>
+            Schedulable capacity the placement engine reserves against (independent
+            of live host telemetry). Set it to what this node may hand out.
+          </DialogDescription>
+        </DialogHeader>
+        {node && (
+          <CapacityForm
+            key={node.id}
+            node={node}
+            onSubmit={(v) => save.mutate(v)}
+            saving={save.isPending}
+          />
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Controlled capacity inputs, initialised from the node. */
+function CapacityForm({
+  node,
+  onSubmit,
+  saving,
+}: {
+  node: Node;
+  onSubmit: (v: { cpuCores: number; memoryMb: number; diskMb: number }) => void;
+  saving: boolean;
+}) {
+  const [cpuCores, setCpuCores] = useState(node.cpuCores ?? 1);
+  const [memoryMb, setMemoryMb] = useState(node.memoryMb ?? 1024);
+  const [diskMb, setDiskMb] = useState(node.diskMb ?? 10240);
+
+  return (
+    <>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="cap-cpu">vCPU cores</Label>
+          <Input
+            id="cap-cpu"
+            type="number"
+            min={1}
+            value={cpuCores}
+            onChange={(e) => setCpuCores(Number(e.target.value))}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cap-mem">Memory (MB)</Label>
+          <Input
+            id="cap-mem"
+            type="number"
+            min={256}
+            value={memoryMb}
+            onChange={(e) => setMemoryMb(Number(e.target.value))}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="cap-disk">Disk (MB)</Label>
+          <Input
+            id="cap-disk"
+            type="number"
+            min={1024}
+            value={diskMb}
+            onChange={(e) => setDiskMb(Number(e.target.value))}
+          />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button
+          loading={saving}
+          onClick={() => onSubmit({ cpuCores, memoryMb, diskMb })}
+        >
+          Save capacity
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
 /** Live panel->agent latency probe, polled while visible. */
 function NodePing({ nodeId, poll }: { nodeId: string; poll?: boolean }) {
   const { data, isLoading } = useQuery({
@@ -204,6 +314,7 @@ export default function AdminNodesPage() {
   const [bootstrapToken, setBootstrapToken] = useState<string | null>(null);
   const [detailNode, setDetailNode] = useState<Node | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Node | null>(null);
+  const [editNode, setEditNode] = useState<Node | null>(null);
   const [restartTarget, setRestartTarget] = useState<Node | null>(null);
 
   const { data: nodes, isLoading } = useQuery({
@@ -358,9 +469,18 @@ export default function AdminNodesPage() {
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          title="Live activity"
                           onClick={() => setDetailNode(node)}
                         >
                           <Activity className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title="Edit capacity"
+                          onClick={() => setEditNode(node)}
+                        >
+                          <Cpu className="size-4" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -624,6 +744,9 @@ export default function AdminNodesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit capacity */}
+      <EditCapacityDialog node={editNode} onClose={() => setEditNode(null)} />
 
       {/* Delete node confirmation */}
       <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
