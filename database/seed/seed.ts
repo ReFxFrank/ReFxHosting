@@ -353,17 +353,28 @@ async function upsertTierPrice(
     select: { id: true },
   });
   if (existing) return;
-  await prisma.price.create({
-    data: {
-      id: uuidv7(),
-      productId,
-      hardwareTierId: tierId,
-      interval,
-      currency: 'USD',
-      amountMinor,
-      isActive: true,
-    },
-  });
+  try {
+    await prisma.price.create({
+      data: {
+        id: uuidv7(),
+        productId,
+        hardwareTierId: tierId,
+        interval,
+        currency: 'USD',
+        amountMinor,
+        isActive: true,
+      },
+    });
+  } catch (e) {
+    // Tolerate a lingering legacy unique constraint or a concurrent insert so a
+    // single price hiccup doesn't abort the whole seed (the corrective migration
+    // 20260616130000_price_unique_fix removes the offending constraint).
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
+      console.warn(`    ! skipped tier price (${interval}) — unique constraint`);
+      return;
+    }
+    throw e;
+  }
 }
 
 /**
@@ -745,8 +756,18 @@ async function main() {
   // deactivation): game templates get a HARDWARE_TIER product with Low/Mid/High
   // tiers; TeamSpeak 3 gets a slot-based VOICE_SERVER product.
   console.log('Storefront plans:');
-  await seedGameTierProducts();
-  await seedVoiceProducts();
+  // Isolate the two seeders so a hiccup in one (e.g. a lingering constraint on a
+  // legacy product) never blocks the other from running.
+  try {
+    await seedGameTierProducts();
+  } catch (e) {
+    console.error('  ! game tier products failed:', (e as Error).message);
+  }
+  try {
+    await seedVoiceProducts();
+  } catch (e) {
+    console.error('  ! voice products failed:', (e as Error).message);
+  }
 
   console.log('Seed complete.');
 }
