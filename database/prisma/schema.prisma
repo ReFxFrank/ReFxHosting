@@ -1203,6 +1203,24 @@ model HomepageAlert {
   updatedAt   DateTime          @updatedAt
 }
 
+/// Admin-curated team member for the public "Meet the team" page. Not tied to a
+/// user account — purely marketing content (name, title, bio, avatar).
+model StaffMember {
+  id        String   @id @db.Uuid
+  name      String
+  title     String   // role/title, e.g. "Founder" / "Support Lead"
+  bio       String?
+  avatarUrl String?
+  // Optional public link (e.g. Discord/profile).
+  link      String?
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, sortOrder])
+}
+
 /// Key/value platform configuration editable at runtime (e.g. payment-gateway
 /// credentials). Secret values are stored AES-256-GCM-encrypted (encrypted=true).
 model PlatformSetting {

@@ -5,6 +5,7 @@ import { AuditService } from './audit.service';
 import { NotificationsService } from './notifications.service';
 import { AlertsService } from './alerts.service';
 import { HomepageAlertsService } from './homepage-alerts.service';
+import { StaffService } from './staff.service';
 import { SettingsService } from './settings.service';
 import { PlatformResolver } from './platform.resolver';
 import { HealthController } from './health.controller';
@@ -38,6 +39,7 @@ import { AlertsController } from './alerts.controller';
     NotificationsService,
     AlertsService,
     HomepageAlertsService,
+    StaffService,
     SettingsService,
     PlatformResolver,
   ],
@@ -46,6 +48,7 @@ import { AlertsController } from './alerts.controller';
     NotificationsService,
     AlertsService,
     HomepageAlertsService,
+    StaffService,
     AuditService,
     SettingsService,
   ],

@@ -26,6 +26,11 @@ import { TemplatesService } from '../templates/templates.service';
 import { ServersService } from '../servers/servers.service';
 import { AlertsService } from '../platform/alerts.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
+import { StaffService } from '../platform/staff.service';
+import {
+  CreateStaffMemberDto,
+  UpdateStaffMemberDto,
+} from '../platform/dto/staff.dto';
 import { AuditService } from '../platform/audit.service';
 import { SettingsService } from '../platform/settings.service';
 import { EmailService } from '../email/email.service';
@@ -103,6 +108,7 @@ export class AdminController {
     private readonly servers: ServersService,
     private readonly alerts: AlertsService,
     private readonly homepageAlerts: HomepageAlertsService,
+    private readonly staff: StaffService,
     private readonly audit: AuditService,
     private readonly roles: RolesService,
     private readonly settings: SettingsService,
@@ -771,6 +777,36 @@ export class AdminController {
   })
   deleteHomepageAlert(@Param('id') id: string) {
     return this.homepageAlerts.delete(id);
+  }
+
+  // ---- Staff (public "Meet the team") ------------------------------------
+
+  @Get('staff')
+  @RequirePerm('content.manage')
+  listStaff() {
+    return this.staff.listAll();
+  }
+
+  @Post('staff')
+  @RequirePerm('content.manage')
+  @Audit({ action: 'admin.staff.create', targetType: 'StaffMember' })
+  createStaff(@Body() dto: CreateStaffMemberDto) {
+    return this.staff.create(dto);
+  }
+
+  @Patch('staff/:id')
+  @RequirePerm('content.manage')
+  @Audit({ action: 'admin.staff.update', targetType: 'StaffMember', targetParam: 'id' })
+  updateStaff(@Param('id') id: string, @Body() dto: UpdateStaffMemberDto) {
+    return this.staff.update(id, dto);
+  }
+
+  @Delete('staff/:id')
+  @RequirePerm('content.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.staff.delete', targetType: 'StaffMember', targetParam: 'id' })
+  deleteStaff(@Param('id') id: string) {
+    return this.staff.delete(id);
   }
 
   // ---- Audit logs --------------------------------------------------------

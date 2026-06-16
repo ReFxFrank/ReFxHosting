@@ -387,6 +387,18 @@ export interface StartingPrice {
   currency: string;
 }
 
+/** An admin-curated team member for the public "Meet the team" page. */
+export interface TeamMember {
+  id: string;
+  name: string;
+  title: string;
+  bio: string | null;
+  avatarUrl: string | null;
+  link: string | null;
+  isActive: boolean;
+  sortOrder: number;
+}
+
 /** A published game as shown on the public homepage/catalog. */
 export interface StorefrontGame {
   id: string;

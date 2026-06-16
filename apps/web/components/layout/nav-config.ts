@@ -96,6 +96,7 @@ export const adminNav: NavSection[] = [
     items: [
       { label: "Homepage Alerts", href: "/admin/homepage-alerts", icon: Megaphone, perm: "content.manage" },
       { label: "Alerts", href: "/admin/alerts", icon: Bell, perm: "content.manage" },
+      { label: "Staff", href: "/admin/staff", icon: Users, perm: "content.manage" },
     ],
   },
   {

@@ -42,6 +42,7 @@ import type {
   AdminServer,
   StorefrontGame,
   StorefrontGameDetail,
+  TeamMember,
   HomepageAlert,
   ModrinthProject,
   ModrinthVersion,
@@ -567,6 +568,7 @@ export const api = {
       http.get<StorefrontGameDetail>(`/catalog/games/${slug}`, { anonymous: true }),
     homepageAlerts: () =>
       getList<HomepageAlert>("/catalog/homepage-alerts", { anonymous: true }),
+    team: () => getList<TeamMember>("/catalog/team", { anonymous: true }),
   },
 
   orders: {
@@ -907,6 +909,14 @@ export const api = {
         : http.post<HomepageAlert>("/admin/homepage-alerts", body),
     deleteHomepageAlert: (id: string) =>
       http.delete<void>(`/admin/homepage-alerts/${id}`),
+
+    // Staff / "Meet the team" (public page content).
+    staff: () => getList<TeamMember>("/admin/staff"),
+    saveStaff: ({ id, ...body }: Partial<TeamMember>) =>
+      id
+        ? http.patch<TeamMember>(`/admin/staff/${id}`, body)
+        : http.post<TeamMember>("/admin/staff", body),
+    deleteStaff: (id: string) => http.delete<void>(`/admin/staff/${id}`),
 
     auditLogs: (query?: { actorId?: string; targetType?: string; page?: number }) =>
       http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),

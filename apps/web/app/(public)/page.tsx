@@ -17,6 +17,7 @@ import {
   FEATURED,
 } from "@/components/public/game-grid";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Reveal } from "@/components/ui/reveal";
 
 export default function HomePage() {
   const [category, setCategory] = useState<string>(FEATURED);
@@ -90,7 +91,9 @@ export default function HomePage() {
         )}
       </section>
 
-      <HostingFeatureCards />
+      <Reveal>
+        <HostingFeatureCards />
+      </Reveal>
     </>
   );
 }

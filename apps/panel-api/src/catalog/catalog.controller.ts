@@ -6,6 +6,7 @@ import { NodesService } from '../nodes/nodes.service';
 import { MinecraftVersionsService } from './minecraft-versions.service';
 import { StorefrontService } from './storefront.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
+import { StaffService } from '../platform/staff.service';
 
 /**
  * Public storefront catalog. No auth — these feed the unauthenticated buy flow.
@@ -22,6 +23,7 @@ export class CatalogController {
     private readonly minecraftVersions: MinecraftVersionsService,
     private readonly storefront: StorefrontService,
     private readonly homepageAlerts: HomepageAlertsService,
+    private readonly staff: StaffService,
   ) {}
 
   /** Locations (regions) with capacity for a given config — storefront picker. */
@@ -72,6 +74,12 @@ export class CatalogController {
   @Get('homepage-alerts')
   homepageAlertsList() {
     return this.homepageAlerts.listActive();
+  }
+
+  /** Public "Meet the team" members (active only). */
+  @Get('team')
+  team() {
+    return this.staff.listActive();
   }
 
   @Get('products')

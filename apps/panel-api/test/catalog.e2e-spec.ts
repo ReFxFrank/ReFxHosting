@@ -6,6 +6,7 @@ import { StorefrontService } from '../src/catalog/storefront.service';
 import { MinecraftVersionsService } from '../src/catalog/minecraft-versions.service';
 import { TemplatesService } from '../src/templates/templates.service';
 import { HomepageAlertsService } from '../src/platform/homepage-alerts.service';
+import { StaffService } from '../src/platform/staff.service';
 import { BillingService } from '../src/billing/billing.service';
 import { NodesService } from '../src/nodes/nodes.service';
 
@@ -25,6 +26,7 @@ describe('Catalog storefront (e2e)', () => {
         MinecraftVersionsService,
         TemplatesService,
         HomepageAlertsService,
+        { provide: StaffService, useValue: { listActive: jest.fn().mockResolvedValue([]) } },
       ],
       overrides: [
         { token: BillingService, useValue: {} },
