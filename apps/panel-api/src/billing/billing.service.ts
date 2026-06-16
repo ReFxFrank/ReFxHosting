@@ -216,6 +216,18 @@ export class BillingService {
     if (dto.allowedTemplateIds !== undefined) {
       data.allowedTemplateIds = dto.allowedTemplateIds;
     }
+    if (dto.perSlot !== undefined) data.perSlot = dto.perSlot;
+    if (dto.gameTemplateId !== undefined) {
+      data.gameTemplate = dto.gameTemplateId
+        ? { connect: { id: dto.gameTemplateId } }
+        : { disconnect: true };
+    }
+    if (dto.minSlots !== undefined) data.minSlots = dto.minSlots;
+    if (dto.maxSlots !== undefined) data.maxSlots = dto.maxSlots;
+    if (dto.slotStep !== undefined) data.slotStep = dto.slotStep;
+    if (dto.cpuPerSlot !== undefined) data.cpuPerSlot = dto.cpuPerSlot;
+    if (dto.memoryMbPerSlot !== undefined) data.memoryMbPerSlot = dto.memoryMbPerSlot;
+    if (dto.diskMbPerSlot !== undefined) data.diskMbPerSlot = dto.diskMbPerSlot;
     return this.prisma.product.update({ where: { id }, data });
   }
 
@@ -265,6 +277,7 @@ export class BillingService {
         productId: dto.productId,
         priceId: dto.priceId,
         interval: dto.interval,
+        slots: dto.slots && dto.slots > 0 ? dto.slots : 1,
         state: SubscriptionState.ACTIVE,
         currentPeriodStart: now,
         currentPeriodEnd,
@@ -700,7 +713,11 @@ export class BillingService {
     if (!price) throw new NotFoundException('Price not found for subscription');
 
     const currency = price.currency || this.billingCfg.defaultCurrency;
-    const quantity = 1;
+    // Per-slot products bill price-per-slot × slots; others are a single unit.
+    const quantity =
+      subscription.product.perSlot && subscription.slots > 0
+        ? subscription.slots
+        : 1;
     const unitMinor = price.amountMinor;
     const subtotalMinor = unitMinor * quantity;
 

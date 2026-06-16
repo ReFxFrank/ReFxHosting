@@ -339,13 +339,21 @@ export class NodesService {
    * Pick the least-loaded ONLINE, non-maintenance node with enough free
    * capacity for the requested limits. Returns null when none fit.
    */
-  async pickNodeFor(limits: {
-    cpuCores: number;
-    memoryMb: number;
-    diskMb: number;
-  }): Promise<Node | null> {
+  async pickNodeFor(
+    limits: {
+      cpuCores: number;
+      memoryMb: number;
+      diskMb: number;
+    },
+    regionId?: string,
+  ): Promise<Node | null> {
     const candidates = await this.prisma.node.findMany({
-      where: { deletedAt: null, state: 'ONLINE', maintenance: false },
+      where: {
+        deletedAt: null,
+        state: 'ONLINE',
+        maintenance: false,
+        ...(regionId ? { regionId } : {}),
+      },
     });
     let best: { node: Node; score: number } | null = null;
     for (const node of candidates) {
@@ -364,18 +372,60 @@ export class NodesService {
   }
 
   /**
+   * Regions that currently have at least one ONLINE, non-maintenance node with
+   * enough free capacity for `limits`. Powers the storefront location picker so
+   * customers only see places their order can actually be provisioned.
+   */
+  async regionsWithCapacity(limits: {
+    cpuCores: number;
+    memoryMb: number;
+    diskMb: number;
+  }): Promise<Array<{ id: string; code: string; name: string; country: string }>> {
+    const regions = await this.prisma.region.findMany({
+      orderBy: { name: 'asc' },
+      select: { id: true, code: true, name: true, country: true },
+    });
+    const nodes = await this.prisma.node.findMany({
+      where: { deletedAt: null, state: 'ONLINE', maintenance: false },
+      select: { id: true, regionId: true },
+    });
+
+    const out: Array<{ id: string; code: string; name: string; country: string }> = [];
+    for (const region of regions) {
+      const regionNodes = nodes.filter((n) => n.regionId === region.id);
+      let fits = false;
+      for (const n of regionNodes) {
+        const cap = await this.capacity(n.id);
+        if (
+          cap.cpu.free >= limits.cpuCores &&
+          cap.memory.free >= limits.memoryMb &&
+          cap.disk.free >= limits.diskMb
+        ) {
+          fits = true;
+          break;
+        }
+      }
+      if (fits) out.push(region);
+    }
+    return out;
+  }
+
+  /**
    * Human-readable explanation of why no node fit a placement request. The
    * scheduler reserves each server's PROVISIONED resources against a node's
    * CONFIGURED capacity (cpuCores/memoryMb/diskMb on the node) — which is
    * independent of live host telemetry — so this points at the real constraint.
    */
-  async capacityShortfall(limits: {
-    cpuCores: number;
-    memoryMb: number;
-    diskMb: number;
-  }): Promise<string> {
+  async capacityShortfall(
+    limits: {
+      cpuCores: number;
+      memoryMb: number;
+      diskMb: number;
+    },
+    regionId?: string,
+  ): Promise<string> {
     const candidates = await this.prisma.node.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...(regionId ? { regionId } : {}) },
     });
     const online = candidates.filter(
       (n) => n.state === 'ONLINE' && !n.maintenance,

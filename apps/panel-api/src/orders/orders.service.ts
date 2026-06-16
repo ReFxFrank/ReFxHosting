@@ -32,6 +32,7 @@ export class OrdersService {
       templateId: string;
       name: string;
       regionId?: string;
+      slots?: number;
       paymentMethodId?: string;
       gateway?: 'stripe' | 'paypal';
       environment?: Record<string, string>;
@@ -49,6 +50,7 @@ export class OrdersService {
       productId: dto.productId,
       priceId: dto.priceId,
       interval: price.interval,
+      slots: dto.slots,
     });
 
     // 2) Generate the first-period invoice.
@@ -78,11 +80,11 @@ export class OrdersService {
         name: dto.name,
         subscriptionId: subscription.id,
         templateId: dto.templateId,
+        regionId: dto.regionId,
         environment: dto.environment,
       },
       { deferProvision: !paidNow },
     );
-    void dto.regionId; // TODO(impl): honor region preference in node placement.
 
     return {
       serverId: server.id,

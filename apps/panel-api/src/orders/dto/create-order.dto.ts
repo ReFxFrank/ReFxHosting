@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsIn, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 /**
  * Checkout payload from the storefront buy flow: subscribe to a product at a
@@ -22,10 +30,16 @@ export class CreateOrderDto {
   @IsString()
   name!: string;
 
-  @ApiPropertyOptional({ description: 'Preferred region (placement hint)' })
+  @ApiPropertyOptional({ description: 'Selected region/location for placement' })
   @IsOptional()
   @IsString()
   regionId?: string;
+
+  @ApiPropertyOptional({ description: 'Slot quantity for per-slot products.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  slots?: number;
 
   @ApiPropertyOptional({ description: 'Stored payment method to charge' })
   @IsOptional()

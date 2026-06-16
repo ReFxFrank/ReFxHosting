@@ -32,6 +32,11 @@ export class CreateServerDto {
   @IsString()
   nodeId?: string;
 
+  @ApiPropertyOptional({ description: 'Preferred region/location for scheduling' })
+  @IsOptional()
+  @IsString()
+  regionId?: string;
+
   @ApiPropertyOptional({ description: 'Initial env var overrides' })
   @IsOptional()
   @IsObject()

@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { BillingService } from '../billing/billing.service';
 import { TemplatesService } from '../templates/templates.service';
+import { NodesService } from '../nodes/nodes.service';
 import { MinecraftVersionsService } from './minecraft-versions.service';
 import { StorefrontService } from './storefront.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
@@ -17,10 +18,25 @@ export class CatalogController {
   constructor(
     private readonly billing: BillingService,
     private readonly templates: TemplatesService,
+    private readonly nodes: NodesService,
     private readonly minecraftVersions: MinecraftVersionsService,
     private readonly storefront: StorefrontService,
     private readonly homepageAlerts: HomepageAlertsService,
   ) {}
+
+  /** Locations (regions) with capacity for a given config — storefront picker. */
+  @Get('locations')
+  locations(
+    @Query('cpuCores') cpuCores?: string,
+    @Query('memoryMb') memoryMb?: string,
+    @Query('diskMb') diskMb?: string,
+  ) {
+    return this.nodes.regionsWithCapacity({
+      cpuCores: Number(cpuCores) || 0,
+      memoryMb: Number(memoryMb) || 0,
+      diskMb: Number(diskMb) || 0,
+    });
+  }
 
   // ---- public storefront --------------------------------------------------
 

@@ -134,20 +134,30 @@ export class ServersService {
     );
     const dockerImage = this.resolveDockerImage(template.dockerImages, environment);
 
-    const limits = {
-      cpuCores: subscription.product.cpuCores ?? template.recCpuCores,
-      memoryMb: subscription.product.memoryMb ?? template.recMemoryMb,
-      diskMb: subscription.product.diskMb ?? template.recDiskMb,
-    };
+    // Per-slot products scale resources with the subscription's slot count;
+    // fixed products use their flat resources (falling back to template recs).
+    const prod = subscription.product;
+    const slots = Math.max(1, subscription.slots ?? 1);
+    const limits = prod.perSlot
+      ? {
+          cpuCores: (prod.cpuPerSlot || 0) * slots || template.recCpuCores,
+          memoryMb: (prod.memoryMbPerSlot || 0) * slots || template.recMemoryMb,
+          diskMb: (prod.diskMbPerSlot || 0) * slots || template.recDiskMb,
+        }
+      : {
+          cpuCores: prod.cpuCores ?? template.recCpuCores,
+          memoryMb: prod.memoryMb ?? template.recMemoryMb,
+          diskMb: prod.diskMb ?? template.recDiskMb,
+        };
 
-    // Node placement: explicit or scheduled.
+    // Node placement: explicit, or scheduled within the chosen region.
     let nodeId = dto.nodeId;
     if (!nodeId) {
-      const node = await this.nodes.pickNodeFor(limits);
+      const node = await this.nodes.pickNodeFor(limits, dto.regionId);
       if (!node) {
         // Surface WHY nothing fit (configured capacity vs. the plan's reserved
         // resources — not host telemetry), so it's actionable.
-        const detail = await this.nodes.capacityShortfall(limits);
+        const detail = await this.nodes.capacityShortfall(limits, dto.regionId);
         throw new ConflictException(`No node has capacity for this plan. ${detail}`);
       }
       nodeId = node.id;
@@ -170,7 +180,7 @@ export class ServersService {
         cpuCores: limits.cpuCores,
         memoryMb: limits.memoryMb,
         diskMb: limits.diskMb,
-        slots: subscription.product.slots ?? null,
+        slots: prod.perSlot ? slots : (prod.slots ?? null),
         startupCommand: template.startupCommand,
         dockerImage,
         environment,

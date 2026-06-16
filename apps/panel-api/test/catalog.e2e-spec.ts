@@ -7,6 +7,7 @@ import { MinecraftVersionsService } from '../src/catalog/minecraft-versions.serv
 import { TemplatesService } from '../src/templates/templates.service';
 import { HomepageAlertsService } from '../src/platform/homepage-alerts.service';
 import { BillingService } from '../src/billing/billing.service';
+import { NodesService } from '../src/nodes/nodes.service';
 
 /**
  * E2E for the PUBLIC storefront surface (no auth): published games, a single
@@ -25,7 +26,10 @@ describe('Catalog storefront (e2e)', () => {
         TemplatesService,
         HomepageAlertsService,
       ],
-      overrides: [{ token: BillingService, useValue: {} }],
+      overrides: [
+        { token: BillingService, useValue: {} },
+        { token: NodesService, useValue: { regionsWithCapacity: jest.fn().mockResolvedValue([]) } },
+      ],
     });
   });
 

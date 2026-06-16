@@ -1,6 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingInterval } from '@prisma/client';
-import { IsEnum, IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
 
 /**
  * Customer payload to start a subscription to a product at a chosen price.
@@ -17,6 +25,12 @@ export class CreateSubscriptionDto {
   @ApiProperty({ enum: BillingInterval })
   @IsEnum(BillingInterval)
   interval!: BillingInterval;
+
+  @ApiPropertyOptional({ description: 'Slot quantity for per-slot products.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  slots?: number;
 
   @ApiPropertyOptional({
     description: 'Payment gateway to bill through.',
