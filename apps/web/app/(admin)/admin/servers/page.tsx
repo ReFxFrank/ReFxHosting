@@ -3,13 +3,20 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, Trash2, ExternalLink } from "lucide-react";
+import { HardDrive, Plus, Trash2, ExternalLink, Power, Play, RotateCw, Square, Zap } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ServerStateBadge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -148,6 +155,17 @@ export default function AdminServersPage() {
       toast.error(e instanceof ApiError ? e.message : "Failed to delete server"),
   });
 
+  const powerMutation = useMutation({
+    mutationFn: (v: { id: string; signal: "start" | "stop" | "restart" | "kill" }) =>
+      api.servers.power(v.id, v.signal),
+    onSuccess: (_d, v) => {
+      toast.success(`Power: ${v.signal} sent`);
+      invalidate();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Power action failed"),
+  });
+
   const canSubmit =
     form.name.trim() &&
     form.ownerId &&
@@ -203,6 +221,45 @@ export default function AdminServersPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center justify-end gap-1">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              title="Power"
+                              disabled={s.state === "PENDING_PAYMENT" || s.state === "INSTALLING"}
+                            >
+                              <Power className="size-4" /> Power
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              disabled={s.state === "RUNNING" || s.state === "STARTING"}
+                              onSelect={() => powerMutation.mutate({ id: s.id, signal: "start" })}
+                            >
+                              <Play /> Start
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={s.state !== "RUNNING"}
+                              onSelect={() => powerMutation.mutate({ id: s.id, signal: "restart" })}
+                            >
+                              <RotateCw /> Restart
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={s.state === "OFFLINE" || s.state === "CRASHED"}
+                              onSelect={() => powerMutation.mutate({ id: s.id, signal: "stop" })}
+                            >
+                              <Square /> Stop
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              destructive
+                              onSelect={() => powerMutation.mutate({ id: s.id, signal: "kill" })}
+                            >
+                              <Zap /> Kill
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         <Button asChild variant="ghost" size="sm" title="Open server (support)">
                           <Link href={`/servers/${s.id}`}>
                             <ExternalLink className="size-4" /> Manage
