@@ -34,6 +34,7 @@ import {
   SuspensionJob,
 } from '../queues/queue.constants';
 import { StripeGateway } from './gateways/stripe.gateway';
+import { PayPalGateway } from './gateways/paypal.gateway';
 import { addInterval } from './interval.util';
 import { generateInvoiceNumber } from './invoice-number.util';
 import { calculateTax } from './tax.util';
@@ -63,6 +64,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly stripe: StripeGateway,
+    private readonly paypal: PayPalGateway,
     private readonly settings: SettingsService,
     @InjectQueue(QUEUE.BILLING_RENEWAL) private readonly renewalQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
@@ -542,6 +544,7 @@ export class BillingService {
   async payInvoice(
     userId: string,
     id: string,
+    gateway?: 'stripe' | 'paypal',
   ): Promise<{ paid: boolean; checkoutUrl?: string; reason?: string }> {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, userId },
@@ -554,15 +557,33 @@ export class BillingService {
       throw new BadRequestException(`Invoice is ${invoice.state}, not payable`);
     }
 
+    // Hosted-checkout redirect targets — these are WEB routes (PANEL_URL).
+    const successUrl = `${this.panelUrl}/billing?paid=1`;
+    const cancelUrl = `${this.panelUrl}/billing`;
+
+    // Explicit PayPal request → PayPal approval flow (when configured).
+    if (gateway === 'paypal') {
+      const paypal = await this.settings.paypalConfig();
+      if (!paypal.clientId || !paypal.clientSecret) {
+        throw new BadRequestException('PayPal is not configured');
+      }
+      const session = await this.paypal.createCheckoutSession({
+        invoice,
+        successUrl,
+        cancelUrl,
+      });
+      return { paid: false, checkoutUrl: session.url };
+    }
+
     const method = await this.prisma.paymentMethod.findFirst({
       where: { userId, isDefault: true },
     });
     if (!method) {
-      // No saved method: hand off to a hosted checkout session.
+      // No saved method: hand off to a hosted Stripe checkout session.
       const session = await this.stripe.createCheckoutSession({
         invoice,
-        successUrl: `${this.panelUrl}/billing/invoices/${invoice.id}?paid=1`,
-        cancelUrl: `${this.panelUrl}/billing/invoices/${invoice.id}`,
+        successUrl,
+        cancelUrl,
       });
       return { paid: false, checkoutUrl: session.url };
     }

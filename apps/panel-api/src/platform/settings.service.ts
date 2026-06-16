@@ -9,6 +9,7 @@ const KEY = {
   stripeSecret: 'gateway.stripe.secretKey',
   stripeWebhook: 'gateway.stripe.webhookSecret',
   stripePublishable: 'gateway.stripe.publishableKey',
+  stripeStatementDescriptor: 'gateway.stripe.statementDescriptor',
   paypalClientId: 'gateway.paypal.clientId',
   paypalClientSecret: 'gateway.paypal.clientSecret',
 } as const;
@@ -17,6 +18,8 @@ export interface GatewayConfigInput {
   stripeSecretKey?: string;
   stripeWebhookSecret?: string;
   stripePublishableKey?: string;
+  /** Text shown on the customer's card statement (≤22 chars, branding). */
+  stripeStatementDescriptor?: string;
   paypalClientId?: string;
   paypalClientSecret?: string;
 }
@@ -63,6 +66,7 @@ export class SettingsService {
     secretKey: string;
     webhookSecret: string;
     publishableKey: string;
+    statementDescriptor: string;
   }> {
     const env = this.config.get<AppConfig['stripe']>('stripe')!;
     return {
@@ -70,6 +74,10 @@ export class SettingsService {
       webhookSecret: (await this.get(KEY.stripeWebhook)) || env.webhookSecret || '',
       publishableKey:
         (await this.get(KEY.stripePublishable)) || env.publishableKey || '',
+      statementDescriptor:
+        (await this.get(KEY.stripeStatementDescriptor)) ||
+        process.env.STRIPE_STATEMENT_DESCRIPTOR ||
+        '',
     };
   }
 
@@ -93,6 +101,7 @@ export class SettingsService {
         secretKeyMasked: mask(stripe.secretKey),
         webhookSecretSet: !!stripe.webhookSecret,
         publishableKey: stripe.publishableKey,
+        statementDescriptor: stripe.statementDescriptor,
       },
       paypal: {
         configured: !!paypal.clientId && !!paypal.clientSecret,
@@ -110,6 +119,13 @@ export class SettingsService {
       await this.set(KEY.stripeWebhook, dto.stripeWebhookSecret.trim(), true);
     if (dto.stripePublishableKey !== undefined)
       await this.set(KEY.stripePublishable, dto.stripePublishableKey.trim(), false);
+    if (dto.stripeStatementDescriptor !== undefined)
+      // Stripe caps the descriptor at 22 chars and forbids < > \ ' " *.
+      await this.set(
+        KEY.stripeStatementDescriptor,
+        dto.stripeStatementDescriptor.replace(/[<>\\'"*]/g, '').trim().slice(0, 22),
+        false,
+      );
     if (dto.paypalClientId !== undefined)
       await this.set(KEY.paypalClientId, dto.paypalClientId.trim(), false);
     if (dto.paypalClientSecret !== undefined)

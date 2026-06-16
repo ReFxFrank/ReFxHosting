@@ -66,6 +66,12 @@ export class SetGatewayConfigDto {
   @MaxLength(255)
   stripePublishableKey?: string;
 
+  @ApiPropertyOptional({ description: 'Card-statement descriptor / branding (≤22 chars).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  stripeStatementDescriptor?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

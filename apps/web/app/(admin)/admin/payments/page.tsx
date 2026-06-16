@@ -150,11 +150,13 @@ function GatewayConfigDialog({
   const [stripeSecret, setStripeSecret] = useState("");
   const [stripeWebhook, setStripeWebhook] = useState("");
   const [stripePub, setStripePub] = useState<string | null>(null);
+  const [descriptor, setDescriptor] = useState<string | null>(null);
   const [paypalId, setPaypalId] = useState<string | null>(null);
   const [paypalSecret, setPaypalSecret] = useState("");
 
   // Initialize prefilled fields once config loads.
   const pub = stripePub ?? cfg?.stripe.publishableKey ?? "";
+  const desc = descriptor ?? cfg?.stripe.statementDescriptor ?? "";
   const ppId = paypalId ?? cfg?.paypal.clientId ?? "";
 
   const save = useMutation({
@@ -163,6 +165,7 @@ function GatewayConfigDialog({
       if (stripeSecret) input.stripeSecretKey = stripeSecret;
       if (stripeWebhook) input.stripeWebhookSecret = stripeWebhook;
       input.stripePublishableKey = pub;
+      input.stripeStatementDescriptor = desc;
       input.paypalClientId = ppId;
       if (paypalSecret) input.paypalClientSecret = paypalSecret;
       return api.admin.setGatewayConfig(input);
@@ -227,6 +230,20 @@ function GatewayConfigDialog({
               onChange={(e) => setStripePub(e.target.value)}
               className="font-mono text-xs"
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="sd">Statement descriptor</Label>
+            <Input
+              id="sd"
+              placeholder="REFX.GG"
+              value={desc}
+              maxLength={22}
+              onChange={(e) => setDescriptor(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              What customers see on their bank/card statement (≤22 chars). Also set a
+              default in your Stripe Dashboard → Business settings.
+            </p>
           </div>
 
           <div className="border-t pt-3 text-sm font-medium">

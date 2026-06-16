@@ -33,6 +33,7 @@ export class OrdersService {
       name: string;
       regionId?: string;
       paymentMethodId?: string;
+      gateway?: 'stripe' | 'paypal';
       environment?: Record<string, string>;
     },
   ): Promise<OrderResult> {
@@ -59,7 +60,7 @@ export class OrdersService {
     //    payment still provisions; dunning + suspension are handled by billing.
     let checkoutUrl: string | undefined;
     try {
-      const pay = await this.billing.payInvoice(userId, invoice.id);
+      const pay = await this.billing.payInvoice(userId, invoice.id, dto.gateway);
       checkoutUrl = pay.checkoutUrl;
       // TODO(impl): for paymentMethodId-specific capture, route the charge to the
       // selected method via the gateway instead of the account default.

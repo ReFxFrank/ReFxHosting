@@ -163,6 +163,7 @@ export interface GatewayConfigDetail {
     secretKeyMasked: string;
     webhookSecretSet: boolean;
     publishableKey: string;
+    statementDescriptor: string;
   };
   paypal: { configured: boolean; clientId: string; clientSecretSet: boolean };
 }

@@ -78,6 +78,14 @@ export default function OrderPage() {
   const [template, setTemplate] = useState<GameTemplate | null>(null);
   const [price, setPrice] = useState<Price | null>(null);
   const [serverName, setServerName] = useState("");
+  const [gateway, setGateway] = useState<"stripe" | "paypal">("stripe");
+
+  // Which checkout gateways are enabled (for the payment-method choice).
+  const payCfg = useQuery({
+    queryKey: ["billing", "config"],
+    queryFn: () => api.billing.config(),
+    retry: false,
+  });
 
   const products = useQuery({
     queryKey: ["catalog", "products", "GAME_SERVER"],
@@ -121,6 +129,7 @@ export default function OrderPage() {
         priceId: price!.id,
         templateId: template!.id,
         name: serverName.trim(),
+        gateway,
       }),
     onSuccess: (res) => {
       if (res?.checkoutUrl) {
@@ -208,6 +217,31 @@ export default function OrderPage() {
           price={price}
           serverName={serverName}
         />
+      )}
+
+      {/* Payment method — only when more than one gateway is available. */}
+      {step === 4 && payCfg.data?.paypal.configured && payCfg.data?.stripe.configured && (
+        <Card>
+          <CardContent className="space-y-2 p-4">
+            <Label>Payment method</Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant={gateway === "stripe" ? "default" : "outline"}
+                onClick={() => setGateway("stripe")}
+              >
+                Card (Stripe)
+              </Button>
+              <Button
+                type="button"
+                variant={gateway === "paypal" ? "default" : "outline"}
+                onClick={() => setGateway("paypal")}
+              >
+                PayPal
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Footer nav */}

@@ -209,10 +209,13 @@ function InvoicesTab({
     queryFn: () => api.billing.config(),
     retry: false,
   });
-  const checkoutEnabled = !!(payCfg?.stripe.configured || payCfg?.paypal.configured);
+  const stripeOn = !!payCfg?.stripe.configured;
+  const paypalOn = !!payCfg?.paypal.configured;
+  const checkoutEnabled = stripeOn || paypalOn;
 
   const payMutation = useMutation({
-    mutationFn: (id: string) => api.billing.payInvoice(id),
+    mutationFn: (vars: { id: string; gateway?: "stripe" | "paypal" }) =>
+      api.billing.payInvoice(vars.id, vars.gateway),
     onSuccess: (res) => {
       if (res?.checkoutUrl) {
         // Hand off to the gateway's hosted checkout (Stripe Checkout / PayPal).
@@ -273,22 +276,41 @@ function InvoicesTab({
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
                       {invoice.state === "OPEN" && (
-                        <Button
-                          size="sm"
-                          disabled={!checkoutEnabled}
-                          title={
-                            checkoutEnabled
-                              ? undefined
-                              : "Online payments aren't enabled yet"
-                          }
-                          loading={
-                            payMutation.isPending &&
-                            payMutation.variables === invoice.id
-                          }
-                          onClick={() => payMutation.mutate(invoice.id)}
-                        >
-                          Pay now
-                        </Button>
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={!checkoutEnabled}
+                            title={
+                              checkoutEnabled
+                                ? undefined
+                                : "Online payments aren't enabled yet"
+                            }
+                            loading={
+                              payMutation.isPending &&
+                              payMutation.variables?.id === invoice.id &&
+                              payMutation.variables?.gateway !== "paypal"
+                            }
+                            onClick={() => payMutation.mutate({ id: invoice.id })}
+                          >
+                            {stripeOn ? "Pay by card" : "Pay now"}
+                          </Button>
+                          {paypalOn && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              loading={
+                                payMutation.isPending &&
+                                payMutation.variables?.id === invoice.id &&
+                                payMutation.variables?.gateway === "paypal"
+                              }
+                              onClick={() =>
+                                payMutation.mutate({ id: invoice.id, gateway: "paypal" })
+                              }
+                            >
+                              PayPal
+                            </Button>
+                          )}
+                        </>
                       )}
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -321,8 +343,10 @@ function InvoicesTab({
       <InvoiceDialog
         invoiceId={viewId}
         onClose={() => setViewId(null)}
-        onPay={(id) => payMutation.mutate(id)}
+        onPay={(id, gateway) => payMutation.mutate({ id, gateway })}
         paying={payMutation.isPending}
+        paypalOn={paypalOn}
+        stripeOn={stripeOn}
       />
     </>
   );
@@ -333,11 +357,15 @@ function InvoiceDialog({
   onClose,
   onPay,
   paying,
+  paypalOn,
+  stripeOn,
 }: {
   invoiceId: string | null;
   onClose: () => void;
-  onPay: (id: string) => void;
+  onPay: (id: string, gateway?: "stripe" | "paypal") => void;
   paying: boolean;
+  paypalOn: boolean;
+  stripeOn: boolean;
 }) {
   const { data: invoice, isLoading } = useQuery({
     queryKey: ["billing", "invoice", invoiceId],
@@ -427,9 +455,16 @@ function InvoiceDialog({
             </Button>
           )}
           {invoice?.state === "OPEN" && (
-            <Button loading={paying} onClick={() => onPay(invoice.id)}>
-              Pay {formatMoney(invoice.totalMinor, invoice.currency)}
-            </Button>
+            <>
+              <Button loading={paying} onClick={() => onPay(invoice.id)}>
+                {stripeOn ? "Pay by card" : "Pay"} {formatMoney(invoice.totalMinor, invoice.currency)}
+              </Button>
+              {paypalOn && (
+                <Button variant="outline" loading={paying} onClick={() => onPay(invoice.id, "paypal")}>
+                  PayPal
+                </Button>
+              )}
+            </>
           )}
         </DialogFooter>
       </DialogContent>

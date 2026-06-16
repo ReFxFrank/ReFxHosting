@@ -134,8 +134,12 @@ export class BillingController {
   @Post('invoices/:id/pay')
   @HttpCode(200)
   @Audit({ action: 'billing.invoice.pay', targetType: 'Invoice', targetParam: 'id' })
-  payInvoice(@CurrentUser('id') userId: string, @Param('id') id: string) {
-    return this.billing.payInvoice(userId, id);
+  payInvoice(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+    @Query('gateway') gateway?: 'stripe' | 'paypal',
+  ) {
+    return this.billing.payInvoice(userId, id, gateway);
   }
 
   // ---- Payment methods ---------------------------------------------------

@@ -5,6 +5,7 @@ import { BillingController } from '../src/billing/billing.controller';
 import { BillingService } from '../src/billing/billing.service';
 import { StripeWebhookController } from '../src/billing/webhooks/stripe-webhook.controller';
 import { StripeGateway } from '../src/billing/gateways/stripe.gateway';
+import { PayPalGateway } from '../src/billing/gateways/paypal.gateway';
 import { QUEUE } from '../src/queues/queue.constants';
 import { getQueueToken } from '@nestjs/bullmq';
 import { createQueueMock } from './utils/prisma.mock';
@@ -20,6 +21,7 @@ describe('Billing (e2e)', () => {
       providers: [BillingService],
       overrides: [
         { token: StripeGateway, useValue: stripe },
+        { token: PayPalGateway, useValue: { name: 'paypal', createCheckoutSession: jest.fn() } },
         { token: getQueueToken(QUEUE.BILLING_RENEWAL), useValue: createQueueMock() },
         { token: getQueueToken(QUEUE.SUSPENSION), useValue: createQueueMock() },
       ],

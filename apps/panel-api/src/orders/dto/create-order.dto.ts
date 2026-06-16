@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsIn, IsObject, IsOptional, IsString, IsUUID } from 'class-validator';
 
 /**
  * Checkout payload from the storefront buy flow: subscribe to a product at a
@@ -31,6 +31,11 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   paymentMethodId?: string;
+
+  @ApiPropertyOptional({ description: 'Checkout gateway', enum: ['stripe', 'paypal'] })
+  @IsOptional()
+  @IsIn(['stripe', 'paypal'])
+  gateway?: 'stripe' | 'paypal';
 
   @ApiPropertyOptional({ description: 'Initial env var overrides' })
   @IsOptional()

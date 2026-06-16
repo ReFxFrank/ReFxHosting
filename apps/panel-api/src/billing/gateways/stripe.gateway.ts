@@ -154,6 +154,7 @@ export class StripeGateway implements PaymentGateway {
     // TODO(impl): prefer line-item mode mapping each InvoiceLineItem to a
     // Stripe price/price_data entry; this single line collapses to the total.
     const stripe = await this.client();
+    const { statementDescriptor } = await this.settings.stripeConfig();
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
       customer: customerRef,
@@ -170,6 +171,11 @@ export class StripeGateway implements PaymentGateway {
           },
         },
       ],
+      // Brand the customer's bank/card statement (else it shows the raw Stripe
+      // account descriptor). Configurable on the owner Payments tab.
+      ...(statementDescriptor
+        ? { payment_intent_data: { statement_descriptor: statementDescriptor } }
+        : {}),
       metadata: { invoiceId: invoice.id },
     });
 

@@ -6,6 +6,7 @@ import { AuditService } from '../src/platform/audit.service';
 import { BillingController } from '../src/billing/billing.controller';
 import { BillingService } from '../src/billing/billing.service';
 import { StripeGateway } from '../src/billing/gateways/stripe.gateway';
+import { PayPalGateway } from '../src/billing/gateways/paypal.gateway';
 import { QUEUE } from '../src/queues/queue.constants';
 import { getQueueToken } from '@nestjs/bullmq';
 import { createQueueMock } from './utils/prisma.mock';
@@ -22,6 +23,7 @@ describe('RBAC (e2e)', () => {
       ],
       overrides: [
         { token: StripeGateway, useValue: { name: 'stripe', verifyWebhook: jest.fn() } },
+        { token: PayPalGateway, useValue: { name: 'paypal', createCheckoutSession: jest.fn() } },
         { token: getQueueToken(QUEUE.BILLING_RENEWAL), useValue: createQueueMock() },
         { token: getQueueToken(QUEUE.SUSPENSION), useValue: createQueueMock() },
       ],

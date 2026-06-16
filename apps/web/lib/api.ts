@@ -475,6 +475,7 @@ export const api = {
       templateId: string;
       regionId?: string;
       name: string;
+      gateway?: "stripe" | "paypal";
     }) => http.post<{ checkoutUrl?: string; serverId?: string; invoiceId?: string }>("/orders", input),
   },
 
@@ -483,8 +484,12 @@ export const api = {
     config: () => http.get<GatewayStatus>("/billing/config"),
     invoices: () => getList<Invoice>("/billing/invoices"),
     invoice: (id: string) => http.get<Invoice>(`/billing/invoices/${id}`),
-    payInvoice: (id: string) =>
-      http.post<{ checkoutUrl?: string }>(`/billing/invoices/${id}/pay`),
+    payInvoice: (id: string, gateway?: "stripe" | "paypal") =>
+      http.post<{ paid?: boolean; checkoutUrl?: string }>(
+        `/billing/invoices/${id}/pay`,
+        undefined,
+        { query: gateway ? { gateway } : undefined },
+      ),
     subscriptions: () => getList<Subscription>("/billing/subscriptions"),
     cancelSubscription: (id: string, atPeriodEnd = true) =>
       http.post<Subscription>(`/billing/subscriptions/${id}/cancel`, { atPeriodEnd }),
@@ -617,6 +622,7 @@ export const api = {
       stripeSecretKey?: string;
       stripeWebhookSecret?: string;
       stripePublishableKey?: string;
+      stripeStatementDescriptor?: string;
       paypalClientId?: string;
       paypalClientSecret?: string;
     }) => http.patch<void>("/admin/payments/gateways/config", input),
