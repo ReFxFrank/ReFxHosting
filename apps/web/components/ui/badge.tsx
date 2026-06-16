@@ -43,6 +43,7 @@ const serverStateMap: Record<
   REINSTALLING: { label: "Reinstalling", variant: "warning", pulse: true },
   SWITCHING_GAME: { label: "Switching game", variant: "default", pulse: true },
   TRANSFERRING: { label: "Transferring", variant: "default", pulse: true },
+  PENDING_PAYMENT: { label: "Awaiting payment", variant: "warning" },
 };
 
 export function ServerStateBadge({ state }: { state: ServerState }) {

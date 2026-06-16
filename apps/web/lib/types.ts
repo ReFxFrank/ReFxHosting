@@ -72,7 +72,8 @@ export type ServerState =
   | "SUSPENDED"
   | "REINSTALLING"
   | "SWITCHING_GAME"
-  | "TRANSFERRING";
+  | "TRANSFERRING"
+  | "PENDING_PAYMENT";
 
 export type PowerSignal = "start" | "stop" | "restart" | "kill";
 

@@ -108,7 +108,11 @@ export class ServersService {
 
   // ---- create / provision ------------------------------------------------
 
-  async create(ownerId: string, dto: CreateServerDto): Promise<Server> {
+  async create(
+    ownerId: string,
+    dto: CreateServerDto,
+    opts: { deferProvision?: boolean } = {},
+  ): Promise<Server> {
     const subscription = await this.prisma.subscription.findFirst({
       where: { id: dto.subscriptionId, userId: ownerId },
       include: { product: true },
@@ -159,7 +163,9 @@ export class ServersService {
         nodeId,
         templateId: template.id,
         templateVersion: template.version,
-        state: 'INSTALLING',
+        // Deferred orders are reserved (port + identity) but NOT installed until
+        // the first payment clears (see billing.markInvoicePaid → provision).
+        state: opts.deferProvision ? 'PENDING_PAYMENT' : 'INSTALLING',
         deployMethod: (template.deployMethods[0] as any) ?? 'DOCKER',
         cpuCores: limits.cpuCores,
         memoryMb: limits.memoryMb,
@@ -176,9 +182,13 @@ export class ServersService {
     // Reserve a reachable public port and wire it into the startup env.
     await this.assignPrimaryAllocation(nodeId, server.id);
 
-    await this.provisionQueue.add(JOB.PROVISION, {
-      serverId: server.id,
-    } satisfies ProvisionJob);
+    // Only install now when not deferring for payment. Deferred servers are
+    // provisioned once the invoice is paid (billing.markInvoicePaid).
+    if (!opts.deferProvision) {
+      await this.provisionQueue.add(JOB.PROVISION, {
+        serverId: server.id,
+      } satisfies ProvisionJob);
+    }
 
     return this.prisma.server.findUniqueOrThrow({ where: { id: server.id } });
   }

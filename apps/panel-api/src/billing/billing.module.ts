@@ -23,6 +23,7 @@ import { QUEUE } from '../queues/queue.constants';
     BullModule.registerQueue(
       { name: QUEUE.BILLING_RENEWAL },
       { name: QUEUE.SUSPENSION },
+      { name: QUEUE.PROVISIONING },
     ),
   ],
   controllers: [BillingController, StripeWebhookController],

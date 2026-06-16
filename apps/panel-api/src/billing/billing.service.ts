@@ -70,6 +70,7 @@ export class BillingService {
     private readonly email: EmailService,
     @InjectQueue(QUEUE.BILLING_RENEWAL) private readonly renewalQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
+    @InjectQueue(QUEUE.PROVISIONING) private readonly provisionQueue: Queue,
   ) {
     this.billingCfg = this.config.get<AppConfig['billing']>('billing')!;
     this.panelUrl = this.config.get<AppConfig['panelUrl']>('panelUrl')!;
@@ -771,10 +772,12 @@ export class BillingService {
       }),
     ]);
 
-    // If the invoice belongs to a past-due subscription that has now been paid,
-    // reactivate it and lift suspensions on its servers.
+    // If the invoice belongs to a subscription, (a) reactivate a past-due sub and
+    // lift suspensions, and (b) provision any servers that were reserved pending
+    // this first payment — so installation only begins once money has cleared.
     if (invoice.subscriptionId) {
       await this.reactivateOnPayment(invoice.subscriptionId);
+      await this.provisionPaidServers(invoice.subscriptionId);
     }
 
     // Email a receipt (best-effort; never blocks settlement).
@@ -801,6 +804,25 @@ export class BillingService {
       })
       .catch(() => null);
     return user ?? null;
+  }
+
+  /**
+   * Install servers that were created in PENDING_PAYMENT for this subscription:
+   * flip them to INSTALLING and enqueue provisioning. This is the gate that
+   * ensures a customer's server only installs after payment has cleared.
+   */
+  private async provisionPaidServers(subscriptionId: string): Promise<void> {
+    const pending = await this.prisma.server.findMany({
+      where: { subscriptionId, deletedAt: null, state: 'PENDING_PAYMENT' },
+      select: { id: true },
+    });
+    for (const s of pending) {
+      await this.prisma.server.update({
+        where: { id: s.id },
+        data: { state: 'INSTALLING' },
+      });
+      await this.provisionQueue.add(JOB.PROVISION, { serverId: s.id });
+    }
   }
 
   private async reactivateOnPayment(subscriptionId: string): Promise<void> {

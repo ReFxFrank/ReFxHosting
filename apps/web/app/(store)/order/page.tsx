@@ -133,12 +133,15 @@ export default function OrderPage() {
       }),
     onSuccess: (res) => {
       if (res?.checkoutUrl) {
-        // TODO(impl): hand off to Stripe-hosted checkout.
+        // Hand off to the gateway's hosted checkout (Stripe/PayPal). The server
+        // is reserved and only installs once payment clears (webhook).
         window.location.href = res.checkoutUrl;
         return;
       }
-      toast.success("Order placed! Your server is being provisioned.");
-      router.push("/servers");
+      // No hosted checkout returned → the invoice is unpaid; the server is
+      // reserved but won't install until it's paid from Billing.
+      toast.success("Order placed. Complete payment in Billing to start your server.");
+      router.push("/billing");
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to place order"),

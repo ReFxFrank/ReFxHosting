@@ -56,25 +56,32 @@ export class OrdersService {
       subscription.id,
     );
 
-    // 3) Attempt payment so the server starts in a paid state. A failed/absent
-    //    payment still provisions; dunning + suspension are handled by billing.
+    // 3) Attempt payment. A saved-method charge may settle immediately; a hosted
+    //    flow returns a checkout URL to redirect to. A gateway error leaves the
+    //    invoice OPEN for the customer to pay from billing.
     let checkoutUrl: string | undefined;
+    let paidNow = false;
     try {
       const pay = await this.billing.payInvoice(userId, invoice.id, dto.gateway);
       checkoutUrl = pay.checkoutUrl;
-      // TODO(impl): for paymentMethodId-specific capture, route the charge to the
-      // selected method via the gateway instead of the account default.
+      paidNow = !!pay.paid;
     } catch {
-      // Non-fatal: leave the invoice OPEN for the customer to pay.
+      // Non-fatal: leave the invoice OPEN; the server stays reserved (unpaid).
     }
 
-    // 4) Provision the server bound to the subscription (queues the agent install).
-    const server = await this.servers.create(userId, {
-      name: dto.name,
-      subscriptionId: subscription.id,
-      templateId: dto.templateId,
-      environment: dto.environment,
-    });
+    // 4) Create the server, but only INSTALL it now if payment already cleared.
+    //    Otherwise it's reserved in PENDING_PAYMENT and provisioned by
+    //    billing.markInvoicePaid once the hosted payment settles (webhook).
+    const server = await this.servers.create(
+      userId,
+      {
+        name: dto.name,
+        subscriptionId: subscription.id,
+        templateId: dto.templateId,
+        environment: dto.environment,
+      },
+      { deferProvision: !paidNow },
+    );
     void dto.regionId; // TODO(impl): honor region preference in node placement.
 
     return {

@@ -427,6 +427,8 @@ enum ServerState {
   REINSTALLING
   SWITCHING_GAME
   TRANSFERRING
+  // Created and port-reserved, but NOT installed — awaiting first payment.
+  PENDING_PAYMENT
 }
 
 model Server {

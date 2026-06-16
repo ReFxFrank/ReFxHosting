@@ -24,6 +24,7 @@ describe('Billing (e2e)', () => {
         { token: PayPalGateway, useValue: { name: 'paypal', createCheckoutSession: jest.fn() } },
         { token: getQueueToken(QUEUE.BILLING_RENEWAL), useValue: createQueueMock() },
         { token: getQueueToken(QUEUE.SUSPENSION), useValue: createQueueMock() },
+        { token: getQueueToken(QUEUE.PROVISIONING), useValue: createQueueMock() },
       ],
     });
   });
