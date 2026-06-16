@@ -1,13 +1,20 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
+  MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { ScheduleAction } from '@prisma/client';
 
 export class CreateServerDto {
   @ApiProperty()
@@ -119,20 +126,65 @@ export class CreateAllocationDto {
   isPrimary?: boolean;
 }
 
+export class ScheduleTaskDto {
+  @ApiProperty({ enum: ScheduleAction })
+  @IsEnum(ScheduleAction)
+  action!: ScheduleAction;
+
+  @ApiProperty({ description: 'Command text, power signal (start/stop/restart/kill), or backup name' })
+  @IsString()
+  @MaxLength(2000)
+  payload!: string;
+
+  @ApiPropertyOptional({ description: 'Delay after the previous task (ms)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  timeOffsetMs?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  sortOrder?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  continueOnFailure?: boolean;
+}
+
 export class CreateScheduleDto {
   @ApiProperty()
   @IsString()
+  @MaxLength(120)
   name!: string;
 
   @ApiProperty({ description: '5-field cron' })
   @IsString()
+  @MaxLength(120)
   cron!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
   onlyWhenOnline?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @ApiPropertyOptional({ type: [ScheduleTaskDto] })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(25)
+  @ValidateNested({ each: true })
+  @Type(() => ScheduleTaskDto)
+  tasks?: ScheduleTaskDto[];
 }
+
+export class UpdateScheduleDto extends PartialType(CreateScheduleDto) {}
 
 export class SendCommandDto {
   @ApiProperty({ description: 'Console command to run once' })

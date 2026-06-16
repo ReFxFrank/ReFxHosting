@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ServersService } from './servers.service';
 import { ServerResourcesService } from './server-resources.service';
+import { ScheduleRunner } from './schedule.runner';
 import { ModsService } from './mods.service';
 import { ModpackService } from './modpack.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -27,6 +28,7 @@ import {
   SetMinecraftConfigDto,
   CreateAllocationDto,
   CreateScheduleDto,
+  UpdateScheduleDto,
   CreateServerDto,
   PowerActionDto,
   ModInstallDto,
@@ -49,6 +51,7 @@ export class ServersController {
     private readonly resources: ServerResourcesService,
     private readonly mods: ModsService,
     private readonly modpacks: ModpackService,
+    private readonly scheduleRunner: ScheduleRunner,
   ) {}
 
   // ---- collection --------------------------------------------------------
@@ -385,6 +388,17 @@ export class ServersController {
     return this.resources.createSchedule(id, dto);
   }
 
+  @Patch(':serverId/schedules/:scheduleId')
+  @RequirePermissions('schedule.update')
+  @Audit({ action: 'schedule.update', targetType: 'Server', targetParam: 'serverId' })
+  updateSchedule(
+    @Param('serverId') id: string,
+    @Param('scheduleId') scheduleId: string,
+    @Body() dto: UpdateScheduleDto,
+  ) {
+    return this.resources.updateSchedule(id, scheduleId, dto);
+  }
+
   @Delete(':serverId/schedules/:scheduleId')
   @RequirePermissions('schedule.delete')
   deleteSchedule(
@@ -401,6 +415,6 @@ export class ServersController {
     @Param('id') id: string,
     @Param('scheduleId') scheduleId: string,
   ) {
-    return this.servers.runSchedule(id, scheduleId);
+    return this.scheduleRunner.runNow(id, scheduleId);
   }
 }

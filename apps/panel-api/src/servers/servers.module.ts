@@ -6,6 +6,7 @@ import { MinecraftResolverService } from './minecraft-resolver.service';
 import { ModrinthService } from './modrinth.service';
 import { ModsService } from './mods.service';
 import { ModpackService } from './modpack.service';
+import { ScheduleRunner } from './schedule.runner';
 import { ServersController } from './servers.controller';
 import { ServersResolver } from './servers.resolver';
 import { ModpackProcessor } from '../queues/processors/modpack.processor';
@@ -20,6 +21,7 @@ import { QUEUE } from '../queues/queue.constants';
       { name: QUEUE.REINSTALL },
       { name: QUEUE.SUSPENSION },
       { name: QUEUE.MODPACK },
+      { name: QUEUE.BACKUPS },
     ),
   ],
   controllers: [ServersController],
@@ -31,6 +33,7 @@ import { QUEUE } from '../queues/queue.constants';
     ModsService,
     ModpackService,
     ModpackProcessor,
+    ScheduleRunner,
     ServersResolver,
   ],
   exports: [ServersService],

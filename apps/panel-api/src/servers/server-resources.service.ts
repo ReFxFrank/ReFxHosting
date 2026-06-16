@@ -1,15 +1,19 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { uuidv7 } from '../common/util/uuid';
+import { isValidCron, nextCronRun } from './cron.util';
 import {
   AddSubUserDto,
   CreateAllocationDto,
   CreateScheduleDto,
   SetVariableDto,
+  UpdateScheduleDto,
 } from './dto/server.dto';
 
 /**
@@ -165,6 +169,10 @@ export class ServerResourcesService {
   }
 
   createSchedule(serverId: string, dto: CreateScheduleDto) {
+    if (!isValidCron(dto.cron)) {
+      throw new BadRequestException('Invalid cron expression');
+    }
+    const isActive = dto.isActive ?? true;
     return this.prisma.schedule.create({
       data: {
         id: uuidv7(),
@@ -172,9 +180,63 @@ export class ServerResourcesService {
         name: dto.name,
         cron: dto.cron,
         onlyWhenOnline: dto.onlyWhenOnline ?? false,
-        // TODO(impl): compute nextRunAt from cron (e.g. cron-parser) and have a
-        // worker poll due schedules.
+        isActive,
+        // Only schedule a next run when active; computed from the cron (UTC).
+        nextRunAt: isActive ? nextCronRun(dto.cron) : null,
+        tasks: {
+          create: (dto.tasks ?? []).map((t, i) => ({
+            id: uuidv7(),
+            action: t.action,
+            payload: t.payload,
+            timeOffsetMs: t.timeOffsetMs ?? 0,
+            sortOrder: t.sortOrder ?? i,
+            continueOnFailure: t.continueOnFailure ?? false,
+          })),
+        },
       },
+      include: { tasks: { orderBy: { sortOrder: 'asc' } } },
+    });
+  }
+
+  async updateSchedule(
+    serverId: string,
+    scheduleId: string,
+    dto: UpdateScheduleDto,
+  ) {
+    const existing = await this.prisma.schedule.findFirst({
+      where: { id: scheduleId, serverId },
+    });
+    if (!existing) throw new NotFoundException('Schedule not found');
+    if (dto.cron !== undefined && !isValidCron(dto.cron)) {
+      throw new BadRequestException('Invalid cron expression');
+    }
+    const cron = dto.cron ?? existing.cron;
+    const isActive = dto.isActive ?? existing.isActive;
+    const data: Prisma.ScheduleUpdateInput = {
+      // Recompute the next run whenever cron / active state could have changed.
+      nextRunAt: isActive ? nextCronRun(cron) : null,
+    };
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.cron !== undefined) data.cron = dto.cron;
+    if (dto.onlyWhenOnline !== undefined) data.onlyWhenOnline = dto.onlyWhenOnline;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.tasks !== undefined) {
+      data.tasks = {
+        deleteMany: {},
+        create: dto.tasks.map((t, i) => ({
+          id: uuidv7(),
+          action: t.action,
+          payload: t.payload,
+          timeOffsetMs: t.timeOffsetMs ?? 0,
+          sortOrder: t.sortOrder ?? i,
+          continueOnFailure: t.continueOnFailure ?? false,
+        })),
+      };
+    }
+    return this.prisma.schedule.update({
+      where: { id: scheduleId },
+      data,
+      include: { tasks: { orderBy: { sortOrder: 'asc' } } },
     });
   }
 

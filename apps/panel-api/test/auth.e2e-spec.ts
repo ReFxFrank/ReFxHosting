@@ -8,6 +8,7 @@ import { WebAuthnService } from '../src/auth/webauthn.service';
 import { ServersController } from '../src/servers/servers.controller';
 import { ServersService } from '../src/servers/servers.service';
 import { ServerResourcesService } from '../src/servers/server-resources.service';
+import { ScheduleRunner } from '../src/servers/schedule.runner';
 import { ModsService } from '../src/servers/mods.service';
 import { ModpackService } from '../src/servers/modpack.service';
 import { MinecraftResolverService } from '../src/servers/minecraft-resolver.service';
@@ -39,6 +40,7 @@ describe('Auth (e2e)', () => {
         { provide: WebAuthnService, useValue: {} },
         ServersService,
         { provide: ServerResourcesService, useValue: {} },
+        { provide: ScheduleRunner, useValue: { runNow: jest.fn() } },
         { provide: ModsService, useValue: {} },
         { provide: ModpackService, useValue: {} },
         {
