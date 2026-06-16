@@ -976,6 +976,14 @@ export class BillingService {
         if (!session.url) {
           throw new Error('PayPal did not return an approval URL');
         }
+        // Record the PayPal order id so capture can resolve the invoice by it
+        // even if the capture response omits custom_id.
+        if (session.sessionId) {
+          await this.prisma.invoice.update({
+            where: { id: invoice.id },
+            data: { gateway: 'paypal', gatewayInvoiceId: session.sessionId },
+          });
+        }
         return { paid: false, checkoutUrl: session.url };
       } catch (e) {
         const detail = (e as Error).message ?? 'unknown error';
@@ -1041,13 +1049,21 @@ export class BillingService {
         `PayPal payment not completed (status: ${result.status})`,
       );
     }
-    if (!result.invoiceId) {
-      throw new BadRequestException('Could not resolve the invoice for this payment');
+    // Resolve the invoice from the capture's custom_id; fall back to the PayPal
+    // order id we stored on the invoice at checkout (so a missing custom_id never
+    // strands a paid order).
+    let invoice = result.invoiceId
+      ? await this.prisma.invoice.findFirst({
+          where: { id: result.invoiceId, userId },
+          select: { id: true },
+        })
+      : null;
+    if (!invoice) {
+      invoice = await this.prisma.invoice.findFirst({
+        where: { gatewayInvoiceId: orderId, userId },
+        select: { id: true },
+      });
     }
-    const invoice = await this.prisma.invoice.findFirst({
-      where: { id: result.invoiceId, userId },
-      select: { id: true },
-    });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
     await this.markInvoicePaid(invoice.id, {

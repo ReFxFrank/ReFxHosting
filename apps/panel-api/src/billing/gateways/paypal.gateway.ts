@@ -230,6 +230,7 @@ export class PayPalGateway implements PaymentGateway {
         payments?: {
           captures?: Array<{
             id: string;
+            custom_id?: string;
             amount?: { value?: string; currency_code?: string };
           }>;
         };
@@ -240,7 +241,10 @@ export class PayPalGateway implements PaymentGateway {
     const capture = unit?.payments?.captures?.[0];
     return {
       status: res.status,
-      invoiceId: unit?.custom_id,
+      // In the CAPTURE response PayPal echoes custom_id on the capture object;
+      // the purchase-unit-level custom_id is often absent here. Read the capture
+      // first, then fall back to the unit.
+      invoiceId: capture?.custom_id ?? unit?.custom_id,
       captureId: capture?.id,
       amountMinor: capture?.amount?.value
         ? Math.round(parseFloat(capture.amount.value) * 100)
