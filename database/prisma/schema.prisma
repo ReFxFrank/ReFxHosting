@@ -952,6 +952,7 @@ enum TicketState {
   PENDING_AGENT
   RESOLVED
   CLOSED
+  ARCHIVED
 }
 
 enum TicketPriority {

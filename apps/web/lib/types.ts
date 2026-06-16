@@ -671,7 +671,7 @@ export interface PaymentMethod {
 }
 
 // Support
-export type TicketState = "OPEN" | "PENDING_CUSTOMER" | "PENDING_AGENT" | "RESOLVED" | "CLOSED";
+export type TicketState = "OPEN" | "PENDING_CUSTOMER" | "PENDING_AGENT" | "RESOLVED" | "CLOSED" | "ARCHIVED";
 export type TicketPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 
 export interface Ticket {

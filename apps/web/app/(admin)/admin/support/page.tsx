@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LifeBuoy, Search, Send, MessageSquareReply, Lock, Settings2 } from "lucide-react";
+import { LifeBuoy, Search, Send, MessageSquareReply, Lock, Settings2, Archive, Trash2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,6 +21,8 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -49,6 +51,7 @@ const STATES: { value: TicketState; label: string }[] = [
   { value: "PENDING_CUSTOMER", label: "Awaiting customer" },
   { value: "RESOLVED", label: "Resolved" },
   { value: "CLOSED", label: "Closed" },
+  { value: "ARCHIVED", label: "Archived" },
 ];
 
 const PRIORITIES: { value: TicketPriority; label: string }[] = [
@@ -64,6 +67,7 @@ const STATE_VARIANT: Record<TicketState, BadgeProps["variant"]> = {
   PENDING_CUSTOMER: "secondary",
   RESOLVED: "success",
   CLOSED: "muted",
+  ARCHIVED: "muted",
 };
 
 const PRIORITY_VARIANT: Record<TicketPriority, BadgeProps["variant"]> = {
@@ -250,6 +254,7 @@ function TicketDrawer({
 
   const [reply, setReply] = useState("");
   const [internal, setInternal] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const send = useMutation({
     mutationFn: () => api.support.reply(ticketId as string, reply, internal),
@@ -262,6 +267,31 @@ function TicketDrawer({
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to send"),
   });
 
+  const archive = useMutation({
+    mutationFn: () => api.support.archiveTicket(ticketId as string),
+    onSuccess: () => {
+      toast.success("Ticket archived");
+      invalidate();
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to archive"),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => api.support.deleteTicket(ticketId as string),
+    onSuccess: () => {
+      toast.success("Ticket deleted");
+      setConfirmDelete(false);
+      invalidate();
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to delete"),
+  });
+
+  const canArchive = ticket?.state === "RESOLVED" || ticket?.state === "CLOSED";
+  const canDelete =
+    ticket?.state === "RESOLVED" || ticket?.state === "CLOSED" || ticket?.state === "ARCHIVED";
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="flex max-h-[90vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
@@ -272,15 +302,42 @@ function TicketDrawer({
         ) : (
           <>
             <DialogHeader className="border-b p-4">
-              <DialogTitle className="flex items-center gap-2">
-                <span className="font-mono text-sm text-muted-foreground">#{ticket.number}</span>
-                <span className="truncate">{ticket.subject}</span>
-              </DialogTitle>
-              <p className="text-xs text-muted-foreground">
-                {ticket.requester
-                  ? `${staffName(ticket.requester)} · ${ticket.requester.email}`
-                  : ""}
-              </p>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <DialogTitle className="flex items-center gap-2">
+                    <span className="font-mono text-sm text-muted-foreground">#{ticket.number}</span>
+                    <span className="truncate">{ticket.subject}</span>
+                  </DialogTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {ticket.requester
+                      ? `${staffName(ticket.requester)} · ${ticket.requester.email}`
+                      : ""}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {canArchive && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      loading={archive.isPending}
+                      onClick={() => archive.mutate()}
+                      title="Store this ticket out of the active queue"
+                    >
+                      <Archive className="size-4" /> Archive
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-destructive hover:text-destructive"
+                    disabled={!canDelete}
+                    title={canDelete ? "Delete ticket" : "Resolve or close the ticket before deleting"}
+                    onClick={() => setConfirmDelete(true)}
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </div>
+              </div>
             </DialogHeader>
 
             {/* Workflow controls */}
@@ -387,6 +444,27 @@ function TicketDrawer({
           </>
         )}
       </DialogContent>
+
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete ticket #{ticket?.number}?</DialogTitle>
+            <DialogDescription>
+              This permanently removes the ticket and its entire conversation. This
+              can’t be undone — archive it instead if you just want it out of the
+              queue.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" loading={remove.isPending} onClick={() => remove.mutate()}>
+              Delete ticket
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

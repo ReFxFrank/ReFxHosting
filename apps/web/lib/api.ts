@@ -571,6 +571,10 @@ export const api = {
       http.patch<Ticket>(`/support/tickets/${id}`, { state }),
     assign: (id: string, assigneeId: string) =>
       http.post<Ticket>(`/support/tickets/${id}/assign`, { assigneeId }),
+    // Storage / cleanup of past tickets (staff).
+    archiveTicket: (id: string) =>
+      http.post<Ticket>(`/support/tickets/${id}/archive`),
+    deleteTicket: (id: string) => http.delete<void>(`/support/tickets/${id}`),
     staff: () => getList<StaffMember>("/support/staff"),
     categories: () => getList<TicketCategory>("/support/categories"),
     createCategory: (input: { name: string; slug: string; slaFirstResponseMin?: number; slaResolutionMin?: number }) =>

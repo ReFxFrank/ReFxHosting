@@ -125,6 +125,34 @@ export class SupportController {
     return this.support.assignTicket(user, id, body.assigneeId);
   }
 
+  /** Archive (store away) a resolved/closed ticket. */
+  @Post('tickets/:id/archive')
+  @HttpCode(200)
+  @UseGuards(RolesGuard)
+  @Roles(GlobalRole.SUPPORT)
+  @Audit({
+    action: 'support.ticket.archive',
+    targetType: 'Ticket',
+    targetParam: 'id',
+  })
+  archiveTicket(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.support.archiveTicket(user, id);
+  }
+
+  /** Permanently delete a resolved/closed/archived ticket (messages cascade). */
+  @Delete('tickets/:id')
+  @HttpCode(204)
+  @UseGuards(RolesGuard)
+  @Roles(GlobalRole.SUPPORT)
+  @Audit({
+    action: 'support.ticket.delete',
+    targetType: 'Ticket',
+    targetParam: 'id',
+  })
+  async deleteTicket(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    await this.support.deleteTicket(user, id);
+  }
+
   // ---- Canned responses (staff) -----------------------------------------
 
   @Get('canned-responses')

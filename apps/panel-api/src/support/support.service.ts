@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -97,7 +98,10 @@ export class SupportService {
     if (!this.isStaff(user)) {
       where.requesterId = user.id;
     }
+    // ARCHIVED tickets are "stored away" — excluded from the default queue, only
+    // shown when explicitly filtered to ARCHIVED.
     if (filter?.state) where.state = filter.state;
+    else where.state = { not: TicketState.ARCHIVED };
     if (filter?.priority) where.priority = filter.priority;
     if (pagination.q) {
       where.subject = { contains: pagination.q, mode: 'insensitive' };
@@ -322,6 +326,55 @@ export class SupportService {
     assigneeId: string,
   ): Promise<Ticket> {
     return this.updateTicket(user, id, { assigneeId });
+  }
+
+  /**
+   * Staff: archive a resolved/closed ticket — "store" it out of the active queue
+   * while keeping the full record (and its messages). Only RESOLVED/CLOSED
+   * tickets can be archived; reopen one first if it's still active.
+   */
+  async archiveTicket(user: AuthUser, id: string): Promise<Ticket> {
+    if (!this.isStaff(user)) throw new ForbiddenException('Staff only');
+    const ticket = await this.prisma.ticket.findUnique({ where: { id } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (
+      ticket.state !== TicketState.RESOLVED &&
+      ticket.state !== TicketState.CLOSED
+    ) {
+      throw new BadRequestException(
+        'Only resolved or closed tickets can be archived.',
+      );
+    }
+    return this.prisma.ticket.update({
+      where: { id },
+      data: { state: TicketState.ARCHIVED },
+    });
+  }
+
+  /**
+   * Staff: permanently delete a ticket and its messages (cascade). Guarded to
+   * resolved/closed/archived tickets so an active conversation can't be deleted
+   * out from under a customer.
+   */
+  async deleteTicket(user: AuthUser, id: string): Promise<{ id: string }> {
+    if (!this.isStaff(user)) throw new ForbiddenException('Staff only');
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id },
+      select: { id: true, state: true },
+    });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    const deletable: TicketState[] = [
+      TicketState.RESOLVED,
+      TicketState.CLOSED,
+      TicketState.ARCHIVED,
+    ];
+    if (!deletable.includes(ticket.state)) {
+      throw new BadRequestException(
+        'Only resolved, closed or archived tickets can be deleted.',
+      );
+    }
+    await this.prisma.ticket.delete({ where: { id } });
+    return { id };
   }
 
   // ---- Canned responses (staff) -----------------------------------------

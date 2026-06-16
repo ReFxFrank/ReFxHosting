@@ -127,6 +127,7 @@ export const TicketState = {
   PENDING_AGENT: 'PENDING_AGENT',
   RESOLVED: 'RESOLVED',
   CLOSED: 'CLOSED',
+  ARCHIVED: 'ARCHIVED',
 } as const;
 export type TicketState = (typeof TicketState)[keyof typeof TicketState];
 

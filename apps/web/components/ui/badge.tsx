@@ -80,6 +80,7 @@ const ticketStateMap: Record<TicketState, { label: string; variant: BadgeProps["
   PENDING_AGENT: { label: "Pending agent", variant: "secondary" },
   RESOLVED: { label: "Resolved", variant: "muted" },
   CLOSED: { label: "Closed", variant: "muted" },
+  ARCHIVED: { label: "Archived", variant: "muted" },
 };
 
 export function TicketStateBadge({ state }: { state: TicketState }) {
