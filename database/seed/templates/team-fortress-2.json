@@ -1,0 +1,76 @@
+{
+  "name": "Team Fortress 2",
+  "slug": "team-fortress-2",
+  "author": "ops@refx.example",
+  "description": "Valve's class-based shooter. SteamCMD-installed srcds dedicated server with map and player configuration.",
+  "category": "shooter",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 232250,
+  "startupCommand": "./srcds_run -game tf -console -port {{SERVER_PORT}} +maxplayers {{MAX_PLAYERS}} +map {{MAP}} +sv_setsteamaccount {{GSLT}} +tv_port {{STV_PORT}}",
+  "startupDetect": "Connection to Steam servers successful",
+  "stopCommand": "quit",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 232250 validate +quit\necho 'Team Fortress 2 install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "tf/cfg/server.cfg", "parser": "file", "find": {} }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 2048,
+  "recDiskMb": 25600,
+  "variables": [
+    {
+      "envName": "MAP",
+      "displayName": "Starting Map",
+      "description": "Map the server loads on start.",
+      "type": "STRING",
+      "defaultValue": "ctf_2fort",
+      "rules": { "required": true, "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "24",
+      "rules": { "required": true, "min": 2, "max": 100 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "STV_PORT",
+      "displayName": "SourceTV Port",
+      "description": "UDP port for SourceTV spectating.",
+      "type": "NUMBER",
+      "defaultValue": "27020",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "GSLT",
+      "displayName": "Game Server Login Token",
+      "description": "Steam GSLT for app 232250 (required for public listing).",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 3
+    }
+  ],
+  "tags": ["fps", "class-based", "multiplayer"],
+  "longDescription": "Host classic TF2 modes — CTF, Payload, KOTH and more — with SourceTV and full server.cfg control."
+}

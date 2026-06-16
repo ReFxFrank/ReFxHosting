@@ -1,0 +1,76 @@
+{
+  "name": "Conan Exiles",
+  "slug": "conan-exiles",
+  "author": "ops@refx.example",
+  "description": "Open-world survival in the lands of Conan. SteamCMD-installed dedicated server (Windows build via Proton) with PvP/PvE and mod support.",
+  "category": "survival",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:proton"
+  },
+  "steamAppId": 443030,
+  "startupCommand": "wine ConanSandboxServer.exe -log -MaxPlayers={{MAX_PLAYERS}} -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}}",
+  "startupDetect": "Server started",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:proton",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 443030 validate +quit\necho 'Conan Exiles install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "ConanSandbox/Saved/Config/WindowsServer/ServerSettings.ini", "parser": "ini", "find": {} }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 8192,
+  "recDiskMb": 81920,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting Conan Exiles Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "40",
+      "rules": { "required": true, "min": 1, "max": 70 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query Port",
+      "description": "Steam query/browser port.",
+      "type": "NUMBER",
+      "defaultValue": "27015",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "ADMIN_PASSWORD",
+      "displayName": "Admin Password",
+      "description": "In-game admin password.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 3
+    }
+  ],
+  "tags": ["survival", "open-world", "pvp", "multiplayer"],
+  "longDescription": "Build, conquer and dominate the Exiled Lands with your clan on a dedicated Conan Exiles server."
+}

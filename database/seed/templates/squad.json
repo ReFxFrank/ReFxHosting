@@ -1,0 +1,76 @@
+{
+  "name": "Squad",
+  "slug": "squad",
+  "author": "ops@refx.example",
+  "description": "Large-scale tactical military FPS. SteamCMD-installed dedicated server with combined-arms 100-player battles.",
+  "category": "shooter",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 403240,
+  "startupCommand": "./SquadServer.sh Port={{SERVER_PORT}} QueryPort={{QUERY_PORT}} FIXEDMAXPLAYERS={{MAX_PLAYERS}} RANDOM=NONE",
+  "startupDetect": "USelectedWorldSettings",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 403240 validate +quit\necho 'Squad install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "SquadGame/ServerConfig/Server.cfg", "parser": "file", "find": {} }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 8192,
+  "recDiskMb": 92160,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting Squad Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "80",
+      "rules": { "required": true, "min": 2, "max": 100 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query Port",
+      "description": "Steam query/browser port.",
+      "type": "NUMBER",
+      "defaultValue": "27165",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "RCON_PASS",
+      "displayName": "RCON Password",
+      "description": "Password protecting the RCON interface.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 3
+    }
+  ],
+  "tags": ["fps", "tactical", "milsim", "multiplayer"],
+  "longDescription": "Command up to 100 players in combined-arms warfare on a dedicated Squad server with RCON administration."
+}

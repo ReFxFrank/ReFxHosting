@@ -1,0 +1,76 @@
+{
+  "name": "V Rising",
+  "slug": "v-rising",
+  "author": "ops@refx.example",
+  "description": "Vampire survival sandbox. SteamCMD-installed dedicated server (Windows build via Proton) with full clan PvP/PvE config.",
+  "category": "survival",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:proton"
+  },
+  "steamAppId": 1604030,
+  "startupCommand": "wine VRisingServer.exe -persistentDataPath ./save-data -serverName \"{{SERVER_NAME}}\" -saveName \"{{SAVE_NAME}}\" -gamePort {{SERVER_PORT}} -queryPort {{QUERY_PORT}} -maxConnectedUsers {{MAX_PLAYERS}}",
+  "startupDetect": "Setting breakpad minidump AppID",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:proton",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 1604030 validate +quit\necho 'V Rising install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "save-data/Settings/ServerHostSettings.json", "parser": "json", "find": {} }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 6144,
+  "recDiskMb": 10240,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting V Rising Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "SAVE_NAME",
+      "displayName": "Save Name",
+      "description": "World save folder name.",
+      "type": "STRING",
+      "defaultValue": "world1",
+      "rules": { "required": true, "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "20",
+      "rules": { "required": true, "min": 1, "max": 100 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query Port",
+      "description": "Steam query/browser port.",
+      "type": "NUMBER",
+      "defaultValue": "9877",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 3
+    }
+  ],
+  "tags": ["survival", "pvp", "vampire", "multiplayer"],
+  "longDescription": "Raise your castle and feed on the living with your clan on a dedicated V Rising server."
+}

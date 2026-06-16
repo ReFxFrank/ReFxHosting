@@ -1,0 +1,87 @@
+{
+  "name": "7 Days to Die",
+  "slug": "seven-days-to-die",
+  "author": "ops@refx.example",
+  "description": "Open-world voxel survival horror. SteamCMD-installed dedicated server driven by serverconfig.xml.",
+  "category": "survival",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 294420,
+  "startupCommand": "./7DaysToDieServer.x86_64 -configfile=serverconfig.xml -logfile 7dtd.log -quit -batchmode -nographics -dedicated",
+  "startupDetect": "GameServer.Init done",
+  "stopCommand": "shutdown",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 294420 validate +quit\necho '7 Days to Die install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "serverconfig.xml", "parser": "xml", "find": {} }
+  ],
+  "recCpuCores": 3,
+  "recMemoryMb": 6144,
+  "recDiskMb": 15360,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting 7DTD Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "8",
+      "rules": { "required": true, "min": 1, "max": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SERVER_PASSWORD",
+      "displayName": "Server Password",
+      "description": "Leave blank for a public server.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 2
+    },
+    {
+      "envName": "GAME_DIFFICULTY",
+      "displayName": "Game Difficulty",
+      "description": "0 (easiest) to 5 (insane).",
+      "type": "NUMBER",
+      "defaultValue": "2",
+      "rules": { "required": true, "min": 0, "max": 5 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "WORLD_GEN_SEED",
+      "displayName": "World Seed",
+      "description": "Seed used to generate a RWG world.",
+      "type": "STRING",
+      "defaultValue": "ReFx",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    }
+  ],
+  "tags": ["pve", "horror", "open-world", "multiplayer"],
+  "longDescription": "Scavenge, craft and fortify against the seventh-day horde on your own 7 Days to Die server."
+}

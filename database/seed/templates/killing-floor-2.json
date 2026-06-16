@@ -1,0 +1,65 @@
+{
+  "name": "Killing Floor 2",
+  "slug": "killing-floor-2",
+  "author": "ops@refx.example",
+  "description": "Co-op wave-based zombie shooter. SteamCMD-installed dedicated server with difficulty, length and web-admin.",
+  "category": "shooter",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 232130,
+  "startupCommand": "./Binaries/Win64/KFGameSteamServer.bin.x86_64 {{START_MAP}}?Game=KFGameContent.KFGameInfo_Survival?MaxPlayers={{MAX_PLAYERS}}?AdminPassword={{ADMIN_PASS}} -port={{SERVER_PORT}}",
+  "startupDetect": "Initializing Game Engine Completed",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 232130 validate +quit\necho 'Killing Floor 2 install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "KFGame/Config/LinuxServer-KFGame.ini", "parser": "ini", "find": {} }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 30720,
+  "variables": [
+    {
+      "envName": "START_MAP",
+      "displayName": "Starting Map",
+      "description": "Map the server loads on start.",
+      "type": "STRING",
+      "defaultValue": "KF-BioticsLab",
+      "rules": { "required": true, "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum co-op player slots.",
+      "type": "NUMBER",
+      "defaultValue": "6",
+      "rules": { "required": true, "min": 1, "max": 12 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "ADMIN_PASS",
+      "displayName": "Admin Password",
+      "description": "Password for the web-admin / RCON.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "required": true, "minLength": 8 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 2
+    }
+  ],
+  "tags": ["fps", "co-op", "pve", "multiplayer"],
+  "longDescription": "Hold the line against Zed waves with up to six players on a dedicated Killing Floor 2 server."
+}

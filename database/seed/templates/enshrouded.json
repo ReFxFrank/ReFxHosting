@@ -1,0 +1,76 @@
+{
+  "name": "Enshrouded",
+  "slug": "enshrouded",
+  "author": "ops@refx.example",
+  "description": "Survival action-RPG voxel sandbox. SteamCMD-installed dedicated server (Windows build via Proton) configured through enshrouded_server.json.",
+  "category": "survival",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:proton"
+  },
+  "steamAppId": 2278520,
+  "startupCommand": "wine enshrouded_server.exe",
+  "startupDetect": "Server started",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:proton",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 2278520 validate +quit\necho 'Enshrouded install complete.'\n"
+  },
+  "configFiles": [
+    { "path": "enshrouded_server.json", "parser": "json", "find": {} }
+  ],
+  "recCpuCores": 4,
+  "recMemoryMb": 8192,
+  "recDiskMb": 10240,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the in-game server browser.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting Enshrouded Server",
+      "rules": { "required": true, "maxLength": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots (Enshrouded supports up to 16).",
+      "type": "NUMBER",
+      "defaultValue": "16",
+      "rules": { "required": true, "min": 1, "max": 16 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SERVER_PASSWORD",
+      "displayName": "Server Password",
+      "description": "Password required to join. Leave blank for an open server.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 2
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query Port",
+      "description": "Steam query/browser port.",
+      "type": "NUMBER",
+      "defaultValue": "15637",
+      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "userEditable": false,
+      "userViewable": true,
+      "sortOrder": 3
+    }
+  ],
+  "tags": ["survival", "rpg", "voxel", "co-op", "multiplayer"],
+  "longDescription": "Explore, build and battle through the Shroud with up to 16 players on a dedicated Enshrouded server."
+}

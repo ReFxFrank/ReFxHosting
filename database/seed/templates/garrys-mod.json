@@ -1,0 +1,87 @@
+{
+  "name": "Garry's Mod",
+  "slug": "garrys-mod",
+  "author": "ops@refx.example",
+  "description": "The Source-engine sandbox. SteamCMD-installed srcds server with Workshop collection and gamemode support.",
+  "category": "sandbox",
+  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 4020,
+  "startupCommand": "./srcds_run -game garrysmod -console -port {{SERVER_PORT}} +maxplayers {{MAX_PLAYERS}} +gamemode {{GAMEMODE}} +map {{MAP}} +host_workshop_collection {{WORKSHOP_ID}} +sv_setsteamaccount {{GSLT}}",
+  "startupDetect": "Gamemode started",
+  "stopCommand": "quit",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 4020 validate +quit\necho \"Garry's Mod install complete.\"\n"
+  },
+  "configFiles": [
+    { "path": "garrysmod/cfg/server.cfg", "parser": "file", "find": {} }
+  ],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 30720,
+  "variables": [
+    {
+      "envName": "MAP",
+      "displayName": "Starting Map",
+      "description": "Map the server loads on start.",
+      "type": "STRING",
+      "defaultValue": "gm_construct",
+      "rules": { "required": true, "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "GAMEMODE",
+      "displayName": "Gamemode",
+      "description": "Active gamemode (e.g. sandbox, darkrp, terrortown).",
+      "type": "STRING",
+      "defaultValue": "sandbox",
+      "rules": { "required": true, "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent player slots.",
+      "type": "NUMBER",
+      "defaultValue": "16",
+      "rules": { "required": true, "min": 1, "max": 128 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "WORKSHOP_ID",
+      "displayName": "Workshop Collection ID",
+      "description": "Steam Workshop collection to auto-download (0 disables).",
+      "type": "NUMBER",
+      "defaultValue": "0",
+      "rules": { "min": 0 },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "GSLT",
+      "displayName": "Game Server Login Token",
+      "description": "Steam GSLT for app 4020 (required for public listing).",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": { "maxLength": 64 },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 4
+    }
+  ],
+  "tags": ["sandbox", "moddable", "workshop", "multiplayer"],
+  "longDescription": "Run any gamemode — sandbox, DarkRP, TTT and more — with full Steam Workshop support on your Garry's Mod server."
+}
