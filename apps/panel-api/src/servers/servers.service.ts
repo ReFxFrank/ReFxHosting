@@ -740,14 +740,78 @@ export class ServersService {
 
   /** Reuses the resize logic; `upgrade` is the web-facing name. */
   async upgrade(id: string, dto: UpgradeServerDto): Promise<Server> {
-    // Per-slot products upgrade by SLOT COUNT (resources + price scale together);
-    // a legacy flat product still resizes raw resources.
+    // Tiered game products upgrade by HARDWARE TIER; per-slot products upgrade by
+    // SLOT COUNT (resources + price scale together); a legacy flat product
+    // resizes raw resources.
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
       include: { node: true, subscription: { include: { product: true } } },
     });
     if (!server) throw new NotFoundException('Server not found');
-    const product = server.subscription?.product;
+    const sub = server.subscription;
+    const product = sub?.product;
+
+    // ---- Hardware-tier change (move to a higher/lower tier) ----------------
+    if (dto.hardwareTierId) {
+      if (!sub || !product) {
+        throw new BadRequestException('Server has no subscription to change');
+      }
+      const tier = await this.prisma.hardwareTier.findFirst({
+        where: { id: dto.hardwareTierId, productId: product.id },
+        include: { prices: true },
+      });
+      if (!tier) throw new BadRequestException('Tier does not belong to this product');
+      if (!tier.isActive) throw new BadRequestException('That tier is not available');
+
+      const currentPrice = await this.prisma.price.findUnique({
+        where: { id: sub.priceId },
+        select: { currency: true },
+      });
+      const currency = currentPrice?.currency ?? 'USD';
+      const newPrice = tier.prices.find(
+        (p) => p.interval === sub.interval && p.currency === currency && p.isActive,
+      );
+      if (!newPrice) {
+        throw new BadRequestException(
+          `That tier has no ${sub.interval.toLowerCase()} (${currency}) price`,
+        );
+      }
+
+      const limits = {
+        cpuCores: tier.cpuCores,
+        memoryMb: tier.memoryMb,
+        diskMb: tier.diskMb,
+      };
+      // The node must absorb the delta when growing.
+      const cap = await this.nodes.capacity(server.nodeId);
+      if (
+        limits.memoryMb - server.memoryMb > cap.memory.free ||
+        limits.cpuCores - server.cpuCores > cap.cpu.free ||
+        limits.diskMb - server.diskMb > cap.disk.free
+      ) {
+        throw new ConflictException('Node lacks capacity for this upgrade');
+      }
+
+      await this.prisma.subscription.update({
+        where: { id: sub.id },
+        data: { hardwareTierId: tier.id, priceId: newPrice.id },
+      });
+      const updated = await this.prisma.server.update({
+        where: { id },
+        data: { ...limits, slots: tier.recommendedPlayers ?? server.slots },
+      });
+      await this.agent.reconfigure(server.node, {
+        serverId: id,
+        limits: {
+          cpuCores: updated.cpuCores,
+          memoryMb: updated.memoryMb,
+          swapMb: updated.swapMb,
+          diskMb: updated.diskMb,
+          ioWeight: updated.ioWeight,
+        },
+      });
+      return updated;
+    }
 
     if (product?.perSlot && dto.slots != null) {
       const slots = Math.min(
@@ -792,7 +856,8 @@ export class ServersService {
     return this.resize(id, dto);
   }
 
-  /** Per-slot upgrade context for the storefront upgrade page. */
+  /** Upgrade context for the upgrade page: hardware tiers (tiered products) or
+   *  per-slot scaling (voice/legacy), plus the server's current resources. */
   async upgradeOptions(id: string): Promise<{
     perSlot: boolean;
     currency: string;
@@ -808,22 +873,66 @@ export class ServersService {
     cpuCores: number;
     memoryMb: number;
     diskMb: number;
+    currentTierId: string | null;
+    tiers: Array<{
+      id: string;
+      name: string;
+      description: string | null;
+      cpuCores: number;
+      memoryMb: number;
+      diskMb: number;
+      recommendedPlayers: number | null;
+      isRecommended: boolean;
+      amountMinor: number | null;
+    }>;
   }> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
       include: {
-        subscription: { include: { product: { include: { prices: true } } } },
+        subscription: {
+          include: {
+            product: {
+              include: {
+                prices: true,
+                hardwareTiers: {
+                  where: { isActive: true },
+                  orderBy: { sortOrder: 'asc' },
+                  include: { prices: true },
+                },
+              },
+            },
+          },
+        },
       },
     });
     if (!server) throw new NotFoundException('Server not found');
     const sub = server.subscription;
     const product = sub?.product;
     const price = product?.prices.find((p) => p.id === sub?.priceId);
+    const currency = price?.currency ?? 'USD';
+    const interval = sub?.interval ?? 'MONTHLY';
+
+    // For tiered products, each tier's price for the subscription's interval +
+    // currency (so the page can show the new recurring cost per tier).
+    const tiers = (product?.hardwareTiers ?? []).map((t) => ({
+      id: t.id,
+      name: t.name,
+      description: t.description,
+      cpuCores: t.cpuCores,
+      memoryMb: t.memoryMb,
+      diskMb: t.diskMb,
+      recommendedPlayers: t.recommendedPlayers,
+      isRecommended: t.isRecommended,
+      amountMinor:
+        t.prices.find(
+          (p) => p.interval === interval && p.currency === currency && p.isActive,
+        )?.amountMinor ?? null,
+    }));
 
     return {
       perSlot: !!product?.perSlot,
-      currency: price?.currency ?? 'USD',
-      interval: sub?.interval ?? 'MONTHLY',
+      currency,
+      interval,
       slots: sub?.slots ?? server.slots ?? 1,
       minSlots: product?.minSlots ?? 1,
       maxSlots: product?.maxSlots ?? 64,
@@ -835,6 +944,8 @@ export class ServersService {
       cpuCores: server.cpuCores,
       memoryMb: server.memoryMb,
       diskMb: server.diskMb,
+      currentTierId: sub?.hardwareTierId ?? null,
+      tiers,
     };
   }
 
@@ -845,7 +956,13 @@ export class ServersService {
    */
   async upgradePreview(
     id: string,
-    dto: { slots?: number; cpuCores?: number; memoryMb?: number; diskMb?: number },
+    dto: {
+      hardwareTierId?: string;
+      slots?: number;
+      cpuCores?: number;
+      memoryMb?: number;
+      diskMb?: number;
+    },
   ): Promise<{
     amountMinor: number;
     currency: string;
@@ -864,6 +981,27 @@ export class ServersService {
     const currentPrice = sub?.product.prices.find((p) => p.id === sub.priceId);
     const currency = currentPrice?.currency ?? 'USD';
     const interval = sub?.interval ?? 'MONTHLY';
+    const currentAmountMinor = currentPrice?.amountMinor ?? 0;
+
+    // Tier change: recurring = the target tier's price for this interval/currency.
+    if (dto.hardwareTierId && sub) {
+      const tierPrice = await this.prisma.price.findFirst({
+        where: {
+          hardwareTierId: dto.hardwareTierId,
+          interval: sub.interval,
+          currency,
+          isActive: true,
+        },
+        select: { amountMinor: true },
+      });
+      const newAmount = tierPrice?.amountMinor ?? currentAmountMinor;
+      return {
+        amountMinor: newAmount,
+        currency,
+        interval,
+        deltaMinor: newAmount - currentAmountMinor,
+      };
+    }
 
     // Per-slot: recurring = per-slot rate × slots.
     if (sub?.product.perSlot && dto.slots != null) {

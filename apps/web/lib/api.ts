@@ -428,10 +428,22 @@ export const api = {
         cpuCores: number;
         memoryMb: number;
         diskMb: number;
+        currentTierId: string | null;
+        tiers: Array<{
+          id: string;
+          name: string;
+          description: string | null;
+          cpuCores: number;
+          memoryMb: number;
+          diskMb: number;
+          recommendedPlayers: number | null;
+          isRecommended: boolean;
+          amountMinor: number | null;
+        }>;
       }>(`/servers/${id}/upgrade/options`),
     upgradePreview: (
       id: string,
-      input: Partial<{ slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
+      input: Partial<{ hardwareTierId: string; slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
     ) =>
       http.post<{ amountMinor: number; currency: string; interval: string; deltaMinor: number }>(
         `/servers/${id}/upgrade/preview`,
@@ -439,7 +451,7 @@ export const api = {
       ),
     upgrade: (
       id: string,
-      input: Partial<{ slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
+      input: Partial<{ hardwareTierId: string; slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
     ) => http.post<void>(`/servers/${id}/upgrade`, input),
 
     // Sub-users

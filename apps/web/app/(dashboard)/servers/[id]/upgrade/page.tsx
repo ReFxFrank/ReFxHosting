@@ -4,7 +4,7 @@ import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cpu, MemoryStick, HardDrive, ArrowRight, TrendingUp, TrendingDown } from "lucide-react";
+import { Cpu, MemoryStick, HardDrive, ArrowRight, TrendingUp, TrendingDown, Users, Check } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
 import {
@@ -15,6 +15,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -39,6 +40,9 @@ function intervalLabel(interval: string) {
   };
   return map[interval] ?? `/${interval.toLowerCase()}`;
 }
+
+type UpgradeOptions = Awaited<ReturnType<typeof api.servers.upgradeOptions>>;
+type UpgradeTier = UpgradeOptions["tiers"][number];
 
 export default function UpgradePage() {
   const { id } = useParams<{ id: string }>();
@@ -94,6 +98,11 @@ export default function UpgradePage() {
         </div>
       </div>
     );
+  }
+
+  // Tiered game products upgrade by hardware tier (Low/Mid/High), not slots.
+  if (opts.tiers && opts.tiers.length > 0) {
+    return <TierUpgrade id={id} opts={opts} />;
   }
 
   if (!opts.perSlot) {
@@ -244,6 +253,199 @@ export default function UpgradePage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** Hardware-tier upgrade: pick a higher (or lower) tier card. */
+function TierUpgrade({ id, opts }: { id: string; opts: UpgradeOptions }) {
+  const queryClient = useQueryClient();
+  const tiers = opts.tiers;
+  const current = tiers.find((t) => t.id === opts.currentTierId) ?? null;
+  const [tierId, setTierId] = useState<string | null>(
+    opts.currentTierId ?? current?.id ?? tiers[0]?.id ?? null,
+  );
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const selected = tiers.find((t) => t.id === tierId) ?? null;
+
+  const upgradeMutation = useMutation({
+    mutationFn: () => api.servers.upgrade(id, { hardwareTierId: tierId! }),
+    onSuccess: () => {
+      toast.success("Plan updated — new tier applies now; billing adjusts next cycle.");
+      queryClient.invalidateQueries({ queryKey: ["server", id] });
+      queryClient.invalidateQueries({ queryKey: ["upgrade-options", id] });
+      setConfirmOpen(false);
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to apply changes"),
+  });
+
+  const currentAmount = current?.amountMinor ?? 0;
+  const newAmount = selected?.amountMinor ?? 0;
+  const delta = newAmount - currentAmount;
+  const isDowngrade = delta < 0;
+  const unchanged = !selected || selected.id === opts.currentTierId;
+  const deltaDisplay = `${delta > 0 ? "+" : delta < 0 ? "-" : ""}${formatMoney(Math.abs(delta), opts.currency)}`;
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Upgrade resources"
+        description="Move to a higher tier for more power, or a lower one to save. The new tier applies now; billing adjusts on your next cycle."
+      />
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {tiers.map((t) => (
+            <TierUpgradeCard
+              key={t.id}
+              tier={t}
+              active={t.id === tierId}
+              isCurrent={t.id === opts.currentTierId}
+              currency={opts.currency}
+              interval={opts.interval}
+              onSelect={() => setTierId(t.id)}
+            />
+          ))}
+        </div>
+
+        <Card className="lg:sticky lg:top-6">
+          <CardHeader>
+            <CardTitle>Price preview</CardTitle>
+            <CardDescription>Recurring cost for the selected tier.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="rounded-lg border bg-muted/30 p-4">
+              <p className="text-xs text-muted-foreground">New recurring price</p>
+              <p className="text-2xl font-semibold tracking-tight">
+                {selected?.amountMinor != null ? formatMoney(selected.amountMinor, opts.currency) : "—"}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  {intervalLabel(opts.interval)}
+                </span>
+              </p>
+              {delta !== 0 && selected?.amountMinor != null && (
+                <p
+                  className={cn(
+                    "inline-flex items-center gap-1 text-sm font-medium",
+                    isDowngrade ? "text-success" : "text-primary",
+                  )}
+                >
+                  {isDowngrade ? <TrendingDown className="size-4" /> : <TrendingUp className="size-4" />}
+                  {deltaDisplay} {isDowngrade ? "saved" : "more"}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <ComparisonRow label="Tier" from={current?.name ?? "—"} to={selected?.name ?? "—"} changed={!unchanged} />
+              <ComparisonRow label="CPU" from={`${opts.cpuCores} vCPU`} to={`${selected?.cpuCores ?? opts.cpuCores} vCPU`} changed={(selected?.cpuCores ?? opts.cpuCores) !== opts.cpuCores} />
+              <ComparisonRow label="Memory" from={formatMb(opts.memoryMb)} to={formatMb(selected?.memoryMb ?? opts.memoryMb)} changed={(selected?.memoryMb ?? opts.memoryMb) !== opts.memoryMb} />
+              <ComparisonRow label="Disk" from={formatMb(opts.diskMb)} to={formatMb(selected?.diskMb ?? opts.diskMb)} changed={(selected?.diskMb ?? opts.diskMb) !== opts.diskMb} />
+            </div>
+
+            <Button
+              className="w-full"
+              disabled={unchanged || selected?.amountMinor == null}
+              onClick={() => setConfirmOpen(true)}
+            >
+              Apply changes
+            </Button>
+            {selected?.amountMinor == null && !unchanged && (
+              <p className="text-xs text-warning">
+                This tier has no price for your billing cycle yet — contact support.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm tier change</DialogTitle>
+            <DialogDescription>Review your new tier before applying.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            <ComparisonRow label="Tier" from={current?.name ?? "—"} to={selected?.name ?? "—"} changed={!unchanged} />
+            <ComparisonRow label="CPU" from={`${opts.cpuCores} vCPU`} to={`${selected?.cpuCores ?? opts.cpuCores} vCPU`} changed={(selected?.cpuCores ?? opts.cpuCores) !== opts.cpuCores} />
+            <ComparisonRow label="Memory" from={formatMb(opts.memoryMb)} to={formatMb(selected?.memoryMb ?? opts.memoryMb)} changed={(selected?.memoryMb ?? opts.memoryMb) !== opts.memoryMb} />
+            <ComparisonRow label="Disk" from={formatMb(opts.diskMb)} to={formatMb(selected?.diskMb ?? opts.diskMb)} changed={(selected?.diskMb ?? opts.diskMb) !== opts.diskMb} />
+          </div>
+          <div className="rounded-lg bg-muted/50 p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">New recurring price</span>
+              <span className="font-medium">
+                {selected?.amountMinor != null ? formatMoney(selected.amountMinor, opts.currency) : "—"}
+                {intervalLabel(opts.interval)}
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              The new tier applies immediately; the price difference is reflected on your next invoice.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button loading={upgradeMutation.isPending} onClick={() => upgradeMutation.mutate()}>
+              Apply changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function TierUpgradeCard({
+  tier,
+  active,
+  isCurrent,
+  currency,
+  interval,
+  onSelect,
+}: {
+  tier: UpgradeTier;
+  active: boolean;
+  isCurrent: boolean;
+  currency: string;
+  interval: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        "relative flex flex-col gap-3 rounded-xl border p-4 text-left transition-colors",
+        active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-accent/40",
+      )}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-semibold">{tier.name}</p>
+        <div className="flex items-center gap-1">
+          {isCurrent && <Badge variant="secondary" className="text-[10px]">Current</Badge>}
+          {tier.isRecommended && !isCurrent && (
+            <Badge variant="secondary" className="text-[10px]">Recommended</Badge>
+          )}
+        </div>
+      </div>
+      {tier.description && <p className="text-xs text-muted-foreground">{tier.description}</p>}
+      <div className="space-y-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5"><MemoryStick className="size-3.5" /> {(tier.memoryMb / 1024).toFixed(tier.memoryMb % 1024 ? 1 : 0)} GB RAM</span>
+        <span className="flex items-center gap-1.5"><Cpu className="size-3.5" /> {tier.cpuCores} vCPU</span>
+        <span className="flex items-center gap-1.5"><HardDrive className="size-3.5" /> {(tier.diskMb / 1024).toFixed(0)} GB disk</span>
+        {tier.recommendedPlayers != null && (
+          <span className="flex items-center gap-1.5"><Users className="size-3.5" /> ~{tier.recommendedPlayers} players</span>
+        )}
+      </div>
+      <div className="mt-auto flex items-center justify-between pt-1">
+        <span className="text-sm font-semibold">
+          {tier.amountMinor != null ? formatMoney(tier.amountMinor, currency) : "—"}
+          {tier.amountMinor != null && (
+            <span className="text-xs font-normal text-muted-foreground">{intervalLabel(interval)}</span>
+          )}
+        </span>
+        {active && <Check className="size-4 text-primary" />}
+      </div>
+    </button>
   );
 }
 

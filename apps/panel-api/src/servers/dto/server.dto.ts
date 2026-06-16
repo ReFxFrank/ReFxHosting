@@ -10,6 +10,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   Min,
   ValidateNested,
@@ -247,6 +248,11 @@ export class UpdateStartupDto {
 }
 
 export class UpgradeServerDto {
+  @ApiPropertyOptional({ description: 'Target hardware tier (tiered game products).' })
+  @IsOptional()
+  @IsUUID()
+  hardwareTierId?: string;
+
   @ApiPropertyOptional({ description: 'New slot count (per-slot products).' })
   @IsOptional()
   @IsInt()
