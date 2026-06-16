@@ -100,7 +100,15 @@ describe('Auth (e2e)', () => {
 
       const res = await request(h.app.getHttpServer())
         .post(`${PREFIX}/auth/register`)
-        .send({ email: 'new@example.com', password: 'a-strong-password-123' });
+        .send({
+          email: 'new@example.com',
+          password: 'a-strong-password-123',
+          addressLine1: '123 Main St',
+          city: 'Springfield',
+          region: 'IL',
+          postalCode: '62704',
+          country: 'US',
+        });
 
       expect(res.status).toBe(201);
       expect(res.body).toEqual({

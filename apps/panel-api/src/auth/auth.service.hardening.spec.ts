@@ -191,6 +191,11 @@ describe('AuthService hardening', () => {
       const res = await service.register({
         email: 'New@Example.com',
         password: 'a-strong-password-123',
+        addressLine1: '123 Main St',
+        city: 'Springfield',
+        region: 'IL',
+        postalCode: '62704',
+        country: 'US',
       } as any);
 
       expect(res).toEqual({ id: USER_ID, email: 'new@example.com' });

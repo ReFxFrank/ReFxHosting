@@ -19,10 +19,20 @@ const schema = z
     email: z.string().email("Enter a valid email"),
     password: z.string().min(10, "Use at least 10 characters"),
     confirm: z.string(),
+    addressLine1: z.string().min(2, "Required"),
+    addressLine2: z.string().optional(),
+    city: z.string().min(1, "Required"),
+    region: z.string().optional(),
+    postalCode: z.string().min(2, "Required"),
+    country: z.string().length(2, "Use a 2-letter country code"),
   })
   .refine((d) => d.password === d.confirm, {
     message: "Passwords do not match",
     path: ["confirm"],
+  })
+  .refine((d) => d.country.toUpperCase() !== "US" || !!d.region?.trim(), {
+    message: "State is required for US addresses",
+    path: ["region"],
   });
 type FormValues = z.infer<typeof schema>;
 
@@ -51,6 +61,12 @@ export default function RegisterPage() {
         password: values.password,
         firstName: values.firstName,
         lastName: values.lastName,
+        addressLine1: values.addressLine1,
+        addressLine2: values.addressLine2 || undefined,
+        city: values.city,
+        region: values.region || undefined,
+        postalCode: values.postalCode,
+        country: values.country.toUpperCase(),
       });
       if (res.accessToken && res.refreshToken) {
         await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });
@@ -102,6 +118,47 @@ export default function RegisterPage() {
           <Input id="confirm" type="password" autoComplete="new-password" {...register("confirm")} />
           {errors.confirm && <p className="text-xs text-destructive">{errors.confirm.message}</p>}
         </div>
+
+        <div className="space-y-1 border-t pt-4">
+          <p className="text-sm font-medium">Billing address</p>
+          <p className="text-xs text-muted-foreground">
+            Required for tax and to place orders.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="addressLine1">Address</Label>
+          <Input id="addressLine1" autoComplete="address-line1" {...register("addressLine1")} />
+          {errors.addressLine1 && <p className="text-xs text-destructive">{errors.addressLine1.message}</p>}
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="addressLine2">Address line 2 (optional)</Label>
+          <Input id="addressLine2" autoComplete="address-line2" {...register("addressLine2")} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="city">City</Label>
+            <Input id="city" autoComplete="address-level2" {...register("city")} />
+            {errors.city && <p className="text-xs text-destructive">{errors.city.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="region">State / province</Label>
+            <Input id="region" autoComplete="address-level1" {...register("region")} />
+            {errors.region && <p className="text-xs text-destructive">{errors.region.message}</p>}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="postalCode">Postal code</Label>
+            <Input id="postalCode" autoComplete="postal-code" {...register("postalCode")} />
+            {errors.postalCode && <p className="text-xs text-destructive">{errors.postalCode.message}</p>}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="country">Country (ISO)</Label>
+            <Input id="country" autoComplete="country" placeholder="US" maxLength={2} className="uppercase" {...register("country")} />
+            {errors.country && <p className="text-xs text-destructive">{errors.country.message}</p>}
+          </div>
+        </div>
+
         <Button type="submit" className="w-full" loading={submitting}>
           Create account
         </Button>

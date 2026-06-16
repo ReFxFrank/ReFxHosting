@@ -49,6 +49,23 @@ export class OrdersService {
       useCredit?: boolean;
     },
   ): Promise<OrderResult> {
+    // A billing address is required before any purchase (tax + basic KYC). This
+    // also covers accounts created before the field was mandatory.
+    const buyer = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { addressLine1: true, city: true, postalCode: true, country: true, region: true },
+    });
+    if (!buyer?.addressLine1 || !buyer.city || !buyer.postalCode || !buyer.country) {
+      throw new BadRequestException(
+        'Add your billing address in Account settings before placing an order.',
+      );
+    }
+    if (buyer.country.toUpperCase() === 'US' && !buyer.region) {
+      throw new BadRequestException(
+        'Add your state to your billing address before placing an order.',
+      );
+    }
+
     const price = await this.prisma.price.findUnique({
       where: { id: dto.priceId },
       include: { product: true },

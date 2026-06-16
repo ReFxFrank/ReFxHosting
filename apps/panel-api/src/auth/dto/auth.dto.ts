@@ -8,6 +8,8 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Length,
+  MaxLength,
   MinLength,
 } from 'class-validator';
 import { ApiKeyScope } from '@prisma/client';
@@ -31,6 +33,43 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   lastName?: string;
+
+  // ---- Billing address (required: needed for tax + any purchase) ----------
+
+  @ApiProperty({ description: 'Street address' })
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  addressLine1!: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  addressLine2?: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  city!: string;
+
+  @ApiPropertyOptional({ description: 'State / province (required for US)' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  region?: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(2)
+  @MaxLength(20)
+  postalCode!: string;
+
+  @ApiProperty({ description: 'ISO 3166-1 alpha-2 country code (e.g. US, GB, DE)' })
+  @IsString()
+  @Length(2, 2)
+  country!: string;
 }
 
 export class LoginDto {

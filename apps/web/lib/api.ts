@@ -262,7 +262,18 @@ export const api = {
   auth: {
     login: (email: string, password: string) =>
       http.post<LoginResponse>("/auth/login", { email, password }, { anonymous: true }),
-    register: (input: { email: string; password: string; firstName?: string; lastName?: string }) =>
+    register: (input: {
+      email: string;
+      password: string;
+      firstName?: string;
+      lastName?: string;
+      addressLine1: string;
+      addressLine2?: string;
+      city: string;
+      region?: string;
+      postalCode: string;
+      country: string;
+    }) =>
       http.post<LoginResponse>("/auth/register", input, { anonymous: true }),
     verifyMfa: (mfaToken: string, code: string, method: "totp" | "recovery" = "totp") =>
       http.post<LoginResponse>("/auth/mfa/verify", { mfaToken, code, method }, { anonymous: true }),
