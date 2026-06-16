@@ -229,7 +229,11 @@ export default function AdminInvoicesPage() {
                               <Ban /> Void / revoke
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
-                            <DropdownMenuItem destructive onSelect={() => setDeleteTarget(inv)}>
+                            <DropdownMenuItem
+                              destructive
+                              disabled={inv.state === "PAID"}
+                              onSelect={() => setDeleteTarget(inv)}
+                            >
                               <Trash2 /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
