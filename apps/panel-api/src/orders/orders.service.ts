@@ -39,6 +39,7 @@ export class OrdersService {
       priceId: string;
       templateId: string;
       name: string;
+      hardwareTierId?: string;
       regionId?: string;
       nodeId?: string;
       slots?: number;
@@ -69,15 +70,56 @@ export class OrdersService {
 
     const price = await this.prisma.price.findUnique({
       where: { id: dto.priceId },
-      include: { product: true },
+      include: { product: true, hardwareTier: true },
     });
     if (!price || price.productId !== dto.productId) {
       throw new BadRequestException('Price does not belong to product');
     }
+    const product = price.product;
+    if (!product.isActive) {
+      throw new BadRequestException('This product is not available');
+    }
+    if (!price.isActive) {
+      throw new BadRequestException('That price is no longer available');
+    }
 
-    // Order subtotal (per-slot products bill price-per-slot × slots).
-    const quantity =
-      price.product.perSlot && dto.slots && dto.slots > 0 ? dto.slots : 1;
+    // Validate the configuration method matches the product's billing model, and
+    // compute the order quantity. Pricing is ALWAYS taken from the DB price row
+    // (price.amountMinor) — never trusted from the client.
+    let quantity = 1;
+    if (product.billingModel === 'PER_SLOT') {
+      // Voice / per-slot: a slot count within the product's min/max + step.
+      const slots = dto.slots ?? 0;
+      const min = product.minSlots || 1;
+      const max = product.maxSlots || min;
+      const step = product.slotStep || 1;
+      if (slots < min || slots > max) {
+        throw new BadRequestException(`Slots must be between ${min} and ${max}`);
+      }
+      if ((slots - min) % step !== 0) {
+        throw new BadRequestException(`Slots must be in steps of ${step}`);
+      }
+      if (price.hardwareTierId) {
+        throw new BadRequestException('This product is not configured by hardware tier');
+      }
+      quantity = slots;
+    } else {
+      // Game / hardware tier: a tier that exists, is active, and owns the price.
+      if (!dto.hardwareTierId) {
+        throw new BadRequestException('Select a hardware tier');
+      }
+      const tier = price.hardwareTier;
+      if (!tier || tier.productId !== product.id) {
+        throw new BadRequestException('Hardware tier does not belong to product');
+      }
+      if (!tier.isActive) {
+        throw new BadRequestException('That hardware tier is not available');
+      }
+      if (price.hardwareTierId !== dto.hardwareTierId) {
+        throw new BadRequestException('Price does not belong to the selected tier');
+      }
+      quantity = 1;
+    }
     const subtotalMinor = price.amountMinor * quantity;
 
     // Validate any coupon / gift card UP FRONT so a bad code fails before we
@@ -102,6 +144,7 @@ export class OrdersService {
       productId: dto.productId,
       priceId: dto.priceId,
       interval: price.interval,
+      hardwareTierId: dto.hardwareTierId,
       slots: dto.slots,
     });
 

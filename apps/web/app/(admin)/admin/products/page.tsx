@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Package, Plus, Pencil, Trash2, Tag } from "lucide-react";
+import { Package, Plus, Pencil, Trash2, Tag, Cpu } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -35,13 +35,26 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import { formatMb, formatMoney } from "@/lib/utils";
-import type { BillingInterval, Price, Product, ProductType } from "@/lib/types";
+import type {
+  BillingInterval,
+  BillingModel,
+  HardwareTier,
+  Price,
+  Product,
+  ProductType,
+} from "@/lib/types";
 
 const TYPE_OPTIONS: { value: ProductType; label: string }[] = [
   { value: "GAME_SERVER", label: "Game server" },
+  { value: "VOICE_SERVER", label: "Voice server" },
   { value: "VPS", label: "VPS" },
   { value: "DEDICATED", label: "Dedicated" },
   { value: "ADDON", label: "Add-on" },
+];
+
+const BILLING_MODEL_OPTIONS: { value: BillingModel; label: string; hint: string }[] = [
+  { value: "HARDWARE_TIER", label: "Hardware tiers", hint: "Game servers — Low/Mid/High fixed packages." },
+  { value: "PER_SLOT", label: "Per slot", hint: "Voice servers — priced per slot (e.g. TeamSpeak 3)." },
 ];
 
 const INTERVALS: { value: BillingInterval; label: string }[] = [
@@ -73,14 +86,14 @@ interface ProductForm {
   slug: string;
   description: string;
   type: ProductType;
+  billingModel: BillingModel;
   cpuCores: number;
   memoryMb: number;
   diskMb: number;
   slots: number;
   isActive: boolean;
-  // Per-slot (GPortal-style) pricing
-  perSlot: boolean;
   gameTemplateId: string;
+  // Per-slot (voice) pricing
   minSlots: number;
   maxSlots: number;
   slotStep: number;
@@ -94,19 +107,19 @@ const emptyForm: ProductForm = {
   slug: "",
   description: "",
   type: "GAME_SERVER",
+  billingModel: "HARDWARE_TIER",
   cpuCores: 2,
   memoryMb: 4096,
   diskMb: 20480,
   slots: 0,
   isActive: true,
-  perSlot: false,
   gameTemplateId: "",
-  minSlots: 6,
-  maxSlots: 100,
-  slotStep: 2,
-  cpuPerSlot: 0.25,
-  memoryMbPerSlot: 512,
-  diskMbPerSlot: 1024,
+  minSlots: 10,
+  maxSlots: 256,
+  slotStep: 10,
+  cpuPerSlot: 0.01,
+  memoryMbPerSlot: 8,
+  diskMbPerSlot: 4,
 };
 
 export default function AdminProductsPage() {
@@ -172,12 +185,13 @@ export default function AdminProductsPage() {
       slug: product.slug,
       description: product.description ?? "",
       type: product.type,
+      billingModel:
+        product.billingModel ?? (product.perSlot ? "PER_SLOT" : "HARDWARE_TIER"),
       cpuCores: product.cpuCores ?? 0,
       memoryMb: product.memoryMb ?? 0,
       diskMb: product.diskMb ?? 0,
       slots: product.slots ?? 0,
       isActive: product.isActive,
-      perSlot: product.perSlot ?? false,
       gameTemplateId: product.gameTemplateId ?? "",
       minSlots: product.minSlots ?? 1,
       maxSlots: product.maxSlots ?? 100,
@@ -356,6 +370,50 @@ export default function AdminProductsPage() {
               </Select>
             </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Billing model</Label>
+                <Select
+                  value={form.billingModel}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, billingModel: v as BillingModel }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BILLING_MODEL_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {BILLING_MODEL_OPTIONS.find((o) => o.value === form.billingModel)?.hint}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Game / voice template</Label>
+                <Select
+                  value={form.gameTemplateId}
+                  onValueChange={(v) => setForm((f) => ({ ...f, gameTemplateId: v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select the template this provisions" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(templatesQ.data ?? []).map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="product-desc">Description</Label>
               <Textarea
@@ -423,95 +481,82 @@ export default function AdminProductsPage() {
               />
             </div>
 
-            {/* Per-slot (GPortal-style) pricing */}
-            <div className="space-y-3 rounded-lg border p-3">
-              <div className="flex items-center justify-between">
+            {/* HARDWARE_TIER: Low/Mid/High packages (each with its own pricing). */}
+            {form.billingModel === "HARDWARE_TIER" && (
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <Cpu className="size-4" /> Hardware tiers
+                </div>
+                {form.id && editingProduct ? (
+                  <TierEditor
+                    productId={form.id}
+                    tiers={editingProduct.hardwareTiers ?? []}
+                  />
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Save the product first, then add Low / Mid / High tiers here.
+                    Each tier sets its own RAM/CPU/disk and per-interval price.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* PER_SLOT: voice slot config + product-level per-slot pricing. */}
+            {form.billingModel === "PER_SLOT" && (
+              <div className="space-y-3 rounded-lg border p-3">
                 <div>
-                  <p className="text-sm font-medium">Per-slot pricing</p>
+                  <p className="text-sm font-medium">Per-slot configuration</p>
                   <p className="text-xs text-muted-foreground">
-                    Customers pick a slot count on a slider; price = per-slot price ×
-                    slots, resources scale per slot.
+                    Customers pick a slot count; price = per-slot price × slots,
+                    resources scale per slot.
                   </p>
                 </div>
-                <Switch
-                  checked={form.perSlot}
-                  onCheckedChange={(v: boolean) => setForm((f) => ({ ...f, perSlot: v }))}
-                />
-              </div>
-
-              {form.perSlot && (
-                <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
-                    <Label>Game</Label>
-                    <Select
-                      value={form.gameTemplateId}
-                      onValueChange={(v) => setForm((f) => ({ ...f, gameTemplateId: v }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select the game this sells" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(templatesQ.data ?? []).map((t) => (
-                          <SelectItem key={t.id} value={t.id}>
-                            {t.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Min slots</Label>
+                    <Input type="number" min={1} value={form.minSlots}
+                      onChange={(e) => setForm((f) => ({ ...f, minSlots: Number(e.target.value) }))} />
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="space-y-1.5">
-                      <Label>Min slots</Label>
-                      <Input type="number" min={1} value={form.minSlots}
-                        onChange={(e) => setForm((f) => ({ ...f, minSlots: Number(e.target.value) }))} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Max slots</Label>
-                      <Input type="number" min={1} value={form.maxSlots}
-                        onChange={(e) => setForm((f) => ({ ...f, maxSlots: Number(e.target.value) }))} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Slider step</Label>
-                      <Input type="number" min={1} value={form.slotStep}
-                        onChange={(e) => setForm((f) => ({ ...f, slotStep: Number(e.target.value) }))} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>vCPU / slot</Label>
-                      <Input type="number" min={0} step="0.05" value={form.cpuPerSlot}
-                        onChange={(e) => setForm((f) => ({ ...f, cpuPerSlot: Number(e.target.value) }))} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>RAM MB / slot</Label>
-                      <Input type="number" min={0} value={form.memoryMbPerSlot}
-                        onChange={(e) => setForm((f) => ({ ...f, memoryMbPerSlot: Number(e.target.value) }))} />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Disk MB / slot</Label>
-                      <Input type="number" min={0} value={form.diskMbPerSlot}
-                        onChange={(e) => setForm((f) => ({ ...f, diskMbPerSlot: Number(e.target.value) }))} />
-                    </div>
+                  <div className="space-y-1.5">
+                    <Label>Max slots</Label>
+                    <Input type="number" min={1} value={form.maxSlots}
+                      onChange={(e) => setForm((f) => ({ ...f, maxSlots: Number(e.target.value) }))} />
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Set the <strong>per-slot</strong> price for each interval in Pricing
-                    below (e.g. monthly per-slot rate). The order total is that × slots.
-                  </p>
+                  <div className="space-y-1.5">
+                    <Label>Slider step</Label>
+                    <Input type="number" min={1} value={form.slotStep}
+                      onChange={(e) => setForm((f) => ({ ...f, slotStep: Number(e.target.value) }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>vCPU / slot</Label>
+                    <Input type="number" min={0} step="0.01" value={form.cpuPerSlot}
+                      onChange={(e) => setForm((f) => ({ ...f, cpuPerSlot: Number(e.target.value) }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>RAM MB / slot</Label>
+                    <Input type="number" min={0} value={form.memoryMbPerSlot}
+                      onChange={(e) => setForm((f) => ({ ...f, memoryMbPerSlot: Number(e.target.value) }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Disk MB / slot</Label>
+                    <Input type="number" min={0} value={form.diskMbPerSlot}
+                      onChange={(e) => setForm((f) => ({ ...f, diskMbPerSlot: Number(e.target.value) }))} />
+                  </div>
                 </div>
-              )}
-            </div>
-
-            {/* Pricing — available once the product exists. */}
-            <div className="space-y-2 rounded-lg border p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Tag className="size-4" /> Pricing
+                <div className="space-y-2 border-t pt-3">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Tag className="size-4" /> Per-slot pricing
+                  </div>
+                  {form.id && editingProduct ? (
+                    <PriceEditor productId={form.id} prices={editingProduct.prices ?? []} />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Save the product first, then add the per-slot price for each interval.
+                    </p>
+                  )}
+                </div>
               </div>
-              {form.id && editingProduct ? (
-                <PriceEditor productId={form.id} prices={editingProduct.prices ?? []} />
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Save the product first, then add per-interval pricing here.
-                </p>
-              )}
-            </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -533,7 +578,7 @@ export default function AdminProductsPage() {
                   diskMb: form.diskMb,
                   slots: form.slots,
                   isActive: form.isActive,
-                  perSlot: form.perSlot,
+                  billingModel: form.billingModel,
                   gameTemplateId: form.gameTemplateId || undefined,
                   minSlots: form.minSlots,
                   maxSlots: form.maxSlots,
@@ -579,8 +624,17 @@ export default function AdminProductsPage() {
   );
 }
 
-/** Inline per-interval price rows with add / edit / delete. */
-function PriceEditor({ productId, prices }: { productId: string; prices: Price[] }) {
+/** Inline per-interval price rows with add / edit / delete. When `tierId` is set
+ *  new prices are scoped to that hardware tier; otherwise they're product-level. */
+function PriceEditor({
+  productId,
+  prices,
+  tierId,
+}: {
+  productId: string;
+  prices: Price[];
+  tierId?: string;
+}) {
   const queryClient = useQueryClient();
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
@@ -590,12 +644,16 @@ function PriceEditor({ productId, prices }: { productId: string; prices: Price[]
   const [amount, setAmount] = useState("");
 
   const create = useMutation({
-    mutationFn: () =>
-      api.admin.createPrice(productId, {
+    mutationFn: () => {
+      const body = {
         interval,
         currency: currency.toUpperCase(),
         amountMinor: Math.round(parseFloat(amount || "0") * 100),
-      }),
+      };
+      return tierId
+        ? api.admin.createTierPrice(productId, tierId, body)
+        : api.admin.createPrice(productId, body);
+    },
     onSuccess: () => {
       toast.success("Price added");
       setAmount("");
@@ -739,6 +797,195 @@ function PriceRow({
         >
           <Trash2 className="size-4" />
         </Button>
+      </div>
+    </div>
+  );
+}
+
+const emptyTier = {
+  name: "",
+  description: "",
+  cpuCores: 2,
+  memoryMb: 4096,
+  diskMb: 20480,
+  recommendedPlayers: 0,
+  isRecommended: false,
+  sortOrder: 0,
+};
+
+/** Manage a product's hardware tiers (Low/Mid/High): add, edit, price, delete. */
+function TierEditor({ productId, tiers }: { productId: string; tiers: HardwareTier[] }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+  const [draft, setDraft] = useState(emptyTier);
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.admin.createTier(productId, {
+        name: draft.name,
+        description: draft.description || undefined,
+        cpuCores: draft.cpuCores,
+        memoryMb: draft.memoryMb,
+        diskMb: draft.diskMb,
+        recommendedPlayers: draft.recommendedPlayers || undefined,
+        isRecommended: draft.isRecommended,
+        sortOrder: draft.sortOrder || tiers.length,
+      }),
+    onSuccess: () => {
+      toast.success("Tier added");
+      setDraft(emptyTier);
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to add tier"),
+  });
+
+  return (
+    <div className="space-y-3">
+      {tiers.length > 0 && (
+        <div className="space-y-2">
+          {[...tiers]
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .map((t) => (
+              <TierRow key={t.id} productId={productId} tier={t} onChanged={invalidate} />
+            ))}
+        </div>
+      )}
+
+      {/* Add a tier */}
+      <div className="space-y-2 rounded-md border border-dashed p-2.5">
+        <p className="text-xs font-medium text-muted-foreground">Add a tier</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Input placeholder="Tier name (e.g. Mid Tier)" value={draft.name}
+            onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
+          <Input placeholder="Recommended players (optional)" type="number" min={0} value={draft.recommendedPlayers}
+            onChange={(e) => setDraft((d) => ({ ...d, recommendedPlayers: Number(e.target.value) }))} />
+        </div>
+        <Input placeholder="Short description" value={draft.description}
+          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))} />
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="space-y-1"><Label className="text-xs">vCPU</Label>
+            <Input type="number" min={0} step="0.5" value={draft.cpuCores}
+              onChange={(e) => setDraft((d) => ({ ...d, cpuCores: Number(e.target.value) }))} /></div>
+          <div className="space-y-1"><Label className="text-xs">RAM (MB)</Label>
+            <Input type="number" min={0} value={draft.memoryMb}
+              onChange={(e) => setDraft((d) => ({ ...d, memoryMb: Number(e.target.value) }))} /></div>
+          <div className="space-y-1"><Label className="text-xs">Disk (MB)</Label>
+            <Input type="number" min={0} value={draft.diskMb}
+              onChange={(e) => setDraft((d) => ({ ...d, diskMb: Number(e.target.value) }))} /></div>
+        </div>
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 text-xs">
+            <Switch checked={draft.isRecommended}
+              onCheckedChange={(v: boolean) => setDraft((d) => ({ ...d, isRecommended: v }))} />
+            Recommended
+          </label>
+          <Button size="sm" loading={create.isPending} disabled={!draft.name.trim()}
+            onClick={() => create.mutate()}>
+            <Plus className="size-4" /> Add tier
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A single editable hardware tier with its own per-interval price rows. */
+function TierRow({
+  productId,
+  tier,
+  onChanged,
+}: {
+  productId: string;
+  tier: HardwareTier;
+  onChanged: () => void;
+}) {
+  const [form, setForm] = useState({
+    name: tier.name,
+    description: tier.description ?? "",
+    cpuCores: tier.cpuCores,
+    memoryMb: tier.memoryMb,
+    diskMb: tier.diskMb,
+    recommendedPlayers: tier.recommendedPlayers ?? 0,
+    isRecommended: tier.isRecommended,
+    isActive: tier.isActive !== false,
+  });
+  const dirty =
+    form.name !== tier.name ||
+    form.description !== (tier.description ?? "") ||
+    form.cpuCores !== tier.cpuCores ||
+    form.memoryMb !== tier.memoryMb ||
+    form.diskMb !== tier.diskMb ||
+    form.recommendedPlayers !== (tier.recommendedPlayers ?? 0) ||
+    form.isRecommended !== tier.isRecommended ||
+    form.isActive !== (tier.isActive !== false);
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.admin.updateTier(tier.id, {
+        name: form.name,
+        description: form.description || undefined,
+        cpuCores: form.cpuCores,
+        memoryMb: form.memoryMb,
+        diskMb: form.diskMb,
+        recommendedPlayers: form.recommendedPlayers || undefined,
+        isRecommended: form.isRecommended,
+        isActive: form.isActive,
+      }),
+    onSuccess: () => { toast.success("Tier saved"); onChanged(); },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to save tier"),
+  });
+
+  const remove = useMutation({
+    mutationFn: () => api.admin.deleteTier(tier.id),
+    onSuccess: () => { toast.success("Tier removed"); onChanged(); },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to remove tier"),
+  });
+
+  return (
+    <div className="space-y-2 rounded-md border p-2.5">
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Input value={form.name} className="font-medium"
+          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
+        <Input placeholder="Recommended players" type="number" min={0} value={form.recommendedPlayers}
+          onChange={(e) => setForm((f) => ({ ...f, recommendedPlayers: Number(e.target.value) }))} />
+      </div>
+      <Input placeholder="Description" value={form.description}
+        onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="space-y-1"><Label className="text-xs">vCPU</Label>
+          <Input type="number" min={0} step="0.5" value={form.cpuCores}
+            onChange={(e) => setForm((f) => ({ ...f, cpuCores: Number(e.target.value) }))} /></div>
+        <div className="space-y-1"><Label className="text-xs">RAM (MB)</Label>
+          <Input type="number" min={0} value={form.memoryMb}
+            onChange={(e) => setForm((f) => ({ ...f, memoryMb: Number(e.target.value) }))} /></div>
+        <div className="space-y-1"><Label className="text-xs">Disk (MB)</Label>
+          <Input type="number" min={0} value={form.diskMb}
+            onChange={(e) => setForm((f) => ({ ...f, diskMb: Number(e.target.value) }))} /></div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-xs">
+          <Switch checked={form.isRecommended}
+            onCheckedChange={(v: boolean) => setForm((f) => ({ ...f, isRecommended: v }))} />
+          Recommended
+        </label>
+        <label className="flex items-center gap-2 text-xs">
+          <Switch checked={form.isActive}
+            onCheckedChange={(v: boolean) => setForm((f) => ({ ...f, isActive: v }))} />
+          Active
+        </label>
+        <div className="ml-auto flex items-center gap-1">
+          <Button size="sm" variant={dirty ? "default" : "ghost"} disabled={!dirty || save.isPending}
+            onClick={() => save.mutate()}>Save</Button>
+          <Button size="icon-sm" variant="ghost" className="text-destructive hover:text-destructive"
+            disabled={remove.isPending} onClick={() => remove.mutate()}>
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
+      </div>
+      <div className="border-t pt-2">
+        <p className="mb-1 text-xs font-medium text-muted-foreground">Pricing</p>
+        <PriceEditor productId={productId} tierId={tier.id} prices={tier.prices ?? []} />
       </div>
     </div>
   );

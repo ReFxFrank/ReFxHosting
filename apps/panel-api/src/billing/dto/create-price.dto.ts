@@ -19,6 +19,14 @@ export class CreatePriceDto {
   @IsUUID()
   productId!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Hardware tier this price belongs to (game tiers). Omit for product-level prices.',
+  })
+  @IsOptional()
+  @IsUUID()
+  hardwareTierId?: string;
+
   @ApiProperty({ enum: BillingInterval })
   @IsEnum(BillingInterval)
   interval!: BillingInterval;

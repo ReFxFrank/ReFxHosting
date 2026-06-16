@@ -83,11 +83,19 @@ export type DbEngine = (typeof DbEngine)[keyof typeof DbEngine];
 
 export const ProductType = {
   GAME_SERVER: 'GAME_SERVER',
+  VOICE_SERVER: 'VOICE_SERVER',
   VPS: 'VPS',
   DEDICATED: 'DEDICATED',
   ADDON: 'ADDON',
 } as const;
 export type ProductType = (typeof ProductType)[keyof typeof ProductType];
+
+/** How a product is configured + priced at order time. */
+export const BillingModel = {
+  HARDWARE_TIER: 'HARDWARE_TIER',
+  PER_SLOT: 'PER_SLOT',
+} as const;
+export type BillingModel = (typeof BillingModel)[keyof typeof BillingModel];
 
 export const BillingInterval = {
   WEEKLY: 'WEEKLY',

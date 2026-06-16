@@ -115,7 +115,7 @@ export class ServersService {
   ): Promise<Server> {
     const subscription = await this.prisma.subscription.findFirst({
       where: { id: dto.subscriptionId, userId: ownerId },
-      include: { product: true },
+      include: { product: true, hardwareTier: true },
     });
     if (!subscription) throw new NotFoundException('Subscription not found');
     if (subscription.state !== 'ACTIVE' && subscription.state !== 'TRIALING') {
@@ -134,11 +134,21 @@ export class ServersService {
     );
     const dockerImage = this.resolveDockerImage(template.dockerImages, environment);
 
-    // Per-slot products scale resources with the subscription's slot count;
-    // fixed products use their flat resources (falling back to template recs).
+    // Resource limits, by billing model:
+    //  • HARDWARE_TIER (game): the chosen tier's fixed RAM/CPU/disk.
+    //  • PER_SLOT (voice): per-slot resources × the subscription's slot count.
+    //  • legacy flat product: the product's flat resources.
+    // All fall back to the template's recommended specs when unset.
     const prod = subscription.product;
+    const tier = subscription.hardwareTier;
     const slots = Math.max(1, subscription.slots ?? 1);
-    const limits = prod.perSlot
+    const limits = tier
+      ? {
+          cpuCores: tier.cpuCores || template.recCpuCores,
+          memoryMb: tier.memoryMb || template.recMemoryMb,
+          diskMb: tier.diskMb || template.recDiskMb,
+        }
+      : prod.perSlot
       ? {
           cpuCores: (prod.cpuPerSlot || 0) * slots || template.recCpuCores,
           memoryMb: (prod.memoryMbPerSlot || 0) * slots || template.recMemoryMb,
@@ -183,7 +193,11 @@ export class ServersService {
         cpuCores: limits.cpuCores,
         memoryMb: limits.memoryMb,
         diskMb: limits.diskMb,
-        slots: prod.perSlot ? slots : (prod.slots ?? null),
+        // Voice/per-slot servers carry the purchased slot count; game tiers show
+        // their informational recommended player count; else the product default.
+        slots: prod.perSlot
+          ? slots
+          : (tier?.recommendedPlayers ?? prod.slots ?? null),
         startupCommand: template.startupCommand,
         dockerImage,
         environment,

@@ -8,12 +8,75 @@ import {
   HardDrive,
   MapPin,
   Check,
+  Users,
 } from "lucide-react";
 import { GameImage } from "./game-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatMoney, formatMb } from "@/lib/utils";
-import type { StorefrontGameDetail } from "@/lib/types";
+import { formatMoney, formatMb, cn } from "@/lib/utils";
+import type { StorefrontGameDetail, StorefrontPlan } from "@/lib/types";
+
+interface PlanCard {
+  key: string;
+  productSlug: string;
+  name: string;
+  description: string | null;
+  cpuCores: number | null;
+  memoryMb: number | null;
+  diskMb: number | null;
+  recommendedPlayers: number | null;
+  recommended: boolean;
+  perSlot: boolean;
+  price: { amountMinor: number; currency: string } | null;
+}
+
+/** Cheapest price in a list, or null. */
+function cheapest(prices: { amountMinor: number; currency: string }[]) {
+  if (!prices.length) return null;
+  return prices.reduce((a, b) => (b.amountMinor < a.amountMinor ? b : a));
+}
+
+/**
+ * Flatten plans into displayable cards: a HARDWARE_TIER product becomes one card
+ * per tier (Low/Mid/High); a PER_SLOT/legacy product becomes a single card.
+ */
+function planCards(plans: StorefrontPlan[]): PlanCard[] {
+  const cards: PlanCard[] = [];
+  for (const p of plans) {
+    if (p.hardwareTiers && p.hardwareTiers.length) {
+      for (const t of [...p.hardwareTiers].sort((a, b) => a.sortOrder - b.sortOrder)) {
+        cards.push({
+          key: t.id,
+          productSlug: p.slug,
+          name: `${p.name} · ${t.name}`,
+          description: t.description,
+          cpuCores: t.cpuCores,
+          memoryMb: t.memoryMb,
+          diskMb: t.diskMb,
+          recommendedPlayers: t.recommendedPlayers,
+          recommended: t.isRecommended,
+          perSlot: false,
+          price: cheapest(t.prices),
+        });
+      }
+    } else {
+      cards.push({
+        key: p.id,
+        productSlug: p.slug,
+        name: p.name,
+        description: p.description,
+        cpuCores: p.cpuCores,
+        memoryMb: p.memoryMb,
+        diskMb: p.diskMb,
+        recommendedPlayers: null,
+        recommended: false,
+        perSlot: p.perSlot,
+        price: cheapest(p.prices),
+      });
+    }
+  }
+  return cards;
+}
 
 /** Detail-page hero using the egg's hero image with a glassy overlay. */
 export function GameDetailHero({ game }: { game: StorefrontGameDetail["game"] }) {
@@ -81,45 +144,62 @@ export function GameOrderSummaryPanel({ detail }: { detail: StorefrontGameDetail
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {plans.map((p) => {
-            const cheapest = p.prices[0];
-            return (
-              <div key={p.id} className="refx-card flex flex-col rounded-2xl p-5">
-                <h3 className="font-semibold">{p.name}</h3>
-                {p.description && (
-                  <p className="mt-1 text-sm text-muted-foreground">{p.description}</p>
+          {planCards(plans).map((c) => (
+            <div
+              key={c.key}
+              className={cn(
+                "refx-card flex flex-col rounded-2xl p-5",
+                c.recommended && "ring-1 ring-primary",
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">{c.name}</h3>
+                {c.recommended && (
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                    Recommended
+                  </span>
                 )}
-                <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-                  <li className="flex items-center gap-2">
-                    <Cpu className="size-4 text-primary" /> {p.cpuCores ?? "—"} vCPU
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <MemoryStick className="size-4 text-primary" />{" "}
-                    {p.memoryMb ? formatMb(p.memoryMb) : "—"} RAM
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <HardDrive className="size-4 text-primary" />{" "}
-                    {p.diskMb ? formatMb(p.diskMb) : "—"} disk
-                  </li>
-                </ul>
-                <div className="mt-4 border-t border-white/[0.06] pt-3">
-                  {cheapest ? (
-                    <p>
-                      <span className="text-xl font-bold">
-                        {formatMoney(cheapest.amountMinor, cheapest.currency)}
-                      </span>
-                      <span className="text-sm text-muted-foreground">/mo</span>
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Contact us</p>
-                  )}
-                </div>
-                <Button className="mt-4 w-full" asChild>
-                  <Link href={`/order?game=${game.slug}&plan=${p.slug}`}>Select</Link>
-                </Button>
               </div>
-            );
-          })}
+              {c.description && (
+                <p className="mt-1 text-sm text-muted-foreground">{c.description}</p>
+              )}
+              <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-center gap-2">
+                  <Cpu className="size-4 text-primary" /> {c.cpuCores ?? "—"} vCPU
+                </li>
+                <li className="flex items-center gap-2">
+                  <MemoryStick className="size-4 text-primary" />{" "}
+                  {c.memoryMb ? formatMb(c.memoryMb) : "—"} RAM
+                </li>
+                <li className="flex items-center gap-2">
+                  <HardDrive className="size-4 text-primary" />{" "}
+                  {c.diskMb ? formatMb(c.diskMb) : "—"} disk
+                </li>
+                {c.recommendedPlayers != null && (
+                  <li className="flex items-center gap-2">
+                    <Users className="size-4 text-primary" /> ~{c.recommendedPlayers} players
+                  </li>
+                )}
+              </ul>
+              <div className="mt-4 border-t border-white/[0.06] pt-3">
+                {c.price ? (
+                  <p>
+                    <span className="text-xl font-bold">
+                      {formatMoney(c.price.amountMinor, c.price.currency)}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      /mo{c.perSlot ? " · per slot" : ""}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Contact us</p>
+                )}
+              </div>
+              <Button className="mt-4 w-full" asChild>
+                <Link href={`/order?product=${c.productSlug}`}>Select</Link>
+              </Button>
+            </div>
+          ))}
         </div>
       )}
 

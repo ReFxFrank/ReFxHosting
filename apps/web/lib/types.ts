@@ -413,11 +413,29 @@ export interface StorefrontPlan {
   name: string;
   slug: string;
   description: string | null;
+  type: ProductType;
+  billingModel: BillingModel;
+  perSlot: boolean;
   cpuCores: number | null;
   memoryMb: number | null;
   diskMb: number | null;
   slots: number | null;
+  minSlots?: number;
+  maxSlots?: number;
+  slotStep?: number;
   prices: { id: string; interval: BillingInterval; currency: string; amountMinor: number }[];
+  hardwareTiers?: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    cpuCores: number;
+    memoryMb: number;
+    diskMb: number;
+    recommendedPlayers: number | null;
+    isRecommended: boolean;
+    sortOrder: number;
+    prices: { id: string; interval: BillingInterval; currency: string; amountMinor: number }[];
+  }>;
 }
 
 export interface StorefrontGameDetail {
@@ -557,7 +575,14 @@ export type BillingInterval =
   | "QUARTERLY"
   | "SEMIANNUAL"
   | "ANNUAL";
-export type ProductType = "GAME_SERVER" | "VPS" | "DEDICATED" | "ADDON";
+export type ProductType =
+  | "GAME_SERVER"
+  | "VOICE_SERVER"
+  | "VPS"
+  | "DEDICATED"
+  | "ADDON";
+
+export type BillingModel = "HARDWARE_TIER" | "PER_SLOT";
 
 export interface Price {
   id: string;
@@ -566,11 +591,28 @@ export interface Price {
   amountMinor: number;
   stripePriceId?: string | null;
   isActive?: boolean;
+  hardwareTierId?: string | null;
+}
+
+/** A fixed hardware package (Low/Mid/High) under a HARDWARE_TIER game product. */
+export interface HardwareTier {
+  id: string;
+  name: string;
+  description: string | null;
+  cpuCores: number;
+  memoryMb: number;
+  diskMb: number;
+  recommendedPlayers: number | null;
+  isRecommended: boolean;
+  isActive?: boolean;
+  sortOrder: number;
+  prices: Price[];
 }
 
 export interface Product {
   id: string;
   type: ProductType;
+  billingModel: BillingModel;
   name: string;
   slug: string;
   description: string | null;
@@ -581,7 +623,9 @@ export interface Product {
   slots: number | null;
   allowedTemplateIds: string[];
   prices: Price[];
-  // GPortal-style per-slot pricing.
+  // Hardware tiers (HARDWARE_TIER game products).
+  hardwareTiers?: HardwareTier[];
+  // GPortal-style per-slot pricing (PER_SLOT voice products).
   perSlot: boolean;
   gameTemplateId: string | null;
   minSlots: number;
@@ -603,7 +647,17 @@ export type SubscriptionState =
 export interface Subscription {
   id: string;
   productId: string;
-  product?: Pick<Product, "id" | "name" | "type"> & { perSlot?: boolean };
+  product?: Pick<Product, "id" | "name" | "type"> & {
+    perSlot?: boolean;
+    billingModel?: BillingModel;
+  };
+  hardwareTier?: {
+    id: string;
+    name: string;
+    cpuCores: number;
+    memoryMb: number;
+    diskMb: number;
+  } | null;
   priceId: string;
   interval: BillingInterval;
   slots?: number;

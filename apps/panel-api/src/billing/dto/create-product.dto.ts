@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ProductType } from '@prisma/client';
+import { BillingModel, ProductType } from '@prisma/client';
 import {
   IsArray,
   IsBoolean,
@@ -22,6 +22,15 @@ export class CreateProductDto {
   @ApiProperty({ enum: ProductType })
   @IsEnum(ProductType)
   type!: ProductType;
+
+  @ApiPropertyOptional({
+    enum: BillingModel,
+    description:
+      'HARDWARE_TIER (game tiers) or PER_SLOT (voice). Defaults from `perSlot`.',
+  })
+  @IsOptional()
+  @IsEnum(BillingModel)
+  billingModel?: BillingModel;
 
   @ApiProperty({ example: 'Minecraft 4GB' })
   @IsString()

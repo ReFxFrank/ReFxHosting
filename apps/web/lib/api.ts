@@ -8,6 +8,7 @@ import type {
   Backup,
   GameCategory,
   GameTemplate,
+  HardwareTier,
   Invoice,
   KbArticle,
   LoginResponse,
@@ -562,6 +563,7 @@ export const api = {
       productId: string;
       priceId: string;
       templateId: string;
+      hardwareTierId?: string;
       regionId?: string;
       nodeId?: string;
       slots?: number;
@@ -844,6 +846,22 @@ export const api = {
       input: Partial<{ interval: BillingInterval; currency: string; amountMinor: number; stripePriceId: string; isActive: boolean }>,
     ) => http.patch<Price>(`/admin/prices/${priceId}`, input),
     deletePrice: (priceId: string) => http.delete<void>(`/admin/prices/${priceId}`),
+
+    // Hardware tiers (Low/Mid/High) for HARDWARE_TIER game products.
+    createTier: (
+      productId: string,
+      input: Partial<Omit<HardwareTier, "id" | "prices">> & { name: string },
+    ) => http.post<HardwareTier>(`/admin/products/${productId}/tiers`, input),
+    updateTier: (
+      tierId: string,
+      input: Partial<Omit<HardwareTier, "id" | "prices">>,
+    ) => http.patch<HardwareTier>(`/admin/tiers/${tierId}`, input),
+    deleteTier: (tierId: string) => http.delete<void>(`/admin/tiers/${tierId}`),
+    createTierPrice: (
+      productId: string,
+      tierId: string,
+      input: { interval: BillingInterval; currency?: string; amountMinor: number; stripePriceId?: string; isActive?: boolean },
+    ) => http.post<Price>(`/admin/products/${productId}/tiers/${tierId}/prices`, input),
 
     servers: () => getList<AdminServer>("/admin/servers"),
     createServer: (input: {

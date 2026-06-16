@@ -26,6 +26,14 @@ export class CreateSubscriptionDto {
   @IsEnum(BillingInterval)
   interval!: BillingInterval;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Chosen hardware tier (HARDWARE_TIER game products).',
+  })
+  @IsOptional()
+  @IsUUID()
+  hardwareTierId?: string;
+
   @ApiPropertyOptional({ description: 'Slot quantity for per-slot products.' })
   @IsOptional()
   @IsInt()

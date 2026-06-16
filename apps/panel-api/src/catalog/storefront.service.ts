@@ -2,8 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-/** Active GAME_SERVER product + its active prices, as needed for pricing. */
-type PricedProduct = Prisma.ProductGetPayload<{ include: { prices: true } }>;
+/** Active product + active prices + active hardware tiers (with their prices). */
+type PricedProduct = Prisma.ProductGetPayload<{
+  include: {
+    prices: true;
+    hardwareTiers: { include: { prices: true } };
+  };
+}>;
 
 /** Cheapest recurring price available for a game, or null when unpriced. */
 export interface StartingPrice {
@@ -111,9 +116,24 @@ export class StorefrontService {
   private activeGameProducts(): Promise<PricedProduct[]> {
     return this.prisma.product.findMany({
       where: { isActive: true, type: 'GAME_SERVER' },
-      include: { prices: { where: { isActive: true } } },
+      include: {
+        prices: { where: { isActive: true } },
+        hardwareTiers: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+          include: { prices: { where: { isActive: true } } },
+        },
+      },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  /** Every active price for a product: product-level + each active tier's. */
+  private allPrices(p: PricedProduct) {
+    return [
+      ...(p.prices ?? []),
+      ...(p.hardwareTiers ?? []).flatMap((t) => t.prices ?? []),
+    ];
   }
 
   /** An empty whitelist means the product allows every game. */
@@ -128,7 +148,7 @@ export class StorefrontService {
     let best: StartingPrice | null = null;
     for (const p of products) {
       if (!this.productAllows(p, templateId)) continue;
-      for (const price of p.prices) {
+      for (const price of this.allPrices(p)) {
         if (!best || price.amountMinor < best.amountMinor) {
           best = { amountMinor: price.amountMinor, currency: price.currency };
         }
@@ -139,23 +159,47 @@ export class StorefrontService {
 
   /** Shape a product into the safe plan view used by the storefront. */
   private toPublicPlan(p: PricedProduct) {
-    return {
-      id: p.id,
-      name: p.name,
-      slug: p.slug,
-      description: p.description,
-      cpuCores: p.cpuCores,
-      memoryMb: p.memoryMb,
-      diskMb: p.diskMb,
-      slots: p.slots,
-      prices: p.prices
+    const mapPrices = (
+      prices: { id: string; interval: string; currency: string; amountMinor: number }[],
+    ) =>
+      prices
         .map((pr) => ({
           id: pr.id,
           interval: pr.interval,
           currency: pr.currency,
           amountMinor: pr.amountMinor,
         }))
-        .sort((a, b) => a.amountMinor - b.amountMinor),
+        .sort((a, b) => a.amountMinor - b.amountMinor);
+
+    return {
+      id: p.id,
+      name: p.name,
+      slug: p.slug,
+      description: p.description,
+      type: p.type,
+      billingModel: p.billingModel,
+      perSlot: p.perSlot,
+      cpuCores: p.cpuCores,
+      memoryMb: p.memoryMb,
+      diskMb: p.diskMb,
+      slots: p.slots,
+      minSlots: p.minSlots,
+      maxSlots: p.maxSlots,
+      slotStep: p.slotStep,
+      prices: mapPrices(p.prices ?? []),
+      // Hardware tiers (Low/Mid/High) with their own per-interval prices.
+      hardwareTiers: (p.hardwareTiers ?? []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        cpuCores: t.cpuCores,
+        memoryMb: t.memoryMb,
+        diskMb: t.diskMb,
+        recommendedPlayers: t.recommendedPlayers,
+        isRecommended: t.isRecommended,
+        sortOrder: t.sortOrder,
+        prices: mapPrices(t.prices ?? []),
+      })),
     };
   }
 }

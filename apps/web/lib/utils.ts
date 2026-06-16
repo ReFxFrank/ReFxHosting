@@ -114,3 +114,13 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Whether a game template represents a voice product (e.g. TeamSpeak 3), so the
+ * customer panel can label it a "Voice" service. Driven by known voice slugs.
+ */
+const VOICE_TEMPLATE_SLUGS = new Set(["teamspeak3", "teamspeak", "mumble", "ventrilo"]);
+export function isVoiceTemplate(slug?: string | null): boolean {
+  if (!slug) return false;
+  return VOICE_TEMPLATE_SLUGS.has(slug) || slug.startsWith("voice-");
+}

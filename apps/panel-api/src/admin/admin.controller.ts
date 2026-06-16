@@ -54,6 +54,10 @@ import {
   CreateProductPriceDto,
   UpdatePriceDto,
 } from '../billing/dto/update-price.dto';
+import {
+  CreateHardwareTierDto,
+  UpdateHardwareTierDto,
+} from '../billing/dto/hardware-tier.dto';
 import { CreateAlertDto } from '../platform/dto/create-alert.dto';
 import {
   CreateHomepageAlertDto,
@@ -584,6 +588,50 @@ export class AdminController {
   @Audit({ action: 'admin.price.delete', targetType: 'Price', targetParam: 'priceId' })
   async deletePrice(@Param('priceId') priceId: string) {
     await this.billing.deletePrice(priceId);
+  }
+
+  // ---- Hardware tiers (game packages: Low/Mid/High) ----------------------
+
+  @Post('products/:id/tiers')
+  @RequirePerm('catalog.manage')
+  @Audit({ action: 'admin.tier.create', targetType: 'Product', targetParam: 'id' })
+  createTier(@Param('id') id: string, @Body() dto: CreateHardwareTierDto) {
+    return this.billing.createTier(id, dto);
+  }
+
+  @Patch('tiers/:tierId')
+  @RequirePerm('catalog.manage')
+  @Audit({ action: 'admin.tier.update', targetType: 'HardwareTier', targetParam: 'tierId' })
+  updateTier(@Param('tierId') tierId: string, @Body() dto: UpdateHardwareTierDto) {
+    return this.billing.updateTier(tierId, dto);
+  }
+
+  @Delete('tiers/:tierId')
+  @RequirePerm('catalog.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.tier.delete', targetType: 'HardwareTier', targetParam: 'tierId' })
+  async deleteTier(@Param('tierId') tierId: string) {
+    await this.billing.deleteTier(tierId);
+  }
+
+  /** Create a price scoped to a hardware tier. */
+  @Post('products/:id/tiers/:tierId/prices')
+  @RequirePerm('catalog.manage')
+  @Audit({ action: 'admin.price.create', targetType: 'HardwareTier', targetParam: 'tierId' })
+  createTierPrice(
+    @Param('id') id: string,
+    @Param('tierId') tierId: string,
+    @Body() dto: CreateProductPriceDto,
+  ) {
+    return this.billing.createPrice({
+      productId: id,
+      hardwareTierId: tierId,
+      interval: dto.interval ?? BillingInterval.MONTHLY,
+      currency: dto.currency,
+      amountMinor: dto.amountMinor,
+      stripePriceId: dto.stripePriceId,
+      isActive: dto.isActive,
+    });
   }
 
   // ---- Templates (egg editor) -------------------------------------------

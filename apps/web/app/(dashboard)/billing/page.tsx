@@ -567,9 +567,18 @@ function SubscriptionsTab({
             <Card key={sub.id}>
               <CardHeader className="flex-row items-start justify-between gap-2 space-y-0">
                 <div className="space-y-1">
-                  <CardTitle>{sub.product?.name ?? "Subscription"}</CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle>{sub.product?.name ?? "Subscription"}</CardTitle>
+                    {sub.product?.type === "VOICE_SERVER" ? (
+                      <Badge variant="outline" className="text-[10px]">Voice</Badge>
+                    ) : sub.product?.type === "GAME_SERVER" ? (
+                      <Badge variant="outline" className="text-[10px]">Game</Badge>
+                    ) : null}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     {intervalLabel[sub.interval]}
+                    {sub.hardwareTier ? ` · ${sub.hardwareTier.name}` : ""}
+                    {sub.product?.perSlot && sub.slots ? ` · ${sub.slots} slots` : ""}
                   </p>
                 </div>
                 <Badge variant={cfg.variant}>{cfg.label}</Badge>

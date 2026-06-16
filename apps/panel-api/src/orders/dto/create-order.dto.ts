@@ -31,6 +31,14 @@ export class CreateOrderDto {
   @IsString()
   name!: string;
 
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Chosen hardware tier (game / HARDWARE_TIER products).',
+  })
+  @IsOptional()
+  @IsUUID()
+  hardwareTierId?: string;
+
   @ApiPropertyOptional({ description: 'Selected region/location for placement' })
   @IsOptional()
   @IsString()

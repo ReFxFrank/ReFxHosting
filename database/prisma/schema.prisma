@@ -665,9 +665,20 @@ model ScheduleTask {
 
 enum ProductType {
   GAME_SERVER
+  VOICE_SERVER
   VPS
   DEDICATED
   ADDON
+}
+
+/// How a product is configured + priced at order time.
+///   HARDWARE_TIER — game servers: customer picks a Low/Mid/High HardwareTier
+///     (fixed RAM/CPU/disk); price = the chosen tier's price for the interval.
+///   PER_SLOT      — voice servers (e.g. TeamSpeak 3): customer picks a slot
+///     count; price = per-slot price × slots; resources scale per slot.
+enum BillingModel {
+  HARDWARE_TIER
+  PER_SLOT
 }
 
 enum BillingInterval {
@@ -682,12 +693,17 @@ enum BillingInterval {
 model Product {
   id            String          @id @db.Uuid
   type          ProductType
+  // Configuration/pricing model. HARDWARE_TIER products carry HardwareTiers (and
+  // price per tier); PER_SLOT products use the per-slot block below. Kept in
+  // lock-step with `perSlot` (perSlot == billingModel == PER_SLOT).
+  billingModel  BillingModel    @default(HARDWARE_TIER)
   name          String
   slug          String          @unique
   description   String?
   isActive      Boolean         @default(true)
 
-  // Resource template applied to provisioned servers
+  // Resource template applied to provisioned servers. For HARDWARE_TIER products
+  // these are a fallback; the chosen HardwareTier supplies the real limits.
   cpuCores      Float?
   memoryMb      Int?
   diskMb        Int?
@@ -695,10 +711,15 @@ model Product {
   // Templates allowed on this product (game switching whitelist). Empty = all.
   allowedTemplateIds String[]
 
-  // GPortal-style per-slot pricing. When perSlot is true the order page shows a
-  // slot slider and the invoice is `Price.amountMinor (per slot, per interval) x
-  // slots`; provisioned resources are the per-slot values x slots. The product is
-  // bound to one game (gameTemplateId) so the storefront can offer it per-game.
+  // Hardware tiers (Low/Mid/High) for HARDWARE_TIER game products. Each tier is a
+  // fixed RAM/CPU/disk package with its own per-interval Prices.
+  hardwareTiers HardwareTier[]
+
+  // GPortal-style per-slot pricing (PER_SLOT products, e.g. voice/TeamSpeak 3).
+  // The order page shows a slot slider and the invoice is `Price.amountMinor
+  // (per slot, per interval) x slots`; provisioned resources are the per-slot
+  // values x slots. The product is bound to one game/voice template
+  // (gameTemplateId) so the storefront can offer it per-product.
   perSlot         Boolean @default(false)
   gameTemplateId  String? @db.Uuid
   gameTemplate    GameTemplate? @relation(fields: [gameTemplateId], references: [id])
@@ -716,10 +737,42 @@ model Product {
   updatedAt     DateTime        @updatedAt
 }
 
+/// A fixed hardware package (Low/Mid/High) under a HARDWARE_TIER game Product.
+/// Resources (cpu/mem/disk) and pricing are configurable per tier from the admin
+/// panel — never hardcoded in the frontend. `recommendedPlayers` is informational
+/// only (NOT the billing basis). Pricing lives on Price rows scoped to the tier.
+model HardwareTier {
+  id                 String   @id @db.Uuid
+  productId          String   @db.Uuid
+  product            Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name               String   // "Low Tier" / "Mid Tier" / "High Tier"
+  description        String?
+  cpuCores           Float    @default(1)
+  memoryMb           Int      @default(1024)
+  diskMb             Int      @default(5120)
+  // Informational only — shown on the storefront card, never used for pricing.
+  recommendedPlayers Int?
+  isRecommended      Boolean  @default(false)
+  isActive           Boolean  @default(true)
+  sortOrder          Int      @default(0)
+
+  prices             Price[]
+  subscriptions      Subscription[]
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([productId])
+}
+
 model Price {
   id          String          @id @db.Uuid
   productId   String          @db.Uuid
   product     Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  // When set, this price belongs to a specific HardwareTier (game tiers price
+  // per tier). NULL = product-level price (PER_SLOT/voice products).
+  hardwareTierId String?      @db.Uuid
+  hardwareTier   HardwareTier? @relation(fields: [hardwareTierId], references: [id], onDelete: Cascade)
   interval    BillingInterval
   currency    String          @default("USD")
   amountMinor Int             // cents
@@ -727,7 +780,8 @@ model Price {
   stripePriceId String?
   isActive    Boolean         @default(true)
 
-  @@unique([productId, interval, currency])
+  @@unique([productId, hardwareTierId, interval, currency])
+  @@index([hardwareTierId])
 }
 
 enum SubscriptionState {
@@ -746,6 +800,10 @@ model Subscription {
   productId       String            @db.Uuid
   product         Product           @relation(fields: [productId], references: [id])
   priceId         String            @db.Uuid
+  // Chosen hardware tier for HARDWARE_TIER game orders (drives provisioned
+  // resources + the renewal price). NULL for PER_SLOT/voice orders.
+  hardwareTierId  String?           @db.Uuid
+  hardwareTier    HardwareTier?     @relation(fields: [hardwareTierId], references: [id])
   interval        BillingInterval
   slots           Int               @default(1)
   state           SubscriptionState @default(ACTIVE)

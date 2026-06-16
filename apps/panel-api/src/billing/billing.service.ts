@@ -42,6 +42,10 @@ import { generateInvoiceNumber } from './invoice-number.util';
 import { calculateTax } from './tax.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreatePriceDto } from './dto/create-price.dto';
+import {
+  CreateHardwareTierDto,
+  UpdateHardwareTierDto,
+} from './dto/hardware-tier.dto';
 import { UpdatePriceDto } from './dto/update-price.dto';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { AddPaymentMethodDto } from './dto/add-payment-method.dto';
@@ -79,11 +83,51 @@ export class BillingService {
 
   // ---- Products & Prices -------------------------------------------------
 
-  /** List active products with their active prices. */
+  /**
+   * Include shape for a product with its active hardware tiers (each with active
+   * prices, ordered) plus active product-level prices — what the storefront and
+   * order flow need to render either tier cards or a slot selector.
+   */
+  private static readonly productInclude = {
+    prices: { where: { isActive: true } },
+    hardwareTiers: {
+      where: { isActive: true },
+      orderBy: { sortOrder: 'asc' },
+      include: { prices: { where: { isActive: true } } },
+    },
+  } satisfies Prisma.ProductInclude;
+
+  /** Admin include: every tier/price (active or not) for management screens. */
+  private static readonly productAdminInclude = {
+    prices: true,
+    hardwareTiers: {
+      orderBy: { sortOrder: 'asc' },
+      include: { prices: true },
+    },
+  } satisfies Prisma.ProductInclude;
+
+  /**
+   * Reconcile the billing model with the legacy `perSlot` flag so they never
+   * drift: PER_SLOT ⟺ perSlot === true. Either field may be supplied; both are
+   * written consistently.
+   */
+  private static resolveBillingModel(dto: {
+    billingModel?: 'HARDWARE_TIER' | 'PER_SLOT';
+    perSlot?: boolean;
+  }): { billingModel: 'HARDWARE_TIER' | 'PER_SLOT'; perSlot: boolean } | null {
+    if (dto.billingModel === undefined && dto.perSlot === undefined) return null;
+    const perSlot =
+      dto.billingModel !== undefined
+        ? dto.billingModel === 'PER_SLOT'
+        : !!dto.perSlot;
+    return { billingModel: perSlot ? 'PER_SLOT' : 'HARDWARE_TIER', perSlot };
+  }
+
+  /** List active products with their active prices + hardware tiers. */
   listProducts(): Promise<Product[]> {
     return this.prisma.product.findMany({
       where: { isActive: true },
-      include: { prices: { where: { isActive: true } } },
+      include: BillingService.productInclude,
       orderBy: { createdAt: 'asc' },
     });
   }
@@ -91,7 +135,7 @@ export class BillingService {
   async getProduct(id: string): Promise<Product> {
     const product = await this.prisma.product.findUnique({
       where: { id },
-      include: { prices: true },
+      include: BillingService.productAdminInclude,
     });
     if (!product) throw new NotFoundException('Product not found');
     return product;
@@ -99,10 +143,12 @@ export class BillingService {
 
   /** Admin: create a product. */
   createProduct(dto: CreateProductDto): Promise<Product> {
+    const model = BillingService.resolveBillingModel(dto);
     return this.prisma.product.create({
       data: {
         id: uuidv7(),
         type: dto.type,
+        billingModel: model?.billingModel ?? 'HARDWARE_TIER',
         name: dto.name,
         slug: dto.slug,
         description: dto.description,
@@ -112,7 +158,7 @@ export class BillingService {
         diskMb: dto.diskMb,
         slots: dto.slots,
         allowedTemplateIds: dto.allowedTemplateIds ?? [],
-        perSlot: dto.perSlot ?? false,
+        perSlot: model?.perSlot ?? false,
         gameTemplateId: dto.gameTemplateId ?? null,
         minSlots: dto.minSlots ?? undefined,
         maxSlots: dto.maxSlots ?? undefined,
@@ -124,17 +170,46 @@ export class BillingService {
     });
   }
 
-  /** Admin: create a price for a product. */
+  /** Admin: create a price for a product, or for one of its hardware tiers. */
   async createPrice(dto: CreatePriceDto) {
     // Ensure the product exists before attaching a price.
     await this.getProduct(dto.productId);
+    const currency = dto.currency ?? this.billingCfg.defaultCurrency;
+    if (dto.hardwareTierId) {
+      // The tier must exist and belong to this product.
+      const tier = await this.prisma.hardwareTier.findUnique({
+        where: { id: dto.hardwareTierId },
+        select: { productId: true },
+      });
+      if (!tier || tier.productId !== dto.productId) {
+        throw new BadRequestException('Hardware tier does not belong to product');
+      }
+    } else {
+      // SQL treats NULLs as distinct, so the unique index can't enforce a single
+      // product-level price per interval/currency — guard it here.
+      const dup = await this.prisma.price.findFirst({
+        where: {
+          productId: dto.productId,
+          hardwareTierId: null,
+          interval: dto.interval,
+          currency,
+        },
+        select: { id: true },
+      });
+      if (dup) {
+        throw new ConflictException(
+          'A price for that interval and currency already exists — edit it instead.',
+        );
+      }
+    }
     try {
       return await this.prisma.price.create({
         data: {
           id: uuidv7(),
           productId: dto.productId,
+          hardwareTierId: dto.hardwareTierId ?? null,
           interval: dto.interval,
-          currency: dto.currency ?? this.billingCfg.defaultCurrency,
+          currency,
           amountMinor: dto.amountMinor,
           stripePriceId: dto.stripePriceId,
           isActive: dto.isActive ?? true,
@@ -189,10 +264,10 @@ export class BillingService {
     return { id };
   }
 
-  /** Admin: list all products (active and inactive) with their prices. */
+  /** Admin: list all products (active and inactive) with prices + tiers. */
   listAllProducts(): Promise<Product[]> {
     return this.prisma.product.findMany({
-      include: { prices: true },
+      include: BillingService.productAdminInclude,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -204,6 +279,11 @@ export class BillingService {
   ): Promise<Product> {
     await this.getProduct(id);
     const data: Prisma.ProductUpdateInput = {};
+    const model = BillingService.resolveBillingModel(dto);
+    if (model) {
+      data.billingModel = model.billingModel;
+      data.perSlot = model.perSlot;
+    }
     if (dto.type !== undefined) data.type = dto.type;
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.slug !== undefined) data.slug = dto.slug;
@@ -216,7 +296,7 @@ export class BillingService {
     if (dto.allowedTemplateIds !== undefined) {
       data.allowedTemplateIds = dto.allowedTemplateIds;
     }
-    if (dto.perSlot !== undefined) data.perSlot = dto.perSlot;
+    // perSlot is reconciled with billingModel above (resolveBillingModel).
     if (dto.gameTemplateId !== undefined) {
       data.gameTemplate = dto.gameTemplateId
         ? { connect: { id: dto.gameTemplateId } }
@@ -256,10 +336,73 @@ export class BillingService {
   async getActiveProductBySlug(slug: string): Promise<Product> {
     const product = await this.prisma.product.findFirst({
       where: { slug, isActive: true },
-      include: { prices: { where: { isActive: true } } },
+      include: BillingService.productInclude,
     });
     if (!product) throw new NotFoundException('Product not found');
     return product;
+  }
+
+  // ---- Hardware tiers (game packages: Low/Mid/High) ----------------------
+
+  /** Admin: add a hardware tier to a product. */
+  async createTier(productId: string, dto: CreateHardwareTierDto) {
+    await this.getProduct(productId);
+    return this.prisma.hardwareTier.create({
+      data: {
+        id: uuidv7(),
+        productId,
+        name: dto.name,
+        description: dto.description,
+        cpuCores: dto.cpuCores,
+        memoryMb: dto.memoryMb,
+        diskMb: dto.diskMb,
+        recommendedPlayers: dto.recommendedPlayers ?? null,
+        isRecommended: dto.isRecommended ?? false,
+        isActive: dto.isActive ?? true,
+        sortOrder: dto.sortOrder ?? 0,
+      },
+    });
+  }
+
+  /** Admin: edit a hardware tier. */
+  async updateTier(tierId: string, dto: UpdateHardwareTierDto) {
+    const tier = await this.prisma.hardwareTier.findUnique({
+      where: { id: tierId },
+      select: { id: true },
+    });
+    if (!tier) throw new NotFoundException('Hardware tier not found');
+    const data: Prisma.HardwareTierUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.description !== undefined) data.description = dto.description;
+    if (dto.cpuCores !== undefined) data.cpuCores = dto.cpuCores;
+    if (dto.memoryMb !== undefined) data.memoryMb = dto.memoryMb;
+    if (dto.diskMb !== undefined) data.diskMb = dto.diskMb;
+    if (dto.recommendedPlayers !== undefined) {
+      data.recommendedPlayers = dto.recommendedPlayers;
+    }
+    if (dto.isRecommended !== undefined) data.isRecommended = dto.isRecommended;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;
+    return this.prisma.hardwareTier.update({ where: { id: tierId }, data });
+  }
+
+  /**
+   * Admin: delete a hardware tier (its prices cascade). Refuses when a
+   * subscription references it (billing history) — deactivate it instead.
+   */
+  async deleteTier(tierId: string): Promise<{ id: string }> {
+    const tier = await this.prisma.hardwareTier.findUnique({
+      where: { id: tierId },
+      select: { id: true, _count: { select: { subscriptions: true } } },
+    });
+    if (!tier) throw new NotFoundException('Hardware tier not found');
+    if (tier._count.subscriptions > 0) {
+      throw new BadRequestException(
+        'This tier has subscriptions and can’t be deleted — deactivate it instead.',
+      );
+    }
+    await this.prisma.hardwareTier.delete({ where: { id: tierId } });
+    return { id: tierId };
   }
 
   // ---- Subscriptions -----------------------------------------------------
@@ -278,6 +421,10 @@ export class BillingService {
     if (price.interval !== dto.interval) {
       throw new BadRequestException('Interval does not match the selected price');
     }
+    // The chosen price must match the chosen tier (or both be product-level).
+    if ((price.hardwareTierId ?? null) !== (dto.hardwareTierId ?? null)) {
+      throw new BadRequestException('Price does not belong to the selected tier');
+    }
 
     const now = new Date();
     const currentPeriodEnd = addInterval(now, dto.interval);
@@ -288,6 +435,7 @@ export class BillingService {
         userId,
         productId: dto.productId,
         priceId: dto.priceId,
+        hardwareTierId: dto.hardwareTierId ?? null,
         interval: dto.interval,
         slots: dto.slots && dto.slots > 0 ? dto.slots : 1,
         state: SubscriptionState.ACTIVE,
@@ -305,6 +453,7 @@ export class BillingService {
       where: { userId },
       include: {
         product: { include: { prices: true } },
+        hardwareTier: true,
         servers: {
           where: { deletedAt: null },
           select: { id: true, shortId: true, name: true, state: true },
@@ -335,8 +484,18 @@ export class BillingService {
           id: s.product.id,
           name: s.product.name,
           type: s.product.type,
+          billingModel: s.product.billingModel,
           perSlot: s.product.perSlot,
         },
+        hardwareTier: s.hardwareTier
+          ? {
+              id: s.hardwareTier.id,
+              name: s.hardwareTier.name,
+              cpuCores: s.hardwareTier.cpuCores,
+              memoryMb: s.hardwareTier.memoryMb,
+              diskMb: s.hardwareTier.diskMb,
+            }
+          : null,
         servers: s.servers,
         renewalAmountMinor: (price?.amountMinor ?? 0) * quantity,
         currency: price?.currency ?? this.billingCfg.defaultCurrency,
@@ -1011,7 +1170,7 @@ export class BillingService {
   ): Promise<Invoice> {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
-      include: { product: true, user: true },
+      include: { product: true, user: true, hardwareTier: true },
     });
     if (!subscription) throw new NotFoundException('Subscription not found');
 
@@ -1073,7 +1232,9 @@ export class BillingService {
           create: [
             {
               id: uuidv7(),
-              description: `${subscription.product.name} (${subscription.interval.toLowerCase()})`,
+              // Reflect the exact purchase: tier name for game orders, slot count
+              // for voice orders.
+              description: this.invoiceLineDescription(subscription, quantity),
               quantity,
               unitMinor,
               amountMinor: subtotalMinor,
@@ -1083,6 +1244,24 @@ export class BillingService {
       },
       include: { lineItems: true },
     });
+  }
+
+  /** Human invoice line for a subscription: includes tier / slot count. */
+  private invoiceLineDescription(
+    subscription: Subscription & {
+      product: Product;
+      hardwareTier?: { name: string } | null;
+    },
+    quantity: number,
+  ): string {
+    const interval = subscription.interval.toLowerCase();
+    if (subscription.hardwareTier) {
+      return `${subscription.product.name} — ${subscription.hardwareTier.name} (${interval})`;
+    }
+    if (subscription.product.perSlot) {
+      return `${subscription.product.name} — ${quantity} slots (${interval})`;
+    }
+    return `${subscription.product.name} (${interval})`;
   }
 
   /**

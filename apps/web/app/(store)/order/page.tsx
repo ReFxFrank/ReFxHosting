@@ -9,10 +9,13 @@ import {
   HardDrive,
   ShoppingCart,
   Server as ServerIcon,
+  Gamepad2,
+  Mic,
+  Users,
+  Check,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState } from "@/components/shared";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +31,7 @@ import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
 import { cn, formatMoney } from "@/lib/utils";
-import type { Product, BillingInterval } from "@/lib/types";
+import type { BillingInterval, HardwareTier, Price, Product } from "@/lib/types";
 
 const INTERVAL_LABEL: Record<BillingInterval, string> = {
   WEEKLY: "Weekly",
@@ -47,11 +50,20 @@ const INTERVAL_ORDER: BillingInterval[] = [
   "ANNUAL",
 ];
 
+const isVoice = (p: Product) =>
+  p.billingModel === "PER_SLOT" || p.type === "VOICE_SERVER";
+
+function sortPrices(prices: Price[]) {
+  return [...prices]
+    .filter((p) => p.isActive !== false)
+    .sort((a, b) => INTERVAL_ORDER.indexOf(a.interval) - INTERVAL_ORDER.indexOf(b.interval));
+}
+
 export default function OrderPage() {
   const router = useRouter();
 
   const productsQ = useQuery({
-    queryKey: ["catalog", "products", "perslot"],
+    queryKey: ["catalog", "products", "tiers"],
     queryFn: () => api.catalog.products(),
   });
   const templatesQ = useQuery({
@@ -73,14 +85,28 @@ export default function OrderPage() {
     () => Object.fromEntries((templatesQ.data ?? []).map((t) => [t.id, t])),
     [templatesQ.data],
   );
-  const games = useMemo(
-    () => (productsQ.data ?? []).filter((p) => p.perSlot && p.isActive && p.gameTemplateId),
+
+  // Orderable offerings: game products (with hardware tiers) and voice products
+  // (per-slot). Each must be active and bound to a template to provision.
+  const offerings = useMemo(
+    () =>
+      (productsQ.data ?? []).filter(
+        (p) =>
+          p.isActive &&
+          p.gameTemplateId &&
+          (isVoice(p)
+            ? true
+            : (p.hardwareTiers ?? []).some((t) => t.isActive !== false)),
+      ),
     [productsQ.data],
   );
+  const gameOfferings = useMemo(() => offerings.filter((p) => !isVoice(p)), [offerings]);
+  const voiceOfferings = useMemo(() => offerings.filter((p) => isVoice(p)), [offerings]);
 
   const [productId, setProductId] = useState<string | null>(null);
+  const [tierId, setTierId] = useState<string | null>(null);
   const [slots, setSlots] = useState(1);
-  const [interval, setInterval] = useState<BillingInterval | null>(null);
+  const [interval, setIntervalState] = useState<BillingInterval | null>(null);
   const [regionId, setRegionId] = useState<string | null>(null);
   const [nodeId, setNodeId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -92,7 +118,16 @@ export default function OrderPage() {
   const [gift, setGift] = useState<{ code: string; balanceMinor: number } | null>(null);
   const [useCredit, setUseCredit] = useState(false);
 
-  const product = games.find((p) => p.id === productId) ?? null;
+  const product = offerings.find((p) => p.id === productId) ?? null;
+  const voice = product ? isVoice(product) : false;
+  const tiers = useMemo(
+    () =>
+      (product?.hardwareTiers ?? [])
+        .filter((t) => t.isActive !== false)
+        .sort((a, b) => a.sortOrder - b.sortOrder),
+    [product],
+  );
+  const tier = voice ? null : tiers.find((t) => t.id === tierId) ?? null;
   const template = product ? templatesById[product.gameTemplateId ?? ""] : null;
   const configVars = (template?.variables ?? []).filter(
     (v) => v.userEditable && v.type !== "SECRET",
@@ -100,31 +135,66 @@ export default function OrderPage() {
   const setConfigVal = (k: string, v: string) =>
     setConfig((c) => ({ ...c, [k]: v }));
 
-  // Deep link: /order?game=<template-slug>
+  // The price list to choose a billing interval from: tier prices (game) or
+  // product prices (voice).
+  const sortedPriceList = useMemo(
+    () => sortPrices(voice ? product?.prices ?? [] : tier?.prices ?? []),
+    [voice, product, tier],
+  );
+  const price = interval
+    ? sortedPriceList.find((p) => p.interval === interval) ?? null
+    : null;
+
+  // Deep link: /order?game=<template-slug> or /order?product=<slug>
   const presetApplied = useRef(false);
   useEffect(() => {
-    if (presetApplied.current || !games.length) return;
-    const slug = new URLSearchParams(window.location.search).get("game");
-    if (slug) {
-      const match = games.find((p) => templatesById[p.gameTemplateId ?? ""]?.slug === slug);
-      if (match) setProductId(match.id);
+    if (presetApplied.current || !offerings.length) return;
+    const params = new URLSearchParams(window.location.search);
+    const productSlug = params.get("product");
+    const gameSlug = params.get("game");
+    if (productSlug) {
+      const m = offerings.find((p) => p.slug === productSlug);
+      if (m) setProductId(m.id);
+    } else if (gameSlug) {
+      const m = offerings.find(
+        (p) => templatesById[p.gameTemplateId ?? ""]?.slug === gameSlug,
+      );
+      if (m) setProductId(m.id);
     }
     presetApplied.current = true;
-  }, [games, templatesById]);
+  }, [offerings, templatesById]);
 
-  // When the chosen game changes, reset its dependent selections.
+  // When the chosen offering changes, reset its dependent selections + default
+  // the tier to the recommended one (game) and the slots to the minimum (voice).
   useEffect(() => {
     if (!product) return;
-    setSlots((s) => clampSlots(s, product));
-    setInterval((cur) => {
-      const ints = sortedPrices(product).map((p) => p.interval);
-      return cur && ints.includes(cur) ? cur : (ints[0] ?? null);
-    });
     setRegionId(null);
     setNodeId(null);
+    if (isVoice(product)) {
+      setTierId(null);
+      setSlots((s) => clampSlots(s, product));
+    } else {
+      const list = (product.hardwareTiers ?? [])
+        .filter((t) => t.isActive !== false)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const rec = list.find((t) => t.isRecommended) ?? list[0] ?? null;
+      setTierId(rec?.id ?? null);
+    }
   }, [product]);
 
-  // Seed per-game config fields from their defaults when the game/template loads.
+  // Default / re-validate the interval whenever the price list changes.
+  useEffect(() => {
+    const ints = sortedPriceList.map((p) => p.interval);
+    setIntervalState((cur) =>
+      cur && ints.includes(cur)
+        ? cur
+        : ints.includes("MONTHLY")
+        ? "MONTHLY"
+        : ints[0] ?? null,
+    );
+  }, [sortedPriceList]);
+
+  // Seed per-game config fields from their defaults when the template loads.
   useEffect(() => {
     if (!product) return;
     const tpl = templatesById[product.gameTemplateId ?? ""];
@@ -135,16 +205,17 @@ export default function OrderPage() {
     setConfig(defaults);
   }, [product, templatesById]);
 
-  const price = product && interval
-    ? product.prices.find((p) => p.interval === interval) ?? null
-    : null;
-
-  const limits = product
+  // Reserved resources drive the location/node capacity check.
+  const limits = !product
+    ? null
+    : voice
     ? {
         cpuCores: +(product.cpuPerSlot * slots).toFixed(2),
         memoryMb: product.memoryMbPerSlot * slots,
         diskMb: product.diskMbPerSlot * slots,
       }
+    : tier
+    ? { cpuCores: tier.cpuCores, memoryMb: tier.memoryMb, diskMb: tier.diskMb }
     : null;
 
   const locationsQ = useQuery({
@@ -152,21 +223,18 @@ export default function OrderPage() {
     queryFn: () => api.catalog.locations(limits!),
     enabled: !!limits,
   });
-
-  // Nodes in the chosen region with capacity (lets the customer pick a specific
-  // node, or leave it on Auto for the scheduler to choose the best one).
   const nodesQ = useQuery({
     queryKey: ["catalog", "nodes", regionId, limits?.cpuCores, limits?.memoryMb, limits?.diskMb],
     queryFn: () => api.catalog.nodes(regionId!, limits!),
     enabled: !!regionId && !!limits,
   });
-  // Changing region invalidates the node choice.
   useEffect(() => {
     setNodeId(null);
   }, [regionId]);
 
   // Pricing preview (the backend recomputes authoritatively, incl. tax).
-  const subtotalMinor = price ? price.amountMinor * slots : 0;
+  const quantity = voice ? slots : 1;
+  const subtotalMinor = price ? price.amountMinor * quantity : 0;
   const discountMinor = coupon ? Math.min(coupon.discountMinor, subtotalMinor) : 0;
   const afterDiscount = Math.max(0, subtotalMinor - discountMinor);
   const giftCredit = gift ? Math.min(gift.balanceMinor, afterDiscount) : 0;
@@ -176,7 +244,7 @@ export default function OrderPage() {
   const dueTodayMinor = Math.max(0, afterGift - creditUsed);
   const currency = price?.currency ?? "USD";
 
-  // A coupon discount depends on the subtotal, so clear it if slots/price change.
+  // A coupon discount depends on the subtotal, so clear it if it changes.
   useEffect(() => {
     setCoupon(null);
   }, [subtotalMinor]);
@@ -211,7 +279,8 @@ export default function OrderPage() {
         productId: product!.id,
         priceId: price!.id,
         templateId: product!.gameTemplateId!,
-        slots,
+        hardwareTierId: voice ? undefined : tier?.id,
+        slots: voice ? slots : undefined,
         regionId: regionId ?? undefined,
         nodeId: nodeId ?? undefined,
         name: name.trim(),
@@ -240,13 +309,16 @@ export default function OrderPage() {
   const stripeOn = !!payCfg.data?.stripe.configured;
   const paypalOn = !!payCfg.data?.paypal.configured;
   const canOrder =
-    !!product && !!price && !!name.trim() && slots > 0 &&
+    !!product &&
+    !!price &&
+    !!name.trim() &&
+    (voice ? slots > 0 : !!tier) &&
     (!(locationsQ.data?.length) || !!regionId);
 
   if (productsQ.isLoading) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Order a game server" description="Pick a game, configure it, go live." />
+        <PageHeader title="Order a server" description="Pick a product, configure it, go live." />
         <div className="grid gap-3 sm:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
         </div>
@@ -254,14 +326,14 @@ export default function OrderPage() {
     );
   }
 
-  if (!games.length) {
+  if (!offerings.length) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Order a game server" description="Pick a game, configure it, go live." />
+        <PageHeader title="Order a server" description="Pick a product, configure it, go live." />
         <EmptyState
           icon={ServerIcon}
-          title="No game plans available yet"
-          description="An admin needs to create a per-slot product (Admin → Products) and publish pricing."
+          title="No plans available yet"
+          description="An admin needs to create a game product with hardware tiers, or a voice product (Admin → Products)."
         />
       </div>
     );
@@ -269,74 +341,96 @@ export default function OrderPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Order a game server" description="Pick a game, choose your size, and you're live in minutes." />
+      <PageHeader title="Order a server" description="Choose a product, configure it, and you're live in minutes." />
 
-      {/* Step 1 — game */}
+      {/* Step 1 — choose an offering (game or voice) */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-muted-foreground">1 · Choose a game</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {games.map((g) => {
-            const tpl = templatesById[g.gameTemplateId ?? ""];
-            const from = sortedPrices(g)[0];
-            const active = g.id === productId;
-            return (
-              <button
-                key={g.id}
-                onClick={() => setProductId(g.id)}
-                className={cn(
-                  "flex items-center gap-3 rounded-xl border p-3 text-left transition-colors",
-                  active ? "border-primary bg-primary/5" : "hover:bg-accent/40",
-                )}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={tpl?.iconUrl || tpl?.cardImageUrl || "/games/presets/default.svg"}
-                  alt=""
-                  className="size-12 shrink-0 rounded-lg bg-white/5 object-cover"
+        <h2 className="text-sm font-semibold text-muted-foreground">1 · Choose a product</h2>
+
+        {gameOfferings.length > 0 && (
+          <div className="space-y-2">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Gamepad2 className="size-3.5" /> Game servers
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {gameOfferings.map((g) => (
+                <OfferingCard
+                  key={g.id}
+                  product={g}
+                  active={g.id === productId}
+                  icon={templatesById[g.gameTemplateId ?? ""]?.iconUrl || templatesById[g.gameTemplateId ?? ""]?.cardImageUrl}
+                  onSelect={() => setProductId(g.id)}
                 />
-                <div className="min-w-0">
-                  <p className="truncate font-semibold">{g.name}</p>
-                  {from && (
-                    <p className="text-xs text-muted-foreground">
-                      from {formatMoney(from.amountMinor, from.currency)}/slot ·{" "}
-                      {INTERVAL_LABEL[from.interval].toLowerCase()}
-                    </p>
-                  )}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {voiceOfferings.length > 0 && (
+          <div className="space-y-2">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Mic className="size-3.5" /> Voice servers
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {voiceOfferings.map((g) => (
+                <OfferingCard
+                  key={g.id}
+                  product={g}
+                  active={g.id === productId}
+                  icon={templatesById[g.gameTemplateId ?? ""]?.iconUrl}
+                  onSelect={() => setProductId(g.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {product && (
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-6">
-            {/* Slots */}
-            <section className="space-y-3 rounded-xl border p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold">2 · Slots</h2>
-                <Badge variant="secondary" className="text-sm">{slots} slots</Badge>
-              </div>
-              <Slider
-                value={slots}
-                min={product.minSlots}
-                max={product.maxSlots}
-                step={product.slotStep || 1}
-                onChange={setSlots}
-              />
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{product.minSlots}</span>
-                <span>{product.maxSlots}</span>
-              </div>
-              {limits && (
-                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1"><Cpu className="size-3.5" /> {limits.cpuCores} vCPU</span>
-                  <span className="inline-flex items-center gap-1"><MemoryStick className="size-3.5" /> {(limits.memoryMb / 1024).toFixed(1)} GB RAM</span>
-                  <span className="inline-flex items-center gap-1"><HardDrive className="size-3.5" /> {(limits.diskMb / 1024).toFixed(1)} GB disk</span>
+            {/* Step 2 — hardware tiers (game) OR slot selector (voice) */}
+            {!voice ? (
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold">2 · Choose a hardware tier</h2>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {tiers.map((t) => (
+                    <TierCard
+                      key={t.id}
+                      tier={t}
+                      active={t.id === tierId}
+                      currency={currency}
+                      interval={interval}
+                      onSelect={() => setTierId(t.id)}
+                    />
+                  ))}
                 </div>
-              )}
-            </section>
+              </section>
+            ) : (
+              <section className="space-y-3 rounded-xl border p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold">2 · Slots</h2>
+                  <Badge variant="secondary" className="text-sm">{slots} slots</Badge>
+                </div>
+                <Slider
+                  value={slots}
+                  min={product.minSlots}
+                  max={product.maxSlots}
+                  step={product.slotStep || 1}
+                  onChange={setSlots}
+                />
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{product.minSlots}</span>
+                  <span>{product.maxSlots}</span>
+                </div>
+                {price && (
+                  <p className="text-xs text-muted-foreground">
+                    {formatMoney(price.amountMinor, currency)} / slot ·{" "}
+                    {interval ? INTERVAL_LABEL[interval].toLowerCase() : ""}
+                  </p>
+                )}
+              </section>
+            )}
 
             {/* Per-game configuration (user-editable template variables) */}
             {configVars.length > 0 && (
@@ -388,32 +482,38 @@ export default function OrderPage() {
               </section>
             )}
 
-            {/* Duration */}
+            {/* Step 3 — billing duration */}
             <section className="space-y-3 rounded-xl border p-4">
               <h2 className="text-sm font-semibold">3 · Billing duration</h2>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {sortedPrices(product).map((p) => {
-                  const active = p.interval === interval;
-                  return (
-                    <button
-                      key={p.id}
-                      onClick={() => setInterval(p.interval)}
-                      className={cn(
-                        "rounded-lg border p-3 text-left transition-colors",
-                        active ? "border-primary bg-primary/5" : "hover:bg-accent/40",
-                      )}
-                    >
-                      <p className="font-medium">{INTERVAL_LABEL[p.interval]}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatMoney(p.amountMinor * slots, p.currency)}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
+              {sortedPriceList.length ? (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {sortedPriceList.map((p) => {
+                    const active = p.interval === interval;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => setIntervalState(p.interval)}
+                        className={cn(
+                          "rounded-lg border p-3 text-left transition-colors",
+                          active ? "border-primary bg-primary/5" : "hover:bg-accent/40",
+                        )}
+                      >
+                        <p className="font-medium">{INTERVAL_LABEL[p.interval]}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatMoney(p.amountMinor * quantity, p.currency)}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {voice ? "This product has no pricing yet." : "Select a tier to see pricing."}
+                </p>
+              )}
             </section>
 
-            {/* Location + node */}
+            {/* Step 4 — location + node */}
             <section className="space-y-3 rounded-xl border p-4">
               <h2 className="text-sm font-semibold">4 · Location</h2>
               {locationsQ.isLoading ? (
@@ -455,24 +555,24 @@ export default function OrderPage() {
                     </Select>
                     {regionId && !nodesQ.isLoading && (nodesQ.data?.length ?? 0) === 0 && (
                       <p className="text-xs text-muted-foreground">
-                        No nodes with capacity here — try another region or fewer slots.
+                        No nodes with capacity here — try another region.
                       </p>
                     )}
                   </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No locations currently have capacity for this size — try fewer slots.
+                  No locations currently have capacity for this size{voice ? " — try fewer slots." : "."}
                 </p>
               )}
             </section>
 
-            {/* Name */}
+            {/* Step 5 — name */}
             <section className="space-y-2 rounded-xl border p-4">
               <Label htmlFor="srv-name">5 · Server name</Label>
               <Input
                 id="srv-name"
-                placeholder="My awesome server"
+                placeholder={voice ? "My community voice" : "My awesome server"}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -482,8 +582,19 @@ export default function OrderPage() {
           {/* Summary */}
           <aside className="lg:sticky lg:top-6 h-fit space-y-3 rounded-xl border p-4">
             <h2 className="text-sm font-semibold">Summary</h2>
-            <Row label="Game" value={product.name} />
-            <Row label="Slots" value={String(slots)} />
+            <Row label="Product" value={product.name} />
+            <Row label="Type" value={voice ? "Voice server" : "Game server"} />
+            {voice ? (
+              <Row label="Slots" value={String(slots)} />
+            ) : (
+              <Row label="Tier" value={tier?.name ?? "—"} />
+            )}
+            {limits && (
+              <Row
+                label="Resources"
+                value={`${limits.cpuCores} vCPU · ${(limits.memoryMb / 1024).toFixed(1)} GB · ${(limits.diskMb / 1024).toFixed(0)} GB`}
+              />
+            )}
             <Row label="Duration" value={interval ? INTERVAL_LABEL[interval] : "—"} />
             <Row
               label="Location"
@@ -641,10 +752,117 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function sortedPrices(product: Product) {
-  return [...product.prices]
-    .filter((p) => p.isActive !== false)
-    .sort((a, b) => INTERVAL_ORDER.indexOf(a.interval) - INTERVAL_ORDER.indexOf(b.interval));
+/** Cheapest active price across a product's tiers (game) or its prices (voice). */
+function fromPrice(product: Product): Price | null {
+  const all = isVoice(product)
+    ? product.prices ?? []
+    : (product.hardwareTiers ?? []).flatMap((t) => t.prices ?? []);
+  const active = all.filter((p) => p.isActive !== false);
+  if (!active.length) return null;
+  return active.reduce((a, b) => (b.amountMinor < a.amountMinor ? b : a));
+}
+
+function OfferingCard({
+  product,
+  active,
+  icon,
+  onSelect,
+}: {
+  product: Product;
+  active: boolean;
+  icon?: string | null;
+  onSelect: () => void;
+}) {
+  const from = fromPrice(product);
+  const voice = isVoice(product);
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        "flex items-center gap-3 rounded-xl border p-3 text-left transition-colors",
+        active ? "border-primary bg-primary/5" : "hover:bg-accent/40",
+      )}
+    >
+      {voice ? (
+        <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-white/5">
+          <Mic className="size-6 text-muted-foreground" />
+        </span>
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={icon || "/games/presets/default.svg"}
+          alt=""
+          className="size-12 shrink-0 rounded-lg bg-white/5 object-cover"
+        />
+      )}
+      <div className="min-w-0">
+        <p className="truncate font-semibold">{product.name}</p>
+        {from && (
+          <p className="text-xs text-muted-foreground">
+            from {formatMoney(from.amountMinor, from.currency)}
+            {voice ? "/slot" : ""}
+          </p>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function TierCard({
+  tier,
+  active,
+  currency,
+  interval,
+  onSelect,
+}: {
+  tier: HardwareTier;
+  active: boolean;
+  currency: string;
+  interval: BillingInterval | null;
+  onSelect: () => void;
+}) {
+  // Show the price for the selected interval if present, else the cheapest.
+  const sorted = sortPrices(tier.prices);
+  const shown =
+    (interval ? sorted.find((p) => p.interval === interval) : null) ?? sorted[0] ?? null;
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        "relative flex flex-col gap-3 rounded-xl border p-4 text-left transition-colors",
+        active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-accent/40",
+      )}
+    >
+      <div className="flex items-center justify-between">
+        <p className="font-semibold">{tier.name}</p>
+        {tier.isRecommended && (
+          <Badge className="text-[10px]" variant="secondary">Recommended</Badge>
+        )}
+      </div>
+      {tier.description && (
+        <p className="text-xs text-muted-foreground">{tier.description}</p>
+      )}
+      <div className="space-y-1 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5"><MemoryStick className="size-3.5" /> {(tier.memoryMb / 1024).toFixed(tier.memoryMb % 1024 ? 1 : 0)} GB RAM</span>
+        <span className="flex items-center gap-1.5"><Cpu className="size-3.5" /> {tier.cpuCores} vCPU</span>
+        <span className="flex items-center gap-1.5"><HardDrive className="size-3.5" /> {(tier.diskMb / 1024).toFixed(0)} GB disk</span>
+        {tier.recommendedPlayers != null && (
+          <span className="flex items-center gap-1.5"><Users className="size-3.5" /> ~{tier.recommendedPlayers} players</span>
+        )}
+      </div>
+      <div className="mt-auto flex items-center justify-between pt-1">
+        <span className="text-sm font-semibold">
+          {shown ? formatMoney(shown.amountMinor, shown.currency) : "—"}
+          {shown && (
+            <span className="text-xs font-normal text-muted-foreground">
+              /{INTERVAL_LABEL[shown.interval].toLowerCase()}
+            </span>
+          )}
+        </span>
+        {active && <Check className="size-4 text-primary" />}
+      </div>
+    </button>
+  );
 }
 
 function clampSlots(s: number, product: Product) {

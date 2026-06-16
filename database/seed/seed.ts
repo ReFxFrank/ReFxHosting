@@ -316,6 +316,7 @@ async function seedGameCategories() {
     { name: 'Simulation', slug: 'simulation' },
     { name: 'Roleplay', slug: 'roleplay' },
     { name: 'FPS', slug: 'shooter' },
+    { name: 'Voice', slug: 'voice' },
   ];
 
   const bySlug: Record<string, string> = {};
@@ -331,123 +332,206 @@ async function seedGameCategories() {
   return bySlug;
 }
 
-async function seedProducts() {
-  // Each product carries a resource template + a price matrix. Prices are in
-  // integer minor units (cents). USD is the primary currency; a couple of
-  // products also advertise EUR.
-  interface PriceSpec {
-    interval: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
-    currency: string;
-    amountMinor: number;
-  }
-  interface ProductSpec {
-    name: string;
-    slug: string;
-    description: string;
-    cpuCores: number;
-    memoryMb: number;
-    diskMb: number;
-    slots: number | null;
-    prices: PriceSpec[];
-  }
-
-  const products: ProductSpec[] = [
-    {
-      name: 'Game Server — Starter',
-      slug: 'game-server-starter',
-      description: '2 vCPU, 4 GB RAM, 25 GB NVMe. Great for small Minecraft / Valheim groups.',
-      cpuCores: 2,
-      memoryMb: 4096,
-      diskMb: 25600,
-      slots: 12,
-      prices: [
-        { interval: 'MONTHLY', currency: 'USD', amountMinor: 999 },
-        { interval: 'QUARTERLY', currency: 'USD', amountMinor: 2697 },
-        { interval: 'ANNUAL', currency: 'USD', amountMinor: 9590 },
-        { interval: 'MONTHLY', currency: 'EUR', amountMinor: 899 },
-      ],
-    },
-    {
-      name: 'Game Server — Standard',
-      slug: 'game-server-standard',
-      description: '4 vCPU, 8 GB RAM, 50 GB NVMe. Modded servers and mid-size communities.',
-      cpuCores: 4,
-      memoryMb: 8192,
-      diskMb: 51200,
-      slots: 32,
-      prices: [
-        { interval: 'MONTHLY', currency: 'USD', amountMinor: 1999 },
-        { interval: 'QUARTERLY', currency: 'USD', amountMinor: 5397 },
-        { interval: 'ANNUAL', currency: 'USD', amountMinor: 19190 },
-        { interval: 'MONTHLY', currency: 'EUR', amountMinor: 1799 },
-      ],
-    },
-    {
-      name: 'Game Server — Performance',
-      slug: 'game-server-performance',
-      description: '8 vCPU, 16 GB RAM, 100 GB NVMe. Rust / Palworld / heavy mod packs.',
-      cpuCores: 8,
-      memoryMb: 16384,
-      diskMb: 102400,
-      slots: 100,
-      prices: [
-        { interval: 'MONTHLY', currency: 'USD', amountMinor: 3999 },
-        { interval: 'QUARTERLY', currency: 'USD', amountMinor: 10797 },
-        { interval: 'ANNUAL', currency: 'USD', amountMinor: 38390 },
-      ],
-    },
+/** Interval price points derived from a monthly base (longer terms discounted). */
+function intervalPrices(monthly: number): Array<['MONTHLY' | 'QUARTERLY' | 'ANNUAL', number]> {
+  return [
+    ['MONTHLY', monthly],
+    ['QUARTERLY', Math.round(monthly * 3 * 0.9)],
+    ['ANNUAL', Math.round(monthly * 12 * 0.8)],
   ];
+}
 
-  for (const p of products) {
+/** Idempotently upsert a tier price; never clobbers admin-tuned amounts. */
+async function upsertTierPrice(
+  productId: string,
+  tierId: string,
+  interval: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL',
+  amountMinor: number,
+) {
+  const existing = await prisma.price.findFirst({
+    where: { productId, hardwareTierId: tierId, interval, currency: 'USD' },
+    select: { id: true },
+  });
+  if (existing) return;
+  await prisma.price.create({
+    data: {
+      id: uuidv7(),
+      productId,
+      hardwareTierId: tierId,
+      interval,
+      currency: 'USD',
+      amountMinor,
+      isActive: true,
+    },
+  });
+}
+
+/**
+ * Create a HARDWARE_TIER game Product for each game template with three standard
+ * tiers (Low / Mid / High) sized around the template's recommended specs. Mid is
+ * marked recommended. Tier resources/prices seed sensible defaults but are fully
+ * editable in the admin panel afterwards. Idempotent + create-only on re-seed.
+ * Legacy per-loader Minecraft eggs and voice templates are skipped.
+ */
+async function seedGameTierProducts() {
+  const SKIP = new Set([
+    'minecraft-paper',
+    'minecraft-fabric',
+    'minecraft-forge',
+    'minecraft-neoforge',
+    'teamspeak3', // voice — handled by seedVoiceProducts
+  ]);
+  const templates = await prisma.gameTemplate.findMany({
+    select: {
+      id: true,
+      slug: true,
+      name: true,
+      recCpuCores: true,
+      recMemoryMb: true,
+      recDiskMb: true,
+      category: { select: { slug: true } },
+    },
+  });
+
+  let count = 0;
+  for (const t of templates) {
+    if (SKIP.has(t.slug) || t.category?.slug === 'voice') continue;
+
+    const slug = `gs-${t.slug}`;
     const product = await prisma.product.upsert({
-      where: { slug: p.slug },
-      update: {
-        name: p.name,
-        description: p.description,
-        type: 'GAME_SERVER',
-        isActive: true,
-        cpuCores: p.cpuCores,
-        memoryMb: p.memoryMb,
-        diskMb: p.diskMb,
-        slots: p.slots,
-      },
+      where: { slug },
+      // Don't clobber admin tuning on re-seed; just keep the game link + model.
+      update: { gameTemplateId: t.id, type: 'GAME_SERVER', billingModel: 'HARDWARE_TIER', perSlot: false },
       create: {
         id: uuidv7(),
         type: 'GAME_SERVER',
-        name: p.name,
-        slug: p.slug,
-        description: p.description,
+        billingModel: 'HARDWARE_TIER',
+        name: t.name,
+        slug,
+        description: `${t.name} game server hosting — pick a hardware tier.`,
         isActive: true,
-        cpuCores: p.cpuCores,
-        memoryMb: p.memoryMb,
-        diskMb: p.diskMb,
-        slots: p.slots,
-        allowedTemplateIds: [], // empty = all templates allowed
+        perSlot: false,
+        gameTemplateId: t.id,
+        allowedTemplateIds: [t.id],
       },
     });
 
-    for (const price of p.prices) {
-      await prisma.price.upsert({
-        where: {
-          productId_interval_currency: {
-            productId: product.id,
-            interval: price.interval,
-            currency: price.currency,
-          },
-        },
-        update: { amountMinor: price.amountMinor, isActive: true },
-        create: {
-          id: uuidv7(),
-          productId: product.id,
-          interval: price.interval,
-          currency: price.currency,
-          amountMinor: price.amountMinor,
-          isActive: true,
-        },
+    // Tier definitions scaled around the template's recommended specs.
+    const tiers: Array<{
+      name: string;
+      description: string;
+      mult: number;
+      players: number;
+      recommended: boolean;
+      sortOrder: number;
+    }> = [
+      { name: 'Low Tier', description: 'Entry-level — small communities & lightweight servers.', mult: 0.5, players: 10, recommended: false, sortOrder: 0 },
+      { name: 'Mid Tier', description: 'Balanced — the recommended default for most servers.', mult: 1, players: 25, recommended: true, sortOrder: 1 },
+      { name: 'High Tier', description: 'Premium — large communities & heavy/modded servers.', mult: 2, players: 60, recommended: false, sortOrder: 2 },
+    ];
+
+    for (const spec of tiers) {
+      const cpuCores = Math.max(1, Math.round(t.recCpuCores * spec.mult * 2) / 2);
+      const memoryMb = Math.max(1024, Math.round((t.recMemoryMb * spec.mult) / 512) * 512);
+      const diskMb = Math.max(5120, Math.round((t.recDiskMb * spec.mult) / 1024) * 1024);
+      // ~$2 per GB RAM per month, floored at $3.
+      const monthly = Math.max(300, Math.round((memoryMb / 1024) * 200));
+
+      // Idempotent on (productId, name): reuse the existing tier if present.
+      const existing = await prisma.hardwareTier.findFirst({
+        where: { productId: product.id, name: spec.name },
+        select: { id: true },
       });
+      const tier = existing
+        ? await prisma.hardwareTier.findUniqueOrThrow({ where: { id: existing.id } })
+        : await prisma.hardwareTier.create({
+            data: {
+              id: uuidv7(),
+              productId: product.id,
+              name: spec.name,
+              description: spec.description,
+              cpuCores,
+              memoryMb,
+              diskMb,
+              recommendedPlayers: spec.players,
+              isRecommended: spec.recommended,
+              isActive: true,
+              sortOrder: spec.sortOrder,
+            },
+          });
+
+      for (const [interval, amountMinor] of intervalPrices(monthly)) {
+        await upsertTierPrice(product.id, tier.id, interval, amountMinor);
+      }
     }
+    count += 1;
   }
-  console.log(`  • Products: ${products.map((p) => p.slug).join(', ')}`);
+  console.log(`  • Game tier products: ${count}`);
+}
+
+/**
+ * Create a slot-based VOICE_SERVER product for TeamSpeak 3 (the first voice
+ * product), bound to the teamspeak3 template. Per-slot pricing/resources;
+ * idempotent + create-only on re-seed.
+ */
+async function seedVoiceProducts() {
+  const tpl = await prisma.gameTemplate.findUnique({
+    where: { slug: 'teamspeak3' },
+    select: { id: true, name: true },
+  });
+  if (!tpl) {
+    console.log('  • Voice products: skipped (teamspeak3 template missing)');
+    return;
+  }
+
+  const slug = 'voice-teamspeak3';
+  const product = await prisma.product.upsert({
+    where: { slug },
+    update: { gameTemplateId: tpl.id, type: 'VOICE_SERVER', billingModel: 'PER_SLOT', perSlot: true },
+    create: {
+      id: uuidv7(),
+      type: 'VOICE_SERVER',
+      billingModel: 'PER_SLOT',
+      name: 'TeamSpeak 3',
+      slug,
+      description: 'TeamSpeak 3 voice hosting — billed per slot. Lightweight, low-latency VoIP.',
+      isActive: true,
+      perSlot: true,
+      gameTemplateId: tpl.id,
+      allowedTemplateIds: [tpl.id],
+      minSlots: 10,
+      maxSlots: 512,
+      slotStep: 10,
+      // Voice is light: a few MB RAM/slot, negligible CPU/disk.
+      cpuPerSlot: 0.01,
+      memoryMbPerSlot: 8,
+      diskMbPerSlot: 4,
+    },
+  });
+
+  // ~$0.10 per slot per month.
+  for (const [interval, amountMinor] of [
+    ['MONTHLY', 10],
+    ['QUARTERLY', 27],
+    ['ANNUAL', 96],
+  ] as Array<['MONTHLY' | 'QUARTERLY' | 'ANNUAL', number]>) {
+    const existing = await prisma.price.findFirst({
+      where: { productId: product.id, hardwareTierId: null, interval, currency: 'USD' },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await prisma.price.create({
+      data: {
+        id: uuidv7(),
+        productId: product.id,
+        interval,
+        currency: 'USD',
+        amountMinor,
+        isActive: true,
+      },
+    });
+  }
+  console.log('  • Voice products: TeamSpeak 3 (per-slot)');
 }
 
 /** Read existing game categories into a { slug: id } map (no writes). */
@@ -597,101 +681,6 @@ async function seedTemplates(
   );
 }
 
-/**
- * Create a GPortal-style per-slot Product for each game template, deriving
- * per-slot resources from the template's recommended specs and pricing each
- * billing interval (with longer terms discounted). Idempotent: products/prices
- * are only written on first creation, so admin tuning persists across re-seeds.
- * Legacy per-loader Minecraft eggs are skipped (the unified `minecraft` covers them).
- */
-async function seedPerSlotProducts() {
-  const LEGACY = new Set([
-    'minecraft-paper',
-    'minecraft-fabric',
-    'minecraft-forge',
-    'minecraft-neoforge',
-  ]);
-  const BASE_SLOTS = 8; // rec resources are treated as ~8 slots' worth
-  const templates = await prisma.gameTemplate.findMany({
-    select: {
-      id: true,
-      slug: true,
-      name: true,
-      recCpuCores: true,
-      recMemoryMb: true,
-      recDiskMb: true,
-    },
-  });
-
-  let count = 0;
-  for (const t of templates) {
-    if (LEGACY.has(t.slug)) continue;
-
-    const memoryMbPerSlot = Math.max(256, Math.round(t.recMemoryMb / BASE_SLOTS));
-    const cpuPerSlot = Math.max(0.1, Math.round((t.recCpuCores / BASE_SLOTS) * 100) / 100);
-    const diskMbPerSlot = Math.max(512, Math.round(t.recDiskMb / BASE_SLOTS));
-    // ~$1.50 per GB-of-RAM per slot per month, floored at $0.50.
-    const monthly = Math.max(50, Math.round((memoryMbPerSlot / 1024) * 150));
-
-    const slug = `gs-${t.slug}`;
-    const product = await prisma.product.upsert({
-      where: { slug },
-      // Don't clobber admin-tuned products on re-seed; just ensure the link.
-      update: { gameTemplateId: t.id, perSlot: true },
-      create: {
-        id: uuidv7(),
-        type: 'GAME_SERVER',
-        name: t.name,
-        slug,
-        description: `${t.name} game server — pay per slot.`,
-        isActive: true,
-        perSlot: true,
-        gameTemplateId: t.id,
-        allowedTemplateIds: [t.id],
-        minSlots: 2,
-        maxSlots: 64,
-        slotStep: 2,
-        cpuPerSlot,
-        memoryMbPerSlot,
-        diskMbPerSlot,
-      },
-    });
-
-    // Per-slot price per interval. Short terms are charged proportionally (no
-    // discount); longer terms discount progressively.
-    const prices: Array<[string, number]> = [
-      ['WEEKLY', Math.max(25, Math.round((monthly * 7) / 30))],
-      ['BIWEEKLY', Math.max(50, Math.round((monthly * 14) / 30))],
-      ['MONTHLY', monthly],
-      ['QUARTERLY', Math.round(monthly * 3 * 0.9)],
-      ['SEMIANNUAL', Math.round(monthly * 6 * 0.85)],
-      ['ANNUAL', Math.round(monthly * 12 * 0.8)],
-    ];
-    for (const [interval, amountMinor] of prices) {
-      await prisma.price.upsert({
-        where: {
-          productId_interval_currency: {
-            productId: product.id,
-            interval: interval as Prisma.PriceCreateInput['interval'],
-            currency: 'USD',
-          },
-        },
-        update: {}, // preserve admin-tuned prices on re-seed
-        create: {
-          id: uuidv7(),
-          productId: product.id,
-          interval: interval as Prisma.PriceCreateInput['interval'],
-          currency: 'USD',
-          amountMinor,
-          isActive: true,
-        },
-      });
-    }
-    count += 1;
-  }
-  console.log(`  • Per-slot products: ${count}`);
-}
-
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -727,7 +716,6 @@ async function main() {
 
     console.log('Catalog:');
     const categorySlugToId = await seedGameCategories();
-    await seedProducts();
     await seedTemplates(categorySlugToId);
   } else {
     console.log(
@@ -744,12 +732,13 @@ async function main() {
     await seedTemplates(categorySlugToId, { createOnly: true });
   }
 
-  // Ensure a per-slot storefront product exists for every game template that's
-  // present. Runs every deploy (create-only — never clobbers admin tuning and
-  // respects deactivation), so the order page has a plan per game without forcing
-  // SEED_DEMO and without resurrecting other demo content.
+  // Ensure storefront plans exist for every game template that's present. Runs
+  // every deploy (create-only — never clobbers admin tuning and respects
+  // deactivation): game templates get a HARDWARE_TIER product with Low/Mid/High
+  // tiers; TeamSpeak 3 gets a slot-based VOICE_SERVER product.
   console.log('Storefront plans:');
-  await seedPerSlotProducts();
+  await seedGameTierProducts();
+  await seedVoiceProducts();
 
   console.log('Seed complete.');
 }

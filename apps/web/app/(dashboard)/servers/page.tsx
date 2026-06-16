@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Server as ServerIcon, Search, Plus, Cpu, MemoryStick, HardDrive } from "lucide-react";
+import { Server as ServerIcon, Search, Plus, Cpu, MemoryStick, HardDrive, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge, ServerStateBadge } from "@/components/ui/badge";
 import { formatMb } from "@/lib/utils";
+import { isVoiceTemplate } from "@/lib/utils";
 
 export default function ServersPage() {
   const [search, setSearch] = useState("");
@@ -60,7 +61,12 @@ export default function ServersPage() {
                 <CardContent className="space-y-4 p-5">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate font-semibold">{server.name}</p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate font-semibold">{server.name}</p>
+                        <Badge variant="outline" className="shrink-0 text-[10px]">
+                          {isVoiceTemplate(server.template?.slug) ? "Voice" : "Game"}
+                        </Badge>
+                      </div>
                       <p className="truncate text-xs text-muted-foreground">
                         {server.template?.name ?? "No game installed"}
                       </p>
@@ -74,11 +80,19 @@ export default function ServersPage() {
                     </Badge>
                   )}
 
-                  <div className="grid grid-cols-3 gap-2 border-t pt-4 text-xs text-muted-foreground">
-                    <Spec icon={Cpu} value={`${server.cpuCores} vCPU`} />
-                    <Spec icon={MemoryStick} value={formatMb(server.memoryMb)} />
-                    <Spec icon={HardDrive} value={formatMb(server.diskMb)} />
-                  </div>
+                  {isVoiceTemplate(server.template?.slug) ? (
+                    <div className="grid grid-cols-3 gap-2 border-t pt-4 text-xs text-muted-foreground">
+                      <Spec icon={Users} value={`${server.slots ?? 0} slots`} />
+                      <Spec icon={MemoryStick} value={formatMb(server.memoryMb)} />
+                      <Spec icon={Cpu} value={`${server.cpuCores} vCPU`} />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 border-t pt-4 text-xs text-muted-foreground">
+                      <Spec icon={Cpu} value={`${server.cpuCores} vCPU`} />
+                      <Spec icon={MemoryStick} value={formatMb(server.memoryMb)} />
+                      <Spec icon={HardDrive} value={formatMb(server.diskMb)} />
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </Link>
