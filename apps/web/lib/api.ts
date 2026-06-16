@@ -660,6 +660,7 @@ export const api = {
       paypalClientId?: string;
       paypalClientSecret?: string;
       paypalMode?: string;
+      paypalWebhookId?: string;
     }) => http.patch<void>("/admin/payments/gateways/config", input),
 
     // Email / SMTP settings (settings.manage).

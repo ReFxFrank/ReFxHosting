@@ -248,4 +248,44 @@ export class PayPalGateway implements PaymentGateway {
       currency: capture?.amount?.currency_code,
     };
   }
+
+  /**
+   * Verify an inbound PayPal webhook against the configured webhook id using
+   * PayPal's verify-webhook-signature API, returning the parsed event. Throws if
+   * the webhook id isn't configured or the signature doesn't verify.
+   */
+  async verifyWebhook(
+    headers: Record<string, string | undefined>,
+    rawBody: Buffer,
+  ): Promise<{ event_type: string; resource: Record<string, any> }> {
+    const { webhookId } = await this.settings.paypalConfig();
+    if (!webhookId) {
+      throw new Error('PayPal webhook id is not configured');
+    }
+    const event = JSON.parse(rawBody.toString('utf8'));
+    const baseUrl = await this.resolveBaseUrl();
+    const token = await this.getAccessToken();
+
+    const res = await fetch(`${baseUrl}/v1/notifications/verify-webhook-signature`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        auth_algo: headers['paypal-auth-algo'],
+        cert_url: headers['paypal-cert-url'],
+        transmission_id: headers['paypal-transmission-id'],
+        transmission_sig: headers['paypal-transmission-sig'],
+        transmission_time: headers['paypal-transmission-time'],
+        webhook_id: webhookId,
+        webhook_event: event,
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`PayPal webhook verify HTTP ${res.status}: ${await res.text()}`);
+    }
+    const body = (await res.json()) as { verification_status?: string };
+    if (body.verification_status !== 'SUCCESS') {
+      throw new Error(`PayPal webhook signature not verified (${body.verification_status})`);
+    }
+    return event;
+  }
 }

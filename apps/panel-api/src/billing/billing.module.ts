@@ -4,6 +4,7 @@ import { BillingService } from './billing.service';
 import { BillingController } from './billing.controller';
 import { BillingResolver } from './billing.resolver';
 import { StripeWebhookController } from './webhooks/stripe-webhook.controller';
+import { PayPalWebhookController } from './webhooks/paypal-webhook.controller';
 import { StripeGateway } from './gateways/stripe.gateway';
 import { PayPalGateway } from './gateways/paypal.gateway';
 import { PAYMENT_GATEWAY } from './gateways/payment-gateway.interface';
@@ -26,7 +27,7 @@ import { QUEUE } from '../queues/queue.constants';
       { name: QUEUE.PROVISIONING },
     ),
   ],
-  controllers: [BillingController, StripeWebhookController],
+  controllers: [BillingController, StripeWebhookController, PayPalWebhookController],
   providers: [
     BillingService,
     BillingResolver,

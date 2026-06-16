@@ -43,9 +43,10 @@ async function bootstrap(): Promise<void> {
   const apiPrefix = config.get<AppConfig['apiPrefix']>('apiPrefix')!;
   const corsOrigins = config.get<AppConfig['corsOrigins']>('corsOrigins')!;
 
-  // Stripe webhooks need the raw body for signature verification; everything
-  // else uses parsed JSON.
+  // Stripe + PayPal webhooks need the raw body for signature verification;
+  // everything else uses parsed JSON.
   app.use('/api/v1/billing/webhooks/stripe', raw({ type: '*/*' }));
+  app.use('/api/v1/billing/webhooks/paypal', raw({ type: '*/*' }));
   app.use(
     json({
       limit: '5mb',

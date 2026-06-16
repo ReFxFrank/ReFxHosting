@@ -166,7 +166,13 @@ export interface GatewayConfigDetail {
     publishableKey: string;
     statementDescriptor: string;
   };
-  paypal: { configured: boolean; clientId: string; clientSecretSet: boolean; mode: string };
+  paypal: {
+    configured: boolean;
+    clientId: string;
+    clientSecretSet: boolean;
+    mode: string;
+    webhookId: string;
+  };
 }
 
 /** Masked SMTP/email settings for the owner editor. */

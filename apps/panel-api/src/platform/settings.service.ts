@@ -13,6 +13,7 @@ const KEY = {
   paypalClientId: 'gateway.paypal.clientId',
   paypalClientSecret: 'gateway.paypal.clientSecret',
   paypalMode: 'gateway.paypal.mode',
+  paypalWebhookId: 'gateway.paypal.webhookId',
   smtpHost: 'email.smtp.host',
   smtpPort: 'email.smtp.port',
   smtpUser: 'email.smtp.user',
@@ -30,6 +31,7 @@ export interface GatewayConfigInput {
   paypalClientId?: string;
   paypalClientSecret?: string;
   paypalMode?: string; // 'sandbox' | 'live'
+  paypalWebhookId?: string;
 }
 
 export interface EmailConfigInput {
@@ -111,6 +113,7 @@ export class SettingsService {
     clientId: string;
     clientSecret: string;
     mode: string;
+    webhookId: string;
   }> {
     const env = this.config.get<AppConfig['paypal']>('paypal')!;
     return {
@@ -118,6 +121,10 @@ export class SettingsService {
       clientSecret:
         (await this.get(KEY.paypalClientSecret)) || env.clientSecret || '',
       mode: (await this.get(KEY.paypalMode)) || env.mode || 'sandbox',
+      webhookId:
+        (await this.get(KEY.paypalWebhookId)) ||
+        process.env.PAYPAL_WEBHOOK_ID ||
+        '',
     };
   }
 
@@ -139,6 +146,7 @@ export class SettingsService {
         clientId: paypal.clientId,
         clientSecretSet: !!paypal.clientSecret,
         mode: paypal.mode,
+        webhookId: paypal.webhookId,
       },
     };
   }
@@ -212,5 +220,7 @@ export class SettingsService {
         dto.paypalMode === 'live' ? 'live' : 'sandbox',
         false,
       );
+    if (dto.paypalWebhookId !== undefined)
+      await this.set(KEY.paypalWebhookId, dto.paypalWebhookId.trim(), false);
   }
 }

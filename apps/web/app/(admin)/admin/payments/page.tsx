@@ -154,12 +154,14 @@ function GatewayConfigDialog({
   const [paypalId, setPaypalId] = useState<string | null>(null);
   const [paypalSecret, setPaypalSecret] = useState("");
   const [paypalMode, setPaypalMode] = useState<string | null>(null);
+  const [paypalWebhook, setPaypalWebhook] = useState<string | null>(null);
 
   // Initialize prefilled fields once config loads.
   const pub = stripePub ?? cfg?.stripe.publishableKey ?? "";
   const desc = descriptor ?? cfg?.stripe.statementDescriptor ?? "";
   const ppId = paypalId ?? cfg?.paypal.clientId ?? "";
   const ppMode = paypalMode ?? cfg?.paypal.mode ?? "sandbox";
+  const ppWebhook = paypalWebhook ?? cfg?.paypal.webhookId ?? "";
 
   const save = useMutation({
     mutationFn: () => {
@@ -170,6 +172,7 @@ function GatewayConfigDialog({
       input.stripeStatementDescriptor = desc;
       input.paypalClientId = ppId;
       input.paypalMode = ppMode;
+      input.paypalWebhookId = ppWebhook;
       if (paypalSecret) input.paypalClientSecret = paypalSecret;
       return api.admin.setGatewayConfig(input);
     },
@@ -292,6 +295,20 @@ function GatewayConfigDialog({
             <p className="text-xs text-muted-foreground">
               Must match your keys — live keys with sandbox mode (or vice-versa) fail
               with &quot;invalid_client&quot;.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="ppwh">Webhook ID</Label>
+            <Input
+              id="ppwh"
+              value={ppWebhook}
+              onChange={(e) => setPaypalWebhook(e.target.value)}
+              className="font-mono text-xs"
+            />
+            <p className="text-xs text-muted-foreground">
+              From PayPal → Apps &amp; Credentials → your app → Webhooks. Point the
+              webhook at <span className="font-mono">/api/v1/billing/webhooks/paypal</span>.
+              Required to verify refunds/disputes.
             </p>
           </div>
         </div>

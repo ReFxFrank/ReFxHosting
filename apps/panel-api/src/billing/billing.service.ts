@@ -684,6 +684,77 @@ export class BillingService {
     return { paid: true };
   }
 
+  // ---- External webhook settlement (PayPal/Stripe async events) ----------
+
+  /** Settle an invoice from an async gateway event (idempotent). */
+  async settleExternalPayment(
+    invoiceId: string,
+    details: MarkPaidDetails,
+  ): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true },
+    });
+    if (!invoice) return; // unknown invoice — ignore
+    await this.markInvoicePaid(invoiceId, details);
+  }
+
+  /** Record an async payment failure for an invoice. */
+  async failExternalPayment(
+    invoiceId: string,
+    reason: string,
+    details: { gateway?: string; gatewayRef?: string },
+  ): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true },
+    });
+    if (!invoice) return;
+    await this.handlePaymentFailure(invoiceId, reason, details);
+  }
+
+  /** Record a refund/reversal against an invoice (idempotent by gatewayRef). */
+  async refundExternalPayment(
+    invoiceId: string,
+    details: { gateway: string; gatewayRef: string; amountMinor?: number; currency?: string },
+  ): Promise<void> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+    });
+    if (!invoice) return;
+
+    if (details.gatewayRef) {
+      const existing = await this.prisma.payment.findFirst({
+        where: {
+          invoiceId,
+          gatewayRef: details.gatewayRef,
+          state: PaymentState.REFUNDED,
+        },
+        select: { id: true },
+      });
+      if (existing) return; // already recorded
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.payment.create({
+        data: {
+          id: uuidv7(),
+          invoiceId,
+          gateway: details.gateway,
+          gatewayRef: details.gatewayRef,
+          amountMinor: details.amountMinor ?? invoice.amountPaidMinor ?? invoice.totalMinor,
+          currency: details.currency ?? invoice.currency,
+          state: PaymentState.REFUNDED,
+        },
+      }),
+      this.prisma.invoice.update({
+        where: { id: invoiceId },
+        data: { state: InvoiceState.REFUNDED },
+      }),
+    ]);
+    this.logger.log(`Invoice ${invoiceId} refunded via ${details.gateway}`);
+  }
+
   /** Charge a saved default method, else hand off to a hosted Stripe checkout. */
   private async chargeOrCheckout(
     userId: string,

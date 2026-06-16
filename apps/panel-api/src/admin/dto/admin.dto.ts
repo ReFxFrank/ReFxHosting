@@ -91,6 +91,12 @@ export class SetGatewayConfigDto {
   @IsOptional()
   @IsIn(['sandbox', 'live'])
   paypalMode?: string;
+
+  @ApiPropertyOptional({ description: 'PayPal webhook id (for verifying webhooks).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  paypalWebhookId?: string;
 }
 
 /** Owner-editable SMTP / email settings. */
