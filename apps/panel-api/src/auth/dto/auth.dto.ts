@@ -5,6 +5,7 @@ import {
   IsEmail,
   IsEnum,
   IsIn,
+  IsObject,
   IsOptional,
   IsString,
   MinLength,
@@ -107,6 +108,7 @@ export class TotpVerifyDto {
 
 export class WebAuthnVerifyDto {
   @ApiProperty({ description: 'Serialized attestation/assertion response' })
+  @IsObject()
   response!: Record<string, unknown>;
 
   @ApiPropertyOptional()
@@ -129,6 +131,7 @@ export class WebAuthnLoginVerifyDto {
   mfaToken!: string;
 
   @ApiProperty({ description: 'Serialized assertion response' })
+  @IsObject()
   response!: Record<string, unknown>;
 }
 
