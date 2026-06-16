@@ -699,6 +699,9 @@ export const api = {
     nodePing: (id: string) => http.get<NodePing>(`/admin/nodes/${id}/ping`),
     restartNodeAgent: (id: string) =>
       http.post<{ restarting: true }>(`/admin/nodes/${id}/restart-agent`),
+    pinNodeCert: (id: string) =>
+      http.post<{ sha256: string }>(`/admin/nodes/${id}/pin-cert`),
+    unpinNodeCert: (id: string) => http.delete<void>(`/admin/nodes/${id}/pin-cert`),
     createNode: (input: Partial<Node> & { regionId: string }) =>
       http.post<Node & { bootstrapToken: string }>("/admin/nodes", input),
     setNodeMaintenance: (id: string, maintenance: boolean) =>

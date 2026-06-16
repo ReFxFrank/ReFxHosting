@@ -11,6 +11,7 @@ export interface AppConfig {
   panelUrl: string;
   rpId: string;
   rpName: string;
+  agentTlsPinning: boolean;
   corsOrigins: string[];
   database: {
     url: string;
@@ -80,6 +81,10 @@ export default (): AppConfig => ({
   panelUrl: process.env.PANEL_URL ?? 'http://localhost:3000',
   rpId: process.env.PANEL_RP_ID ?? 'localhost',
   rpName: process.env.PANEL_RP_NAME ?? 'ReFx Hosting',
+  // When on, the panel pins each node's agent TLS cert (verifies it against the
+  // stored cert) instead of accepting any cert. Off by default so existing
+  // self-signed setups keep working until operators pin per node.
+  agentTlsPinning: (process.env.AGENT_TLS_PINNING ?? 'false').toLowerCase() === 'true',
   corsOrigins: toList(process.env.CORS_ORIGINS) || ['http://localhost:3000'],
   database: {
     url: process.env.DATABASE_URL ?? '',

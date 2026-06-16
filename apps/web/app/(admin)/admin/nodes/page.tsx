@@ -121,6 +121,25 @@ function EditCapacityDialog({
       toast.error(e instanceof ApiError ? e.message : "Failed to update node"),
   });
 
+  const pin = useMutation({
+    mutationFn: () => api.admin.pinNodeCert(node!.id),
+    onSuccess: (r) => {
+      toast.success(`Certificate pinned (${r.sha256.slice(0, 16)}…)`);
+      queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't pin certificate"),
+  });
+  const unpin = useMutation({
+    mutationFn: () => api.admin.unpinNodeCert(node!.id),
+    onSuccess: () => {
+      toast.success("Certificate unpinned");
+      queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
+      onClose();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't unpin"),
+  });
+
   return (
     <Dialog
       open={!!node}
@@ -143,6 +162,32 @@ function EditCapacityDialog({
             onSubmit={(v) => save.mutate(v)}
             saving={save.isPending}
           />
+        )}
+
+        {node && (
+          <div className="space-y-2 border-t pt-4">
+            <p className="refx-eyebrow">Agent TLS certificate</p>
+            {node.agentCertSha256 ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={node.agentCertSha256}>
+                  Pinned · {node.agentCertSha256.slice(0, 24)}…
+                </p>
+                <Button variant="ghost" size="sm" loading={unpin.isPending} onClick={() => unpin.mutate()}>
+                  Unpin
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  Not pinned — the panel accepts any cert. Pin to verify the agent
+                  (requires AGENT_TLS_PINNING).
+                </p>
+                <Button variant="outline" size="sm" loading={pin.isPending} onClick={() => pin.mutate()}>
+                  Pin certificate
+                </Button>
+              </div>
+            )}
+          </div>
         )}
       </DialogContent>
     </Dialog>

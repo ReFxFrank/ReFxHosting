@@ -260,6 +260,12 @@ model Node {
   daemonPort    Int        @default(8443)
   sftpPort      Int        @default(2022)
   scheme        String     @default("https")
+  // Pinned agent TLS certificate (PEM) + its SHA-256 fingerprint. When set and
+  // AGENT_TLS_PINNING is on, the panel verifies the agent against THIS cert
+  // (defeats MITM on the self-signed control channel). Populated via the admin
+  // "pin certificate" action (trust-on-first-use).
+  agentCertPem    String?
+  agentCertSha256 String?
 
   // Public port range the panel auto-assigns from for this node's server
   // allocations (primary game port + per-game query/RCON/etc.). Configurable per

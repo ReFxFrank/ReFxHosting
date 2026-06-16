@@ -1,6 +1,9 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Node } from '@prisma/client';
+import * as tls from 'node:tls';
+import { createHash } from 'node:crypto';
+import { Agent as UndiciAgent, type Dispatcher } from 'undici';
 import { AppConfig } from '../config/configuration';
 import { CryptoService } from '../common/crypto/crypto.service';
 import {
@@ -89,6 +92,9 @@ export class NodeAgentClient {
   private readonly logger = new Logger(NodeAgentClient.name);
   private readonly timeoutMs: number;
   private readonly secretsEncKey: string;
+  private readonly pinningEnabled: boolean;
+  /** Cache one undici dispatcher per pinned cert so we don't rebuild per call. */
+  private readonly dispatchers = new Map<string, UndiciAgent>();
 
   constructor(
     config: ConfigService,
@@ -96,6 +102,69 @@ export class NodeAgentClient {
   ) {
     this.timeoutMs = config.get<AppConfig['agent']>('agent')!.requestTimeoutMs;
     this.secretsEncKey = config.get<string>('secretsEncKey')!;
+    this.pinningEnabled = config.get<AppConfig['agentTlsPinning']>('agentTlsPinning')!;
+  }
+
+  /**
+   * Per-node TLS dispatcher. When pinning is enabled AND the node has a pinned
+   * cert, returns an undici Agent that trusts ONLY that cert (rejecting any
+   * other — i.e. MITM). Otherwise returns undefined and the call uses the
+   * default transport (current self-signed-accepting behavior), so existing
+   * deployments are unaffected until they opt in + pin.
+   */
+  private dispatcherFor(node: Node): Dispatcher | undefined {
+    if (!this.pinningEnabled || !node.agentCertPem) return undefined;
+    const key = `${node.id}:${node.agentCertSha256 ?? ''}`;
+    let agent = this.dispatchers.get(key);
+    if (!agent) {
+      agent = new UndiciAgent({
+        connect: {
+          ca: node.agentCertPem,
+          servername: node.fqdn,
+          rejectUnauthorized: true,
+        },
+      });
+      this.dispatchers.set(key, agent);
+    }
+    return agent;
+  }
+
+  /**
+   * Open a one-off TLS connection to the agent and capture its leaf certificate
+   * (PEM + SHA-256 fingerprint) for pinning. Trust-on-first-use: the operator
+   * runs this once per node (admin "pin certificate") to record the cert.
+   */
+  captureCert(node: Node): Promise<{ pem: string; sha256: string }> {
+    return new Promise((resolve, reject) => {
+      const socket = tls.connect(
+        {
+          host: node.fqdn,
+          port: node.daemonPort,
+          servername: node.fqdn,
+          rejectUnauthorized: false,
+          timeout: this.timeoutMs,
+        },
+        () => {
+          const cert = socket.getPeerCertificate();
+          if (!cert || !cert.raw) {
+            socket.destroy();
+            reject(new Error('Agent presented no certificate'));
+            return;
+          }
+          const der = cert.raw;
+          const b64 = der.toString('base64').match(/.{1,64}/g)?.join('\n') ?? '';
+          const pem = `-----BEGIN CERTIFICATE-----\n${b64}\n-----END CERTIFICATE-----\n`;
+          const sha256 = createHash('sha256').update(der).digest('hex');
+          socket.end();
+          resolve({ pem, sha256 });
+        },
+      );
+      socket.on('timeout', () => {
+        socket.destroy();
+        reject(new Error('Timed out connecting to the agent'));
+      });
+      socket.on('error', (e) => reject(e));
+    });
   }
 
   // ---- power & lifecycle --------------------------------------------------
@@ -244,7 +313,8 @@ export class NodeAgentClient {
         },
         body: bytes as unknown as BodyInit,
         signal: controller.signal,
-      });
+        dispatcher: this.dispatcherFor(node),
+      } as RequestInit & { dispatcher?: Dispatcher });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new ServiceUnavailableException(
@@ -467,10 +537,10 @@ export class NodeAgentClient {
         },
         body: serialized || undefined,
         signal: controller.signal,
-        // TODO(impl): pin/verify the node's TLS cert (mTLS) instead of relying
-        // on the public CA chain. For self-signed agents, supply a custom
-        // https.Agent with the node's cert fingerprint.
-      });
+        // Pin the agent's TLS cert when enabled (undici dispatcher); otherwise
+        // the default transport is used.
+        dispatcher: this.dispatcherFor(node),
+      } as RequestInit & { dispatcher?: Dispatcher });
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');

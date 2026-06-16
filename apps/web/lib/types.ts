@@ -290,6 +290,8 @@ export interface Node {
   scheme?: string;
   daemonPort?: number;
   sftpPort?: number;
+  /** SHA-256 of the pinned agent TLS cert (present once pinned). */
+  agentCertSha256?: string | null;
   regionId: string;
   region?: { id: string; code: string; name: string; country?: string | null };
   os: NodeOs;

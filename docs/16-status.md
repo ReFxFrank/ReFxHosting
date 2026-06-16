@@ -47,7 +47,7 @@ Legend:
 | Mods + modpacks (Modrinth) | **Done** | Per-server mod/plugin search+install (loader/version-aware); **modpack installer** (`ModpackProcessor`): parse `.mrpack`, auto-switch MC version + loader, reinstall (worlds preserved), provision mods + config. Modrinth-host-locked downloads; per-file size cap. |
 | Resource resize | **Done** | Node-capacity check + agent reconfigure. |
 | Nodes (register/heartbeat/capacity/tokens, per-node port range) | **Done** | Agent registration + bootstrap-token endpoints; configurable allocation port range. |
-| Agent client + console WS gateway | **Partial** | HMAC-signed HTTP client + browser↔agent relay; `TODO(impl)`: mTLS pinning. |
+| Agent client + console WS gateway | **Done (foundation)** | HMAC-signed HTTP client + browser↔agent relay. **Opt-in TLS certificate pinning** (`AGENT_TLS_PINNING`): pin a node's agent cert (admin "Pin certificate", trust-on-first-use) and the panel verifies against it via an undici dispatcher; off by default so self-signed setups are unaffected until pinned. |
 | Billing (products/prices/subs/invoices/payments, tax) | **Done** | **Editable + deletable products + per-interval prices**; **GPortal-style per-slot order page**; **weekly → annual** terms; **owner-only gateway/key editor** (`SettingsService`, AES-256-GCM, env fallback); Stripe + PayPal gateways; **Stripe _and_ PayPal verified webhooks** (capture/refund, idempotent); **coupons** (%/fixed, caps, expiry), **gift cards**, and per-user **account/store credit** — stackable, gateway charges only the remainder; free/fully-covered invoices settle without a gateway round-trip; **VAT/GST/US tax computed from the customer's billing address** (required at registration + before any order). Deep SDK flows (saved-card off-session vaulting, SCA) marked `TODO(impl)`. |
 | Queues (provisioning/reinstall/backup/renewal/suspension/modpack) | **Done** | BullMQ processors call agent/billing; **hourly renewal/dunning cron** (`BillingScheduler`, `@nestjs/schedule`) enqueues RENEW for due subs + DUNNING for past-due (deterministic jobIds = multi-instance safe; toggle `BILLING_SCHEDULER`). |
 | Support (admin queue/notes/canned/SLA/KB) | **Done** | Admin ticket queue (reply, status/priority, categorise, assign, internal notes); **ticket archive (storage) + permanent delete**; **category (SLA) + canned-response CRUD**; SLA breach computation; `support.*` permissions. |
@@ -91,7 +91,9 @@ beyond a single build session, and are called out so expectations are clear:
   (encrypted keys) and the Stripe webhook settles invoices/checkouts idempotently;
   live Stripe/PayPal still needs real keys + a registered webhook endpoint, and
   deep SDK flows (e.g. SCA edge cases) remain `TODO(impl)`.
-- **Production secrets/TLS/mTLS** between panel and agents (self-signed by default).
+- **Production secrets/TLS** between panel and agents (self-signed by default).
+  Panel→agent **certificate pinning is available** (`AGENT_TLS_PINNING` + pin per
+  node); full mutual-TLS with panel client certs is the remaining `TODO(impl)`.
   Host ports bind to loopback by default (`BIND_HOST`); a reverse proxy terminates
   TLS. Panel↔agent mTLS pinning is still `TODO(impl)`.
 - **Load/scale validation** to the "tens of thousands of servers" target —

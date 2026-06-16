@@ -207,6 +207,23 @@ export class AdminController {
     return this.nodes.restartAgent(id);
   }
 
+  /** Pin (trust-on-first-use) the node agent's current TLS certificate. */
+  @Post('nodes/:id/pin-cert')
+  @HttpCode(200)
+  @RequirePerm('nodes.manage')
+  @Audit({ action: 'admin.node.pin-cert', targetType: 'Node', targetParam: 'id' })
+  pinNodeCert(@Param('id') id: string) {
+    return this.nodes.pinAgentCert(id);
+  }
+
+  @Delete('nodes/:id/pin-cert')
+  @HttpCode(204)
+  @RequirePerm('nodes.manage')
+  @Audit({ action: 'admin.node.unpin-cert', targetType: 'Node', targetParam: 'id' })
+  unpinNodeCert(@Param('id') id: string) {
+    return this.nodes.unpinAgentCert(id);
+  }
+
   @Patch('nodes/:id')
   @RequirePerm('nodes.manage')
   @Audit({ action: 'admin.node.update', targetType: 'Node', targetParam: 'id' })

@@ -250,6 +250,39 @@ export class NodesService {
   }
 
   /**
+   * Trust-on-first-use: capture the agent's current TLS cert and pin it on the
+   * node, so subsequent panel→agent calls verify against it (when
+   * AGENT_TLS_PINNING is enabled). Returns the fingerprint for display.
+   */
+  async pinAgentCert(id: string): Promise<{ sha256: string }> {
+    const node = await this.prisma.node.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!node) throw new NotFoundException('Node not found');
+    let captured: { pem: string; sha256: string };
+    try {
+      captured = await this.agent.captureCert(node);
+    } catch (e) {
+      throw new BadRequestException(
+        `Couldn't fetch the agent certificate: ${(e as Error).message}`,
+      );
+    }
+    await this.prisma.node.update({
+      where: { id },
+      data: { agentCertPem: captured.pem, agentCertSha256: captured.sha256 },
+    });
+    return { sha256: captured.sha256 };
+  }
+
+  /** Remove the pinned cert (revert to default transport for this node). */
+  async unpinAgentCert(id: string): Promise<void> {
+    await this.prisma.node.update({
+      where: { id },
+      data: { agentCertPem: null, agentCertSha256: null },
+    });
+  }
+
+  /**
    * Ask the node's agent to restart itself in place. Game servers keep running
    * and are re-adopted when the agent comes back. Does NOT power-cycle the host.
    */
