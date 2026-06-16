@@ -231,13 +231,25 @@ export class BillingService {
     return this.prisma.product.update({ where: { id }, data });
   }
 
-  /** Admin: soft-deactivate a product (kept for invoice history integrity). */
-  async deleteProduct(id: string): Promise<Product> {
-    await this.getProduct(id);
-    return this.prisma.product.update({
+  /**
+   * Admin: permanently delete a product (its prices cascade). Refuses when any
+   * subscription references it — deleting would break billing history; deactivate
+   * (isActive=false) those instead. Products with no subscriptions are removed
+   * outright.
+   */
+  async deleteProduct(id: string): Promise<{ id: string }> {
+    const product = await this.prisma.product.findUnique({
       where: { id },
-      data: { isActive: false },
+      select: { id: true, _count: { select: { subscriptions: true } } },
     });
+    if (!product) throw new NotFoundException('Product not found');
+    if (product._count.subscriptions > 0) {
+      throw new BadRequestException(
+        'This product has subscriptions and can’t be deleted without breaking billing history — deactivate it instead.',
+      );
+    }
+    await this.prisma.product.delete({ where: { id } });
+    return { id };
   }
 
   /** Public catalog: a single active product resolved by its slug. */

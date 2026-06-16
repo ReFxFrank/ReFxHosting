@@ -151,7 +151,7 @@ export default function AdminProductsPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => api.admin.deleteProduct(id),
     onSuccess: () => {
-      toast.success("Product deactivated");
+      toast.success("Product deleted");
       setDeleteTarget(null);
       invalidate();
     },
@@ -556,8 +556,9 @@ export default function AdminProductsPage() {
           <DialogHeader>
             <DialogTitle>Delete {deleteTarget?.name}?</DialogTitle>
             <DialogDescription>
-              The product is deactivated and hidden from the storefront. Existing
-              subscriptions and invoice history are preserved.
+              This permanently deletes the product and its prices. A product that
+              still has subscriptions can’t be deleted — deactivate it (toggle it
+              off) instead to keep billing history intact.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -569,7 +570,7 @@ export default function AdminProductsPage() {
               loading={deleteMutation.isPending}
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
             >
-              Deactivate
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
