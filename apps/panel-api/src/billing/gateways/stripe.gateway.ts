@@ -18,6 +18,12 @@ export type StripeInvoice = Awaited<
 export type StripeCharge = Awaited<
   ReturnType<StripeClient['charges']['retrieve']>
 >;
+export type StripeCheckoutSession = Awaited<
+  ReturnType<StripeClient['checkout']['sessions']['retrieve']>
+>;
+export type StripePaymentIntent = Awaited<
+  ReturnType<StripeClient['paymentIntents']['retrieve']>
+>;
 export type StripeMetadata = StripeInvoice['metadata'];
 export type StripeError = InstanceType<typeof Stripe.errors.StripeError> & {
   payment_intent?: { id?: string };

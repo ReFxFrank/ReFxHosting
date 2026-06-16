@@ -651,6 +651,25 @@ export class BillingService {
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
+    // Idempotency: Stripe emits several overlapping events for one payment
+    // (invoice.paid + invoice.payment_succeeded + payment_intent.succeeded) and
+    // retries delivery. If we've already recorded this exact gateway payment —
+    // or the invoice is already settled and we have no new ref — do nothing, so
+    // we never double-count revenue or create duplicate Payment rows.
+    if (details.gatewayRef) {
+      const already = await this.prisma.payment.findFirst({
+        where: {
+          invoiceId,
+          gatewayRef: details.gatewayRef,
+          state: PaymentState.SUCCEEDED,
+        },
+        select: { id: true },
+      });
+      if (already) return invoice;
+    } else if (invoice.state === InvoiceState.PAID) {
+      return invoice;
+    }
+
     const amountMinor = details.amountMinor ?? invoice.totalMinor;
     const currency = details.currency ?? invoice.currency;
 

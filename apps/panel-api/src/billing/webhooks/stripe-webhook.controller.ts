@@ -17,6 +17,8 @@ import {
   StripeEvent,
   StripeInvoice,
   StripeCharge,
+  StripeCheckoutSession,
+  StripePaymentIntent,
   StripeMetadata,
 } from '../gateways/stripe.gateway';
 
@@ -74,10 +76,13 @@ export class StripeWebhookController {
   /** Route a verified event to the appropriate billing action. */
   private async dispatch(event: StripeEvent): Promise<void> {
     switch (event.type) {
+      // Stripe emits BOTH invoice.paid and invoice.payment_succeeded for a paid
+      // invoice; handle them identically (markInvoicePaid is idempotent).
+      case 'invoice.paid':
       case 'invoice.payment_succeeded': {
-        // TODO(impl): the Stripe Invoice object shape carries our linkage via
-        // metadata.invoiceId (set in createCheckoutSession/charge) or the
-        // `number`/`id`. Here we resolve our invoice by gatewayInvoiceId.
+        // The Stripe Invoice object carries our linkage via metadata.invoiceId
+        // (set in createCheckoutSession/charge) or the `id`. We resolve our
+        // invoice by metadata first, then by gatewayInvoiceId.
         const obj = event.data.object as StripeInvoice & {
           payment_intent?: string;
         };
@@ -92,6 +97,44 @@ export class StripeWebhookController {
           amountMinor: obj.amount_paid ?? undefined,
           currency: obj.currency?.toUpperCase(),
           gatewayInvoiceId: obj.id,
+        });
+        break;
+      }
+
+      // The primary signal for a one-off order checkout. The session carries our
+      // metadata.invoiceId and the resulting payment_intent id.
+      case 'checkout.session.completed': {
+        const obj = event.data.object as StripeCheckoutSession;
+        if (obj.payment_status && obj.payment_status === 'unpaid') return;
+        const invoice = await this.resolveInvoice({
+          id: obj.id,
+          metadata: obj.metadata,
+        });
+        if (!invoice) return;
+        await this.billing.markInvoicePaid(invoice.id, {
+          gateway: 'stripe',
+          gatewayRef:
+            (typeof obj.payment_intent === 'string'
+              ? obj.payment_intent
+              : undefined) ?? obj.id ?? '',
+          amountMinor: obj.amount_total ?? undefined,
+          currency: obj.currency?.toUpperCase(),
+        });
+        break;
+      }
+
+      // Belt-and-braces: only acts when the intent carries our metadata.invoiceId
+      // (otherwise the invoice.*/checkout events already settled it). Idempotent.
+      case 'payment_intent.succeeded': {
+        const obj = event.data.object as StripePaymentIntent;
+        if (!obj.metadata?.invoiceId) return;
+        const invoice = await this.resolveInvoice({ metadata: obj.metadata });
+        if (!invoice) return;
+        await this.billing.markInvoicePaid(invoice.id, {
+          gateway: 'stripe',
+          gatewayRef: obj.id ?? '',
+          amountMinor: obj.amount_received ?? undefined,
+          currency: obj.currency?.toUpperCase(),
         });
         break;
       }
