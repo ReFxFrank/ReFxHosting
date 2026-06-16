@@ -11,6 +11,7 @@ import {
   Ticket,
   TicketCategory,
   TicketMessage,
+  TicketPriority,
   TicketState,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -88,26 +89,53 @@ export class SupportService {
   async listTickets(
     user: AuthUser,
     pagination: PaginationDto,
+    filter?: { state?: TicketState; priority?: TicketPriority },
   ): Promise<Paginated<Ticket>> {
     const where: Prisma.TicketWhereInput = {};
     if (!this.isStaff(user)) {
       where.requesterId = user.id;
     }
+    if (filter?.state) where.state = filter.state;
+    if (filter?.priority) where.priority = filter.priority;
     if (pagination.q) {
       where.subject = { contains: pagination.q, mode: 'insensitive' };
     }
 
+    // Staff get the requester/assignee/category resolved for the queue view.
+    const include: Prisma.TicketInclude | undefined = this.isStaff(user)
+      ? {
+          requester: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+          assignee: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+          _count: { select: { messages: true } },
+        }
+      : undefined;
+
     const [data, total] = await this.prisma.$transaction([
       this.prisma.ticket.findMany({
         where,
+        include,
         skip: pagination.skip,
         take: pagination.take,
-        orderBy: { createdAt: 'desc' },
+        // Most-recently-active first so the queue surfaces fresh replies.
+        orderBy: { updatedAt: 'desc' },
       }),
       this.prisma.ticket.count({ where }),
     ]);
 
     return paginate(data, total, pagination);
+  }
+
+  /** Staff directory for the assignee picker (SUPPORT / ADMIN / OWNER). */
+  listStaff() {
+    return this.prisma.user.findMany({
+      where: { deletedAt: null, globalRole: { in: ['SUPPORT', 'ADMIN', 'OWNER'] } },
+      select: { id: true, email: true, firstName: true, lastName: true, globalRole: true },
+      orderBy: [{ globalRole: 'desc' }, { firstName: 'asc' }],
+    });
   }
 
   /**
@@ -117,7 +145,29 @@ export class SupportService {
   async getTicket(user: AuthUser, id: string): Promise<TicketWithMessages> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id },
-      include: { messages: { orderBy: { createdAt: 'asc' } } },
+      include: {
+        messages: {
+          orderBy: { createdAt: 'asc' },
+          include: {
+            author: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                avatarUrl: true,
+                globalRole: true,
+              },
+            },
+          },
+        },
+        requester: {
+          select: { id: true, email: true, firstName: true, lastName: true },
+        },
+        assignee: {
+          select: { id: true, email: true, firstName: true, lastName: true },
+        },
+      },
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
 

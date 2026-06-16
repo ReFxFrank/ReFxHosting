@@ -75,6 +75,12 @@ export const adminNav: NavSection[] = [
     ],
   },
   {
+    title: "Support",
+    items: [
+      { label: "Tickets", href: "/admin/support", icon: LifeBuoy, perm: "support.read" },
+    ],
+  },
+  {
     title: "Catalog",
     items: [
       { label: "Products", href: "/admin/products", icon: Package, perm: "catalog.manage" },

@@ -157,10 +157,10 @@ const SYSTEM_ROLES = [
     permissions: [
       'dashboard.read', 'servers.read', 'servers.manage', 'nodes.read', 'nodes.manage',
       'locations.manage', 'users.read', 'users.manage', 'billing.read', 'billing.manage',
-      'catalog.manage', 'content.manage', 'audit.read', 'settings.manage',
+      'catalog.manage', 'content.manage', 'support.read', 'support.manage', 'audit.read', 'settings.manage',
     ],
   },
-  { key: 'support', name: 'Support', description: 'Read-only: overview, customers, servers.', permissions: ['dashboard.read', 'users.read', 'servers.read'] },
+  { key: 'support', name: 'Support', description: 'Tickets, plus read access to customers and servers.', permissions: ['dashboard.read', 'support.read', 'support.manage', 'users.read', 'servers.read'] },
   { key: 'customer', name: 'Customer', description: 'Client area only — no admin access.', permissions: [] },
 ];
 

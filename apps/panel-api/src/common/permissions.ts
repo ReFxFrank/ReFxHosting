@@ -20,6 +20,8 @@ export const ADMIN_PERMISSIONS = [
   'payments.manage',
   'catalog.manage',
   'content.manage',
+  'support.read',
+  'support.manage',
   'audit.read',
   'settings.manage',
   'roles.manage',
@@ -43,10 +45,18 @@ export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
     'billing.manage',
     'catalog.manage',
     'content.manage',
+    'support.read',
+    'support.manage',
     'audit.read',
     'settings.manage',
   ],
-  support: ['dashboard.read', 'users.read', 'servers.read'],
+  support: [
+    'dashboard.read',
+    'support.read',
+    'support.manage',
+    'users.read',
+    'servers.read',
+  ],
   customer: [],
 };
 

@@ -110,7 +110,7 @@ export default function SupportPage() {
 function TicketsTab({ onNew }: { onNew: () => void }) {
   const { data: tickets, isLoading } = useQuery({
     queryKey: ["support", "tickets"],
-    queryFn: () => api.support.tickets(),
+    queryFn: () => api.support.tickets().then((r) => r.data),
   });
 
   if (isLoading) return <ListSkeleton rows={4} />;

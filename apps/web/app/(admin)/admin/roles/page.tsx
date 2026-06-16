@@ -44,6 +44,7 @@ const PERM_GROUPS: { title: string; perms: string[] }[] = [
   { title: "Billing", perms: ["billing.read", "billing.manage", "payments.manage"] },
   { title: "Catalog", perms: ["catalog.manage"] },
   { title: "Content", perms: ["content.manage"] },
+  { title: "Support", perms: ["support.read", "support.manage"] },
   { title: "System", perms: ["audit.read", "settings.manage", "roles.manage"] },
 ];
 

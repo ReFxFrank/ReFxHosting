@@ -31,6 +31,9 @@ import type {
   SubUser,
   Ticket,
   TicketMessage,
+  TicketCategory,
+  CannedResponse,
+  StaffMember,
   User,
   FileEntry,
   AuditLog,
@@ -485,15 +488,37 @@ export const api = {
   },
 
   support: {
-    tickets: (query?: { state?: string }) => getList<Ticket>("/support/tickets", { query }),
+    tickets: (query?: { state?: string; priority?: string; q?: string; page?: number }) =>
+      http.get<Paginated<Ticket>>("/support/tickets", { query }),
     ticket: (id: string) =>
       http.get<Ticket & { messages: TicketMessage[] }>(`/support/tickets/${id}`),
     createTicket: (input: { subject: string; body: string; priority?: string; categoryId?: string }) =>
       http.post<Ticket>("/support/tickets", input),
-    reply: (id: string, body: string) =>
-      http.post<TicketMessage>(`/support/tickets/${id}/messages`, { body }),
+    reply: (id: string, body: string, isInternal = false) =>
+      http.post<TicketMessage>(`/support/tickets/${id}/messages`, { body, isInternal }),
+    // Staff workflow: state / priority / category / assignee.
+    updateTicket: (
+      id: string,
+      input: Partial<{
+        state: Ticket["state"];
+        priority: Ticket["priority"];
+        categoryId: string | null;
+        assigneeId: string | null;
+      }>,
+    ) => http.patch<Ticket>(`/support/tickets/${id}`, input),
     setState: (id: string, state: Ticket["state"]) =>
       http.patch<Ticket>(`/support/tickets/${id}`, { state }),
+    assign: (id: string, assigneeId: string) =>
+      http.post<Ticket>(`/support/tickets/${id}/assign`, { assigneeId }),
+    staff: () => getList<StaffMember>("/support/staff"),
+    categories: () => getList<TicketCategory>("/support/categories"),
+    createCategory: (input: { name: string; slug: string; slaFirstResponseMin?: number; slaResolutionMin?: number }) =>
+      http.post<TicketCategory>("/support/categories", input),
+    cannedResponses: () => getList<CannedResponse>("/support/canned-responses"),
+    createCannedResponse: (input: { title: string; body: string; tags?: string[] }) =>
+      http.post<CannedResponse>("/support/canned-responses", input),
+    deleteCannedResponse: (id: string) =>
+      http.delete<void>(`/support/canned-responses/${id}`),
     kb: (query?: { search?: string; category?: string }) =>
       getList<KbArticle>("/support/kb", { query }),
     kbArticle: (slug: string) => http.get<KbArticle>(`/support/kb/${slug}`),

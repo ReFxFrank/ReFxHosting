@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { GlobalRole } from '@prisma/client';
+import { GlobalRole, TicketPriority, TicketState } from '@prisma/client';
 import { SupportService } from './support.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -48,8 +48,18 @@ export class SupportController {
   listTickets(
     @CurrentUser() user: AuthUser,
     @Query() pagination: PaginationDto,
+    @Query('state') state?: TicketState,
+    @Query('priority') priority?: TicketPriority,
   ) {
-    return this.support.listTickets(user, pagination);
+    return this.support.listTickets(user, pagination, { state, priority });
+  }
+
+  /** Staff directory for the assignee picker. */
+  @Get('staff')
+  @UseGuards(RolesGuard)
+  @Roles(GlobalRole.SUPPORT)
+  listStaff() {
+    return this.support.listStaff();
   }
 
   @Post('tickets')

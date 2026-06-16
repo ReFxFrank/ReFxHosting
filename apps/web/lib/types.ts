@@ -578,8 +578,35 @@ export interface Ticket {
   categoryId: string | null;
   assigneeId: string | null;
   requester?: Pick<User, "id" | "email" | "firstName" | "lastName">;
+  assignee?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  slaBreached?: boolean;
+  _count?: { messages: number };
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TicketCategory {
+  id: string;
+  name: string;
+  slug: string;
+  slaFirstResponseMin: number;
+  slaResolutionMin: number;
+}
+
+export interface CannedResponse {
+  id: string;
+  title: string;
+  body: string;
+  tags: string[];
+  createdAt: string;
+}
+
+export interface StaffMember {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  globalRole: GlobalRole;
 }
 
 export interface TicketMessage {
