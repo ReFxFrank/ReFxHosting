@@ -65,28 +65,36 @@ describe('PermissionGuard', () => {
     expect(prisma.server.findFirst).not.toHaveBeenCalled();
   });
 
-  it('does NOT grant platform ADMIN implicit access to a customer server', async () => {
-    // Staff must use the admin panel; in the client area they are treated like
-    // any other principal (owner/sub-user only).
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
-    prisma.subUser.findFirst.mockResolvedValue(null);
-    await expect(
-      guard.canActivate(
-        ctx({
-          user: { id: 'admin', globalRole: 'ADMIN' },
-          params: { serverId: SERVER_ID },
-        }),
-      ),
-    ).rejects.toThrow('Not a member of this server');
+  it('grants staff holding servers.manage support access without touching the server', async () => {
+    const result = await guard.canActivate(
+      ctx({
+        user: { id: 'admin', globalRole: 'ADMIN', permissions: ['servers.manage'] },
+        params: { serverId: SERVER_ID },
+      }),
+    );
+    expect(result).toBe(true);
+    expect(prisma.server.findFirst).not.toHaveBeenCalled();
   });
 
-  it('does NOT grant platform OWNER implicit access to a customer server', async () => {
+  it('grants an OWNER (wildcard permission) support access', async () => {
+    const result = await guard.canActivate(
+      ctx({
+        user: { id: 'root', globalRole: 'OWNER', permissions: ['*'] },
+        params: { serverId: SERVER_ID },
+      }),
+    );
+    expect(result).toBe(true);
+  });
+
+  it('does NOT grant read-only staff (servers.read only) access to a customer server', async () => {
+    // Support tier can view the admin list but cannot operate a server they
+    // neither own nor are a sub-user on.
     prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
     prisma.subUser.findFirst.mockResolvedValue(null);
     await expect(
       guard.canActivate(
         ctx({
-          user: { id: 'root', globalRole: 'OWNER' },
+          user: { id: 'support', globalRole: 'SUPPORT', permissions: ['servers.read'] },
           params: { serverId: SERVER_ID },
         }),
       ),

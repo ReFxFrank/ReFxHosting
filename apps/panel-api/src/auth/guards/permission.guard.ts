@@ -9,17 +9,20 @@ import { Reflector } from '@nestjs/core';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { PERMISSIONS_KEY } from '../../common/decorators/permissions.decorator';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
+import { hasPermission } from '../../common/permissions';
 import { PrismaService } from '../../prisma/prisma.service';
 
 /**
  * Per-server authorization. Resolves the target server from the `:serverId`
  * (or `:id`) route param and grants access when the principal is:
+ *   - staff holding the admin `servers.manage` capability (support access), or
  *   - the server owner, or
  *   - an ACTIVE SubUser holding ALL required @RequirePermissions().
  *
- * NOTE: platform staff (ADMIN/OWNER) get NO implicit access to a customer's
- * server through the client area — they must use the admin panel. This keeps a
- * customer's servers private to them and the sub-users they invite.
+ * The staff override lets support operate a customer's server FROM THE ADMIN
+ * PANEL. It is deliberately gated on `servers.manage` (ADMIN/OWNER by default),
+ * NOT on global role alone, and a customer's servers never appear in a staff
+ * member's OWN client dashboard/list (that query is scoped in ServersService).
  *
  * API-key principals are additionally constrained: a READ-scope key cannot pass
  * a guard that requires any non-read permission.
@@ -58,8 +61,14 @@ export class PermissionGuard implements CanActivate {
       if (!hasWrite) throw new ForbiddenException('API key lacks write scope');
     }
 
-    // Staff do NOT get an implicit override here — client-area server access is
-    // owner/sub-user only. Staff manage customer servers via the admin panel.
+    // Staff support override: a principal whose admin RBAC grants `servers.manage`
+    // (ADMIN/OWNER by default) may operate any server, so support can help a
+    // customer from the admin panel. Read-only staff (servers.read only) and
+    // customers fall through to the owner/sub-user checks below.
+    if (hasPermission(user.permissions ?? [], 'servers.manage')) {
+      return true;
+    }
+
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
       select: { id: true, ownerId: true },

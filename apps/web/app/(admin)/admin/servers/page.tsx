@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, Trash2 } from "lucide-react";
+import { HardDrive, Plus, Trash2, ExternalLink } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -181,7 +182,7 @@ export default function AdminServersPage() {
                   <TableHead>Node</TableHead>
                   <TableHead>Game</TableHead>
                   <TableHead>State</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-28" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -201,14 +202,21 @@ export default function AdminServersPage() {
                       <ServerStateBadge state={s.state} />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => setDeleteTarget(s)}
-                      >
-                        <Trash2 className="size-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button asChild variant="ghost" size="sm" title="Open server (support)">
+                          <Link href={`/servers/${s.id}`}>
+                            <ExternalLink className="size-4" /> Manage
+                          </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(s)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}

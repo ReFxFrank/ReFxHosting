@@ -70,9 +70,12 @@ npx prisma validate --schema database/prisma/schema.prisma
   TOTP + WebAuthn; scoped API keys.
 - **AuthZ**: global roles (CUSTOMER/SUPPORT/ADMIN/OWNER) + per-server `SubUser`
   permissions (see `packages/shared/src/permissions.ts`). Wildcards like `files.*`
-  are honored. Staff (ADMIN/OWNER) do NOT get implicit access to a customer's
-  server through the **client area** (`/servers/*`) — that's owner/sub-user only;
-  staff manage customer servers via the **admin panel** (`/admin/*`).
+  are honored. Per-server access (the `PermissionGuard`) is owner / active
+  sub-user, PLUS a staff support override gated on the admin `servers.manage`
+  capability (ADMIN/OWNER) — read-only staff (`servers.read` only) do NOT get it.
+  A customer's servers never appear in a staff member's OWN client dashboard/list
+  (`ServersService.list` + dashboard are scoped); staff reach them via the admin
+  Servers list ("Manage" → the standard server screens).
 - **Every mutating action** should be mirrored into `AuditLog`.
 - **Health/metrics** are mounted at the ROOT (`/health`, `/metrics`), excluded
   from the `/api/v1` prefix — don't probe them under the prefix.
