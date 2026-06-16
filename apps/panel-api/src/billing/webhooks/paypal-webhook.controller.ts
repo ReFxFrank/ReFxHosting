@@ -9,6 +9,7 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request } from 'express';
+import { SubscriptionState } from '@prisma/client';
 import { Public } from '../../common/decorators/public.decorator';
 import { RawResponse } from '../../common/decorators/raw-response.decorator';
 import { BillingService } from '../billing.service';
@@ -101,6 +102,34 @@ export class PayPalWebhookController {
         });
         break;
       }
+
+      // Recurring subscription payment: PayPal auto-billed a cycle. The SALE
+      // resource carries the subscription id in `billing_agreement_id` and the
+      // amount under `amount.total` (different shape from captures).
+      case 'PAYMENT.SALE.COMPLETED': {
+        const paypalSubId: string | undefined = r.billing_agreement_id;
+        if (!paypalSubId) return; // not a subscription sale
+        await this.billing.settlePayPalRecurringPayment(paypalSubId, {
+          saleId: r.id ?? '',
+          amountMinor: r.amount?.total
+            ? Math.round(parseFloat(r.amount.total) * 100)
+            : undefined,
+          currency: r.amount?.currency,
+        });
+        break;
+      }
+
+      // Subscription lifecycle → mirror onto our subscription.
+      case 'BILLING.SUBSCRIPTION.CANCELLED':
+        if (r.id) await this.billing.applyPayPalSubscriptionState(r.id, SubscriptionState.CANCELED);
+        break;
+      case 'BILLING.SUBSCRIPTION.SUSPENDED':
+        if (r.id) await this.billing.applyPayPalSubscriptionState(r.id, SubscriptionState.SUSPENDED);
+        break;
+      case 'BILLING.SUBSCRIPTION.EXPIRED':
+        if (r.id) await this.billing.applyPayPalSubscriptionState(r.id, SubscriptionState.EXPIRED);
+        break;
+
       default:
         this.logger.debug(`Unhandled PayPal event: ${event.event_type}`);
     }

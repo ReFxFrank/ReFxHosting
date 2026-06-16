@@ -148,10 +148,21 @@ export class OrdersService {
       slots: dto.slots,
     });
 
+    // PayPal recurring: fixed-price orders with no discounts/credit start a real
+    // PayPal subscription (auto-bills every cycle). The plan price is the total,
+    // so the first invoice is raised tax-free to match what PayPal charges.
+    // Per-slot or discounted PayPal orders fall back to the one-time flow.
+    const wantsPaypalSub =
+      dto.gateway === 'paypal' &&
+      quantity === 1 &&
+      !dto.couponCode?.trim() &&
+      !dto.giftCardCode?.trim() &&
+      !dto.useCredit;
+
     // 2) Generate the first-period invoice (coupon discount baked in).
     const invoice = await this.billing.createInvoiceForSubscription(
       subscription.id,
-      { discountMinor, couponCode },
+      { discountMinor, couponCode, noTax: wantsPaypalSub },
     );
     if (couponRedemptionId) {
       await this.coupons.attachRedemption(couponRedemptionId, invoice.id, discountMinor);
@@ -162,42 +173,54 @@ export class OrdersService {
     let paidNow = false;
     let checkoutUrl: string | undefined;
     let applied = 0; // total non-gateway credit applied (gift card + store credit)
-    if (dto.giftCardCode?.trim()) {
-      applied += await this.giftCards.redeemForInvoice(
-        dto.giftCardCode,
-        userId,
-        invoice.id,
-        invoice.totalMinor,
-      );
-    }
-    if (dto.useCredit) {
-      // Draw down store credit for whatever the gift card didn't cover.
-      applied += await this.credit.applyToInvoice(
-        userId,
-        invoice.id,
-        Math.max(0, invoice.totalMinor - applied),
-      );
-    }
 
-    if (invoice.totalMinor > 0 && applied >= invoice.totalMinor) {
-      // Gift card and/or credit cover the whole order → settle without a gateway.
-      await this.billing.markInvoicePaid(invoice.id, {
-        gateway: 'credit',
-        gatewayRef: `credit-${invoice.id}`,
-        amountMinor: invoice.totalMinor,
-        currency: invoice.currency,
-      });
-      paidNow = true;
-    } else {
-      // Charge the outstanding balance (total − any applied credit) via the
-      // gateway. payInvoice settles directly if the balance is already zero
-      // (e.g. a 100%-off coupon), so a $0 order never hits a hosted checkout.
+    if (wantsPaypalSub) {
+      // Hand off to a recurring PayPal subscription; the first payment settles
+      // this invoice + provisions via the PayPal webhook.
       try {
-        const pay = await this.billing.payInvoice(userId, invoice.id, dto.gateway);
-        checkoutUrl = pay.checkoutUrl;
-        paidNow = !!pay.paid;
+        const res = await this.billing.startPayPalSubscription(userId, subscription.id);
+        checkoutUrl = res.approveUrl;
       } catch {
         // Non-fatal: leave the invoice OPEN; the server stays reserved (unpaid).
+      }
+    } else {
+      if (dto.giftCardCode?.trim()) {
+        applied += await this.giftCards.redeemForInvoice(
+          dto.giftCardCode,
+          userId,
+          invoice.id,
+          invoice.totalMinor,
+        );
+      }
+      if (dto.useCredit) {
+        // Draw down store credit for whatever the gift card didn't cover.
+        applied += await this.credit.applyToInvoice(
+          userId,
+          invoice.id,
+          Math.max(0, invoice.totalMinor - applied),
+        );
+      }
+
+      if (invoice.totalMinor > 0 && applied >= invoice.totalMinor) {
+        // Gift card and/or credit cover the whole order → settle without a gateway.
+        await this.billing.markInvoicePaid(invoice.id, {
+          gateway: 'credit',
+          gatewayRef: `credit-${invoice.id}`,
+          amountMinor: invoice.totalMinor,
+          currency: invoice.currency,
+        });
+        paidNow = true;
+      } else {
+        // Charge the outstanding balance (total − any applied credit) via the
+        // gateway. payInvoice settles directly if the balance is already zero
+        // (e.g. a 100%-off coupon), so a $0 order never hits a hosted checkout.
+        try {
+          const pay = await this.billing.payInvoice(userId, invoice.id, dto.gateway);
+          checkoutUrl = pay.checkoutUrl;
+          paidNow = !!pay.paid;
+        } catch {
+          // Non-fatal: leave the invoice OPEN; the server stays reserved (unpaid).
+        }
       }
     }
 

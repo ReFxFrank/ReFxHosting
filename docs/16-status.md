@@ -91,6 +91,15 @@ beyond a single build session, and are called out so expectations are clear:
   (encrypted keys) and the Stripe webhook settles invoices/checkouts idempotently;
   live Stripe/PayPal still needs real keys + a registered webhook endpoint, and
   deep SDK flows (e.g. SCA edge cases) remain `TODO(impl)`.
+  **PayPal recurring** uses the Subscriptions API: a fixed-price order paid with
+  PayPal lazily creates a PayPal catalog product + billing plan (persisted on
+  Product/Price) and a subscription, then auto-bills each cycle; the
+  `PAYMENT.SALE.COMPLETED` webhook settles each period invoice + provisions, and
+  `BILLING.SUBSCRIPTION.*` events mirror cancel/suspend/expire. Enable those
+  webhook events in the PayPal app, and verify the flow in PayPal **sandbox**
+  before going live. PayPal subscriptions are billed at the plan (tax-free) price
+  and don't combine with coupons/gift cards/credit or per-slot (voice) orders —
+  those fall back to the existing one-time PayPal checkout.
 - **Production secrets/TLS** between panel and agents (self-signed by default).
   Panel→agent **certificate pinning is available** (`AGENT_TLS_PINNING` + pin per
   node); full mutual-TLS with panel client certs is the remaining `TODO(impl)`.

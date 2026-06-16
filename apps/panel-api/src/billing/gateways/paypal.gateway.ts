@@ -253,6 +253,140 @@ export class PayPalGateway implements PaymentGateway {
     };
   }
 
+  // ---- Recurring subscriptions (PayPal Subscriptions API) ----------------
+
+  /** Map our BillingInterval to a PayPal billing-cycle frequency. */
+  private static frequencyFor(interval: string): {
+    interval_unit: 'DAY' | 'WEEK' | 'MONTH' | 'YEAR';
+    interval_count: number;
+  } {
+    switch (interval) {
+      case 'WEEKLY':
+        return { interval_unit: 'WEEK', interval_count: 1 };
+      case 'BIWEEKLY':
+        return { interval_unit: 'WEEK', interval_count: 2 };
+      case 'MONTHLY':
+        return { interval_unit: 'MONTH', interval_count: 1 };
+      case 'QUARTERLY':
+        return { interval_unit: 'MONTH', interval_count: 3 };
+      case 'SEMIANNUAL':
+        return { interval_unit: 'MONTH', interval_count: 6 };
+      case 'ANNUAL':
+        return { interval_unit: 'YEAR', interval_count: 1 };
+      default:
+        return { interval_unit: 'MONTH', interval_count: 1 };
+    }
+  }
+
+  /** Create a PayPal catalog product (one per platform Product). */
+  async createCatalogProduct(name: string, description?: string): Promise<string> {
+    const res = await this.api<{ id: string }>('/v1/catalogs/products', {
+      method: 'POST',
+      body: {
+        name: name.slice(0, 127),
+        description: (description ?? name).slice(0, 256),
+        type: 'SERVICE',
+        category: 'SOFTWARE',
+      },
+    });
+    return res.id;
+  }
+
+  /**
+   * Create an active PayPal billing plan for a product + interval + price. The
+   * plan defines the recurring billing cycle PayPal charges automatically.
+   */
+  async createBillingPlan(params: {
+    paypalProductId: string;
+    name: string;
+    interval: string;
+    amountMinor: number;
+    currency: string;
+  }): Promise<string> {
+    const freq = PayPalGateway.frequencyFor(params.interval);
+    const res = await this.api<{ id: string }>('/v1/billing/plans', {
+      method: 'POST',
+      body: {
+        product_id: params.paypalProductId,
+        name: params.name.slice(0, 127),
+        status: 'ACTIVE',
+        billing_cycles: [
+          {
+            frequency: freq,
+            tenure_type: 'REGULAR',
+            sequence: 1,
+            total_cycles: 0, // 0 = bill forever until cancelled
+            pricing_scheme: {
+              fixed_price: {
+                value: (params.amountMinor / 100).toFixed(2),
+                currency_code: params.currency,
+              },
+            },
+          },
+        ],
+        payment_preferences: {
+          auto_bill_outstanding: true,
+          setup_fee_failure_action: 'CONTINUE',
+          payment_failure_threshold: 1,
+        },
+      },
+    });
+    return res.id;
+  }
+
+  /**
+   * Create a subscription against a plan and return its approval link. `customId`
+   * carries our internal subscription id back via webhooks. PayPal bills the
+   * cycle automatically once the buyer approves.
+   */
+  async createSubscription(params: {
+    planId: string;
+    customId: string;
+    successUrl: string;
+    cancelUrl: string;
+  }): Promise<{ id: string; approveUrl: string; status: string }> {
+    const res = await this.api<{
+      id: string;
+      status: string;
+      links: Array<{ rel: string; href: string }>;
+    }>('/v1/billing/subscriptions', {
+      method: 'POST',
+      body: {
+        plan_id: params.planId,
+        custom_id: params.customId,
+        application_context: {
+          shipping_preference: 'NO_SHIPPING',
+          user_action: 'SUBSCRIBE_NOW',
+          return_url: params.successUrl,
+          cancel_url: params.cancelUrl,
+        },
+      },
+    });
+    const approve = res.links.find((l) => l.rel === 'approve');
+    return { id: res.id, approveUrl: approve?.href ?? '', status: res.status };
+  }
+
+  /** Fetch a subscription's current state (status + custom_id). */
+  async getSubscription(subscriptionId: string): Promise<{
+    id: string;
+    status: string;
+    customId?: string;
+  }> {
+    const res = await this.api<{ id: string; status: string; custom_id?: string }>(
+      `/v1/billing/subscriptions/${subscriptionId}`,
+      { method: 'GET' },
+    );
+    return { id: res.id, status: res.status, customId: res.custom_id };
+  }
+
+  /** Cancel a subscription (best-effort; ignores already-cancelled). */
+  async cancelSubscription(subscriptionId: string, reason = 'Cancelled by customer'): Promise<void> {
+    await this.api(`/v1/billing/subscriptions/${subscriptionId}/cancel`, {
+      method: 'POST',
+      body: { reason: reason.slice(0, 127) },
+    });
+  }
+
   /**
    * Verify an inbound PayPal webhook against the configured webhook id using
    * PayPal's verify-webhook-signature API, returning the parsed event. Throws if

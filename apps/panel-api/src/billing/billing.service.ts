@@ -523,7 +523,20 @@ export class BillingService {
     id: string,
     atPeriodEnd: boolean,
   ): Promise<Subscription> {
-    await this.getOwnedSubscription(userId, id);
+    const sub = await this.getOwnedSubscription(userId, id);
+
+    // Stop future PayPal auto-charges either way (immediate cancel, or cancel at
+    // period end where service continues until currentPeriodEnd but PayPal must
+    // not bill the next cycle). Best-effort: ignore PayPal errors (already gone).
+    if (sub.gateway === 'paypal' && sub.gatewaySubId) {
+      try {
+        await this.paypal.cancelSubscription(sub.gatewaySubId);
+      } catch (e) {
+        this.logger.warn(
+          `PayPal cancel for ${sub.gatewaySubId} failed: ${(e as Error).message}`,
+        );
+      }
+    }
 
     if (atPeriodEnd) {
       return this.prisma.subscription.update({
@@ -1075,6 +1088,175 @@ export class BillingService {
     return { paid: true };
   }
 
+  // ---- Recurring PayPal subscriptions ------------------------------------
+
+  /**
+   * Ensure a PayPal billing plan exists for a price (creating the PayPal catalog
+   * product + plan on first use and persisting their ids), and return the plan id.
+   */
+  async ensurePayPalPlan(priceId: string): Promise<string> {
+    const price = await this.prisma.price.findUnique({
+      where: { id: priceId },
+      include: { product: true },
+    });
+    if (!price) throw new NotFoundException('Price not found');
+    if (price.paypalPlanId) return price.paypalPlanId;
+
+    let paypalProductId = price.product.paypalProductId;
+    if (!paypalProductId) {
+      paypalProductId = await this.paypal.createCatalogProduct(
+        price.product.name,
+        price.product.description ?? undefined,
+      );
+      await this.prisma.product.update({
+        where: { id: price.product.id },
+        data: { paypalProductId },
+      });
+    }
+
+    const planId = await this.paypal.createBillingPlan({
+      paypalProductId,
+      name: `${price.product.name} (${price.interval.toLowerCase()})`,
+      interval: price.interval,
+      amountMinor: price.amountMinor,
+      currency: price.currency,
+    });
+    await this.prisma.price.update({
+      where: { id: price.id },
+      data: { paypalPlanId: planId },
+    });
+    return planId;
+  }
+
+  /**
+   * Start a recurring PayPal subscription for one of the caller's subscriptions
+   * and return the approval URL. The first payment (and every renewal) settles
+   * the period invoice + provisions via the PayPal webhook.
+   */
+  async startPayPalSubscription(
+    userId: string,
+    subscriptionId: string,
+  ): Promise<{ approveUrl: string }> {
+    const sub = await this.prisma.subscription.findFirst({
+      where: { id: subscriptionId, userId },
+    });
+    if (!sub) throw new NotFoundException('Subscription not found');
+    const paypal = await this.settings.paypalConfig();
+    if (!paypal.clientId || !paypal.clientSecret) {
+      throw new BadRequestException('PayPal is not configured');
+    }
+    const planId = await this.ensurePayPalPlan(sub.priceId);
+    const created = await this.paypal.createSubscription({
+      planId,
+      customId: sub.id,
+      successUrl: `${this.panelUrl}/billing?paid=1`,
+      cancelUrl: `${this.panelUrl}/billing`,
+    });
+    if (!created.approveUrl) {
+      throw new BadGatewayException('PayPal did not return an approval URL');
+    }
+    await this.prisma.subscription.update({
+      where: { id: sub.id },
+      data: { gateway: 'paypal', gatewaySubId: created.id },
+    });
+    return { approveUrl: created.approveUrl };
+  }
+
+  /**
+   * Settle a recurring PayPal payment (webhook PAYMENT.SALE.COMPLETED). Resolves
+   * our subscription by the PayPal subscription id, settles the open period
+   * invoice (raising one for a renewal), provisions on the first payment, and
+   * rolls the billing period forward. Idempotent by the PayPal sale id.
+   */
+  async settlePayPalRecurringPayment(
+    paypalSubId: string,
+    details: { saleId: string; amountMinor?: number; currency?: string },
+  ): Promise<void> {
+    const sub = await this.prisma.subscription.findFirst({
+      where: { gatewaySubId: paypalSubId },
+    });
+    if (!sub) {
+      this.logger.warn(`PayPal sale for unknown subscription ${paypalSubId}`);
+      return;
+    }
+    if (details.saleId) {
+      const already = await this.prisma.payment.findFirst({
+        where: { gatewayRef: details.saleId, state: PaymentState.SUCCEEDED },
+        select: { id: true },
+      });
+      if (already) return; // duplicate delivery
+    }
+
+    // Settle the current OPEN invoice (first payment), else raise one for the
+    // new period (a renewal PayPal initiated).
+    const open = await this.prisma.invoice.findFirst({
+      where: { subscriptionId: sub.id, state: InvoiceState.OPEN },
+      orderBy: { createdAt: 'desc' },
+    });
+    const isRenewal = !open;
+    const invoice =
+      open ?? (await this.createInvoiceForSubscription(sub.id, { noTax: true }));
+
+    await this.markInvoicePaid(invoice.id, {
+      gateway: 'paypal',
+      gatewayRef: details.saleId,
+      amountMinor: details.amountMinor ?? invoice.totalMinor,
+      currency: details.currency ?? invoice.currency,
+    });
+
+    // Roll the period forward on a renewal (or if the current period has ended).
+    const now = new Date();
+    if (isRenewal || sub.currentPeriodEnd <= now) {
+      await this.prisma.subscription.update({
+        where: { id: sub.id },
+        data: {
+          state: SubscriptionState.ACTIVE,
+          currentPeriodStart: sub.currentPeriodEnd,
+          currentPeriodEnd: addInterval(sub.currentPeriodEnd, sub.interval),
+          renewalReminderSentAt: null,
+        },
+      });
+    }
+  }
+
+  /**
+   * Update our subscription state from a PayPal subscription lifecycle webhook
+   * (cancelled/suspended/expired), resolving by the PayPal subscription id.
+   */
+  async applyPayPalSubscriptionState(
+    paypalSubId: string,
+    state: SubscriptionState,
+  ): Promise<void> {
+    const sub = await this.prisma.subscription.findFirst({
+      where: { gatewaySubId: paypalSubId },
+    });
+    if (!sub) return;
+    await this.prisma.subscription.update({
+      where: { id: sub.id },
+      data: {
+        state,
+        ...(state === SubscriptionState.CANCELED ? { autoRenew: false } : {}),
+      },
+    });
+    if (
+      state === SubscriptionState.CANCELED ||
+      state === SubscriptionState.SUSPENDED
+    ) {
+      const servers = await this.prisma.server.findMany({
+        where: { subscriptionId: sub.id, deletedAt: null },
+        select: { id: true },
+      });
+      for (const s of servers) {
+        await this.suspensionQueue.add(JOB.SUSPEND, {
+          serverId: s.id,
+          subscriptionId: sub.id,
+          action: 'suspend',
+          reason: `PayPal subscription ${state.toLowerCase()}`,
+        } satisfies SuspensionJob);
+      }
+    }
+  }
+
   // ---- External webhook settlement (PayPal/Stripe async events) ----------
 
   /** Settle an invoice from an async gateway event (idempotent). */
@@ -1209,7 +1391,7 @@ export class BillingService {
    */
   async createInvoiceForSubscription(
     subscriptionId: string,
-    opts: { discountMinor?: number; couponCode?: string } = {},
+    opts: { discountMinor?: number; couponCode?: string; noTax?: boolean } = {},
   ): Promise<Invoice> {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
@@ -1235,11 +1417,16 @@ export class BillingService {
     const taxableMinor = subtotalMinor - discountMinor;
 
     // Tax from the customer's saved billing address (no-tax when none on file).
-    const taxLoc = this.resolveTaxRegion(subscription.user);
-    const tax = calculateTax(taxableMinor, {
-      region: taxLoc?.region ?? '',
-      country: taxLoc?.country,
-    });
+    // PayPal-subscription invoices are raised tax-free: the PayPal plan price is
+    // the total PayPal charges (per-customer tax can't be encoded in a shared
+    // plan), so the invoice must match it.
+    const taxLoc = opts.noTax ? null : this.resolveTaxRegion(subscription.user);
+    const tax = opts.noTax
+      ? { taxMinor: 0, taxType: null as string | null, taxRatePct: 0 }
+      : calculateTax(taxableMinor, {
+          region: taxLoc?.region ?? '',
+          country: taxLoc?.country,
+        });
     const totalMinor = taxableMinor + tax.taxMinor;
     const taxRegion = taxLoc?.region ?? null;
 

@@ -733,6 +733,9 @@ model Product {
   prices        Price[]
   subscriptions Subscription[]
 
+  // PayPal catalog product id (lazily created for recurring PayPal subscriptions).
+  paypalProductId String?
+
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 }
@@ -778,6 +781,8 @@ model Price {
   amountMinor Int             // cents
   // External processor price IDs
   stripePriceId String?
+  // PayPal billing-plan id (lazily created for recurring PayPal subscriptions).
+  paypalPlanId  String?
   isActive    Boolean         @default(true)
 
   @@unique([productId, hardwareTierId, interval, currency])
