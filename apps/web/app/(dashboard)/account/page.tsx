@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { startRegistration } from "@simplewebauthn/browser";
+import QRCode from "qrcode";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -432,6 +434,7 @@ function TotpSetupDialog({
 }) {
   const [code, setCode] = useState("");
   const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
 
   const setupQuery = useQuery({
     queryKey: ["account", "totp", "setup"],
@@ -440,6 +443,22 @@ function TotpSetupDialog({
     staleTime: 0,
     gcTime: 0,
   });
+
+  // Render the otpauth:// URL as a scannable QR for Authy / Google Authenticator.
+  const otpauthUrl = setupQuery.data?.otpauthUrl;
+  useEffect(() => {
+    if (!otpauthUrl) {
+      setQrDataUrl(null);
+      return;
+    }
+    let active = true;
+    QRCode.toDataURL(otpauthUrl, { margin: 1, width: 320 })
+      .then((url) => active && setQrDataUrl(url))
+      .catch(() => active && setQrDataUrl(null));
+    return () => {
+      active = false;
+    };
+  }, [otpauthUrl]);
 
   const enableMutation = useMutation({
     mutationFn: () => api.account.totpEnable(code.trim()),
@@ -504,21 +523,28 @@ function TotpSetupDialog({
               <Skeleton className="h-28 w-full" />
             ) : setupQuery.data ? (
               <div className="space-y-4">
-                {/* TODO(impl): render otpauthUrl as a scannable QR code. */}
-                <div className="flex aspect-square w-40 mx-auto items-center justify-center rounded-md border border-dashed text-center text-xs text-muted-foreground p-2">
-                  QR code
-                  <br />
-                  (TODO)
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Setup URL</Label>
+                <p className="text-center text-xs text-muted-foreground">
+                  Scan with Authy, Google Authenticator, 1Password or any TOTP app.
+                </p>
+                {qrDataUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={qrDataUrl}
+                    alt="TOTP QR code"
+                    className="mx-auto size-44 rounded-md border bg-white p-2"
+                  />
+                ) : (
+                  <Skeleton className="mx-auto size-44 rounded-md" />
+                )}
+                <details className="text-xs text-muted-foreground">
+                  <summary className="cursor-pointer select-none">Can&apos;t scan? Enter the setup URL manually</summary>
                   <Textarea
                     readOnly
                     rows={3}
                     value={setupQuery.data.otpauthUrl}
-                    className="font-mono text-xs"
+                    className="mt-2 font-mono text-xs"
                   />
-                </div>
+                </details>
                 <div className="space-y-1.5">
                   <Label>Manual key</Label>
                   <div className="flex items-center gap-2">
@@ -644,6 +670,47 @@ function TotpDisableDialog({
 // --- Passkeys --------------------------------------------------------------
 
 function PasskeysCard() {
+  const queryClient = useQueryClient();
+  const [adding, setAdding] = useState(false);
+
+  const { data: passkeys, isLoading } = useQuery({
+    queryKey: ["account", "passkeys"],
+    queryFn: () => api.account.passkeys(),
+  });
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["account", "passkeys"] });
+
+  async function addPasskey() {
+    setAdding(true);
+    try {
+      const options = await api.account.passkeyRegisterOptions();
+      const attestation = await startRegistration(
+        options as Parameters<typeof startRegistration>[0],
+      );
+      const label =
+        typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+          ? "Apple device"
+          : undefined;
+      await api.account.passkeyRegisterVerify(attestation, label);
+      toast.success("Passkey added");
+      invalidate();
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "NotAllowedError") return; // cancelled
+      toast.error(e instanceof ApiError ? e.message : "Couldn't add passkey");
+    } finally {
+      setAdding(false);
+    }
+  }
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.account.deletePasskey(id),
+    onSuccess: () => {
+      toast.success("Passkey removed");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't remove passkey"),
+  });
+
   return (
     <Card>
       <CardHeader>
@@ -651,18 +718,41 @@ function PasskeysCard() {
           <Fingerprint className="size-4" /> Passkeys / WebAuthn
         </CardTitle>
         <CardDescription>
-          Sign in with a hardware key, fingerprint or device passkey.
+          Sign in with a hardware key, fingerprint or device passkey. Passkeys act
+          as a second factor at sign-in.
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">No passkeys registered.</p>
-        <Button
-          variant="outline"
-          onClick={() =>
-            // TODO(impl): wire up the WebAuthn registration ceremony.
-            toast.info("Passkey registration isn't wired up yet.")
-          }
-        >
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : passkeys?.length ? (
+          <ul className="divide-y rounded-md border">
+            {passkeys.map((p) => (
+              <li key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{p.label || "Passkey"}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Added {formatDate(p.createdAt)}
+                    {p.lastUsedAt ? ` · last used ${formatDate(p.lastUsedAt)}` : ""}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-destructive hover:text-destructive"
+                  aria-label="Remove passkey"
+                  disabled={remove.isPending}
+                  onClick={() => remove.mutate(p.id)}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted-foreground">No passkeys registered.</p>
+        )}
+        <Button variant="outline" loading={adding} onClick={addPasskey}>
           <Plus className="size-4" /> Add passkey
         </Button>
       </CardContent>

@@ -105,6 +105,27 @@ export class WebAuthnService {
     return { verified: true };
   }
 
+  /** List a user's registered passkeys (no secret material). */
+  async listCredentials(userId: string) {
+    const creds = await this.prisma.webAuthnCredential.findMany({
+      where: { userId },
+      select: { id: true, label: true, createdAt: true, lastUsedAt: true, transports: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return creds;
+  }
+
+  /** Remove one of the user's passkeys by row id. */
+  async removeCredential(userId: string, id: string): Promise<{ id: string }> {
+    const cred = await this.prisma.webAuthnCredential.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!cred) throw new BadRequestException('Passkey not found');
+    await this.prisma.webAuthnCredential.delete({ where: { id } });
+    return { id };
+  }
+
   async authenticationOptions(userId: string) {
     const creds = await this.prisma.webAuthnCredential.findMany({
       where: { userId },

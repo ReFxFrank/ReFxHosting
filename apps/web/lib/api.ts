@@ -60,7 +60,12 @@ import type {
   CreditReason,
   ProfileUpdate,
   AdminRole,
+  WebAuthnCredential,
 } from "@/lib/types";
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from "@simplewebauthn/types";
 
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
@@ -261,9 +266,20 @@ export const api = {
       http.post<LoginResponse>("/auth/register", input, { anonymous: true }),
     verifyMfa: (mfaToken: string, code: string, method: "totp" | "recovery" = "totp") =>
       http.post<LoginResponse>("/auth/mfa/verify", { mfaToken, code, method }, { anonymous: true }),
-    // WebAuthn assertion exchange. TODO(impl): full ceremony with @simplewebauthn/browser.
-    verifyWebAuthn: (mfaToken: string, assertion: unknown) =>
-      http.post<LoginResponse>("/auth/mfa/webauthn", { mfaToken, assertion }, { anonymous: true }),
+    // Passkey (WebAuthn) sign-in: fetch assertion options for the challenge, then
+    // exchange the browser assertion for a session.
+    webauthnLoginOptions: (mfaToken: string) =>
+      http.post<PublicKeyCredentialRequestOptionsJSON>(
+        "/auth/mfa/webauthn/login/options",
+        { mfaToken },
+        { anonymous: true },
+      ),
+    webauthnLoginVerify: (mfaToken: string, response: unknown) =>
+      http.post<LoginResponse>(
+        "/auth/mfa/webauthn/login/verify",
+        { mfaToken, response },
+        { anonymous: true },
+      ),
     logout: () => http.post<void>("/auth/logout"),
     me: () => http.get<User>("/auth/me"),
     forgotPassword: (email: string) =>
@@ -280,11 +296,18 @@ export const api = {
     createApiKey: (input: { name: string; scopes: ApiKey["scopes"] }) =>
       http.post<ApiKey>("/account/api-keys", input),
     revokeApiKey: (id: string) => http.delete<void>(`/account/api-keys/${id}`),
-    // MFA management. TODO(impl): WebAuthn registration ceremony.
+    // TOTP (authenticator app) management.
     totpSetup: () => http.post<{ secret: string; otpauthUrl: string }>("/account/mfa/totp/setup"),
     totpEnable: (code: string) =>
       http.post<{ recoveryCodes: string[] }>("/account/mfa/totp/enable", { code }),
     totpDisable: (code: string) => http.post<void>("/account/mfa/totp/disable", { code }),
+    // Passkey (WebAuthn) management — uses the authenticated /auth endpoints.
+    passkeys: () => http.get<WebAuthnCredential[]>("/auth/mfa/webauthn/credentials"),
+    passkeyRegisterOptions: () =>
+      http.post<PublicKeyCredentialCreationOptionsJSON>("/auth/mfa/webauthn/register/options"),
+    passkeyRegisterVerify: (response: unknown, label?: string) =>
+      http.post<{ verified: boolean }>("/auth/mfa/webauthn/register/verify", { response, label }),
+    deletePasskey: (id: string) => http.delete<void>(`/auth/mfa/webauthn/credentials/${id}`),
     notifications: () => getList<Notification>("/account/notifications"),
     markNotificationRead: (id: string) =>
       http.post<void>(`/account/notifications/${id}/read`),

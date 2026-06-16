@@ -15,6 +15,7 @@ const MODELS = [
   'passwordResetToken',
   'emailVerificationToken',
   'apiKey',
+  'webAuthnCredential',
   'server',
   'subUser',
   'gameTemplate',

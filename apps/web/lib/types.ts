@@ -58,6 +58,15 @@ export interface CreditLedger {
   transactions: CreditTransaction[];
 }
 
+/** A registered passkey (WebAuthn credential) shown in account security. */
+export interface WebAuthnCredential {
+  id: string;
+  label: string | null;
+  transports: string[];
+  createdAt: string;
+  lastUsedAt: string | null;
+}
+
 export interface AdminRole {
   id: string;
   key: string;

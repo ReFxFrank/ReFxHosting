@@ -29,6 +29,10 @@ describe('AuthService TOTP', () => {
         deleteMany: jest.fn((a: any) => a),
         create: jest.fn((a: any) => a),
       },
+      webAuthnCredential: {
+        // No passkeys by default — the login MFA gate only checks the count.
+        count: jest.fn().mockResolvedValue(0),
+      },
       session: { create: jest.fn() },
       $transaction: jest.fn().mockResolvedValue([]),
     };

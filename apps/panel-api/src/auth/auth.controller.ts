@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  Param,
   Post,
   Req,
   UseGuards,
@@ -32,6 +33,8 @@ import {
   TotpVerifyDto,
   VerifyEmailDto,
   WebAuthnVerifyDto,
+  WebAuthnLoginOptionsDto,
+  WebAuthnLoginVerifyDto,
 } from './dto/auth.dto';
 
 @ApiTags('auth')
@@ -190,6 +193,23 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  @Get('mfa/webauthn/credentials')
+  webauthnList(@CurrentUser('id') userId: string) {
+    return this.webauthn.listCredentials(userId);
+  }
+
+  @ApiBearerAuth()
+  @Delete('mfa/webauthn/credentials/:id')
+  @HttpCode(204)
+  @Audit({ action: 'auth.mfa.webauthn.remove', targetType: 'WebAuthnCredential', targetParam: 'id' })
+  async webauthnRemove(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    await this.webauthn.removeCredential(userId, id);
+  }
+
+  @ApiBearerAuth()
   @Post('mfa/webauthn/auth/options')
   webauthnAuthOptions(@CurrentUser('id') userId: string) {
     return this.webauthn.authenticationOptions(userId);
@@ -202,6 +222,29 @@ export class AuthController {
     @Body() dto: WebAuthnVerifyDto,
   ) {
     return this.webauthn.verifyAuthentication(userId, dto.response as any);
+  }
+
+  // ---- WebAuthn login (passkey as a second factor at sign-in) ------------
+
+  @Public()
+  @Post('mfa/webauthn/login/options')
+  @HttpCode(200)
+  async webauthnLoginOptions(@Body() dto: WebAuthnLoginOptionsDto) {
+    const userId = await this.auth.verifyMfaChallenge(dto.mfaToken);
+    return this.webauthn.authenticationOptions(userId);
+  }
+
+  @Public()
+  @Post('mfa/webauthn/login/verify')
+  @HttpCode(200)
+  @Audit({ action: 'auth.mfa.webauthn.login', targetType: 'User' })
+  async webauthnLoginVerify(@Body() dto: WebAuthnLoginVerifyDto, @Req() req: any) {
+    const userId = await this.auth.verifyMfaChallenge(dto.mfaToken);
+    await this.webauthn.verifyAuthentication(userId, dto.response as any);
+    return this.auth.issueSessionForUser(userId, {
+      ip: req.ip,
+      userAgent: req.headers['user-agent'],
+    });
   }
 
   // ---- API keys ----------------------------------------------------------

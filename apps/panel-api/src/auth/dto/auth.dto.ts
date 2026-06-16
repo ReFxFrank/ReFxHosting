@@ -115,6 +115,23 @@ export class WebAuthnVerifyDto {
   label?: string;
 }
 
+/** Begin a passkey assertion at sign-in (after the password factor cleared). */
+export class WebAuthnLoginOptionsDto {
+  @ApiProperty({ description: 'Short-lived MFA challenge token from /auth/login' })
+  @IsString()
+  mfaToken!: string;
+}
+
+/** Complete a passkey assertion at sign-in. */
+export class WebAuthnLoginVerifyDto {
+  @ApiProperty({ description: 'Short-lived MFA challenge token from /auth/login' })
+  @IsString()
+  mfaToken!: string;
+
+  @ApiProperty({ description: 'Serialized assertion response' })
+  response!: Record<string, unknown>;
+}
+
 export class CreateApiKeyDto {
   @ApiProperty()
   @IsString()
@@ -153,4 +170,12 @@ export class TokenResponseDto {
   @IsOptional()
   @IsString()
   mfaToken?: string;
+
+  @ApiPropertyOptional({
+    description: 'Second-factor methods the user can satisfy (present iff mfaRequired)',
+    enum: ['totp', 'recovery', 'webauthn'],
+    isArray: true,
+  })
+  @IsOptional()
+  methods?: ('totp' | 'recovery' | 'webauthn')[];
 }

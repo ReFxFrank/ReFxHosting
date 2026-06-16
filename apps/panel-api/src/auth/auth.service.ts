@@ -117,25 +117,52 @@ export class AuthService {
       throw new UnauthorizedException(`Account ${user.state.toLowerCase()}`);
     }
 
-    // MFA challenge
-    if (user.totpEnabledAt && user.totpSecretEnc) {
-      if (!dto.totp) {
-        // Issue a short-lived, signed challenge token bound to this (already
-        // password-verified) principal. The raw user id is NEVER returned.
-        return {
-          accessToken: '',
-          refreshToken: '',
-          expiresIn: 0,
-          mfaRequired: true,
-          mfaToken: await this.issueMfaChallenge(user.id),
-        };
+    // MFA challenge — required when the user has TOTP enabled OR any passkey.
+    const totpOn = !!(user.totpEnabledAt && user.totpSecretEnc);
+    const passkeyCount = await this.prisma.webAuthnCredential.count({
+      where: { userId: user.id },
+    });
+    if (totpOn || passkeyCount > 0) {
+      // Fast path: a valid TOTP code supplied inline clears the challenge.
+      if (totpOn && dto.totp) {
+        const secret = this.crypto.decrypt(user.totpSecretEnc!);
+        if (!authenticator.check(dto.totp, secret)) {
+          throw new UnauthorizedException('Invalid MFA code');
+        }
+        return this.issueTokens(user, ctx);
       }
-      const secret = this.crypto.decrypt(user.totpSecretEnc);
-      if (!authenticator.check(dto.totp, secret)) {
-        throw new UnauthorizedException('Invalid MFA code');
-      }
+      // Otherwise hand back a short-lived, signed challenge token bound to this
+      // (already password-verified) principal. The raw user id is NEVER returned.
+      const methods: ('totp' | 'recovery' | 'webauthn')[] = [
+        ...(totpOn ? (['totp', 'recovery'] as const) : []),
+        ...(passkeyCount > 0 ? (['webauthn'] as const) : []),
+      ];
+      return {
+        accessToken: '',
+        refreshToken: '',
+        expiresIn: 0,
+        mfaRequired: true,
+        mfaToken: await this.issueMfaChallenge(user.id),
+        methods,
+      };
     }
 
+    return this.issueTokens(user, ctx);
+  }
+
+  /**
+   * Issue a session for a user who has already cleared every factor through a
+   * separate ceremony (e.g. a passkey assertion verified against the login MFA
+   * challenge). Used by the WebAuthn login path in the controller.
+   */
+  async issueSessionForUser(
+    userId: string,
+    ctx: { ip?: string; userAgent?: string },
+  ): Promise<TokenResponseDto> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+    });
+    if (!user) throw new UnauthorizedException('Invalid credentials');
     return this.issueTokens(user, ctx);
   }
 

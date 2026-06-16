@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Fingerprint, ShieldCheck } from "lucide-react";
+import { startAuthentication } from "@simplewebauthn/browser";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { toast } from "@/components/ui/sonner";
@@ -58,24 +59,30 @@ export default function TwoFactorPage() {
 
   async function verifyWebAuthn() {
     if (!mfa) return;
-    // TODO(impl): run navigator.credentials.get() ceremony via @simplewebauthn/browser,
-    // then exchange the assertion. Stubbed to keep the flow visible.
-    toast.info("Passkey verification requires the WebAuthn ceremony (TODO impl).");
+    setSubmitting(true);
     try {
-      const res = await api.auth.verifyWebAuthn(mfa.token, { stub: true });
+      const options = await api.auth.webauthnLoginOptions(mfa.token);
+      const assertion = await startAuthentication(options as Parameters<typeof startAuthentication>[0]);
+      const res = await api.auth.webauthnLoginVerify(mfa.token, assertion);
       if (res.accessToken && res.refreshToken) {
         sessionStorage.removeItem("refx.mfa");
-        await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, mfa?.remember ?? true);
-        {
-          const role = useAuthStore.getState().user?.globalRole;
-          const staff = role === "ADMIN" || role === "OWNER";
-          router.replace(
-            mfa.next && mfa.next !== "/dashboard" ? mfa.next : staff ? "/admin" : "/dashboard",
-          );
-        }
+        await setSession(
+          { accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 },
+          undefined,
+          mfa?.remember ?? true,
+        );
+        const role = useAuthStore.getState().user?.globalRole;
+        const staff = role === "ADMIN" || role === "OWNER";
+        router.replace(
+          mfa.next && mfa.next !== "/dashboard" ? mfa.next : staff ? "/admin" : "/dashboard",
+        );
       }
-    } catch {
-      /* expected while stubbed */
+    } catch (e) {
+      // A user cancelling the browser prompt throws NotAllowedError — keep quiet.
+      if (e instanceof DOMException && e.name === "NotAllowedError") return;
+      toast.error(e instanceof ApiError ? e.message : "Passkey sign-in failed");
+    } finally {
+      setSubmitting(false);
     }
   }
 
