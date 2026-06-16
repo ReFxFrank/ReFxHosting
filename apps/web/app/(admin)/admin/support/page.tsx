@@ -314,7 +314,8 @@ function TicketDrawer({
                       : ""}
                   </p>
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                {/* mr-8 keeps these clear of the dialog's absolute close (X) button. */}
+                <div className="mr-8 flex shrink-0 items-center gap-1.5">
                   {canArchive && (
                     <Button
                       variant="outline"
@@ -326,16 +327,17 @@ function TicketDrawer({
                       <Archive className="size-4" /> Archive
                     </Button>
                   )}
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-destructive hover:text-destructive"
-                    disabled={!canDelete}
-                    title={canDelete ? "Delete ticket" : "Resolve or close the ticket before deleting"}
-                    onClick={() => setConfirmDelete(true)}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                  {canDelete && (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-destructive hover:text-destructive"
+                      title="Delete ticket"
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  )}
                 </div>
               </div>
             </DialogHeader>
