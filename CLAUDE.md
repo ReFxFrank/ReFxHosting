@@ -69,8 +69,10 @@ npx prisma validate --schema database/prisma/schema.prisma
 - **Auth**: Argon2id passwords; JWT access+refresh with refresh rotation;
   TOTP + WebAuthn; scoped API keys.
 - **AuthZ**: global roles (CUSTOMER/SUPPORT/ADMIN/OWNER) + per-server `SubUser`
-  permissions (see `packages/shared/src/permissions.ts`). Owners/admins implicitly
-  hold all server permissions; wildcards like `files.*` are honored.
+  permissions (see `packages/shared/src/permissions.ts`). Wildcards like `files.*`
+  are honored. Staff (ADMIN/OWNER) do NOT get implicit access to a customer's
+  server through the **client area** (`/servers/*`) — that's owner/sub-user only;
+  staff manage customer servers via the **admin panel** (`/admin/*`).
 - **Every mutating action** should be mirrored into `AuditLog`.
 - **Health/metrics** are mounted at the ROOT (`/health`, `/metrics`), excluded
   from the `/api/v1` prefix — don't probe them under the prefix.

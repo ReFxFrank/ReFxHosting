@@ -14,9 +14,12 @@ import { PrismaService } from '../../prisma/prisma.service';
 /**
  * Per-server authorization. Resolves the target server from the `:serverId`
  * (or `:id`) route param and grants access when the principal is:
- *   - a platform ADMIN/OWNER (override), or
  *   - the server owner, or
  *   - an ACTIVE SubUser holding ALL required @RequirePermissions().
+ *
+ * NOTE: platform staff (ADMIN/OWNER) get NO implicit access to a customer's
+ * server through the client area — they must use the admin panel. This keeps a
+ * customer's servers private to them and the sub-users they invite.
  *
  * API-key principals are additionally constrained: a READ-scope key cannot pass
  * a guard that requires any non-read permission.
@@ -55,10 +58,8 @@ export class PermissionGuard implements CanActivate {
       if (!hasWrite) throw new ForbiddenException('API key lacks write scope');
     }
 
-    if (user.globalRole === 'ADMIN' || user.globalRole === 'OWNER') {
-      return true;
-    }
-
+    // Staff do NOT get an implicit override here — client-area server access is
+    // owner/sub-user only. Staff manage customer servers via the admin panel.
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
       select: { id: true, ownerId: true },

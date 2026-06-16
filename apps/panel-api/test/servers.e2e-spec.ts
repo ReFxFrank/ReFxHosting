@@ -15,7 +15,6 @@ import { createQueueMock } from './utils/prisma.mock';
 
 const OWNER_ID = 'owner-1';
 const STRANGER_ID = 'stranger-1';
-const ADMIN_ID = 'admin-1';
 const SERVER_ID = 'srv-1';
 
 describe('Servers (e2e)', () => {
@@ -135,11 +134,21 @@ describe('Servers (e2e)', () => {
   });
 
   describe('POST /servers/:serverId/switch-game', () => {
+    /** Mock the PermissionGuard's ownership lookup (resolves the server owner). */
+    function guardOwns() {
+      h.prisma.server.findFirst.mockResolvedValueOnce({
+        id: SERVER_ID,
+        ownerId: OWNER_ID,
+      });
+    }
+
     it('rejects when the server is not stopped (409)', async () => {
-      const token = await asUser(ADMIN_ID, 'ADMIN'); // admin bypasses PermissionGuard
+      const token = await asUser(OWNER_ID);
+      guardOwns();
       // ServersService.switchGame loads the server (RUNNING => not stopped).
       h.prisma.server.findFirst.mockResolvedValueOnce({
         id: SERVER_ID,
+        ownerId: OWNER_ID,
         deletedAt: null,
         state: 'RUNNING',
         templateId: 'tpl-old',
@@ -158,9 +167,11 @@ describe('Servers (e2e)', () => {
     });
 
     it('rejects when target template is not whitelisted (403)', async () => {
-      const token = await asUser(ADMIN_ID, 'ADMIN');
+      const token = await asUser(OWNER_ID);
+      guardOwns();
       h.prisma.server.findFirst.mockResolvedValueOnce({
         id: SERVER_ID,
+        ownerId: OWNER_ID,
         deletedAt: null,
         state: 'OFFLINE',
         templateId: 'tpl-old',
@@ -187,9 +198,11 @@ describe('Servers (e2e)', () => {
     });
 
     it('rejects switching to the same game (400)', async () => {
-      const token = await asUser(ADMIN_ID, 'ADMIN');
+      const token = await asUser(OWNER_ID);
+      guardOwns();
       h.prisma.server.findFirst.mockResolvedValueOnce({
         id: SERVER_ID,
+        ownerId: OWNER_ID,
         deletedAt: null,
         state: 'OFFLINE',
         templateId: 'tpl-same',
@@ -208,9 +221,11 @@ describe('Servers (e2e)', () => {
 
     it('accepts a valid switch and enqueues a reinstall (201)', async () => {
       reinstallQueue.add.mockClear();
-      const token = await asUser(ADMIN_ID, 'ADMIN');
+      const token = await asUser(OWNER_ID);
+      guardOwns();
       h.prisma.server.findFirst.mockResolvedValueOnce({
         id: SERVER_ID,
+        ownerId: OWNER_ID,
         deletedAt: null,
         state: 'OFFLINE',
         templateId: 'tpl-old',
