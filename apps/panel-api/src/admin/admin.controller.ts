@@ -11,7 +11,12 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { GlobalRole, InvoiceState, UserState } from '@prisma/client';
+import {
+  BillingInterval,
+  GlobalRole,
+  InvoiceState,
+  UserState,
+} from '@prisma/client';
 import { AdminService } from './admin.service';
 import { NodesService } from '../nodes/nodes.service';
 import { UsersService } from '../users/users.service';
@@ -31,6 +36,10 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateNodeDto, UpdateNodeDto } from '../nodes/dto/node.dto';
 import { CreateLocationDto, UpdateLocationDto } from '../nodes/dto/location.dto';
 import { CreateProductDto } from '../billing/dto/create-product.dto';
+import {
+  CreateProductPriceDto,
+  UpdatePriceDto,
+} from '../billing/dto/update-price.dto';
 import { CreateAlertDto } from '../platform/dto/create-alert.dto';
 import {
   CreateHomepageAlertDto,
@@ -350,6 +359,37 @@ export class AdminController {
   @Audit({ action: 'admin.product.delete', targetType: 'Product', targetParam: 'id' })
   async deleteProduct(@Param('id') id: string) {
     await this.billing.deleteProduct(id);
+  }
+
+  // ---- Prices (per-product, per-interval) -------------------------------
+
+  @Post('products/:id/prices')
+  @RequirePerm('catalog.manage')
+  @Audit({ action: 'admin.price.create', targetType: 'Product', targetParam: 'id' })
+  createPrice(@Param('id') id: string, @Body() dto: CreateProductPriceDto) {
+    return this.billing.createPrice({
+      productId: id,
+      interval: dto.interval ?? BillingInterval.MONTHLY,
+      currency: dto.currency,
+      amountMinor: dto.amountMinor,
+      stripePriceId: dto.stripePriceId,
+      isActive: dto.isActive,
+    });
+  }
+
+  @Patch('prices/:priceId')
+  @RequirePerm('catalog.manage')
+  @Audit({ action: 'admin.price.update', targetType: 'Price', targetParam: 'priceId' })
+  updatePrice(@Param('priceId') priceId: string, @Body() dto: UpdatePriceDto) {
+    return this.billing.updatePrice(priceId, dto);
+  }
+
+  @Delete('prices/:priceId')
+  @RequirePerm('catalog.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.price.delete', targetType: 'Price', targetParam: 'priceId' })
+  async deletePrice(@Param('priceId') priceId: string) {
+    await this.billing.deletePrice(priceId);
   }
 
   // ---- Templates (egg editor) -------------------------------------------

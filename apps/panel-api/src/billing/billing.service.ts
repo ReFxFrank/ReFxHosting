@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -12,6 +13,7 @@ import {
   InvoiceState,
   PaymentMethod,
   PaymentState,
+  Price,
   Prisma,
   Product,
   Subscription,
@@ -37,6 +39,7 @@ import { generateInvoiceNumber } from './invoice-number.util';
 import { calculateTax } from './tax.util';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreatePriceDto } from './dto/create-price.dto';
+import { UpdatePriceDto } from './dto/update-price.dto';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { AddPaymentMethodDto } from './dto/add-payment-method.dto';
 
@@ -111,17 +114,65 @@ export class BillingService {
   async createPrice(dto: CreatePriceDto) {
     // Ensure the product exists before attaching a price.
     await this.getProduct(dto.productId);
-    return this.prisma.price.create({
-      data: {
-        id: uuidv7(),
-        productId: dto.productId,
-        interval: dto.interval,
-        currency: dto.currency ?? this.billingCfg.defaultCurrency,
-        amountMinor: dto.amountMinor,
-        stripePriceId: dto.stripePriceId,
-        isActive: dto.isActive ?? true,
-      },
+    try {
+      return await this.prisma.price.create({
+        data: {
+          id: uuidv7(),
+          productId: dto.productId,
+          interval: dto.interval,
+          currency: dto.currency ?? this.billingCfg.defaultCurrency,
+          amountMinor: dto.amountMinor,
+          stripePriceId: dto.stripePriceId,
+          isActive: dto.isActive ?? true,
+        },
+      });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'A price for that interval and currency already exists — edit it instead.',
+        );
+      }
+      throw e;
+    }
+  }
+
+  /** Admin: update an existing price's mutable fields. */
+  async updatePrice(id: string, dto: UpdatePriceDto): Promise<Price> {
+    const price = await this.prisma.price.findUnique({ where: { id } });
+    if (!price) throw new NotFoundException('Price not found');
+    const data: Prisma.PriceUpdateInput = {};
+    if (dto.interval !== undefined) data.interval = dto.interval;
+    if (dto.currency !== undefined) data.currency = dto.currency;
+    if (dto.amountMinor !== undefined) data.amountMinor = dto.amountMinor;
+    if (dto.stripePriceId !== undefined) data.stripePriceId = dto.stripePriceId;
+    if (dto.isActive !== undefined) data.isActive = dto.isActive;
+    try {
+      return await this.prisma.price.update({ where: { id }, data });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'A price for that interval and currency already exists.',
+        );
+      }
+      throw e;
+    }
+  }
+
+  /** Admin: delete a price. */
+  async deletePrice(id: string): Promise<{ id: string }> {
+    const price = await this.prisma.price.findUnique({
+      where: { id },
+      select: { id: true },
     });
+    if (!price) throw new NotFoundException('Price not found');
+    await this.prisma.price.delete({ where: { id } });
+    return { id };
   }
 
   /** Admin: list all products (active and inactive) with their prices. */
