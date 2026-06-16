@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Invoice } from '@prisma/client';
 import { AppConfig } from '../../config/configuration';
+import { SettingsService } from '../../platform/settings.service';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import {
   ChargeResult,
@@ -21,35 +22,44 @@ import {
 export class PayPalGateway implements PaymentGateway {
   readonly name = 'paypal';
   private readonly logger = new Logger(PayPalGateway.name);
-  private readonly clientId: string;
-  private readonly clientSecret: string;
-  private readonly baseUrl: string;
 
-  /** Cached OAuth token + expiry epoch ms. */
-  private token?: { value: string; expiresAt: number };
+  /** Cached OAuth token + expiry epoch ms, keyed by the client id it was for. */
+  private token?: { value: string; expiresAt: number; clientId: string };
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly settings: SettingsService,
+  ) {}
+
+  /** Sandbox/live base URL (mode comes from env config). */
+  private get baseUrl(): string {
     const cfg = this.config.get<AppConfig['paypal']>('paypal')!;
-    this.clientId = cfg.clientId;
-    this.clientSecret = cfg.clientSecret;
-    this.baseUrl =
-      cfg.mode === 'live'
-        ? 'https://api-m.paypal.com'
-        : 'https://api-m.sandbox.paypal.com';
+    return cfg.mode === 'live'
+      ? 'https://api-m.paypal.com'
+      : 'https://api-m.sandbox.paypal.com';
   }
 
   /**
-   * Retrieve (and cache) an OAuth2 access token via client-credentials grant.
+   * Retrieve (and cache) an OAuth2 access token via client-credentials grant,
+   * using the EFFECTIVE credentials (owner-editable settings → env fallback) so
+   * keys entered in the panel actually authenticate.
    */
   private async getAccessToken(): Promise<string> {
+    const { clientId, clientSecret } = await this.settings.paypalConfig();
+    if (!clientId || !clientSecret) {
+      throw new Error('PayPal is not configured (missing client id/secret)');
+    }
+
     const now = Date.now();
-    if (this.token && this.token.expiresAt > now + 30_000) {
+    if (
+      this.token &&
+      this.token.clientId === clientId &&
+      this.token.expiresAt > now + 30_000
+    ) {
       return this.token.value;
     }
 
-    const basic = Buffer.from(
-      `${this.clientId}:${this.clientSecret}`,
-    ).toString('base64');
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
     const res = await fetch(`${this.baseUrl}/v1/oauth2/token`, {
       method: 'POST',
@@ -72,6 +82,7 @@ export class PayPalGateway implements PaymentGateway {
     this.token = {
       value: data.access_token,
       expiresAt: now + data.expires_in * 1000,
+      clientId,
     };
     return this.token.value;
   }

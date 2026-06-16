@@ -142,6 +142,18 @@ export class BillingController {
     return this.billing.payInvoice(userId, id, gateway);
   }
 
+  /** Pay the open invoice for one of the caller's servers (Pay-now button). */
+  @Post('servers/:serverId/pay')
+  @HttpCode(200)
+  @Audit({ action: 'billing.server.pay', targetType: 'Server', targetParam: 'serverId' })
+  payForServer(
+    @CurrentUser('id') userId: string,
+    @Param('serverId') serverId: string,
+    @Query('gateway') gateway?: 'stripe' | 'paypal',
+  ) {
+    return this.billing.payForServer(userId, serverId, gateway);
+  }
+
   // ---- Payment methods ---------------------------------------------------
 
   @Get('payment-methods')

@@ -491,6 +491,12 @@ export const api = {
         undefined,
         { query: gateway ? { gateway } : undefined },
       ),
+    payForServer: (serverId: string, gateway?: "stripe" | "paypal") =>
+      http.post<{ paid?: boolean; checkoutUrl?: string }>(
+        `/billing/servers/${serverId}/pay`,
+        undefined,
+        { query: gateway ? { gateway } : undefined },
+      ),
     subscriptions: () => getList<Subscription>("/billing/subscriptions"),
     cancelSubscription: (id: string, atPeriodEnd = true) =>
       http.post<Subscription>(`/billing/subscriptions/${id}/cancel`, { atPeriodEnd }),

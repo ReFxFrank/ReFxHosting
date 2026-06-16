@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
-import { api } from "@/lib/api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { ArrowLeft, CreditCard } from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { ServerStateBadge, Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { serverTabs } from "@/components/layout/nav-config";
 
@@ -55,6 +57,9 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
                   {server.primaryAllocation.ip}:{server.primaryAllocation.port}
                 </Badge>
               )}
+              {server.state === "PENDING_PAYMENT" && (
+                <PayNowButton serverId={id} />
+              )}
             </>
           ) : (
             <Skeleton className="h-8 w-64" />
@@ -84,5 +89,31 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
 
       <div>{children}</div>
     </div>
+  );
+}
+
+/** "Pay now" for an AWAITING_PAYMENT server — starts the gateway checkout. */
+function PayNowButton({ serverId }: { serverId: string }) {
+  const pay = useMutation({
+    mutationFn: () => api.billing.payForServer(serverId),
+    onSuccess: (res) => {
+      if (res?.checkoutUrl) {
+        window.location.href = res.checkoutUrl;
+        return;
+      }
+      if (res?.paid) {
+        toast.success("Payment received — your server is being provisioned.");
+        return;
+      }
+      toast.success("Payment started.");
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Could not start payment"),
+  });
+
+  return (
+    <Button size="sm" loading={pay.isPending} onClick={() => pay.mutate()}>
+      <CreditCard className="size-4" /> Pay now
+    </Button>
   );
 }

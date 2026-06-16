@@ -381,6 +381,7 @@ model GameTemplate {
 
   variables       TemplateVariable[]
   servers         Server[]
+  products        Product[]
 
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
@@ -678,6 +679,20 @@ model Product {
   // Templates allowed on this product (game switching whitelist). Empty = all.
   allowedTemplateIds String[]
 
+  // GPortal-style per-slot pricing. When perSlot is true the order page shows a
+  // slot slider and the invoice is `Price.amountMinor (per slot, per interval) x
+  // slots`; provisioned resources are the per-slot values x slots. The product is
+  // bound to one game (gameTemplateId) so the storefront can offer it per-game.
+  perSlot         Boolean @default(false)
+  gameTemplateId  String? @db.Uuid
+  gameTemplate    GameTemplate? @relation(fields: [gameTemplateId], references: [id])
+  minSlots        Int     @default(1)
+  maxSlots        Int     @default(100)
+  slotStep        Int     @default(1)
+  cpuPerSlot      Float   @default(0)
+  memoryMbPerSlot Int     @default(0)
+  diskMbPerSlot   Int     @default(0)
+
   prices        Price[]
   subscriptions Subscription[]
 
@@ -716,6 +731,7 @@ model Subscription {
   product         Product           @relation(fields: [productId], references: [id])
   priceId         String            @db.Uuid
   interval        BillingInterval
+  slots           Int               @default(1)
   state           SubscriptionState @default(ACTIVE)
   currentPeriodStart DateTime
   currentPeriodEnd   DateTime

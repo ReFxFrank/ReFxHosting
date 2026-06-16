@@ -1,4 +1,5 @@
 import {
+  BadGatewayException,
   BadRequestException,
   ConflictException,
   Injectable,
@@ -570,14 +571,61 @@ export class BillingService {
       if (!paypal.clientId || !paypal.clientSecret) {
         throw new BadRequestException('PayPal is not configured');
       }
-      const session = await this.paypal.createCheckoutSession({
-        invoice,
-        successUrl,
-        cancelUrl,
-      });
-      return { paid: false, checkoutUrl: session.url };
+      try {
+        const session = await this.paypal.createCheckoutSession({
+          invoice,
+          successUrl,
+          cancelUrl,
+        });
+        if (!session.url) {
+          throw new Error('PayPal did not return an approval URL');
+        }
+        return { paid: false, checkoutUrl: session.url };
+      } catch (e) {
+        this.logger.error(`PayPal checkout failed: ${(e as Error).message}`);
+        throw new BadGatewayException(
+          'Could not start PayPal checkout. Check the PayPal keys/mode in Payments settings.',
+        );
+      }
     }
 
+    return this.chargeOrCheckout(userId, invoice, successUrl, cancelUrl);
+  }
+
+  /**
+   * Pay the open invoice for one of the caller's servers (used by the "Pay now"
+   * button on an AWAITING_PAYMENT server). Resolves the server's subscription's
+   * open invoice and starts the same payment flow as payInvoice.
+   */
+  async payForServer(
+    userId: string,
+    serverId: string,
+    gateway?: 'stripe' | 'paypal',
+  ): Promise<{ paid: boolean; checkoutUrl?: string; reason?: string }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, ownerId: userId, deletedAt: null },
+      select: { subscriptionId: true },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    if (!server.subscriptionId) {
+      throw new BadRequestException('This server has no invoice to pay');
+    }
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { subscriptionId: server.subscriptionId, state: InvoiceState.OPEN },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true },
+    });
+    if (!invoice) throw new BadRequestException('No open invoice for this server');
+    return this.payInvoice(userId, invoice.id, gateway);
+  }
+
+  /** Charge a saved default method, else hand off to a hosted Stripe checkout. */
+  private async chargeOrCheckout(
+    userId: string,
+    invoice: Invoice,
+    successUrl: string,
+    cancelUrl: string,
+  ): Promise<{ paid: boolean; checkoutUrl?: string; reason?: string }> {
     const method = await this.prisma.paymentMethod.findFirst({
       where: { userId, isDefault: true },
     });
