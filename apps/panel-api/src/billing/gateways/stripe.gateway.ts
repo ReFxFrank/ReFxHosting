@@ -30,6 +30,12 @@ export type StripeCheckoutSession = Awaited<
 export type StripePaymentIntent = Awaited<
   ReturnType<StripeClient['paymentIntents']['retrieve']>
 >;
+type StripeSetupIntent = Awaited<
+  ReturnType<StripeClient['setupIntents']['create']>
+>;
+type StripePaymentMethod = Awaited<
+  ReturnType<StripeClient['paymentMethods']['retrieve']>
+>;
 export type StripeMetadata = StripeInvoice['metadata'];
 export type StripeError = InstanceType<typeof Stripe.errors.StripeError> & {
   payment_intent?: { id?: string };
@@ -114,6 +120,7 @@ export class StripeGateway implements PaymentGateway {
   async charge(
     invoice: Invoice,
     paymentMethodRef: string,
+    customerRef?: string,
   ): Promise<ChargeResult> {
     try {
       const stripe = await this.client();
@@ -125,8 +132,9 @@ export class StripeGateway implements PaymentGateway {
         payment_method: paymentMethodRef,
         confirm: true,
         off_session: true,
-        // TODO(impl): attach `customer` once we persist the Stripe customer id
-        // on User/PaymentMethod, required for off_session reuse.
+        // The saved PaymentMethod belongs to the customer; off-session reuse at
+        // renewal requires the owning customer to be attached.
+        ...(customerRef ? { customer: customerRef } : {}),
         metadata: { invoiceId: invoice.id, invoiceNumber: invoice.number },
         description: `Invoice ${invoice.number}`,
       });
@@ -150,6 +158,67 @@ export class StripeGateway implements PaymentGateway {
         success: false,
         failureReason: e.message ?? 'Unknown Stripe error',
       };
+    }
+  }
+
+  /**
+   * Create a SetupIntent to collect + save a card for future off-session
+   * charges. The browser confirms it with the returned client_secret; the saved
+   * PaymentMethod is attached to `customerRef`.
+   */
+  async createSetupIntent(
+    customerRef: string,
+  ): Promise<{ clientSecret: string; setupIntentId: string }> {
+    const stripe = await this.client();
+    const intent: StripeSetupIntent = await stripe.setupIntents.create({
+      customer: customerRef,
+      usage: 'off_session',
+      payment_method_types: ['card'],
+    });
+    return { clientSecret: intent.client_secret ?? '', setupIntentId: intent.id };
+  }
+
+  /**
+   * Resolve a confirmed SetupIntent into the saved PaymentMethod's details, so
+   * the caller can persist it. Returns null when not yet succeeded.
+   */
+  async getSavedPaymentMethod(setupIntentId: string): Promise<{
+    customerId: string;
+    paymentMethodId: string;
+    brand: string | null;
+    last4: string | null;
+    expMonth: number | null;
+    expYear: number | null;
+  } | null> {
+    const stripe = await this.client();
+    const si = await stripe.setupIntents.retrieve(setupIntentId);
+    if (si.status !== 'succeeded' || !si.payment_method) return null;
+    const pmId =
+      typeof si.payment_method === 'string'
+        ? si.payment_method
+        : si.payment_method.id;
+    const customerId =
+      typeof si.customer === 'string' ? si.customer : (si.customer?.id ?? '');
+    const pm: StripePaymentMethod = await stripe.paymentMethods.retrieve(pmId);
+    return {
+      customerId,
+      paymentMethodId: pmId,
+      brand: pm.card?.brand ?? null,
+      last4: pm.card?.last4 ?? null,
+      expMonth: pm.card?.exp_month ?? null,
+      expYear: pm.card?.exp_year ?? null,
+    };
+  }
+
+  /** Detach a saved PaymentMethod from the customer (on removal). Best-effort. */
+  async detachPaymentMethod(paymentMethodRef: string): Promise<void> {
+    try {
+      const stripe = await this.client();
+      await stripe.paymentMethods.detach(paymentMethodRef);
+    } catch (err) {
+      this.logger.warn(
+        `Stripe detach failed for ${paymentMethodRef}: ${(err as Error).message}`,
+      );
     }
   }
 

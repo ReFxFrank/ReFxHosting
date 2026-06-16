@@ -53,3 +53,10 @@ export class AddPaymentMethodDto {
   @IsBoolean()
   isDefault?: boolean;
 }
+
+/** Confirm a SetupIntent so the saved card is persisted server-side. */
+export class ConfirmSetupDto {
+  @ApiProperty({ description: 'The SetupIntent id confirmed by the browser.' })
+  @IsString()
+  setupIntentId!: string;
+}

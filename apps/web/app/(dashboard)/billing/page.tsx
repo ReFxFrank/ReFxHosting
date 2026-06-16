@@ -18,6 +18,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { AddCardDialog } from "@/components/billing/add-card-dialog";
 import { PageHeader, StatCard, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -686,16 +687,10 @@ function PaymentMethodsTab({
 }) {
   const queryClient = useQueryClient();
   const [removeTarget, setRemoveTarget] = useState<PaymentMethod | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
 
-  const addMutation = useMutation({
-    mutationFn: () => api.billing.addPaymentMethodUrl(),
-    onSuccess: (res) => {
-      // TODO(impl): redirect into Stripe setup/SetupIntent flow.
-      if (res?.url) window.location.href = res.url;
-    },
-    onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to start setup"),
-  });
+  const refetchMethods = () =>
+    queryClient.invalidateQueries({ queryKey: ["billing", "payment-methods"] });
 
   const defaultMutation = useMutation({
     mutationFn: (id: string) => api.billing.setDefaultPaymentMethod(id),
@@ -720,8 +715,9 @@ function PaymentMethodsTab({
 
   return (
     <div className="space-y-4">
+      <AddCardDialog open={addOpen} onOpenChange={setAddOpen} onSaved={refetchMethods} />
       <div className="flex justify-end">
-        <Button loading={addMutation.isPending} onClick={() => addMutation.mutate()}>
+        <Button onClick={() => setAddOpen(true)}>
           <Plus className="size-4" /> Add payment method
         </Button>
       </div>
@@ -734,7 +730,7 @@ function PaymentMethodsTab({
           title="No payment methods"
           description="Add a card to enable automatic renewals and one-click checkout."
           action={
-            <Button loading={addMutation.isPending} onClick={() => addMutation.mutate()}>
+            <Button onClick={() => setAddOpen(true)}>
               <Plus className="size-4" /> Add payment method
             </Button>
           }

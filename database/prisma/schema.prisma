@@ -75,6 +75,10 @@ model User {
   creditBalanceMinor Int        @default(0)
   creditTransactions CreditTransaction[]
 
+  // Payment-gateway customer handle (e.g. Stripe "cus_..."), so saved cards can
+  // be charged off-session at renewal. Created on first card save.
+  gatewayCustomerId String?
+
   // MFA
   totpSecretEnc     String?     // AES-256-GCM encrypted TOTP seed
   totpEnabledAt     DateTime?

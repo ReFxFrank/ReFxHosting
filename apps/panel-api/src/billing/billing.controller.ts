@@ -25,6 +25,7 @@ import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import {
   AddPaymentMethodDto,
+  ConfirmSetupDto,
   CreatePriceDto,
   CreateProductDto,
   CreateSubscriptionDto,
@@ -235,6 +236,17 @@ export class BillingController {
   @Audit({ action: 'billing.payment_method.setup', targetType: 'PaymentMethod' })
   setupPaymentMethod(@CurrentUser('id') userId: string) {
     return this.billing.createSetupIntent(userId);
+  }
+
+  /** Persist the card after the browser confirms the SetupIntent. */
+  @Post('payment-methods/confirm')
+  @HttpCode(200)
+  @Audit({ action: 'billing.payment_method.confirm', targetType: 'PaymentMethod' })
+  confirmPaymentMethod(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ConfirmSetupDto,
+  ) {
+    return this.billing.savePaymentMethodFromSetup(userId, dto.setupIntentId);
   }
 
   @Post('payment-methods/:id/default')

@@ -574,8 +574,14 @@ export const api = {
     resumeSubscription: (id: string) =>
       http.post<Subscription>(`/billing/subscriptions/${id}/resume`),
     paymentMethods: () => getList<PaymentMethod>("/billing/payment-methods"),
-    addPaymentMethodUrl: () =>
-      http.post<{ url: string }>("/billing/payment-methods/setup"),
+    // Card vaulting: create a SetupIntent, then persist the saved card after the
+    // browser confirms it.
+    setupCard: () =>
+      http.post<{ clientSecret: string; setupIntentId: string }>(
+        "/billing/payment-methods/setup",
+      ),
+    confirmCard: (setupIntentId: string) =>
+      http.post<PaymentMethod>("/billing/payment-methods/confirm", { setupIntentId }),
     setDefaultPaymentMethod: (id: string) =>
       http.post<void>(`/billing/payment-methods/${id}/default`),
     removePaymentMethod: (id: string) =>

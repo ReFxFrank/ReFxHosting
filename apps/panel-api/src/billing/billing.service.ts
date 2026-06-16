@@ -858,7 +858,8 @@ export class BillingService {
       return { paid: false, checkoutUrl: session.url };
     }
 
-    const result = await this.stripe.charge(invoice, method.gatewayRef);
+    const customerId = await this.getGatewayCustomerId(userId);
+    const result = await this.stripe.charge(invoice, method.gatewayRef, customerId);
     if (result.success) {
       await this.markInvoicePaid(invoice.id, {
         gateway: this.stripe.name,
@@ -1251,11 +1252,26 @@ export class BillingService {
     return method;
   }
 
-  /** Remove a stored payment method owned by the user. */
+  /** Remove a stored payment method owned by the user (detaches it at Stripe). */
   async removePaymentMethod(userId: string, id: string): Promise<void> {
-    await this.getOwnedPaymentMethod(userId, id);
-    // TODO(impl): detach the PaymentMethod from the processor (stripe.detach).
+    const method = await this.getOwnedPaymentMethod(userId, id);
+    if (method.gateway === this.stripe.name && method.gatewayRef) {
+      await this.stripe.detachPaymentMethod(method.gatewayRef);
+    }
     await this.prisma.paymentMethod.delete({ where: { id } });
+    // If we removed the default, promote the most recent remaining method.
+    if (method.isDefault) {
+      const next = await this.prisma.paymentMethod.findFirst({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+      });
+      if (next) {
+        await this.prisma.paymentMethod.update({
+          where: { id: next.id },
+          data: { isDefault: true },
+        });
+      }
+    }
   }
 
   /** Mark a payment method as the user's default (clears the flag on others). */
@@ -1278,13 +1294,101 @@ export class BillingService {
   }
 
   /**
-   * Begin adding a payment method: return the client material the web needs to
-   * collect card details. TODO(impl): create a real Stripe SetupIntent and return
-   * its client_secret; the placeholder URL keeps the flow wired end-to-end.
+   * Ensure the user has a gateway (Stripe) customer and return its id, creating
+   * + persisting one on first use. Required to save and off-session-charge cards.
    */
-  async createSetupIntent(userId: string): Promise<{ url: string; clientSecret?: string }> {
-    void userId;
-    return { url: `${this.panelUrl}/billing/payment-methods/add` };
+  private async ensureGatewayCustomer(userId: string): Promise<string> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        gatewayCustomerId: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.gatewayCustomerId) return user.gatewayCustomerId;
+
+    const customerId = await this.stripe.createCustomer({
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+    });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { gatewayCustomerId: customerId },
+    });
+    return customerId;
+  }
+
+  /** The user's existing gateway customer id (undefined if none yet). */
+  private async getGatewayCustomerId(userId: string): Promise<string | undefined> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { gatewayCustomerId: true },
+    });
+    return user?.gatewayCustomerId ?? undefined;
+  }
+
+  /**
+   * Begin adding a card: create a Stripe SetupIntent for the user's customer and
+   * return its client_secret for the browser's Stripe Elements to confirm.
+   */
+  async createSetupIntent(
+    userId: string,
+  ): Promise<{ clientSecret: string; setupIntentId: string }> {
+    const customerId = await this.ensureGatewayCustomer(userId);
+    return this.stripe.createSetupIntent(customerId);
+  }
+
+  /**
+   * Persist the card saved by a confirmed SetupIntent. Verifies the SetupIntent
+   * (server-side) belongs to this user's customer, then upserts the
+   * PaymentMethod (idempotent by gatewayRef) and makes it default if it's the
+   * user's first.
+   */
+  async savePaymentMethodFromSetup(
+    userId: string,
+    setupIntentId: string,
+  ): Promise<PaymentMethod> {
+    const customerId = await this.ensureGatewayCustomer(userId);
+    const saved = await this.stripe.getSavedPaymentMethod(setupIntentId);
+    if (!saved || !saved.paymentMethodId) {
+      throw new BadRequestException('Card setup is not complete yet');
+    }
+    if (saved.customerId && saved.customerId !== customerId) {
+      throw new BadRequestException('Setup does not belong to this account');
+    }
+
+    const existing = await this.prisma.paymentMethod.findFirst({
+      where: { userId, gatewayRef: saved.paymentMethodId },
+    });
+    if (existing) return existing;
+
+    const count = await this.prisma.paymentMethod.count({ where: { userId } });
+    const isDefault = count === 0;
+    if (isDefault) {
+      await this.prisma.paymentMethod.updateMany({
+        where: { userId, isDefault: true },
+        data: { isDefault: false },
+      });
+    }
+    return this.prisma.paymentMethod.create({
+      data: {
+        id: uuidv7(),
+        userId,
+        gateway: this.stripe.name,
+        gatewayRef: saved.paymentMethodId,
+        brand: saved.brand,
+        last4: saved.last4,
+        expMonth: saved.expMonth,
+        expYear: saved.expYear,
+        isDefault,
+      },
+    });
   }
 
   // ---- Renewal & dunning (driven by the billing-renewal queue) -----------
@@ -1365,7 +1469,8 @@ export class BillingService {
       return { invoiceId: invoice.id, paid: false, reason: 'no payment method' };
     }
 
-    const result = await this.stripe.charge(invoice, method.gatewayRef);
+    const customerId = await this.getGatewayCustomerId(sub.userId);
+    const result = await this.stripe.charge(invoice, method.gatewayRef, customerId);
     if (result.success) {
       await this.markInvoicePaid(invoice.id, {
         gateway: this.stripe.name,
