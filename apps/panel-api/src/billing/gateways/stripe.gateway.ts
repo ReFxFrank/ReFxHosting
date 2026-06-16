@@ -11,6 +11,12 @@ import { Invoice } from '@prisma/client';
  * resolution-independent and tracks the SDK without internal path imports.
  */
 type StripeClient = InstanceType<typeof Stripe>;
+type CheckoutSessionCreateParams = Parameters<
+  StripeClient['checkout']['sessions']['create']
+>[0];
+type CheckoutSession = Awaited<
+  ReturnType<StripeClient['checkout']['sessions']['create']>
+>;
 export type StripeEvent = ReturnType<StripeClient['webhooks']['constructEvent']>;
 export type StripeInvoice = Awaited<
   ReturnType<StripeClient['invoices']['retrieve']>
@@ -157,7 +163,7 @@ export class StripeGateway implements PaymentGateway {
     // Stripe price/price_data entry; this single line collapses to the total.
     const stripe = await this.client();
     const { statementDescriptor } = await this.settings.stripeConfig();
-    const session = await stripe.checkout.sessions.create({
+    const base: CheckoutSessionCreateParams = {
       mode: 'payment',
       customer: customerRef,
       success_url: successUrl,
@@ -174,13 +180,29 @@ export class StripeGateway implements PaymentGateway {
           },
         },
       ],
-      // Brand the customer's bank/card statement (else it shows the raw Stripe
-      // account descriptor). Configurable on the owner Payments tab.
-      ...(statementDescriptor
-        ? { payment_intent_data: { statement_descriptor: statementDescriptor } }
-        : {}),
       metadata: { invoiceId: invoice.id },
-    });
+    };
+
+    // Brand the customer's bank/card statement. Card Checkout requires
+    // `statement_descriptor_suffix` (the plain `statement_descriptor` is rejected
+    // for cards in current API versions). If Stripe still rejects it for any
+    // reason, retry WITHOUT it so checkout never breaks over branding.
+    let session: CheckoutSession;
+    if (statementDescriptor) {
+      try {
+        session = await stripe.checkout.sessions.create({
+          ...base,
+          payment_intent_data: { statement_descriptor_suffix: statementDescriptor },
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Stripe rejected statement descriptor; retrying without it: ${(err as Error).message}`,
+        );
+        session = await stripe.checkout.sessions.create(base);
+      }
+    } else {
+      session = await stripe.checkout.sessions.create(base);
+    }
 
     return { sessionId: session.id, url: session.url ?? '' };
   }
