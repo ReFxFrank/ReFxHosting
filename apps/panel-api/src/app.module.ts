@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 
 import configuration, { AppConfig } from './config/configuration';
@@ -41,6 +42,9 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
       load: [configuration],
       cache: true,
     }),
+
+    // Cron scheduling (billing renewal/dunning sweep).
+    ScheduleModule.forRoot(),
 
     // BullMQ root — shares the Redis connection across all queues.
     BullModule.forRootAsync({

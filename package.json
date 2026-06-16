@@ -42,5 +42,8 @@
     "ts-node": "^10.9.2",
     "turbo": "^2.0.6",
     "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "@nestjs/schedule": "^6.1.3"
   }
 }

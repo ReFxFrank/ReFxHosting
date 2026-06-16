@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { BillingService } from './billing.service';
+import { BillingScheduler } from './billing.scheduler';
 import { CouponsService } from './coupons.service';
 import { GiftCardsService } from './gift-cards.service';
 import { CreditService } from './credit.service';
@@ -33,6 +34,7 @@ import { QUEUE } from '../queues/queue.constants';
   controllers: [BillingController, StripeWebhookController, PayPalWebhookController],
   providers: [
     BillingService,
+    BillingScheduler,
     CouponsService,
     GiftCardsService,
     CreditService,

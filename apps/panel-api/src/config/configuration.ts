@@ -54,6 +54,7 @@ export interface AppConfig {
   billing: {
     invoiceNumberPrefix: string;
     defaultCurrency: string;
+    schedulerEnabled: boolean;
   };
   throttle: {
     ttl: number;
@@ -130,6 +131,9 @@ export default (): AppConfig => ({
   billing: {
     invoiceNumberPrefix: process.env.INVOICE_NUMBER_PREFIX ?? 'INV',
     defaultCurrency: process.env.DEFAULT_CURRENCY ?? 'USD',
+    // The renewal/dunning cron sweep. Defaults on; set BILLING_SCHEDULER=false to
+    // disable (e.g. when running a separate dedicated scheduler process).
+    schedulerEnabled: (process.env.BILLING_SCHEDULER ?? 'true').toLowerCase() !== 'false',
   },
   throttle: {
     ttl: toInt(process.env.THROTTLE_TTL, 60),

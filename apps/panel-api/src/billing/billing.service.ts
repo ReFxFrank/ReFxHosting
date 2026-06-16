@@ -922,13 +922,14 @@ export class BillingService {
     const discountMinor = Math.max(0, Math.min(opts.discountMinor ?? 0, subtotalMinor));
     const taxableMinor = subtotalMinor - discountMinor;
 
-    // Resolve a tax region. TODO(impl): persist a billing address on User and use
-    // it here; for now derive nothing and treat as no-tax unless a region exists.
-    const taxRegion = this.resolveTaxRegion(subscription);
+    // Tax from the customer's saved billing address (no-tax when none on file).
+    const taxLoc = this.resolveTaxRegion(subscription.user);
     const tax = calculateTax(taxableMinor, {
-      region: taxRegion ?? '',
+      region: taxLoc?.region ?? '',
+      country: taxLoc?.country,
     });
     const totalMinor = taxableMinor + tax.taxMinor;
+    const taxRegion = taxLoc?.region ?? null;
 
     const year = new Date().getUTCFullYear();
     const sequence = await this.nextInvoiceSequence(year);
@@ -988,11 +989,22 @@ export class BillingService {
   }
 
   /**
-   * Best-effort tax region resolution. TODO(impl): read the customer's billing
-   * country/state once an address model exists. Returns null when unknown.
+   * Resolve the tax region from the customer's saved billing address. For US
+   * customers the region is the two-letter state (tax engine keys US sales tax by
+   * state); everywhere else it's the ISO country code (VAT/GST). Returns nulls
+   * when no address is on file, which the tax engine treats as no-tax.
    */
-  private resolveTaxRegion(_subscription: Subscription): string | null {
-    return null;
+  private resolveTaxRegion(user: {
+    country: string | null;
+    region: string | null;
+  } | null): { region: string; country?: string } | null {
+    if (!user?.country) return null;
+    const country = user.country.toUpperCase();
+    if (country === 'US') {
+      if (!user.region) return null; // need the state to rate US sales tax
+      return { region: user.region.toUpperCase(), country };
+    }
+    return { region: country, country };
   }
 
   /** Mark an invoice PAID and record a SUCCEEDED Payment. */
@@ -1278,9 +1290,10 @@ export class BillingService {
   // ---- Renewal & dunning (driven by the billing-renewal queue) -----------
 
   /**
-   * Subscriptions whose current period has ended (or ends within `withinMs`),
-   * that auto-renew and are not canceled/expired. The scheduler enqueues a
-   * renewal job per id; this method is the source of truth for "due".
+   * Subscriptions in good standing whose current period has ended (or ends
+   * within `withinMs`) and that auto-renew — i.e. due for a fresh renewal. The
+   * scheduler enqueues a RENEW job per id. PAST_DUE subs are NOT included here;
+   * they're retried by the dunning sweep (`findPastDueSubscriptions`).
    */
   async findDueSubscriptions(withinMs = 0): Promise<string[]> {
     const cutoff = new Date(Date.now() + withinMs);
@@ -1289,7 +1302,24 @@ export class BillingService {
         autoRenew: true,
         cancelAtPeriodEnd: false,
         currentPeriodEnd: { lte: cutoff },
-        state: { in: [SubscriptionState.ACTIVE, SubscriptionState.TRIALING, SubscriptionState.PAST_DUE] },
+        state: { in: [SubscriptionState.ACTIVE, SubscriptionState.TRIALING] },
+      },
+      select: { id: true },
+    });
+    return subs.map((s) => s.id);
+  }
+
+  /**
+   * Past-due subscriptions to retry (dunning). Auto-renewing, not scheduled to
+   * cancel, still PAST_DUE — each has an unpaid OPEN invoice the renew path
+   * reuses (it never creates a second invoice for the same period).
+   */
+  async findPastDueSubscriptions(): Promise<string[]> {
+    const subs = await this.prisma.subscription.findMany({
+      where: {
+        autoRenew: true,
+        cancelAtPeriodEnd: false,
+        state: SubscriptionState.PAST_DUE,
       },
       select: { id: true },
     });
@@ -1318,7 +1348,14 @@ export class BillingService {
       return { invoiceId: '', paid: false, reason: 'canceled' };
     }
 
-    const invoice = await this.createInvoiceForSubscription(subscriptionId);
+    // Reuse an existing OPEN invoice for this subscription (the dunning case —
+    // a prior renewal already raised the period invoice and the charge failed),
+    // so a retry never creates a duplicate invoice. Otherwise raise a fresh one.
+    const invoice =
+      (await this.prisma.invoice.findFirst({
+        where: { subscriptionId, state: InvoiceState.OPEN },
+        orderBy: { createdAt: 'desc' },
+      })) ?? (await this.createInvoiceForSubscription(subscriptionId));
 
     const method = await this.prisma.paymentMethod.findFirst({
       where: { userId: sub.userId, isDefault: true },
