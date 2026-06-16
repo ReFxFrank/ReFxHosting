@@ -4,20 +4,28 @@
 
 # ReFx Hosting
 
-### The open game-server hosting platform with **GPortal-style game switching**
+### The open, multi‑OS **game & voice** server‑hosting platform — with GPortal‑style game switching
 
-Buy a server slot **once** — swap between Minecraft, Rust, ARK, Valheim, Palworld, CS2, FiveM and more **without redeploying**.
-A production-grade alternative to **Pterodactyl**, **AMP**, and **GPortal**, with an original cross-platform node agent, integrated billing, and a built-in helpdesk.
+**Game servers** sell on configurable **hardware tiers** (Low · Mid · High). **Voice servers** (TeamSpeak 3) sell **per slot**. Customers buy a server **once** and swap between Minecraft, Rust, ARK, Valheim, Palworld, CS2, FiveM and more **without redeploying** — a production‑grade, self‑hostable alternative to **Pterodactyl**, **AMP**, and **GPortal** with an original cross‑platform node agent, recurring **Stripe + PayPal** billing, and a built‑in helpdesk.
+
+<br/>
 
 [![CI](https://github.com/refxfrank/refxhosting/actions/workflows/ci.yml/badge.svg)](./.github/workflows/ci.yml)
 [![Security](https://github.com/refxfrank/refxhosting/actions/workflows/security.yml/badge.svg)](./.github/workflows/security.yml)
-[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](./LICENSE)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](#tech-stack)
-[![Go](https://img.shields.io/badge/Go-00ADD8?logo=go&logoColor=white)](#-node-agent--apps-node-agent)
-[![Next.js](https://img.shields.io/badge/Next.js%2014-000?logo=next.js&logoColor=white)](#-web-panel--apps-web)
-[![NestJS](https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white)](#-panel-api--apps-panel-api)
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-0072FF.svg?style=flat-square)](./LICENSE)
+[![Tests](https://img.shields.io/badge/tests-150_unit_·_47_e2e_green-0072FF?style=flat-square)](#-testing)
 
-[Quick start](#-quick-start) · [Cheat-sheet](#-operator-cheat-sheet-this-box) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](#-tech-stack)
+[![Go](https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white)](#-node-agent--apps-node-agent)
+[![Next.js](https://img.shields.io/badge/Next.js%2014-000?style=flat-square&logo=next.js&logoColor=white)](#-web--apps-web)
+[![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=flat-square&logo=nestjs&logoColor=white)](#-panel-api--apps-panel-api)
+[![Prisma](https://img.shields.io/badge/Prisma-2D3748?style=flat-square&logo=prisma&logoColor=white)](#-tech-stack)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white)](#-tech-stack)
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](#-quick-start)
+
+**<samp>Primary&nbsp;#0072FF</samp>** · Dark glassy control‑panel UI · One Go binary for Linux **and** Windows nodes
+
+[Quick start](#-quick-start) · [Cheat-sheet](#-operator-cheat-sheet-this-box) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [Pricing model](#-how-pricing-works) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
 
 </div>
 
@@ -27,15 +35,23 @@ A production-grade alternative to **Pterodactyl**, **AMP**, and **GPortal**, wit
 
 Most panels lock a server to one game. **ReFx treats the server as a durable, billable identity** — its `shortId`, SFTP login, backups, and subscription stay put while the game *software* underneath is swapped on demand. That's the model GPortal popularised, built here on an **original node agent** that runs games in **Docker _or_ as native processes** (the thing most panels can't do well) — identically on **Linux and Windows**.
 
+Two product types, each with the right pricing model:
+
+- 🎮 **Game servers → hardware tiers.** Customers pick a **Low / Mid / High** package (fixed RAM/CPU/disk, fully admin‑configurable, with an optional informational player count) — not priced by player slots.
+- 🎙️ **Voice servers → slots.** **TeamSpeak 3** (the first voice product) is billed **per slot** on lightweight resources, with a simple slot selector.
+
 | | |
 |---|---|
 | 🔁 **Game switching** | Stop → pick a new game → reinstall → play. Same server, same billing. |
 | 🧩 **Docker _and_ native hosting** | One `Runtime` interface; games that hate containers run as resource-limited native processes (cgroups v2 / Windows Job Objects). |
 | 🖥️ **True multi-OS** | A single Go binary runs on Ubuntu, Debian, AlmaLinux, Rocky **and** Windows Server 2022/2025. |
-| 💳 **Billing built in** | Products, subscriptions, invoices, VAT/GST/US tax, Stripe + PayPal (both with **verified webhooks** + capture), auto-renewal & dunning. A **GPortal-style per-slot order page** (slot slider, per-game config, live location capacity, **weekly → annual** terms). **Edit products _and_ per-interval pricing** from the panel; **delete** unused products; **owner-only gateway/key editor** (encrypted at rest). **Coupons** (% or fixed, min-order, usage caps, expiry), **gift cards** (stored-value codes) and **account/store credit** (admin grant / refund-to-credit) — all stackable at checkout, charging only the remaining balance. |
+| 🎮 **Hardware‑tier game servers** | Each game sells on **Low / Mid / High** tiers — fixed RAM/CPU/disk packages, fully configurable in the admin panel (resources, price per cycle, recommended/default tier, display order, active toggle). The order page shows **tier cards**; customers **upgrade/downgrade between tiers** from the panel and resources re‑provision live. Player count is informational, never the billing basis. |
+| 🎙️ **Slot‑based voice hosting** | **TeamSpeak 3** as a first‑class voice product: a **slot selector** (min/max/step, price per slot), lightweight provisioning, the purchased slot count passed to the container, and clear **Game vs Voice** labelling across the customer + admin panels. |
+| 💳 **Billing built in** | Products, subscriptions, invoices, VAT/GST/US tax, **Stripe + PayPal** (both with **verified webhooks** + capture), auto‑renewal & dunning. **Recurring PayPal** uses the **Subscriptions API** (auto‑bills every cycle). **Two billing models per product** — hardware tiers _or_ per‑slot — with **server‑side price validation** (the backend recomputes every total; client prices are never trusted). **Weekly → annual** terms; **edit products, tiers _and_ per‑interval pricing** in‑panel; **owner‑only gateway/key editor** (encrypted at rest); **coupons**, **gift cards** and **account/store credit**, all stackable at checkout. |
 | 🛟 **Helpdesk built in** | A full **admin ticket queue** — reply, internal notes, set status/priority, categorise, assign — plus manageable **categories (SLA targets)** and **canned responses**, and a knowledge base. Past tickets can be **archived (stored away)** or **permanently deleted**. |
 | 🔐 **Enterprise auth + custom RBAC** | Argon2id, TOTP + WebAuthn, scoped API keys, audit logs. **Build your own roles**: an owner-only Roles page with a granular admin-permission catalog; the whole admin surface is permission-gated end-to-end (customers never see it). Per-server sub-user permissions too. A customer's servers stay **private to them + their sub-users** — staff don't see them in the client area and reach them only via the admin panel (gated on `servers.manage`); a **Customers** view lists accounts with active, paid services. |
-| 🧱 **Eggs, evolved** | JSON-driven game templates — admins add new games with **zero code changes**: drop a JSON file in `database/seed/templates/` and it **auto-loads on the next deploy** (create-only), each game automatically getting a purchasable per-slot package. |
+| 🧱 **Eggs, evolved** | JSON-driven game templates — admins add new games with **zero code changes**: drop a JSON file in `database/seed/templates/` and it **auto-loads on the next deploy** (create-only), each game automatically getting a purchasable **hardware‑tier** product (Low/Mid/High). |
+| 👥 **Public "Meet the team"** | A polished, admin‑curated **`/team`** page with an animated avatar group + member cards (name, title, bio, avatar, link). Curate it from **Admin → Staff**; dependency‑free, GPU‑friendly animations that match the glassy theme. |
 | ⛏️ **One Minecraft, every loader** | Buy **Minecraft once**, then pick **Vanilla / Paper / Fabric / Forge / NeoForge** and the **exact version** any time from a dedicated **Minecraft** tab — the server keeps its identity. **Automatic JVM selection** per version means no `UnsupportedClassVersionError` boot crashes. |
 | 🧩 **Mods _and_ modpacks** | Built-in **Modrinth** browser: **one-click install** of individual mods/plugins (loader/version-aware), **and a full modpack installer** that downloads a `.mrpack`, **auto-switches the server to the pack's Minecraft version + loader**, then provisions every mod and config. |
 | 🔒 **Rootless game containers** | Game servers run as a non-root user (`uid 1000`), so you don't get the "running as root" warning and a compromised server can't run as root on the node. |
@@ -49,7 +65,7 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 > **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**150 unit + 47 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
 
 > [!TIP]
-> **Recently shipped:** **GPortal-style per-slot order page** (slot slider, per-game config, live location capacity) · **coupons + gift cards + account/store credit** (stackable at checkout) · **Stripe _and_ PayPal verified webhooks + capture** (free/100%-off orders settle without a gateway round-trip) · **weekly & biweekly** billing terms · **product deletion** (not just deactivate) · **paying-customers view** · **staff support access** to customer servers via the admin panel (client area stays private) · **ticket archive (storage) + delete** · **SMTP/Resend email** with clear test-send diagnostics · **15+ new game eggs** that **auto-load on deploy** (Arma 3/Reforger, Squad, 7 Days to Die, Garry's Mod, TF2, Mordhau, Killing Floor 2, V Rising, Enshrouded, Conan Exiles, Astroneer, Unturned, ATS, tModLoader) · **Modrinth modpack installer** (auto loader/version switch) · **custom RBAC** roles + permission-gated admin · **admin Support ticket queue** + categories & canned responses · **editable products & per-interval pricing** · **owner-only payment-gateway/key editor** · separate **customer vs admin** areas · **reverse-proxy hardening** · contact/billing **address fields** + idle-session timeout · self-healing migrations · unified **one-Minecraft** product with post-purchase loader/version tab · built-in **Modrinth** mod & plugin browser · **rootless** game containers · in-browser **file manager** + live **SFTP** credential rotation · console that **persists across navigations & refreshes**.
+> **Recently shipped:** **hardware‑tier game servers** (Low/Mid/High cards + admin tier editor) · **slot‑based voice hosting — TeamSpeak 3** · **tier upgrade/downgrade** from the panel · **recurring PayPal via the Subscriptions API** (auto‑bills each cycle) · **PayPal capture fix** (no more "could not resolve invoice" after paying) · **public "Meet the team" page** + admin staff curation · **invoices select‑all + bulk delete** (paid invoices protected) · **node ping** now distinguishes "agent alive but port blocked" from "offline" and self‑heals · **node‑agent TLS cert persists across restarts** (pins stay valid) · **smoother dialogs** (removed costly backdrop‑blur) · **coupons + gift cards + account/store credit** · **custom RBAC** + permission‑gated admin · **admin Support ticket queue** · **owner‑only payment‑gateway/key editor** · unified **one‑Minecraft** product with loader/version tab · built‑in **Modrinth** mods + **modpack installer** · **rootless** game containers · in‑browser **file manager** + live **SFTP** rotation · console that **persists across navigations & refreshes**.
 
 ---
 
@@ -59,6 +75,8 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 |---|:---:|:---:|:---:|:---:|
 | Open source | ✅ AGPL-3.0 | ✅ MIT | ❌ commercial | ❌ proprietary |
 | **Game switching** (keep server, swap game) | ✅ | ❌ | ⚠️ reinstall | ✅ |
+| **Hardware‑tier** game plans (Low/Mid/High) | ✅ | ⚠️ manual | ⚠️ manual | ✅ |
+| **Voice hosting** (TeamSpeak, slot‑based) | ✅ | ❌ | ⚠️ | ✅ |
 | **Native process hosting** (non-Docker) | ✅ | ❌ Docker-only | ✅ | ✅ |
 | Docker hosting | ✅ | ✅ | ✅ | ✅ |
 | Runs on **Windows** nodes | ✅ | ❌ | ✅ | ✅ |
@@ -153,40 +171,35 @@ The orchestration lives in [`apps/panel-api/src/servers/`](apps/panel-api/src/se
 | 🪖 Arma 3 | 🪖 Arma Reforger | 🎖️ Squad | 🔧 Garry's Mod |
 | 🎩 Team Fortress 2 | ⚔️ Mordhau | 🧟‍♂️ Killing Floor 2 | 🧛 V Rising |
 | 🌫️ Enshrouded | 🗡️ Conan Exiles | 🚀 Astroneer | 🪂 Unturned |
-| 🚚 American Truck Simulator | | | _+ add your own_ |
+| 🚚 American Truck Simulator | 🎙️ **TeamSpeak 3** _(voice · slot‑based)_ | | _+ add your own_ |
 
-Each is a JSON template in [`database/seed/templates/`](database/seed/templates) — no code required to add a game; drop a file and it auto-loads on the next deploy. See **[docs/10-game-templates.md](docs/10-game-templates.md)** and the requested-games backlog in **[docs/egg-backlog.md](docs/egg-backlog.md)**.
+Each is a JSON template in [`database/seed/templates/`](database/seed/templates) — no code required to add a game; drop a file and it auto-loads on the next deploy. Game eggs get **hardware‑tier** products; voice eggs (e.g. `teamspeak3`) get a **slot‑based** product. See **[docs/10-game-templates.md](docs/10-game-templates.md)** and the requested-games backlog in **[docs/egg-backlog.md](docs/egg-backlog.md)**.
 
 > **Minecraft, unified:** there's now a **single Minecraft product**. After buying, open the server's **Minecraft** tab to choose the loader — **Vanilla, Paper, Fabric, Forge or NeoForge** — and the **exact version** (resolved live from each project's API; Mojang's manifest for Vanilla), switching between them whenever you like without losing the server. The panel **auto-picks the right `eclipse-temurin` JVM** for the chosen version (Java 11 → 25), so newer releases boot without manual image fiddling, and loader builds can be pinned or left as `latest`/`recommended` (auto-resolved at install). On modded/plugin loaders, the **Mods** tab adds Modrinth search + one-click install.
 
-### 💰 Storefront pricing (seeded per-slot defaults)
+## 💸 How pricing works
 
-The GPortal-style order page sells **per-slot products** — one is **auto-seeded for every game egg** (`seedPerSlotProducts()` in `database/seed/seed.ts`). The seeded numbers below are **starting defaults**; edit any of them per game in **Admin → Products** (the seeder is create-only and never overwrites your edits, nor reactivates a product you deactivate).
+A `Product` has an explicit **billing model**, so different product types price the right way. The order page renders the matching UI automatically, and the **backend recomputes + validates every total** at checkout (product/tier active, tier belongs to product, slot within min/max/step) — **client‑sent prices are never trusted**.
 
-**Per-slot resources** (derived from each template's *recommended* specs, treated as ~**8 slots'** worth, with floors):
+### 🎮 Game servers — hardware tiers
 
-| Resource | Formula | Floor |
-|----------|---------|-------|
-| vCPU / slot | `recCpuCores ÷ 8` (2 dp) | `0.10` |
-| RAM / slot | `recMemoryMb ÷ 8` | `256 MB` |
-| Disk / slot | `recDiskMb ÷ 8` | `512 MB` |
+Each game egg is auto‑seeded as a **`HARDWARE_TIER`** product with three configurable tiers. The seeded numbers are **starting defaults** sized around each template's *recommended* specs; edit resources, prices, the recommended tier, and order in **Admin → Products → (game) → Hardware tiers** (the seeder is create‑only and never overwrites your edits).
 
-A server's provisioned resources are **per-slot × slot count**. Slot slider defaults: **min 2, max 64, step 2**.
+| Tier | RAM | vCPU | Disk | Notes |
+|------|-----|------|------|-------|
+| **Low** | ~½× rec | ~½× rec | ~rec | Entry‑level — small communities |
+| **Mid** ⭐ | ~1× rec | ~1× rec | ~1× rec | Balanced — **recommended default** |
+| **High** | ~2× rec | ~2× rec | ~2× rec | Premium — large / modded servers |
 
-**Price** — the base **monthly per-slot** rate is `max($0.50, RAM_GB_per_slot × $1.50)`. Each billing term is priced from that with a discount, and the order total is **per-slot price × slots**:
+Customers pick a **tier card** at checkout and can **upgrade/downgrade** between tiers later (resources re‑provision live; billing adjusts next cycle). An optional **recommended player count** is shown for guidance only — it is **never** the billing basis.
 
-| Term | Multiplier | Discount | Per-slot amount |
-|------|-----------|----------|-----------------|
-| Weekly | × 7⁄30 | — (proportional) | `monthly × 7 ÷ 30` (floor 25¢) |
-| Biweekly | × 14⁄30 | — (proportional) | `monthly × 14 ÷ 30` (floor 50¢) |
-| Monthly | × 1 | — | `monthly` |
-| Quarterly | × 3 | **−10%** | `monthly × 3 × 0.90` |
-| Semi-annual | × 6 | **−15%** | `monthly × 6 × 0.85` |
-| Annual | × 12 | **−20%** | `monthly × 12 × 0.80` |
+### 🎙️ Voice servers — per slot
 
-Terms shorter than a month (**weekly/biweekly**) are billed **proportionally with no discount**; renewals step by exact days (7/14), while monthly+ terms step by calendar month.
+**TeamSpeak 3** is a **`PER_SLOT`** product: customers choose a slot count (min/max/step) and pay **price‑per‑slot × slots**. Resources are lightweight per‑slot values, and the purchased slot count is passed to the container (`TS3SERVER_MAX_CLIENTS` / `SLOTS`).
 
-_Example — a game with **8 GB** recommended RAM → **1 GB/slot** → **$1.50/slot/month**. A 10-slot monthly server = **$15.00/mo**; the same annually = `1.50 × 12 × 0.80 × 10` = **$144.00/yr** (≈ $12/mo). All amounts are stored as integer minor units (cents)._
+### 🗓️ Terms & recurring billing
+
+Both models support **weekly · biweekly · monthly · quarterly · semi‑annual · annual** terms (longer terms discounted; sub‑month terms billed proportionally). Saved **Stripe cards** auto‑charge off‑session at renewal; **PayPal** uses the **Subscriptions API** so PayPal auto‑bills each cycle. **Coupons, gift cards and store credit** stack at checkout (card flow), charging only the remaining balance. All amounts are stored as **integer minor units (cents)**.
 
 ---
 
@@ -214,10 +227,11 @@ NestJS central panel. **Compiles clean & boots; 150 unit + 47 e2e tests green.**
 | AuthZ | `src/auth/guards` | `RolesGuard` (global roles), `PermissionGuard` (per-server `SubUser` perms, owner/admin override, wildcard `files.*`) |
 | Servers | `src/servers` | `POST /servers` (queues provisioning), power `start/stop/restart/kill`, `reinstall`, **`switchGame()`**, **`setMinecraftConfig()`** (loader + version), **Modrinth mod search/install**, **modpack installer** (`ModpackProcessor` — `.mrpack` → loader/version switch + mods/config), `resize()` (capacity-checked), variables/allocations/sub-users/schedules |
 | Agent link | `src/agent` | `NodeAgentClient` (HMAC-signed calls), `ConsoleGateway` (browser ↔ agent WebSocket relay) |
-| Billing | `src/billing` | `calculateTax()` (VAT/GST/US), invoice numbering, **editable products + per-interval prices**, `StripeGateway`/`PayPalGateway` with **DB-backed encrypted keys** (`SettingsService`), **Stripe webhook** (idempotent invoice/checkout/payment events), renewal + dunning workers |
+| Billing | `src/billing` | **two billing models** (`HARDWARE_TIER` tiers + `PER_SLOT`), `HardwareTier` CRUD, server‑side price validation, `calculateTax()` (VAT/GST/US), invoice numbering, `StripeGateway`/`PayPalGateway` with **DB‑backed encrypted keys**, **Stripe + PayPal verified webhooks**, **recurring PayPal Subscriptions** (`ensurePayPalPlan`/`startPayPalSubscription`/`settlePayPalRecurringPayment`), renewal + dunning workers |
+| Orders | `src/orders` | checkout orchestration: validate product/tier/slots, create subscription + first invoice, settle via gateway (or start a PayPal subscription), reserve‑then‑provision on payment |
 | Support | `src/support` | **admin ticket queue** (reply/notes/status/priority/assign), **categories (SLA) + canned responses CRUD**, SLA breach computation, KB |
 | AuthZ (custom RBAC) | `src/admin`, `src/common/permissions.ts` | `Role` model + granular admin-permission catalog, `AdminPermissionGuard` + `@RequirePerm`, owner-only Roles management |
-| Platform | `src/platform` | audit query, notifications, global alerts, encrypted settings store, `/health`, Prometheus `/metrics` |
+| Platform | `src/platform` | audit query, notifications, global alerts, **staff/“team” content** (`StaffService`), encrypted settings store, `/health`, Prometheus `/metrics` |
 
 ```http
 POST /api/v1/servers/{id}/switch-game
@@ -234,12 +248,14 @@ Next.js 14 customer + admin panel. **Builds, typechecks & lints clean.**
 - **Minecraft tab** — for Minecraft servers, pick the loader (Vanilla/Paper/Fabric/Forge/NeoForge) and exact version; switch any time.
 - **Mods & Modpacks tabs** — Modrinth search with one-click install/remove of mods & plugins (loader/version-aware), plus a **modpack installer** that picks a `.mrpack` version and switches the server's MC version + loader for you (runs in the background with a completion notification).
 - **File manager** — browse, edit, upload, compress/extract, permissions; now surfaces agent errors instead of silently showing an empty folder.
+- **Order flow** — adapts to the product: **hardware‑tier cards** for game servers, a **slot selector** for voice (TeamSpeak 3); live location/node capacity, coupons/gift cards/credit, Stripe **or** PayPal.
 - **Switch-game flow** — choose from the plan-allowed catalog with an explicit keep-vs-wipe data decision.
-- **Resource upgrade** — CPU/RAM/disk sliders with live price preview.
+- **Upgrade** — move a game server **between hardware tiers** (or scale slots for voice) with a live price preview; resources re‑provision immediately.
+- **Public Team page** + admin **Staff** curation — animated avatar group, dependency‑free reveal animations.
 - **Separate customer & admin areas** — distinct layouts/nav; the entire `/admin` surface is **permission-gated** (server-enforced), so customers never see staff tooling.
 - **Admin power tools** — create servers from an egg; manage nodes (region **dropdown** on create) with **per-server power controls**; **Products** with an inline **price editor**; an **owner-only Payments** page with a gateway/key editor; **Orders/Invoices** (void/delete); a **Support** ticket queue + categories/canned responses; a **Roles & permissions** builder; **Customers/Users** with full account view + delete.
 - Sessions **stay signed in across panel rebuilds** (transient-tolerant token refresh + optional "keep me signed in"); an **idle-session timeout** prompts before logging out.
-- Plus dashboard, backups, databases, schedules, billing, account/security, and a GPortal-style **storefront** with per-game artwork and node-derived server locations.
+- Plus dashboard, backups, databases, schedules, billing, account/security, and a glassy **storefront** with per-game artwork, node-derived server locations, and a public **Meet the team** page.
 
 ### ⚙️ node-agent — [`apps/node-agent`](apps/node-agent)
 Original Go daemon. **Cross-compiles to linux/amd64, linux/arm64, windows/amd64; vet + tests pass.**
@@ -261,6 +277,7 @@ type Runtime interface {
 - `DockerRuntime` — Docker SDK: image pull, resource-limited containers, log demux, live stats.
 - `NativeRuntime` — `os/exec` with cgroups v2 (Linux) / Job Objects (Windows) limits, ring-buffer console fan-out. **The differentiator.**
 - Plus a jailed file manager + SFTP server, tar.gz→S3 backups, signed control API, and a WebSocket hub.
+- **Self‑signed TLS that persists across restarts** (stable fingerprint), so the panel's optional **certificate pinning** (`AGENT_TLS_PINNING`) keeps verifying after agent updates.
 
 ### 📦 shared / database / infra
 - [`packages/shared`](packages/shared) — enums (mirror the schema), the panel↔agent WS protocol, permission strings, DTOs.
@@ -436,6 +453,14 @@ PANEL_URL=https://example.com
 > ⚠️ `NEXT_PUBLIC_API_URL` is **compiled into the web image**. If you change it you
 > must **rebuild** `web`, not just restart it. Behind SSL it must be **https** and
 > point at the API host the browser uses (e.g. `https://api.example.com`).
+
+> 💳 **Payment gateways** are best configured **in‑panel** (Owner → Payments — keys
+> are encrypted at rest), or via env. Register your webhook endpoint at
+> `POST /api/v1/billing/webhooks/stripe` and `…/paypal`. For **recurring PayPal**,
+> enable these events on the PayPal app: `PAYMENT.SALE.COMPLETED`,
+> `PAYMENT.CAPTURE.COMPLETED/REFUNDED`, and
+> `BILLING.SUBSCRIPTION.CANCELLED/SUSPENDED/EXPIRED` — and verify the flow in
+> **PayPal sandbox** before going live.
 
 ### Step 2 — build, migrate, seed, run
 
