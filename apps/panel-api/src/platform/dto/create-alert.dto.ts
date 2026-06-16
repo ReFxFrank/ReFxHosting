@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AlertSeverity } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDate,
   IsEnum,
   IsOptional,
@@ -43,4 +44,9 @@ export class CreateAlertDto {
   @Type(() => Date)
   @IsDate()
   endsAt?: Date;
+
+  @ApiPropertyOptional({ default: true, description: 'Whether the alert is active.' })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

@@ -42,6 +42,7 @@ export class AlertsService {
         body: dto.body,
         startsAt: dto.startsAt,
         endsAt: dto.endsAt,
+        isActive: dto.isActive, // undefined → schema default (true)
       },
     });
   }
