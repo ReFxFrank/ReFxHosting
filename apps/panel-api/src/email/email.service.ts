@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter, SendMailOptions } from 'nodemailer';
@@ -80,16 +85,29 @@ export class EmailService {
     };
   }
 
-  /** Send a test email to verify SMTP settings. Throws on failure (so the UI can report it). */
+  /** Send a test email to verify SMTP settings. Throws a descriptive error (so the UI can report it). */
   async sendTest(to: string): Promise<{ delivered: boolean }> {
     const { transporter, from, configured } = await this.transport();
-    await transporter.sendMail({
-      from,
-      to,
-      subject: 'ReFx Hosting — SMTP test',
-      text: 'This is a test email confirming your SMTP settings work. 🎉',
-      html: '<p>This is a test email confirming your SMTP settings work. 🎉</p>',
-    });
+    if (!configured) {
+      throw new BadRequestException(
+        'Email is not configured yet — set an SMTP host (e.g. smtp.resend.com) and save before sending a test.',
+      );
+    }
+    try {
+      await transporter.sendMail({
+        from,
+        to,
+        subject: 'ReFx Hosting — SMTP test',
+        text: 'This is a test email confirming your SMTP settings work. 🎉',
+        html: '<p>This is a test email confirming your SMTP settings work. 🎉</p>',
+      });
+    } catch (err) {
+      const detail = (err as Error).message ?? 'unknown error';
+      this.logger.warn(`Test email to ${to} failed: ${detail}`);
+      // Surface the provider's own reason (auth failure, blocked port, unverified
+      // sender domain, …) instead of a generic 500 so the owner can fix it.
+      throw new BadGatewayException(`Could not send test email: ${detail}`);
+    }
     return { delivered: configured };
   }
 
