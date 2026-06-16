@@ -588,6 +588,38 @@ export interface Invoice {
   createdAt: string;
 }
 
+export type CouponKind = "PERCENT" | "FIXED";
+
+export interface Coupon {
+  id: string;
+  code: string;
+  description: string | null;
+  kind: CouponKind;
+  value: number; // percent 1-100, or fixed minor units
+  currency: string;
+  minSubtotalMinor: number | null;
+  maxRedemptions: number | null;
+  timesRedeemed: number;
+  maxPerUser: number | null;
+  startsAt: string | null;
+  expiresAt: string | null;
+  isActive: boolean;
+  createdAt: string;
+  _count?: { redemptions: number };
+}
+
+export interface GiftCard {
+  id: string;
+  code: string;
+  initialBalanceMinor: number;
+  balanceMinor: number;
+  currency: string;
+  isActive: boolean;
+  expiresAt: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
 export interface PaymentMethod {
   id: string;
   gateway: string;

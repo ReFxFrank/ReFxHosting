@@ -81,6 +81,10 @@ export default function OrderPage() {
   const [name, setName] = useState("");
   const [gateway, setGateway] = useState<"stripe" | "paypal">("stripe");
   const [config, setConfig] = useState<Record<string, string>>({});
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<{ code: string; discountMinor: number } | null>(null);
+  const [giftInput, setGiftInput] = useState("");
+  const [gift, setGift] = useState<{ code: string; balanceMinor: number } | null>(null);
 
   const product = games.find((p) => p.id === productId) ?? null;
   const template = product ? templatesById[product.gameTemplateId ?? ""] : null;
@@ -142,7 +146,42 @@ export default function OrderPage() {
     enabled: !!limits,
   });
 
-  const totalMinor = price ? price.amountMinor * slots : 0;
+  // Pricing preview (the backend recomputes authoritatively, incl. tax).
+  const subtotalMinor = price ? price.amountMinor * slots : 0;
+  const discountMinor = coupon ? Math.min(coupon.discountMinor, subtotalMinor) : 0;
+  const afterDiscount = Math.max(0, subtotalMinor - discountMinor);
+  const giftCredit = gift ? Math.min(gift.balanceMinor, afterDiscount) : 0;
+  const dueTodayMinor = Math.max(0, afterDiscount - giftCredit);
+  const currency = price?.currency ?? "USD";
+
+  // A coupon discount depends on the subtotal, so clear it if slots/price change.
+  useEffect(() => {
+    setCoupon(null);
+  }, [subtotalMinor]);
+
+  const applyCoupon = useMutation({
+    mutationFn: () => api.billing.validateCoupon(couponInput.trim(), subtotalMinor),
+    onSuccess: (res) => {
+      setCoupon({ code: res.code, discountMinor: res.discountMinor });
+      toast.success(`Coupon ${res.code} applied`);
+    },
+    onError: (e) => {
+      setCoupon(null);
+      toast.error(e instanceof ApiError ? e.message : "Invalid coupon");
+    },
+  });
+
+  const applyGift = useMutation({
+    mutationFn: () => api.billing.lookupGiftCard(giftInput.trim()),
+    onSuccess: (res) => {
+      setGift({ code: res.code, balanceMinor: res.balanceMinor });
+      toast.success(`Gift card applied — ${formatMoney(res.balanceMinor, res.currency)} balance`);
+    },
+    onError: (e) => {
+      setGift(null);
+      toast.error(e instanceof ApiError ? e.message : "Invalid gift card");
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -155,6 +194,8 @@ export default function OrderPage() {
         name: name.trim(),
         gateway,
         environment: Object.keys(config).length ? config : undefined,
+        couponCode: coupon?.code,
+        giftCardCode: gift?.code,
       }),
     onSuccess: (res) => {
       if (res?.checkoutUrl) {
@@ -399,11 +440,99 @@ export default function OrderPage() {
               label="Location"
               value={locationsQ.data?.find((r) => r.id === regionId)?.name ?? "Auto"}
             />
-            <div className="flex items-center justify-between border-t pt-3">
-              <span className="font-medium">Total</span>
-              <span className="text-lg font-semibold">
-                {price ? formatMoney(totalMinor, price.currency) : "—"}
-              </span>
+
+            {/* Coupon */}
+            <div className="space-y-1.5 border-t pt-3">
+              <Label className="text-xs">Coupon code</Label>
+              {coupon ? (
+                <div className="flex items-center justify-between rounded-md border border-success/40 bg-success/5 px-2.5 py-1.5 text-sm">
+                  <span className="font-mono">{coupon.code}</span>
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => { setCoupon(null); setCouponInput(""); }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value)}
+                    placeholder="WELCOME10"
+                    className="h-9 font-mono uppercase"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={applyCoupon.isPending}
+                    disabled={!couponInput.trim()}
+                    onClick={() => applyCoupon.mutate()}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Gift card */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Gift card</Label>
+              {gift ? (
+                <div className="flex items-center justify-between rounded-md border border-success/40 bg-success/5 px-2.5 py-1.5 text-sm">
+                  <span className="font-mono">{gift.code}</span>
+                  <button
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    onClick={() => { setGift(null); setGiftInput(""); }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    value={giftInput}
+                    onChange={(e) => setGiftInput(e.target.value)}
+                    placeholder="GIFT-…"
+                    className="h-9 font-mono uppercase"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={applyGift.isPending}
+                    disabled={!giftInput.trim()}
+                    onClick={() => applyGift.mutate()}
+                  >
+                    Apply
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1 border-t pt-3 text-sm">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Subtotal</span>
+                <span>{formatMoney(subtotalMinor, currency)}</span>
+              </div>
+              {discountMinor > 0 && (
+                <div className="flex justify-between text-success">
+                  <span>Discount</span>
+                  <span>−{formatMoney(discountMinor, currency)}</span>
+                </div>
+              )}
+              {giftCredit > 0 && (
+                <div className="flex justify-between text-success">
+                  <span>Gift card</span>
+                  <span>−{formatMoney(giftCredit, currency)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between pt-1 font-medium">
+                <span>Due today</span>
+                <span className="text-lg font-semibold">
+                  {price ? formatMoney(dueTodayMinor, currency) : "—"}
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Tax (if any) is added at checkout.</p>
             </div>
 
             {paypalOn && stripeOn && (

@@ -17,6 +17,8 @@ import {
   Settings,
   ReceiptText,
   Wallet,
+  TicketPercent,
+  Gift,
   ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
@@ -72,6 +74,8 @@ export const adminNav: NavSection[] = [
       { label: "Invoices", href: "/admin/invoices", icon: ReceiptText, perm: "billing.read" },
       { label: "Billing", href: "/admin/billing", icon: CreditCard, perm: "billing.read" },
       { label: "Payments", href: "/admin/payments", icon: Wallet, perm: "payments.manage" },
+      { label: "Coupons", href: "/admin/coupons", icon: TicketPercent, perm: "billing.manage" },
+      { label: "Gift cards", href: "/admin/gift-cards", icon: Gift, perm: "billing.manage" },
     ],
   },
   {

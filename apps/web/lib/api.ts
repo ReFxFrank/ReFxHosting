@@ -52,6 +52,9 @@ import type {
   GatewayStatus,
   GatewayConfigDetail,
   EmailConfigDetail,
+  Coupon,
+  CouponKind,
+  GiftCard,
   ProfileUpdate,
   AdminRole,
 } from "@/lib/types";
@@ -488,12 +491,24 @@ export const api = {
       name: string;
       gateway?: "stripe" | "paypal";
       environment?: Record<string, string>;
+      couponCode?: string;
+      giftCardCode?: string;
     }) => http.post<{ checkoutUrl?: string; serverId?: string; invoiceId?: string }>("/orders", input),
   },
 
   billing: {
     /** Public-safe gateway config for the checkout button (Stripe publishable key). */
     config: () => http.get<GatewayStatus>("/billing/config"),
+    validateCoupon: (code: string, subtotalMinor: number) =>
+      http.post<{ valid: boolean; code: string; kind: CouponKind; value: number; discountMinor: number }>(
+        "/billing/coupons/validate",
+        { code, subtotalMinor },
+      ),
+    lookupGiftCard: (code: string) =>
+      http.post<{ code: string; balanceMinor: number; currency: string }>(
+        "/billing/gift-cards/lookup",
+        { code },
+      ),
     invoices: () => getList<Invoice>("/billing/invoices"),
     invoice: (id: string) => http.get<Invoice>(`/billing/invoices/${id}`),
     payInvoice: (id: string, gateway?: "stripe" | "paypal") =>
@@ -675,6 +690,21 @@ export const api = {
     }) => http.patch<void>("/admin/settings/email", input),
     sendTestEmail: (to: string) =>
       http.post<{ delivered: boolean }>("/admin/settings/email/test", { to }),
+
+    // Coupons (billing.manage)
+    coupons: () => getList<Coupon>("/admin/coupons"),
+    createCoupon: (input: Partial<Coupon>) =>
+      http.post<Coupon>("/admin/coupons", input),
+    updateCoupon: ({ id, ...input }: Partial<Coupon>) =>
+      http.patch<Coupon>(`/admin/coupons/${id}`, input),
+    deleteCoupon: (id: string) => http.delete<void>(`/admin/coupons/${id}`),
+
+    // Gift cards (billing.manage)
+    giftCards: () => getList<GiftCard>("/admin/gift-cards"),
+    createGiftCard: (input: { code?: string; initialBalanceMinor: number; currency?: string; note?: string; expiresAt?: string }) =>
+      http.post<GiftCard>("/admin/gift-cards", input),
+    updateGiftCard: (id: string, input: Partial<{ isActive: boolean; note: string; expiresAt: string }>) =>
+      http.patch<GiftCard>(`/admin/gift-cards/${id}`, input),
 
     products: () => getList<Product>("/admin/products"),
     // Strip `id` from the body — it's in the URL on update, and the API rejects
