@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { COUNTRIES, US_STATES } from "@/lib/geo";
+import { TIMEZONES } from "@/lib/timezones";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -106,7 +107,7 @@ export default function AccountPage() {
 const profileSchema = z.object({
   firstName: z.string().min(1, "Required"),
   lastName: z.string().optional(),
-  locale: z.string().min(1, "Required"),
+  avatarUrl: z.string().url("Enter a valid image URL").or(z.literal("")).optional(),
   timezone: z.string().min(1, "Required"),
   phone: z.string().optional(),
   addressLine1: z.string().optional(),
@@ -129,13 +130,14 @@ function ProfileTab() {
     handleSubmit,
     control,
     watch,
+    setValue,
     formState: { errors, isDirty },
   } = useForm<ProfileValues>({
     resolver: zodResolver(profileSchema),
     values: {
       firstName: user?.firstName ?? "",
       lastName: user?.lastName ?? "",
-      locale: user?.locale ?? "",
+      avatarUrl: user?.avatarUrl ?? "",
       timezone: user?.timezone ?? "",
       phone: user?.phone ?? "",
       addressLine1: user?.addressLine1 ?? "",
@@ -168,10 +170,12 @@ function ProfileTab() {
       <CardContent className="space-y-6">
         <div className="flex items-center gap-4">
           <Avatar className="size-16 text-base">
-            {user.avatarUrl && <AvatarImage src={user.avatarUrl} alt={fullName} />}
+            {(watch("avatarUrl") || user.avatarUrl) && (
+              <AvatarImage src={watch("avatarUrl") || user.avatarUrl || ""} alt={fullName} />
+            )}
             <AvatarFallback>{initials(fullName, user.email)}</AvatarFallback>
           </Avatar>
-          <div className="space-y-1">
+          <div className="min-w-0 flex-1 space-y-1.5">
             <div className="flex items-center gap-2">
               <p className="font-medium">{fullName || user.email}</p>
               {user.emailVerifiedAt ? (
@@ -180,7 +184,26 @@ function ProfileTab() {
                 <Badge variant="warning">Unverified</Badge>
               )}
             </div>
-            <p className="text-sm text-muted-foreground">{user.email}</p>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Profile picture URL (https://…)"
+                className="h-8 text-xs"
+                {...register("avatarUrl")}
+              />
+              {watch("avatarUrl") ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setValue("avatarUrl", "", { shouldDirty: true })}
+                >
+                  Clear
+                </Button>
+              ) : null}
+            </div>
+            {errors.avatarUrl && (
+              <p className="text-xs text-destructive">{errors.avatarUrl.message}</p>
+            )}
           </div>
         </div>
 
@@ -205,15 +228,25 @@ function ProfileTab() {
               <Input id="email" value={user.email} readOnly disabled />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="locale">Locale</Label>
-              <Input id="locale" placeholder="en-US" {...register("locale")} />
-              {errors.locale && (
-                <p className="text-xs text-destructive">{errors.locale.message}</p>
-              )}
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="timezone">Timezone</Label>
-              <Input id="timezone" placeholder="UTC" {...register("timezone")} />
+              <Controller
+                control={control}
+                name="timezone"
+                render={({ field }) => (
+                  <Select value={field.value || "UTC"} onValueChange={field.onChange}>
+                    <SelectTrigger id="timezone">
+                      <SelectValue placeholder="Select timezone…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIMEZONES.map((tz) => (
+                        <SelectItem key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
               {errors.timezone && (
                 <p className="text-xs text-destructive">{errors.timezone.message}</p>
               )}
