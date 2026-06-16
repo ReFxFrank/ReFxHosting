@@ -66,6 +66,7 @@ import {
 } from '../templates/dto/template.dto';
 import {
   AdminCreateServerDto,
+  BulkIdsDto,
   CreateRoleDto,
   GrantCreditDto,
   SetEmailConfigDto,
@@ -376,6 +377,23 @@ export class AdminController {
   @RequirePerm('billing.read')
   listOrders(@Query() pagination: PaginationDto) {
     return this.billing.listAllSubscriptions(pagination);
+  }
+
+  /** Bulk-delete orders (must precede `orders/:id` so it isn't read as an id). */
+  @Post('orders/bulk-delete')
+  @RequirePerm('billing.manage')
+  @HttpCode(200)
+  @Audit({ action: 'admin.order.bulk-delete', targetType: 'Subscription' })
+  bulkDeleteOrders(@Body() dto: BulkIdsDto) {
+    return this.billing.deleteSubscriptions(dto.ids);
+  }
+
+  @Delete('orders/:id')
+  @RequirePerm('billing.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.order.delete', targetType: 'Subscription', targetParam: 'id' })
+  async deleteOrder(@Param('id') id: string) {
+    await this.billing.deleteSubscription(id);
   }
 
   @Get('invoices')

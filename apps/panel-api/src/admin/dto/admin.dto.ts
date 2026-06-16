@@ -188,6 +188,14 @@ export class UpdateRoleDto {
   permissions?: string[];
 }
 
+/** Identifiers for a bulk action (e.g. deleting multiple orders at once). */
+export class BulkIdsDto {
+  @ApiProperty({ type: [String], description: 'Target ids.' })
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[];
+}
+
 /**
  * Adjust a user's store-credit balance. A positive amount grants credit (e.g. a
  * goodwill gesture or refund-to-credit); a negative amount deducts it. Money is

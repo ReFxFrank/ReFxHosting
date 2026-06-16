@@ -434,6 +434,60 @@ export class BillingService {
     return paginate(data, total, pagination);
   }
 
+  /**
+   * Delete an order (subscription). Invoice + (soft-deleted) server history is
+   * preserved by detaching them rather than cascading. Refuses to delete an
+   * order that still has live servers — those must be removed/transferred first.
+   */
+  async deleteSubscription(id: string): Promise<{ id: string }> {
+    const sub = await this.prisma.subscription.findUnique({
+      where: { id },
+      include: {
+        servers: { where: { deletedAt: null }, select: { id: true } },
+      },
+    });
+    if (!sub) throw new NotFoundException('Order not found');
+    if (sub.servers.length > 0) {
+      throw new BadRequestException(
+        'This order still has active servers — delete or transfer them before removing it.',
+      );
+    }
+    await this.prisma.$transaction([
+      // Detach already soft-deleted servers and keep invoice history intact.
+      this.prisma.server.updateMany({
+        where: { subscriptionId: id },
+        data: { subscriptionId: null },
+      }),
+      this.prisma.invoice.updateMany({
+        where: { subscriptionId: id },
+        data: { subscriptionId: null },
+      }),
+      this.prisma.subscription.delete({ where: { id } }),
+    ]);
+    return { id };
+  }
+
+  /**
+   * Bulk-delete orders. Each is attempted independently so one blocked order
+   * (e.g. still has servers) doesn't abort the batch; the result reports which
+   * were removed and which were skipped (with the reason).
+   */
+  async deleteSubscriptions(
+    ids: string[],
+  ): Promise<{ deleted: string[]; skipped: { id: string; reason: string }[] }> {
+    const deleted: string[] = [];
+    const skipped: { id: string; reason: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteSubscription(id);
+        deleted.push(id);
+      } catch (e) {
+        skipped.push({ id, reason: (e as Error).message });
+      }
+    }
+    return { deleted, skipped };
+  }
+
   /** Headline billing figures for the admin Billing view (money in minor units). */
   async adminBillingSummary(): Promise<{
     currency: string;

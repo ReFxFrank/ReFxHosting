@@ -671,6 +671,12 @@ export const api = {
     billingSummary: () => http.get<AdminBillingSummary>("/admin/billing/summary"),
     orders: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminSubscription>>("/admin/orders", { query }),
+    deleteOrder: (id: string) => http.delete<void>(`/admin/orders/${id}`),
+    bulkDeleteOrders: (ids: string[]) =>
+      http.post<{ deleted: string[]; skipped: { id: string; reason: string }[] }>(
+        "/admin/orders/bulk-delete",
+        { ids },
+      ),
     invoices: (query?: { page?: number; q?: string; state?: string }) =>
       http.get<Paginated<AdminInvoice>>("/admin/invoices", { query }),
     voidInvoice: (id: string) => http.post<AdminInvoice>(`/admin/invoices/${id}/void`),
