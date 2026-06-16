@@ -76,6 +76,15 @@ interface ProductForm {
   diskMb: number;
   slots: number;
   isActive: boolean;
+  // Per-slot (GPortal-style) pricing
+  perSlot: boolean;
+  gameTemplateId: string;
+  minSlots: number;
+  maxSlots: number;
+  slotStep: number;
+  cpuPerSlot: number;
+  memoryMbPerSlot: number;
+  diskMbPerSlot: number;
 }
 
 const emptyForm: ProductForm = {
@@ -88,6 +97,14 @@ const emptyForm: ProductForm = {
   diskMb: 20480,
   slots: 0,
   isActive: true,
+  perSlot: false,
+  gameTemplateId: "",
+  minSlots: 6,
+  maxSlots: 100,
+  slotStep: 2,
+  cpuPerSlot: 0.25,
+  memoryMbPerSlot: 512,
+  diskMbPerSlot: 1024,
 };
 
 export default function AdminProductsPage() {
@@ -158,10 +175,24 @@ export default function AdminProductsPage() {
       diskMb: product.diskMb ?? 0,
       slots: product.slots ?? 0,
       isActive: product.isActive,
+      perSlot: product.perSlot ?? false,
+      gameTemplateId: product.gameTemplateId ?? "",
+      minSlots: product.minSlots ?? 1,
+      maxSlots: product.maxSlots ?? 100,
+      slotStep: product.slotStep ?? 1,
+      cpuPerSlot: product.cpuPerSlot ?? 0,
+      memoryMbPerSlot: product.memoryMbPerSlot ?? 0,
+      diskMbPerSlot: product.diskMbPerSlot ?? 0,
     });
     setSlugTouched(true); // existing slug is authoritative; don't auto-rewrite
     setEditOpen(true);
   }
+
+  // Game templates for the per-slot product → game link.
+  const templatesQ = useQuery({
+    queryKey: ["admin", "templates"],
+    queryFn: () => api.admin.templates(),
+  });
 
   // The currently-edited product, re-read from the cache so its prices stay live.
   const editingProduct = products?.find((p) => p.id === form.id) ?? null;
@@ -390,6 +421,82 @@ export default function AdminProductsPage() {
               />
             </div>
 
+            {/* Per-slot (GPortal-style) pricing */}
+            <div className="space-y-3 rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">Per-slot pricing</p>
+                  <p className="text-xs text-muted-foreground">
+                    Customers pick a slot count on a slider; price = per-slot price ×
+                    slots, resources scale per slot.
+                  </p>
+                </div>
+                <Switch
+                  checked={form.perSlot}
+                  onCheckedChange={(v: boolean) => setForm((f) => ({ ...f, perSlot: v }))}
+                />
+              </div>
+
+              {form.perSlot && (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label>Game</Label>
+                    <Select
+                      value={form.gameTemplateId}
+                      onValueChange={(v) => setForm((f) => ({ ...f, gameTemplateId: v }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select the game this sells" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(templatesQ.data ?? []).map((t) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label>Min slots</Label>
+                      <Input type="number" min={1} value={form.minSlots}
+                        onChange={(e) => setForm((f) => ({ ...f, minSlots: Number(e.target.value) }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Max slots</Label>
+                      <Input type="number" min={1} value={form.maxSlots}
+                        onChange={(e) => setForm((f) => ({ ...f, maxSlots: Number(e.target.value) }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Slider step</Label>
+                      <Input type="number" min={1} value={form.slotStep}
+                        onChange={(e) => setForm((f) => ({ ...f, slotStep: Number(e.target.value) }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>vCPU / slot</Label>
+                      <Input type="number" min={0} step="0.05" value={form.cpuPerSlot}
+                        onChange={(e) => setForm((f) => ({ ...f, cpuPerSlot: Number(e.target.value) }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>RAM MB / slot</Label>
+                      <Input type="number" min={0} value={form.memoryMbPerSlot}
+                        onChange={(e) => setForm((f) => ({ ...f, memoryMbPerSlot: Number(e.target.value) }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Disk MB / slot</Label>
+                      <Input type="number" min={0} value={form.diskMbPerSlot}
+                        onChange={(e) => setForm((f) => ({ ...f, diskMbPerSlot: Number(e.target.value) }))} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Set the <strong>per-slot</strong> price for each interval in Pricing
+                    below (e.g. monthly per-slot rate). The order total is that × slots.
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* Pricing — available once the product exists. */}
             <div className="space-y-2 rounded-lg border p-3">
               <div className="flex items-center gap-2 text-sm font-medium">
@@ -424,6 +531,14 @@ export default function AdminProductsPage() {
                   diskMb: form.diskMb,
                   slots: form.slots,
                   isActive: form.isActive,
+                  perSlot: form.perSlot,
+                  gameTemplateId: form.gameTemplateId || undefined,
+                  minSlots: form.minSlots,
+                  maxSlots: form.maxSlots,
+                  slotStep: form.slotStep,
+                  cpuPerSlot: form.cpuPerSlot,
+                  memoryMbPerSlot: form.memoryMbPerSlot,
+                  diskMbPerSlot: form.diskMbPerSlot,
                 })
               }
             >
