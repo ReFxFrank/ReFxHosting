@@ -48,20 +48,29 @@ export class CreditService {
     }
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
-      select: { creditBalanceMinor: true },
+      select: { id: true },
     });
     if (!user) throw new NotFoundException('User not found');
-    const next = user.creditBalanceMinor + amountMinor;
-    if (next < 0) {
-      throw new BadRequestException('Insufficient credit balance for this deduction');
-    }
-    const [updated] = await this.prisma.$transaction([
-      this.prisma.user.update({
-        where: { id: userId },
-        data: { creditBalanceMinor: next },
-        select: { creditBalanceMinor: true },
-      }),
-      this.prisma.creditTransaction.create({
+
+    // Apply atomically via increment/decrement (never an absolute set) so
+    // concurrent grants/deductions don't clobber one another; a deduction is
+    // guarded so the balance can't go negative.
+    return this.prisma.$transaction(async (tx) => {
+      if (amountMinor < 0) {
+        const drawn = await tx.user.updateMany({
+          where: { id: userId, creditBalanceMinor: { gte: -amountMinor } },
+          data: { creditBalanceMinor: { increment: amountMinor } },
+        });
+        if (drawn.count === 0) {
+          throw new BadRequestException('Insufficient credit balance for this deduction');
+        }
+      } else {
+        await tx.user.update({
+          where: { id: userId },
+          data: { creditBalanceMinor: { increment: amountMinor } },
+        });
+      }
+      await tx.creditTransaction.create({
         data: {
           id: uuidv7(),
           userId,
@@ -71,9 +80,13 @@ export class CreditService {
           invoiceId: opts.invoiceId ?? null,
           actorId: opts.actorId ?? null,
         },
-      }),
-    ]);
-    return { balanceMinor: updated.creditBalanceMinor };
+      });
+      const fresh = await tx.user.findUnique({
+        where: { id: userId },
+        select: { creditBalanceMinor: true },
+      });
+      return { balanceMinor: fresh?.creditBalanceMinor ?? 0 };
+    });
   }
 
   /**
@@ -86,19 +99,23 @@ export class CreditService {
     invoiceId: string,
     maxApplyMinor: number,
   ): Promise<number> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { creditBalanceMinor: true },
-    });
-    const applied = Math.max(0, Math.min(user?.creditBalanceMinor ?? 0, maxApplyMinor));
-    if (applied <= 0) return 0;
-
-    await this.prisma.$transaction([
-      this.prisma.user.update({
+    // Guarded draw-down (balance >= applied) so concurrent applications can't
+    // overspend the balance below zero; a lost race yields 0 applied.
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.findUnique({
         where: { id: userId },
+        select: { creditBalanceMinor: true },
+      });
+      const applied = Math.max(0, Math.min(user?.creditBalanceMinor ?? 0, maxApplyMinor));
+      if (applied <= 0) return 0;
+
+      const drawn = await tx.user.updateMany({
+        where: { id: userId, creditBalanceMinor: { gte: applied } },
         data: { creditBalanceMinor: { decrement: applied } },
-      }),
-      this.prisma.creditTransaction.create({
+      });
+      if (drawn.count === 0) return 0;
+
+      await tx.creditTransaction.create({
         data: {
           id: uuidv7(),
           userId,
@@ -106,12 +123,12 @@ export class CreditService {
           reason: CreditReason.INVOICE_PAYMENT,
           invoiceId,
         },
-      }),
-      this.prisma.invoice.update({
+      });
+      await tx.invoice.update({
         where: { id: invoiceId },
         data: { amountPaidMinor: { increment: applied } },
-      }),
-    ]);
-    return applied;
+      });
+      return applied;
+    });
   }
 }

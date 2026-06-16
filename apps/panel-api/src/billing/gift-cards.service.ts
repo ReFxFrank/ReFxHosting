@@ -95,15 +95,25 @@ export class GiftCardsService {
     maxApplyMinor: number,
   ): Promise<number> {
     const card = await this.lookup(code);
-    const applied = Math.max(0, Math.min(card.balanceMinor, maxApplyMinor));
-    if (applied <= 0) return 0;
 
-    await this.prisma.$transaction([
-      this.prisma.giftCard.update({
-        where: { id: card.id },
+    // Draw down atomically: the guarded updateMany (balance >= applied) only
+    // succeeds if no concurrent redemption already spent the balance, so a card
+    // can never go below zero (no lost-update double-spend). On a lost race we
+    // return 0 and the caller charges the full amount through the gateway.
+    return this.prisma.$transaction(async (tx) => {
+      const fresh = await tx.giftCard.findUnique({ where: { id: card.id } });
+      if (!fresh || !fresh.isActive || fresh.balanceMinor <= 0) return 0;
+      if (fresh.expiresAt && fresh.expiresAt < new Date()) return 0;
+      const applied = Math.max(0, Math.min(fresh.balanceMinor, maxApplyMinor));
+      if (applied <= 0) return 0;
+
+      const drawn = await tx.giftCard.updateMany({
+        where: { id: card.id, balanceMinor: { gte: applied } },
         data: { balanceMinor: { decrement: applied } },
-      }),
-      this.prisma.giftCardTransaction.create({
+      });
+      if (drawn.count === 0) return 0; // lost the race; treat as no credit applied
+
+      await tx.giftCardTransaction.create({
         data: {
           id: uuidv7(),
           giftCardId: card.id,
@@ -111,12 +121,12 @@ export class GiftCardsService {
           invoiceId,
           amountMinor: -applied,
         },
-      }),
-      this.prisma.invoice.update({
+      });
+      await tx.invoice.update({
         where: { id: invoiceId },
         data: { amountPaidMinor: { increment: applied } },
-      }),
-    ]);
-    return applied;
+      });
+      return applied;
+    });
   }
 }

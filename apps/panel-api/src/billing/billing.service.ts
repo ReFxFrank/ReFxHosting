@@ -859,11 +859,14 @@ export class BillingService {
     }
 
     const customerId = await this.getGatewayCustomerId(userId);
+    const chargedMinor = Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0));
     const result = await this.stripe.charge(invoice, method.gatewayRef, customerId);
     if (result.success) {
       await this.markInvoicePaid(invoice.id, {
         gateway: this.stripe.name,
         gatewayRef: result.gatewayRef,
+        amountMinor: chargedMinor,
+        currency: invoice.currency,
       });
       return { paid: true };
     }
@@ -1470,11 +1473,14 @@ export class BillingService {
     }
 
     const customerId = await this.getGatewayCustomerId(sub.userId);
+    const chargedMinor = Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0));
     const result = await this.stripe.charge(invoice, method.gatewayRef, customerId);
     if (result.success) {
       await this.markInvoicePaid(invoice.id, {
         gateway: this.stripe.name,
         gatewayRef: result.gatewayRef,
+        amountMinor: chargedMinor,
+        currency: invoice.currency,
       });
       // Roll the billing period forward.
       await this.prisma.subscription.update({
