@@ -122,6 +122,11 @@ export class NodeAgentClient {
           ca: node.agentCertPem,
           servername: node.fqdn,
           rejectUnauthorized: true,
+          // We pin the EXACT leaf cert via `ca`, so the connection only succeeds
+          // for that cert. Hostname matching is then redundant and would reject
+          // typical self-signed agent certs (CN/SAN = localhost or an IP), so we
+          // skip it — the pinned cert IS the identity check.
+          checkServerIdentity: () => undefined,
         },
       });
       this.dispatchers.set(key, agent);
