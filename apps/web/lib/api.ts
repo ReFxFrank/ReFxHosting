@@ -341,6 +341,18 @@ export const api = {
           `/servers/${id}/mods/${encodeURIComponent(filename)}`,
         ),
     },
+    // Modrinth modpacks (.mrpack) — installing one switches the server's MC
+    // version + loader automatically, then provisions the pack's mods/config.
+    modpacks: {
+      search: (id: string, q: string) =>
+        getList<ModrinthProject>(`/servers/${id}/modpacks/search`, { query: { q } }),
+      versions: (id: string, projectId: string) =>
+        getList<ModrinthVersion>(`/servers/${id}/modpacks/versions`, {
+          query: { projectId },
+        }),
+      install: (id: string, versionId: string) =>
+        http.post<{ accepted: true }>(`/servers/${id}/modpacks/install`, { versionId }),
+    },
     sftp: (id: string) =>
       http.get<{ host: string; port: number; username: string }>(`/servers/${id}/sftp`),
     rotateSftp: (id: string) =>

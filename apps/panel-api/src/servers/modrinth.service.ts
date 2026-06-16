@@ -120,6 +120,17 @@ export class ModrinthService {
     return (raw ?? []).map((v) => this.mapVersion(v));
   }
 
+  /**
+   * All versions of a project, newest first, with NO loader/version filter.
+   * Used for modpacks, where the version itself dictates the loader + MC version.
+   */
+  async projectVersions(idOrSlug: string): Promise<ModrinthVersion[]> {
+    const raw = await this.get<any[]>(
+      `/project/${encodeURIComponent(idOrSlug)}/version`,
+    );
+    return (raw ?? []).map((v) => this.mapVersion(v));
+  }
+
   /** A single version by id. */
   async version(versionId: string): Promise<ModrinthVersion> {
     const v = await this.get<any>(`/version/${encodeURIComponent(versionId)}`);

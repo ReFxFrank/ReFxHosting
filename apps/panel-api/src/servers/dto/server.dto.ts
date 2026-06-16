@@ -171,6 +171,12 @@ export class ModInstallDto {
   versionId?: string;
 }
 
+export class ModpackInstallDto {
+  @ApiProperty({ description: 'Modrinth modpack version id (the .mrpack to install).' })
+  @IsString()
+  versionId!: string;
+}
+
 export class UpdateStartupDto {
   @ApiPropertyOptional()
   @IsOptional()

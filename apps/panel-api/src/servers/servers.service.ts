@@ -503,6 +503,37 @@ export class ServersService {
       throw new ConflictException(`Cannot reconfigure while ${server.state}`);
     }
 
+    const { concrete } = await this.applyMinecraftEnv(id, dto, 'REINSTALLING');
+
+    await this.reinstallQueue.add(JOB.REINSTALL, {
+      serverId: id,
+      preserveData: true,
+    } satisfies ReinstallJob);
+
+    return { accepted: true, loader: dto.loader, version: concrete };
+  }
+
+  /**
+   * Write the Minecraft loader/version/loader-version onto a server's environment
+   * (+ matching docker image / startup command / variable overrides) WITHOUT
+   * queueing a reinstall. Shared by the loader switcher and the modpack installer
+   * (which reinstalls itself, in order, after writing files). Returns the
+   * resolved concrete MC version.
+   */
+  async applyMinecraftEnv(
+    id: string,
+    dto: { loader: string; version?: string; loaderVersion?: string },
+    state?: 'REINSTALLING',
+  ): Promise<{ concrete: string; loaderVersion: string }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      include: { template: true },
+    });
+    if (!server?.template) throw new NotFoundException('Server not found');
+    if (!isMinecraftLoader(dto.loader)) {
+      throw new BadRequestException(`Unknown loader: ${dto.loader}`);
+    }
+
     const loaderVersion = dto.loaderVersion?.trim() || 'latest';
     const concrete = await this.mcResolver.resolveByLoader(
       dto.loader,
@@ -523,9 +554,13 @@ export class ServersService {
     await this.prisma.$transaction([
       this.prisma.server.update({
         where: { id },
-        data: { environment, startupCommand, dockerImage, state: 'REINSTALLING' },
+        data: {
+          environment,
+          startupCommand,
+          dockerImage,
+          ...(state ? { state } : {}),
+        },
       }),
-      // Keep any explicit per-server variable overrides in sync.
       this.prisma.serverVariable.updateMany({
         where: { serverId: id, envName: 'LOADER' },
         data: { value: dto.loader },
@@ -540,12 +575,7 @@ export class ServersService {
       }),
     ]);
 
-    await this.reinstallQueue.add(JOB.REINSTALL, {
-      serverId: id,
-      preserveData: true,
-    } satisfies ReinstallJob);
-
-    return { accepted: true, loader: dto.loader, version: concrete };
+    return { concrete, loaderVersion };
   }
 
   // ---- resize (upgrade/downgrade) ----------------------------------------

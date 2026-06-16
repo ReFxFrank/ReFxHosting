@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ServersService } from './servers.service';
 import { ServerResourcesService } from './server-resources.service';
 import { ModsService } from './mods.service';
+import { ModpackService } from './modpack.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
@@ -29,6 +30,7 @@ import {
   CreateServerDto,
   PowerActionDto,
   ModInstallDto,
+  ModpackInstallDto,
   ResizeServerDto,
   SendCommandDto,
   SetVariableDto,
@@ -46,6 +48,7 @@ export class ServersController {
     private readonly servers: ServersService,
     private readonly resources: ServerResourcesService,
     private readonly mods: ModsService,
+    private readonly modpacks: ModpackService,
   ) {}
 
   // ---- collection --------------------------------------------------------
@@ -206,6 +209,27 @@ export class ServersController {
   @Audit({ action: 'server.mod.remove', targetType: 'Server', targetParam: 'id' })
   modsRemove(@Param('id') id: string, @Param('filename') filename: string) {
     return this.mods.remove(id, filename);
+  }
+
+  // ---- modpacks (Modrinth) ----------------------------------------------
+
+  @Get(':id/modpacks/search')
+  @RequirePermissions('files.read')
+  modpacksSearch(@Param('id') id: string, @Query('q') q = '') {
+    return this.modpacks.search(id, q);
+  }
+
+  @Get(':id/modpacks/versions')
+  @RequirePermissions('files.read')
+  modpacksVersions(@Param('id') id: string, @Query('projectId') projectId: string) {
+    return this.modpacks.versions(id, projectId);
+  }
+
+  @Post(':id/modpacks/install')
+  @RequirePermissions('control.reinstall')
+  @Audit({ action: 'server.modpack.install', targetType: 'Server', targetParam: 'id' })
+  modpacksInstall(@Param('id') id: string, @Body() dto: ModpackInstallDto) {
+    return this.modpacks.install(id, dto.versionId);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

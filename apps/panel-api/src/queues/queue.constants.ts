@@ -10,6 +10,7 @@ export const QUEUE = {
   BACKUPS: 'backups',
   BILLING_RENEWAL: 'billing-renewal',
   SUSPENSION: 'suspension',
+  MODPACK: 'modpack',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
@@ -45,6 +46,14 @@ export interface SuspensionJob {
   reason?: string;
 }
 
+export interface ModpackInstallJob {
+  serverId: string;
+  /** Modrinth modpack version id (the .mrpack to install). */
+  versionId: string;
+  /** Display title for notifications. */
+  title?: string;
+}
+
 export const JOB = {
   PROVISION: 'provision',
   REINSTALL: 'reinstall',
@@ -52,4 +61,5 @@ export const JOB = {
   RENEW: 'renew',
   DUNNING: 'dunning',
   SUSPEND: 'suspend',
+  INSTALL_MODPACK: 'install-modpack',
 } as const;
