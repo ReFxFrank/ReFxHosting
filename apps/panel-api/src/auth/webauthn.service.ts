@@ -128,6 +128,10 @@ export class WebAuthnService {
         expectedChallenge,
         expectedOrigin: this.expectedOrigins(),
         expectedRPID: this.rpId,
+        // Options request UV as 'preferred', so don't HARD-require it here — some
+        // password managers (Dashlane, etc.) register without performing UV. The
+        // passkey is a second factor (password already verified), so this is safe.
+        requireUserVerification: false,
       });
     } catch (e) {
       // Surface the real reason (origin / RP-ID mismatch, bad attestation) so a
@@ -221,6 +225,7 @@ export class WebAuthnService {
           counter: Number(cred.counter),
           transports: cred.transports as AuthenticatorTransportFuture[],
         },
+        requireUserVerification: false,
       });
     } catch (e) {
       const detail = (e as Error).message ?? 'unknown error';
