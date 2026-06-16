@@ -122,6 +122,24 @@ gateway token. A **`Payment`** is one collection attempt against an `Invoice`
 (`PENDING` → `SUCCEEDED`/`FAILED`, or `REFUNDED`) and a `failureReason`. A single
 invoice may accumulate several `Payment` rows across dunning retries.
 
+## Configuring gateways & keys (in-panel)
+
+Gateway credentials are **editable from the panel** (owner-only, `payments.manage`):
+**Admin → Payments → Configure gateways** sets the Stripe secret/webhook/publishable
+keys and PayPal client id/secret. They're stored via `SettingsService` in the
+`PlatformSetting` table, **encrypted at rest** (AES-256-GCM, `SECRETS_ENC_KEY`), and
+secrets are **write-only** (never returned to the browser — only a masked hint). The
+`StripeGateway` builds its client from the effective key (DB value, else the
+`STRIPE_*` env fallback), so you can configure live keys without a redeploy.
+
+The Stripe **webhook** (`POST /api/v1/billing/webhooks/stripe`) is signature-verified
+against the configured signing secret and settles invoices **idempotently** (deduped
+by invoice + gateway reference), handling `invoice.paid` / `invoice.payment_succeeded`,
+`checkout.session.completed`, `payment_intent.succeeded`, and the failure events.
+
+> Products and their per-interval **prices are editable** in **Admin → Products**
+> (create/edit/remove a `Price` per `BillingInterval`/currency).
+
 ## Gateway abstraction
 
 All processor-specific logic sits behind a single interface. The renewal engine,

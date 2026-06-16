@@ -188,7 +188,7 @@ under `/api/v1` auth — they validate the gateway signature instead.
 
 | Endpoint | Source | Purpose |
 |----------|--------|---------|
-| `POST /webhooks/stripe` | Stripe | `invoice.paid`, `payment_intent.*`, subscription lifecycle → updates `Invoice`/`Payment`/`Subscription` |
+| `POST /api/v1/billing/webhooks/stripe` | Stripe | Verified via the configured signing secret. Handles `invoice.paid` / `invoice.payment_succeeded`, `checkout.session.completed`, `payment_intent.succeeded`, and `invoice.payment_failed` / `charge.failed` → settles `Invoice`/`Payment`/`Subscription` **idempotently** (deduped by invoice + gateway ref) |
 | `POST /webhooks/paypal` | PayPal | Equivalent billing-agreement / payment events |
 
 Billing reconciliation and dunning are detailed in
@@ -275,6 +275,11 @@ role/scope; server-scoped routes additionally accept the `Server` owner or a
 | `POST` | `/servers/:id/schedules` | WRITE | Create cron `Schedule` + `ScheduleTask`s |
 | `GET`  | `/servers/:id/sub-users` | READ + owner | List `SubUser` grants |
 | `POST` | `/servers/:id/sub-users` | WRITE + owner | Grant scoped access |
+| `PATCH`| `/servers/:id/minecraft` | `startup.update` | Set loader (vanilla/paper/fabric/forge/neoforge) + version |
+| `GET`  | `/servers/:id/mods/search\|versions\|installed` | `files.read` | Modrinth mod/plugin browse (loader/version-aware) |
+| `POST` | `/servers/:id/mods/install` · `DELETE …/mods/:file` | `files.write` | Install / remove a mod jar |
+| `GET`  | `/servers/:id/modpacks/search\|versions` | `files.read` | Browse Modrinth **modpacks** + versions |
+| `POST` | `/servers/:id/modpacks/install` | `control.reinstall` | Queue a modpack install (auto loader/version switch, mods + config) |
 
 ### Nodes & infrastructure (admin)
 
@@ -313,8 +318,24 @@ role/scope; server-scoped routes additionally accept the `Server` owner or a
 | `POST` | `/tickets` | WRITE | Open a ticket |
 | `GET`  | `/tickets/:id` | READ + participant | Ticket thread |
 | `POST` | `/tickets/:id/messages` | WRITE + participant | Reply (`TicketMessage`; `isInternal` for staff) |
-| `PATCH`| `/tickets/:id` | SUPPORT | Update `TicketState`/`TicketPriority`/`assigneeId` |
+| `PATCH`| `/tickets/:id` | SUPPORT | Update `TicketState`/`TicketPriority`/`assigneeId`/`categoryId` |
+| `POST` | `/tickets/:id/assign` | SUPPORT | Assign to a staff member |
+| `GET`  | `/staff` | SUPPORT | Staff directory (assignee picker) |
+| `GET`/`POST`/`PATCH`/`DELETE` | `/categories[/:id]` | SUPPORT/ADMIN | Ticket categories (name/slug/SLA targets) |
+| `GET`/`POST`/`PATCH`/`DELETE` | `/canned-responses[/:id]` | SUPPORT | Canned responses |
 | `GET`  | `/kb/articles` | public | Published `KbArticle`s |
+
+### Admin (RBAC, catalog, billing, payments)
+
+| Method | Path | Permission | Description |
+|--------|------|-----------|-------------|
+| `GET`/`POST`/`PATCH`/`DELETE` | `/admin/roles[/:id]` | `roles.manage` | Custom roles; `GET /admin/roles/permissions` is the catalog |
+| `PATCH`| `/admin/users/:id/role` | `roles.manage` | Assign a role to a user |
+| `POST`/`PATCH`/`DELETE` | `/admin/products[/:id]` | `catalog.manage` | Manage products |
+| `POST` | `/admin/products/:id/prices` · `PATCH`/`DELETE` `/admin/prices/:id` | `catalog.manage` | Per-interval pricing |
+| `POST` | `/admin/invoices/:id/void` · `DELETE …` | `billing.manage` | Void / delete invoices |
+| `GET`  | `/admin/payments` | `payments.manage` | Raw payment ledger (owner) |
+| `GET`/`PATCH` | `/admin/payments/gateways/config` | `payments.manage` | View / set Stripe & PayPal keys (encrypted; secrets write-only) |
 
 ## Examples
 

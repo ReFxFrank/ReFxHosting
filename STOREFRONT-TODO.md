@@ -1,6 +1,6 @@
 # ReFx Public Storefront — status & next steps
 
-_Last updated: 2026-06-15. Working branch: `main`._
+_Last updated: 2026-06-16. Working branch: `main`._
 
 ## ✅ Done & pushed to `main`
 
@@ -45,7 +45,7 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
 ## 🧪 Testing / polish
 - [x] **Automated E2E** for the public API (`catalog.e2e-spec`): games list, game
       detail (404 when unpublished, allowed-plan filtering, safe-field whitelist),
-      homepage alerts. 45 e2e + 144 unit green.
+      homepage alerts. (Suite now 47 e2e + 144 unit green.)
 - [x] **Fixed** `?next` query preservation through login/register so the
       storefront → `/order?game=&plan=` preselection survives account creation.
 - [x] **Fixed** pre-existing e2e breakage (ServersService missing
@@ -64,17 +64,46 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
   post-purchase via Settings → Minecraft card (`PATCH /servers/:id/minecraft`). Old per-loader
   eggs hidden (kept for existing servers). Re-seed on the VPS to apply.
 
-## 🅿️ In progress — Modrinth mod browser
-- **Groundwork committed** (not yet wired): `signRequestRaw` + `NodeAgentClient.uploadFileBytes`
-  (stream jar bytes to the agent `/files/write`, no agent rebuild) and `ModrinthService`
-  (search/versions proxy).
-- **Remaining:** a `ModsService` + routes (`GET …/mods/search|versions`, `POST …/mods/install`,
-  `GET …/mods/installed`, `DELETE …/mods/:file`); wire into ServersModule; then a `Mods` tab in
-  the server UI (search → pick version → install → list/remove).
-- **Loader detection note:** now that Minecraft is unified, derive the loader from the server's
-  `LOADER` env var (fallback to template slug); target dir = `plugins/` for paper, else `mods/`.
+## ✅ Modrinth mods & modpacks (done)
+- **Mods/plugins:** `ModsService` + routes (`GET …/mods/search|versions|installed`,
+  `POST …/mods/install`, `DELETE …/mods/:file`) wired into ServersModule; **Mods** tab
+  in the server UI. Loader derived from the server's `LOADER` env var (fallback to
+  template slug); target dir `plugins/` for paper, else `mods/`.
+- **Modpacks:** `ModpackService` + `ModpackProcessor` (background `MODPACK` queue).
+  Install parses the `.mrpack`, derives the required MC version + loader (+loader
+  version) from `modrinth.index.json` dependencies, switches the server
+  (`ServersService.applyMinecraftEnv`), reinstalls (worlds preserved), clears stale
+  mods, then downloads every server-side mod + applies config overrides. **Modpacks**
+  server tab (search → pick version → background install + completion notification).
+  Routes: `GET …/modpacks/search|versions`, `POST …/modpacks/install`. Uses `fflate`
+  for zip parsing; Quilt packs not yet supported; per-file 30 MiB agent-upload cap.
+
+## ✅ Platform work shipped 2026-06-16
+- **Custom RBAC** — `Role` model + granular admin-permission catalog,
+  `AdminPermissionGuard`/`@RequirePerm`; owner-only **Roles & permissions** page
+  (built-in roles editable except Owner, which always keeps `*`). Admin surface is
+  permission-gated end-to-end; `support.*` permissions added.
+- **Admin Support** — full ticket queue (reply, internal notes, status/priority,
+  categorise, assign) + **categories (SLA) & canned-response** management.
+- **Billing** — editable **products + per-interval pricing**; owner-only
+  **payment-gateway/key editor** (encrypted at rest); Stripe **webhooks** wired
+  (`invoice.paid`, `checkout.session.completed`, `payment_intent.succeeded`,
+  idempotent); invoice void/delete.
+- **Accounts** — contact/billing **address fields**; user **delete** frees the
+  email (tombstone); soft-deleted accounts no longer resurrected on deploy
+  (`seedOwner` bootstraps only when no owner exists; demo content behind `SEED_DEMO`).
+- **Ops/UX** — separate customer vs admin areas; **forced dark theme** (light mode
+  was unstyled); reverse-proxy hardening (`BIND_HOST` loopback binding +
+  `TRUST_PROXY`); **self-healing migrations** (db-push fallback) + `AuthController`
+  guard fix (the `/auth/me` 500 that blanked the panel); idle-session timeout.
+
+## ⏭️ Possible next steps
+- Stream/agent-side fetch for modpack files >30 MiB (lift the panel upload cap).
+- Quilt loader support for modpacks.
+- Hard-purge option for accounts with no billing history (today: soft-delete).
 
 ## Notes
 - Existing dashboard/admin/billing/server/node functionality is untouched.
 - If the homepage looks empty after deploy, the eggs likely aren't published — re-run the
-  `migrate` service (re-seed) or publish via the API/Phase-4 UI.
+  `migrate` service (re-seed) or publish via the admin UI. On an already-initialised box,
+  set `SEED_DEMO=true` to re-seed demo content.

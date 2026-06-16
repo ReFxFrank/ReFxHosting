@@ -56,10 +56,23 @@ unique; never commit `.env`.
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | Signing keys for access/refresh JWTs ([08 — Security](08-security.md)). |
 | `ENCRYPTION_KEY` | Master/KMS key for AES-256-GCM encryption of `*Enc` columns (TOTP seeds, SFTP/db passwords). |
 | `PANEL_URL` / `API_URL` | Public URLs for links, CSRF origin, and agent callbacks. |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe gateway ([07 — Billing](07-billing.md)). |
-| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` | PayPal gateway. |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe gateway env fallback ([07 — Billing](07-billing.md)). Keys are also editable in-panel (encrypted) and the DB value takes precedence. |
+| `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET` | PayPal gateway env fallback (also editable in-panel). |
+| `NEXT_PUBLIC_API_URL` | **Baked into the web bundle at build time.** Must be the URL the browser uses for the API, with a **matching scheme** (an `https` site can't call an `http` API). Behind SSL: `https://api.example.com`. |
+| `CORS_ORIGINS` | Comma-separated browser origins allowed to call the API (e.g. `https://example.com,https://www.example.com`). |
+| `BIND_HOST` | Host interface published container ports bind to. Default `127.0.0.1` keeps Postgres/Redis/MinIO/web/api **off the public internet** behind a reverse proxy. |
+| `TRUST_PROXY` | Hops of reverse proxy to trust for `X-Forwarded-For` (default `1`) so per-IP rate limiting / audit logs see the real client IP. |
+| `SEED_DEMO` | Demo content (sample regions/products/templates) seeds on a first run only; set `true` to force, leave blank so deleted data isn't resurrected. |
 | `SMTP_*` | Outbound email (verification, invoices, notifications). |
 | `NODE_AGENT_TLS_CA` | CA used to verify agent certificates (node trust model, [08 — Security](08-security.md)). |
+
+> **Single-host with a reverse proxy (Caddy/nginx):** keep `BIND_HOST=127.0.0.1`,
+> set `TRUST_PROXY=1`, point the proxy at `127.0.0.1:3000` (web) and
+> `127.0.0.1:4000` (api, e.g. `api.example.com`), set `CORS_ORIGINS` to your site
+> origins, and `NEXT_PUBLIC_API_URL=https://api.example.com` (then rebuild `web`).
+> Always run compose with `--env-file .env` so it uses your secrets, not the
+> built-in dev defaults — including the Postgres password the data volume was
+> initialised with.
 
 ### Create the first admin
 

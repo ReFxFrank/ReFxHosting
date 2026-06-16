@@ -32,12 +32,12 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 | 🔁 **Game switching** | Stop → pick a new game → reinstall → play. Same server, same billing. |
 | 🧩 **Docker _and_ native hosting** | One `Runtime` interface; games that hate containers run as resource-limited native processes (cgroups v2 / Windows Job Objects). |
 | 🖥️ **True multi-OS** | A single Go binary runs on Ubuntu, Debian, AlmaLinux, Rocky **and** Windows Server 2022/2025. |
-| 💳 **Billing built in** | Products, subscriptions, invoices, VAT/GST/US tax, Stripe + PayPal, auto-renewal & dunning. |
-| 🛟 **Helpdesk built in** | Tickets, internal notes, canned responses, SLA tracking, knowledge base. |
-| 🔐 **Enterprise auth** | Argon2id, TOTP + WebAuthn, RBAC + per-server sub-user permissions, scoped API keys, audit logs. |
+| 💳 **Billing built in** | Products, subscriptions, invoices, VAT/GST/US tax, Stripe + PayPal, auto-renewal & dunning. **Edit products _and_ per-interval pricing** from the panel; **owner-only payment-gateway/key editor** (keys encrypted at rest); Stripe **webhooks wired** (`invoice.paid`, `checkout.session.completed`, `payment_intent.succeeded`, idempotent). |
+| 🛟 **Helpdesk built in** | A full **admin ticket queue** — reply, internal notes, set status/priority, categorise, assign — plus manageable **categories (SLA targets)** and **canned responses**, and a knowledge base. |
+| 🔐 **Enterprise auth + custom RBAC** | Argon2id, TOTP + WebAuthn, scoped API keys, audit logs. **Build your own roles**: an owner-only Roles page with a granular admin-permission catalog; the whole admin surface is permission-gated end-to-end (customers never see it). Per-server sub-user permissions too. |
 | 🧱 **Eggs, evolved** | JSON-driven game templates — admins add new games with **zero code changes**. |
 | ⛏️ **One Minecraft, every loader** | Buy **Minecraft once**, then pick **Vanilla / Paper / Fabric / Forge / NeoForge** and the **exact version** any time from a dedicated **Minecraft** tab — the server keeps its identity. **Automatic JVM selection** per version means no `UnsupportedClassVersionError` boot crashes. |
-| 🧩 **Mod & plugin browser** | Built-in **Modrinth** search with **one-click install** of mods/plugins (loader- and version-aware) straight into the server — no manual jar uploads. |
+| 🧩 **Mods _and_ modpacks** | Built-in **Modrinth** browser: **one-click install** of individual mods/plugins (loader/version-aware), **and a full modpack installer** that downloads a `.mrpack`, **auto-switches the server to the pack's Minecraft version + loader**, then provisions every mod and config. |
 | 🔒 **Rootless game containers** | Game servers run as a non-root user (`uid 1000`), so you don't get the "running as root" warning and a compromised server can't run as root on the node. |
 | 🔌 **Auto networking** | Every new server reserves a free port and wires it into the game's startup automatically; players connect at the **IP:port** shown right on the server page (one-click copy). |
 | 🛠️ **Admin power tools** | Create servers straight from an egg (no SSH), manage & delete nodes, **start/stop/restart individual servers from the node view**, pick a node's **region from a dropdown**, and watch **live node CPU / RAM / disk / ping graphs** from heartbeats. |
@@ -46,10 +46,10 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 | 📦 **Migrate in** | Importers for **Pterodactyl** (live), AMP & TCAdmin (scaffolded). |
 
 > [!NOTE]
-> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**144 unit + 45 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
+> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**144 unit + 47 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
 
 > [!TIP]
-> **Recently shipped:** unified **one-Minecraft** product with a post-purchase loader/version tab · built-in **Modrinth** mod & plugin browser · **rootless** game containers · in-browser **file manager** + live **SFTP** credential rotation · **per-server power controls** in the admin node view · **region dropdown** for node creation · console that **persists across navigations & refreshes** · sessions that **stay signed in across panel rebuilds** · per-game storefront artwork and node-derived server locations.
+> **Recently shipped:** **Modrinth modpack installer** (auto loader/version switch) · **custom RBAC** roles + permission-gated admin · **admin Support ticket queue** + categories & canned responses · **editable products & per-interval pricing** · **owner-only payment-gateway/key editor** + Stripe webhook wiring · separate **customer vs admin** areas · **reverse-proxy hardening** (loopback port binding + trust-proxy) · contact/billing **address fields** + idle-session timeout · self-healing migrations · unified **one-Minecraft** product with post-purchase loader/version tab · built-in **Modrinth** mod & plugin browser · **rootless** game containers · in-browser **file manager** + live **SFTP** credential rotation · **per-server power controls** in the admin node view · console that **persists across navigations & refreshes** · sessions that **stay signed in across panel rebuilds**.
 
 ---
 
@@ -173,17 +173,18 @@ Each is a JSON template in [`database/seed/templates/`](database/seed/templates)
 ## 🧩 Components & key functions
 
 ### 🧠 panel-api — [`apps/panel-api`](apps/panel-api)
-NestJS central panel. **Compiles clean & boots; 144 unit + 45 e2e tests green.**
+NestJS central panel. **Compiles clean & boots; 144 unit + 47 e2e tests green.**
 
 | Area | Where | Notable functions / endpoints |
 |------|-------|-------------------------------|
 | Auth & MFA | `src/auth` | `register` / `login` (Argon2id), JWT access+refresh with **rotation + reuse detection**, `totpEnroll`/`totpVerify`, WebAuthn ceremonies, scoped + IP-allowlisted API keys |
 | AuthZ | `src/auth/guards` | `RolesGuard` (global roles), `PermissionGuard` (per-server `SubUser` perms, owner/admin override, wildcard `files.*`) |
-| Servers | `src/servers` | `POST /servers` (queues provisioning), power `start/stop/restart/kill`, `reinstall`, **`switchGame()`**, **`setMinecraftConfig()`** (loader + version), **Modrinth mod search/install**, `resize()` (capacity-checked), variables/allocations/sub-users/schedules |
+| Servers | `src/servers` | `POST /servers` (queues provisioning), power `start/stop/restart/kill`, `reinstall`, **`switchGame()`**, **`setMinecraftConfig()`** (loader + version), **Modrinth mod search/install**, **modpack installer** (`ModpackProcessor` — `.mrpack` → loader/version switch + mods/config), `resize()` (capacity-checked), variables/allocations/sub-users/schedules |
 | Agent link | `src/agent` | `NodeAgentClient` (HMAC-signed calls), `ConsoleGateway` (browser ↔ agent WebSocket relay) |
-| Billing | `src/billing` | `calculateTax()` (VAT/GST/US), invoice numbering, `StripeGateway`/`PayPalGateway`, renewal + dunning workers |
-| Support | `src/support` | tickets, internal notes, canned responses, SLA breach computation, KB |
-| Platform | `src/platform` | audit query, notifications, global alerts, `/health`, Prometheus `/metrics` |
+| Billing | `src/billing` | `calculateTax()` (VAT/GST/US), invoice numbering, **editable products + per-interval prices**, `StripeGateway`/`PayPalGateway` with **DB-backed encrypted keys** (`SettingsService`), **Stripe webhook** (idempotent invoice/checkout/payment events), renewal + dunning workers |
+| Support | `src/support` | **admin ticket queue** (reply/notes/status/priority/assign), **categories (SLA) + canned responses CRUD**, SLA breach computation, KB |
+| AuthZ (custom RBAC) | `src/admin`, `src/common/permissions.ts` | `Role` model + granular admin-permission catalog, `AdminPermissionGuard` + `@RequirePerm`, owner-only Roles management |
+| Platform | `src/platform` | audit query, notifications, global alerts, encrypted settings store, `/health`, Prometheus `/metrics` |
 
 ```http
 POST /api/v1/servers/{id}/switch-game
@@ -198,13 +199,14 @@ Next.js 14 customer + admin panel. **Builds, typechecks & lints clean.**
 
 - **Live console** — `xterm.js` wired to the panel WebSocket (`lib/ws.ts`), with power controls and live CPU/RAM/disk gauges (Recharts). A shared console hub keeps the socket + scrollback **alive across tab switches and full page refreshes** (`lib/console-hub.ts`).
 - **Minecraft tab** — for Minecraft servers, pick the loader (Vanilla/Paper/Fabric/Forge/NeoForge) and exact version; switch any time.
-- **Mods tab** — Modrinth search with one-click install/remove of mods & plugins (loader/version-aware).
+- **Mods & Modpacks tabs** — Modrinth search with one-click install/remove of mods & plugins (loader/version-aware), plus a **modpack installer** that picks a `.mrpack` version and switches the server's MC version + loader for you (runs in the background with a completion notification).
 - **File manager** — browse, edit, upload, compress/extract, permissions; now surfaces agent errors instead of silently showing an empty folder.
 - **Switch-game flow** — choose from the plan-allowed catalog with an explicit keep-vs-wipe data decision.
 - **Resource upgrade** — CPU/RAM/disk sliders with live price preview.
-- **Admin** — create servers from an egg, manage nodes (region **dropdown** on create), and **start/stop/restart individual servers** from a node's detail view.
-- Sessions **stay signed in across panel rebuilds** (transient-tolerant token refresh + optional "keep me signed in").
-- Plus dashboard, backups, databases, schedules, billing, support, account/security, a full admin area, and a GPortal-style **storefront** with per-game artwork and node-derived server locations.
+- **Separate customer & admin areas** — distinct layouts/nav; the entire `/admin` surface is **permission-gated** (server-enforced), so customers never see staff tooling.
+- **Admin power tools** — create servers from an egg; manage nodes (region **dropdown** on create) with **per-server power controls**; **Products** with an inline **price editor**; an **owner-only Payments** page with a gateway/key editor; **Orders/Invoices** (void/delete); a **Support** ticket queue + categories/canned responses; a **Roles & permissions** builder; **Customers/Users** with full account view + delete.
+- Sessions **stay signed in across panel rebuilds** (transient-tolerant token refresh + optional "keep me signed in"); an **idle-session timeout** prompts before logging out.
+- Plus dashboard, backups, databases, schedules, billing, account/security, and a GPortal-style **storefront** with per-game artwork and node-derived server locations.
 
 ### ⚙️ node-agent — [`apps/node-agent`](apps/node-agent)
 Original Go daemon. **Cross-compiles to linux/amd64, linux/arm64, windows/amd64; vet + tests pass.**
@@ -384,13 +386,23 @@ S3_ACCESS_KEY=...           S3_SECRET_KEY=...
 
 # IMPORTANT: baked into the web bundle at BUILD time, not runtime.
 # Set this to the URL browsers use to reach panel-api before building web.
-NEXT_PUBLIC_API_URL=https://panel.example.com:4000
+# Its scheme MUST match the site's: an https:// page cannot call an http:// API.
+NEXT_PUBLIC_API_URL=https://api.example.com
+
+# Reverse-proxy hardening (recommended in production)
+BIND_HOST=127.0.0.1          # publish container ports on loopback only; the proxy fronts them
+TRUST_PROXY=1                # derive client IP from X-Forwarded-For (rate-limit/audit accuracy)
+CORS_ORIGINS=https://example.com,https://www.example.com
+PANEL_URL=https://example.com
 
 # Optional: SMTP (email), STRIPE_*/PAYPAL_* (live billing)
+# Demo content (sample regions/products/templates) only seeds on a first run;
+# set SEED_DEMO=true to force it, or leave blank so deleted data isn't resurrected.
 ```
 
 > ⚠️ `NEXT_PUBLIC_API_URL` is **compiled into the web image**. If you change it you
-> must **rebuild** `web`, not just restart it.
+> must **rebuild** `web`, not just restart it. Behind SSL it must be **https** and
+> point at the API host the browser uses (e.g. `https://api.example.com`).
 
 ### Step 2 — build, migrate, seed, run
 
@@ -409,13 +421,23 @@ built-in dev defaults.
 
 ### Step 3 — put it behind TLS
 
-Run a reverse proxy (Caddy / nginx / Traefik) terminating HTTPS and routing:
+Run a reverse proxy (Caddy / nginx / Traefik) terminating HTTPS and routing to
+the **loopback-bound** ports (`BIND_HOST=127.0.0.1`):
 
 | Public host | → | Upstream |
 |-------------|---|----------|
-| `panel.example.com` | → | `web:3000` |
-| `panel.example.com:4000` (or `/api`) | → | `panel-api:4000` |
+| `example.com`, `www.example.com` | → | `127.0.0.1:3000` (web) |
+| `api.example.com` | → | `127.0.0.1:4000` (panel-api) |
 
+A minimal **Caddyfile**:
+
+```caddy
+example.com, www.example.com { reverse_proxy 127.0.0.1:3000 }
+api.example.com              { reverse_proxy 127.0.0.1:4000 }
+```
+
+Set `CORS_ORIGINS` to the web origins and `NEXT_PUBLIC_API_URL=https://api.example.com`
+(rebuild `web` after). Caddy auto-upgrades the console WebSocket — no extra config.
 Then browse to your domain and sign in as the seeded owner. `/health` and
 `/metrics` are served at the **root** (not under `/api/v1`).
 
@@ -694,7 +716,7 @@ refxhosting/
 
 ```bash
 cd apps/panel-api && npm test          # 144 unit tests
-cd apps/panel-api && npm run test:e2e  # 45 HTTP integration tests
+cd apps/panel-api && npm run test:e2e  # 47 HTTP integration tests
 cd apps/node-agent && go test ./...    # agent unit tests
 npx prisma validate --schema database/prisma/schema.prisma
 ```
