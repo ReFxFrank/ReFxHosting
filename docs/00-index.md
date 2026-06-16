@@ -36,7 +36,8 @@ consistent with the canonical data model in
 ### Domain subsystems
 - [07 — Billing Architecture](07-billing.md) — product/price/subscription/invoice/payment model, gateway abstraction, dunning, tax, suspension lifecycle.
 - [08 — Security Architecture](08-security.md) — authN/authZ, encryption, API security, OWASP, audit trails, node trust model.
-- [10 — Game Templates ("Eggs")](10-game-templates.md) — template JSON schema, variables, install scripts, config rendering, game switching, Minecraft/Rust walkthroughs.
+- [10 — Game Templates ("Eggs")](10-game-templates.md) — template JSON schema, variables, install scripts, config rendering, game switching, auto-loading new eggs, Minecraft/Rust walkthroughs.
+- [Egg backlog](egg-backlog.md) — shipped game eggs and the requested games still to add (with the blocker for each) + an "add an egg" checklist.
 
 ### Platform & operations
 - [09 — Infrastructure & Scaling](09-infrastructure.md) — horizontal scaling, HA, queues, observability, Compose vs Kubernetes, multi-DC, backup/DR.

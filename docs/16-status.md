@@ -17,13 +17,13 @@ Legend:
 > typechecks; the node-agent builds/vets/tests on linux/amd64, linux/arm64,
 > windows/amd64; `apps/web` builds, typechecks, and lints; and `apps/panel-api`
 > compiles with 0 type errors, boots (all modules init, all REST routes map, the
-> code-first GraphQL schema generates), and passes **144 unit + 47 e2e tests**.
+> code-first GraphQL schema generates), and passes **150 unit + 47 e2e tests**.
 
 ## Components
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `database` (Prisma schema) | **Done** | Full canonical schema across all domains; validates. **Committed migration chain** (`0_init` → auth-hardening, storefront, node port-range, user contact/address, RBAC roles, platform settings). Seed script + 11 game templates; demo content is gated behind `SEED_DEMO` (first-run only) so deleted data isn't resurrected. |
+| `database` (Prisma schema) | **Done** | Full canonical schema across all domains; validates. **Committed migration chain** (`0_init` → auth-hardening, storefront, node port-range, user contact/address, RBAC roles, platform settings). Seed script + ~24 game templates that **auto-load create-only on every deploy** (new eggs appear without `SEED_DEMO`); other demo content is gated behind `SEED_DEMO` (first-run only) so deleted data isn't resurrected. |
 | `packages/shared` | **Done** | Enums mirroring the schema, panel↔agent WS protocol, per-server permission strings + `hasPermission`, common DTOs. Typechecks clean. (Apps still carry local copies pending migration onto it.) |
 | `panel-api` (NestJS) | **Done (foundation)** | 118 TS files across auth, users, servers, nodes, billing, support, platform, agent, queues, common, prisma. Compiles clean and boots. |
 | `node-agent` (Go) | **Done (foundation)** | 43 Go files. `Runtime` interface with real Docker + native-process backends, build-tagged limits, WS hub, signed control API, file jail, backups, SFTP, stats. Cross-compiles + tests pass. |
@@ -48,9 +48,9 @@ Legend:
 | Resource resize | **Done** | Node-capacity check + agent reconfigure. |
 | Nodes (register/heartbeat/capacity/tokens, per-node port range) | **Done** | Agent registration + bootstrap-token endpoints; configurable allocation port range. |
 | Agent client + console WS gateway | **Partial** | HMAC-signed HTTP client + browser↔agent relay; `TODO(impl)`: mTLS pinning. |
-| Billing (products/prices/subs/invoices/payments, tax) | **Done** | **Editable products + per-interval prices**; **owner-only gateway/key editor** (`SettingsService`, AES-256-GCM, env fallback); Stripe + PayPal gateways; **Stripe webhook handles invoice.paid / invoice.payment_succeeded / checkout.session.completed / payment_intent.succeeded, idempotently**; VAT/GST/US tax engine. Deep SDK flows marked `TODO(impl)`. |
+| Billing (products/prices/subs/invoices/payments, tax) | **Done** | **Editable + deletable products + per-interval prices**; **GPortal-style per-slot order page**; **weekly → annual** terms; **owner-only gateway/key editor** (`SettingsService`, AES-256-GCM, env fallback); Stripe + PayPal gateways; **Stripe _and_ PayPal verified webhooks** (capture/refund, idempotent); **coupons** (%/fixed, caps, expiry), **gift cards**, and per-user **account/store credit** — stackable, gateway charges only the remainder; free/fully-covered invoices settle without a gateway round-trip; VAT/GST/US tax engine. Deep SDK flows marked `TODO(impl)`. |
 | Queues (provisioning/reinstall/backup/renewal/suspension/modpack) | **Done** | BullMQ processors call agent/billing; cron triggers `TODO(impl)`. |
-| Support (admin queue/notes/canned/SLA/KB) | **Done** | Admin ticket queue (reply, status/priority, categorise, assign, internal notes); **category (SLA) + canned-response CRUD**; SLA breach computation; `support.*` permissions. |
+| Support (admin queue/notes/canned/SLA/KB) | **Done** | Admin ticket queue (reply, status/priority, categorise, assign, internal notes); **ticket archive (storage) + permanent delete**; **category (SLA) + canned-response CRUD**; SLA breach computation; `support.*` permissions. |
 | Platform (audit query, notifications, alerts, health, metrics) | **Done** | Prometheus `/metrics`, `/health`. |
 | REST + GraphQL + Swagger | **Done** | REST primary; code-first GraphQL mirrors key reads; Swagger at `/docs`. |
 
@@ -99,6 +99,6 @@ beyond a single build session, and are called out so expectations are clear:
 - **OpenSearch indexing, migration importers** (Pterodactyl/AMP/TCAdmin) —
   designed (docs 11) with `TODO(impl)` stubs. (Transactional email delivery for
   password reset / verification is implemented via nodemailer/SMTP.)
-- **Test coverage** — 144 unit + 47 e2e (panel-api) and security-critical agent
+- **Test coverage** — 150 unit + 47 e2e (panel-api) and security-critical agent
   paths are covered; broader coverage (esp. the modpack installer and web E2E) is
   still growing.

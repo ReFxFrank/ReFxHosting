@@ -136,9 +136,45 @@ The Stripe **webhook** (`POST /api/v1/billing/webhooks/stripe`) is signature-ver
 against the configured signing secret and settles invoices **idempotently** (deduped
 by invoice + gateway reference), handling `invoice.paid` / `invoice.payment_succeeded`,
 `checkout.session.completed`, `payment_intent.succeeded`, and the failure events.
+The **PayPal** webhook (`POST /api/v1/billing/webhooks/paypal`) is verified via PayPal's
+`verify-webhook-signature` API against the configured webhook id and handles
+`PAYMENT.CAPTURE.COMPLETED/DENIED/REFUNDED/REVERSED`; the approval→capture flow is
+also completed synchronously on return from the PayPal approval page.
 
 > Products and their per-interval **prices are editable** in **Admin → Products**
-> (create/edit/remove a `Price` per `BillingInterval`/currency).
+> (create/edit/remove a `Price` per `BillingInterval`/currency), and a product with
+> no subscriptions can be **permanently deleted** (its prices cascade); products
+> with subscriptions are deactivated instead to preserve billing history.
+
+## Order page, per-slot products & terms
+
+The storefront order page is **GPortal-style**: the customer picks a game, drags a
+**slot slider**, sets per-game configuration, and chooses a location from nodes with
+live capacity. Per-slot products (`Product.perSlot`, bound to a `gameTemplateId`)
+bill `Price.amountMinor` (the per-slot, per-interval rate) **× `Subscription.slots`**;
+provisioned resources are the per-slot CPU/RAM/disk × slots. Billing terms span
+**weekly, biweekly, monthly, quarterly, semi-annual and annual** (`BillingInterval`);
+weekly/biweekly are billed proportionally and renew by exact days, monthly+ by
+calendar month. The seeded pricing model and formulas are documented in the
+[README → Storefront pricing](../README.md#-storefront-pricing-seeded-per-slot-defaults).
+
+## Discounts, gift cards & account credit
+
+Three stackable, panel-managed credit mechanisms reduce what the gateway charges —
+the gateway only ever collects the **remaining balance**, and a fully-covered (or
+$0 / 100%-off) invoice is settled **without** a gateway round-trip:
+
+| Mechanism | Model | Admin | Checkout |
+|-----------|-------|-------|----------|
+| **Coupons** | `Coupon` (`PERCENT`/`FIXED`, `minSubtotalMinor`, `maxRedemptions`, `maxPerUser`, `startsAt`/`expiresAt`) + `CouponRedemption` | Admin → Coupons (CRUD) | Validated up front; discount reduces the taxable subtotal and is recorded on the `Invoice` (`discountMinor`, `couponCode`). |
+| **Gift cards** | `GiftCard` stored-value codes + `GiftCardTransaction` ledger | Admin → Gift cards (issue, toggle) | Redeemed against the invoice total, drawing the card balance down. |
+| **Account / store credit** | `User.creditBalanceMinor` + `CreditTransaction` ledger (`ADMIN_GRANT`, `REFUND`, `GIFT_CARD`, `INVOICE_PAYMENT`, `ADJUSTMENT`) | Admin → user detail: grant / deduct (e.g. refund-to-credit) | Opt-in "use account credit" toggle; draws the balance down before the gateway charges the rest. |
+
+Order of application at checkout: **gift card → account credit → coupon-discounted
+total → gateway** for the remainder. Each draw-down bumps `Invoice.amountPaidMinor`,
+so the Stripe/PayPal charge (or hosted checkout `unit_amount`) is always
+`max(0, totalMinor − amountPaidMinor)`. Customers see their balance + ledger at
+`GET /billing/credit`.
 
 ## Gateway abstraction
 

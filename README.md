@@ -32,10 +32,10 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 | 🔁 **Game switching** | Stop → pick a new game → reinstall → play. Same server, same billing. |
 | 🧩 **Docker _and_ native hosting** | One `Runtime` interface; games that hate containers run as resource-limited native processes (cgroups v2 / Windows Job Objects). |
 | 🖥️ **True multi-OS** | A single Go binary runs on Ubuntu, Debian, AlmaLinux, Rocky **and** Windows Server 2022/2025. |
-| 💳 **Billing built in** | Products, subscriptions, invoices, VAT/GST/US tax, Stripe + PayPal (both with **verified webhooks** + capture), auto-renewal & dunning. **Edit products _and_ per-interval pricing** from the panel; **owner-only gateway/key editor** (encrypted at rest). **Coupons** (% or fixed, min-order, usage caps, expiry) and **gift cards** (stored-value codes) redeemable at checkout. |
-| 🛟 **Helpdesk built in** | A full **admin ticket queue** — reply, internal notes, set status/priority, categorise, assign — plus manageable **categories (SLA targets)** and **canned responses**, and a knowledge base. |
-| 🔐 **Enterprise auth + custom RBAC** | Argon2id, TOTP + WebAuthn, scoped API keys, audit logs. **Build your own roles**: an owner-only Roles page with a granular admin-permission catalog; the whole admin surface is permission-gated end-to-end (customers never see it). Per-server sub-user permissions too. |
-| 🧱 **Eggs, evolved** | JSON-driven game templates — admins add new games with **zero code changes**. |
+| 💳 **Billing built in** | Products, subscriptions, invoices, VAT/GST/US tax, Stripe + PayPal (both with **verified webhooks** + capture), auto-renewal & dunning. A **GPortal-style per-slot order page** (slot slider, per-game config, live location capacity, **weekly → annual** terms). **Edit products _and_ per-interval pricing** from the panel; **delete** unused products; **owner-only gateway/key editor** (encrypted at rest). **Coupons** (% or fixed, min-order, usage caps, expiry), **gift cards** (stored-value codes) and **account/store credit** (admin grant / refund-to-credit) — all stackable at checkout, charging only the remaining balance. |
+| 🛟 **Helpdesk built in** | A full **admin ticket queue** — reply, internal notes, set status/priority, categorise, assign — plus manageable **categories (SLA targets)** and **canned responses**, and a knowledge base. Past tickets can be **archived (stored away)** or **permanently deleted**. |
+| 🔐 **Enterprise auth + custom RBAC** | Argon2id, TOTP + WebAuthn, scoped API keys, audit logs. **Build your own roles**: an owner-only Roles page with a granular admin-permission catalog; the whole admin surface is permission-gated end-to-end (customers never see it). Per-server sub-user permissions too. A customer's servers stay **private to them + their sub-users** — staff don't see them in the client area and reach them only via the admin panel (gated on `servers.manage`); a **Customers** view lists accounts with active, paid services. |
+| 🧱 **Eggs, evolved** | JSON-driven game templates — admins add new games with **zero code changes**: drop a JSON file in `database/seed/templates/` and it **auto-loads on the next deploy** (create-only), each game automatically getting a purchasable per-slot package. |
 | ⛏️ **One Minecraft, every loader** | Buy **Minecraft once**, then pick **Vanilla / Paper / Fabric / Forge / NeoForge** and the **exact version** any time from a dedicated **Minecraft** tab — the server keeps its identity. **Automatic JVM selection** per version means no `UnsupportedClassVersionError` boot crashes. |
 | 🧩 **Mods _and_ modpacks** | Built-in **Modrinth** browser: **one-click install** of individual mods/plugins (loader/version-aware), **and a full modpack installer** that downloads a `.mrpack`, **auto-switches the server to the pack's Minecraft version + loader**, then provisions every mod and config. |
 | 🔒 **Rootless game containers** | Game servers run as a non-root user (`uid 1000`), so you don't get the "running as root" warning and a compromised server can't run as root on the node. |
@@ -46,10 +46,10 @@ Most panels lock a server to one game. **ReFx treats the server as a durable, bi
 | 📦 **Migrate in** | Importers for **Pterodactyl** (live), AMP & TCAdmin (scaffolded). |
 
 > [!NOTE]
-> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**144 unit + 47 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
+> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**150 unit + 47 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
 
 > [!TIP]
-> **Recently shipped:** **Modrinth modpack installer** (auto loader/version switch) · **custom RBAC** roles + permission-gated admin · **admin Support ticket queue** + categories & canned responses · **editable products & per-interval pricing** · **owner-only payment-gateway/key editor** + Stripe webhook wiring · separate **customer vs admin** areas · **reverse-proxy hardening** (loopback port binding + trust-proxy) · contact/billing **address fields** + idle-session timeout · self-healing migrations · unified **one-Minecraft** product with post-purchase loader/version tab · built-in **Modrinth** mod & plugin browser · **rootless** game containers · in-browser **file manager** + live **SFTP** credential rotation · **per-server power controls** in the admin node view · console that **persists across navigations & refreshes** · sessions that **stay signed in across panel rebuilds**.
+> **Recently shipped:** **GPortal-style per-slot order page** (slot slider, per-game config, live location capacity) · **coupons + gift cards + account/store credit** (stackable at checkout) · **Stripe _and_ PayPal verified webhooks + capture** (free/100%-off orders settle without a gateway round-trip) · **weekly & biweekly** billing terms · **product deletion** (not just deactivate) · **paying-customers view** · **staff support access** to customer servers via the admin panel (client area stays private) · **ticket archive (storage) + delete** · **SMTP/Resend email** with clear test-send diagnostics · **15+ new game eggs** that **auto-load on deploy** (Arma 3/Reforger, Squad, 7 Days to Die, Garry's Mod, TF2, Mordhau, Killing Floor 2, V Rising, Enshrouded, Conan Exiles, Astroneer, Unturned, ATS, tModLoader) · **Modrinth modpack installer** (auto loader/version switch) · **custom RBAC** roles + permission-gated admin · **admin Support ticket queue** + categories & canned responses · **editable products & per-interval pricing** · **owner-only payment-gateway/key editor** · separate **customer vs admin** areas · **reverse-proxy hardening** · contact/billing **address fields** + idle-session timeout · self-healing migrations · unified **one-Minecraft** product with post-purchase loader/version tab · built-in **Modrinth** mod & plugin browser · **rootless** game containers · in-browser **file manager** + live **SFTP** credential rotation · console that **persists across navigations & refreshes**.
 
 ---
 
@@ -149,9 +149,13 @@ The orchestration lives in [`apps/panel-api/src/servers/`](apps/panel-api/src/se
 |---|---|---|---|
 | ⛏️ **Minecraft** _(Vanilla · Paper · Fabric · Forge · NeoForge)_ | 🔫 Rust | 🦖 ARK: Survival Evolved | 🧟 DayZ |
 | 🪓 Valheim | 🐾 Palworld | 💥 Counter-Strike 2 | 🚗 FiveM (GTA V) |
-| 🏭 Satisfactory | 🌳 Terraria | 🧠 Project Zomboid | _+ add your own_ |
+| 🏭 Satisfactory | 🌳 Terraria _(+ tModLoader)_ | 🧠 Project Zomboid | 🌅 7 Days to Die |
+| 🪖 Arma 3 | 🪖 Arma Reforger | 🎖️ Squad | 🔧 Garry's Mod |
+| 🎩 Team Fortress 2 | ⚔️ Mordhau | 🧟‍♂️ Killing Floor 2 | 🧛 V Rising |
+| 🌫️ Enshrouded | 🗡️ Conan Exiles | 🚀 Astroneer | 🪂 Unturned |
+| 🚚 American Truck Simulator | | | _+ add your own_ |
 
-Each is a JSON template in [`database/seed/templates/`](database/seed/templates) — no code required to add a game. See **[docs/10-game-templates.md](docs/10-game-templates.md)**.
+Each is a JSON template in [`database/seed/templates/`](database/seed/templates) — no code required to add a game; drop a file and it auto-loads on the next deploy. See **[docs/10-game-templates.md](docs/10-game-templates.md)** and the requested-games backlog in **[docs/egg-backlog.md](docs/egg-backlog.md)**.
 
 > **Minecraft, unified:** there's now a **single Minecraft product**. After buying, open the server's **Minecraft** tab to choose the loader — **Vanilla, Paper, Fabric, Forge or NeoForge** — and the **exact version** (resolved live from each project's API; Mojang's manifest for Vanilla), switching between them whenever you like without losing the server. The panel **auto-picks the right `eclipse-temurin` JVM** for the chosen version (Java 11 → 25), so newer releases boot without manual image fiddling, and loader builds can be pinned or left as `latest`/`recommended` (auto-resolved at install). On modded/plugin loaders, the **Mods** tab adds Modrinth search + one-click install.
 
@@ -202,7 +206,7 @@ _Example — a game with **8 GB** recommended RAM → **1 GB/slot** → **$1.50/
 ## 🧩 Components & key functions
 
 ### 🧠 panel-api — [`apps/panel-api`](apps/panel-api)
-NestJS central panel. **Compiles clean & boots; 144 unit + 47 e2e tests green.**
+NestJS central panel. **Compiles clean & boots; 150 unit + 47 e2e tests green.**
 
 | Area | Where | Notable functions / endpoints |
 |------|-------|-------------------------------|
@@ -744,7 +748,7 @@ refxhosting/
 ## 🧪 Testing
 
 ```bash
-cd apps/panel-api && npm test          # 144 unit tests
+cd apps/panel-api && npm test          # 150 unit tests
 cd apps/panel-api && npm run test:e2e  # 47 HTTP integration tests
 cd apps/node-agent && go test ./...    # agent unit tests
 npx prisma validate --schema database/prisma/schema.prisma

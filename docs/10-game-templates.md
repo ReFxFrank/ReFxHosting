@@ -406,6 +406,36 @@ Mechanics:
 4. On start, the agent watches stdout for `Server startup complete` to mark
    `RUNNING`; `quit` is the graceful `stopCommand`.
 
+## Seeding & auto-loading eggs
+
+Eggs ship as JSON files in
+[`database/seed/templates/`](../database/seed/templates). The seed runner
+(`database/seed/seed.ts`, executed by the one-shot `migrate` service on every
+deploy) imports them in two modes:
+
+- **First run / `SEED_DEMO=true`** — full upsert of all templates (and the rest
+  of the demo content: regions, categories, sample products).
+- **Every other deploy** — `seedTemplates(..., { createOnly: true })` runs
+  automatically: **brand-new egg slugs are imported**, while existing templates
+  are left completely untouched (admin tuning, publish state, custom art and
+  variables are preserved). No `SEED_DEMO` flag is needed to add a game.
+
+Immediately afterward, `seedPerSlotProducts()` ensures every present template has
+a purchasable **per-slot `Product`** (`gs-<slug>`) with per-interval pricing —
+also create-only, so it never clobbers admin-tuned prices or reactivates a
+product you deactivated. So the workflow to add a game is simply: **drop a JSON
+file → redeploy**; it appears in the catalog with a buyable plan.
+
+> A hard-deleted egg whose JSON still exists will be re-created on the next
+> deploy; remove the `<slug>.json` file to retire it for good. Requested games
+> not yet shipped are tracked in [`egg-backlog.md`](egg-backlog.md).
+
+Bundled eggs include Minecraft (all loaders), Rust, ARK, DayZ, Valheim,
+Palworld, CS2, FiveM, Satisfactory, Terraria (+ tModLoader), Project Zomboid,
+7 Days to Die, Arma 3, Arma Reforger, Squad, Garry's Mod, Team Fortress 2,
+Mordhau, Killing Floor 2, V Rising, Enshrouded, Conan Exiles, Astroneer,
+Unturned and American Truck Simulator.
+
 ## Cross-references
 
 - [02 — Database Schema](02-database.md#3-game-templates-eggs) — `GameTemplate`,

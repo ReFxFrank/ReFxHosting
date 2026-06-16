@@ -106,11 +106,20 @@ identity.
 
 A server owner can grant collaborators scoped access via `SubUser`, whose
 `permissions` is a **string array** of fine-grained capabilities, e.g.
-`console.command`, `files.read`, `backup.create`. The guard chain resolves the
-caller's effective permissions for a target `Server` from (a) ownership, (b)
-`globalRole`, or (c) an `ACTIVE` `SubUser` grant, and checks the action's
-required permission string before proceeding. `SubUserState = REVOKED` instantly
-removes access.
+`console.command`, `files.read`, `backup.create`. The `PermissionGuard` resolves
+the caller's effective access to a target `Server` from (a) ownership, (b) an
+`ACTIVE` `SubUser` grant holding the required permission, or (c) a **staff
+support override** gated on the admin `servers.manage` capability (ADMIN/OWNER by
+default). `SubUserState = REVOKED` instantly removes access.
+
+> **Client area vs admin support.** Global role alone does **not** grant
+> client-area access to a customer's server — the override is the explicit
+> `servers.manage` admin permission, so read-only staff (`servers.read`) cannot
+> operate customer servers. A customer's servers also never appear in a staff
+> member's own client dashboard/list (`ServersService.list` and the dashboard
+> summary are scoped to owner + sub-user); staff reach them via the **admin
+> Servers list** ("Manage" → the standard server screens). See
+> [`CLAUDE.md`](../CLAUDE.md) → AuthZ.
 
 ### API keys
 
