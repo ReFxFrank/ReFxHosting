@@ -50,6 +50,8 @@ export default function AdminInvoicesPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<AdminInvoice | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const canManage = useAuthStore((s) => s.hasPermission("billing.manage"));
 
   const { data, isLoading } = useQuery({
@@ -58,8 +60,21 @@ export default function AdminInvoicesPage() {
   });
   const invoices = data?.data ?? [];
 
-  const invalidate = () =>
+  const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["admin", "invoices"] });
+    setSelected(new Set());
+  };
+
+  const allSelected = invoices.length > 0 && selected.size === invoices.length;
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(invoices.map((i) => i.id)));
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
 
   const voidMutation = useMutation({
     mutationFn: (id: string) => api.admin.voidInvoice(id),
@@ -89,6 +104,24 @@ export default function AdminInvoicesPage() {
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to delete invoice"),
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: string[]) => api.admin.bulkDeleteInvoices(ids),
+    onSuccess: (res) => {
+      setBulkConfirmOpen(false);
+      if (res.deleted.length) {
+        toast.success(
+          `Deleted ${res.deleted.length} invoice${res.deleted.length === 1 ? "" : "s"}`,
+        );
+      }
+      if (res.skipped.length) {
+        toast.error(`${res.skipped.length} skipped — ${res.skipped[0].reason}`);
+      }
+      invalidate();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to delete invoices"),
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -96,14 +129,24 @@ export default function AdminInvoicesPage() {
         description="Every invoice issued across the platform and its payment status."
       />
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by number or customer…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search by number or customer…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        {canManage && selected.size > 0 && (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground">{selected.size} selected</span>
+            <Button variant="destructive" size="sm" onClick={() => setBulkConfirmOpen(true)}>
+              <Trash2 className="size-4" /> Delete selected
+            </Button>
+          </div>
+        )}
       </div>
 
       {isLoading ? (
@@ -114,6 +157,17 @@ export default function AdminInvoicesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {canManage && (
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all"
+                        className="size-4 accent-[hsl(var(--primary))]"
+                        checked={allSelected}
+                        onChange={toggleAll}
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Invoice</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Status</TableHead>
@@ -125,7 +179,18 @@ export default function AdminInvoicesPage() {
               </TableHeader>
               <TableBody>
                 {invoices.map((inv) => (
-                  <TableRow key={inv.id}>
+                  <TableRow key={inv.id} data-state={selected.has(inv.id) ? "selected" : undefined}>
+                    {canManage && (
+                      <TableCell>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select invoice ${inv.number}`}
+                          className="size-4 accent-[hsl(var(--primary))]"
+                          checked={selected.has(inv.id)}
+                          onChange={() => toggle(inv.id)}
+                        />
+                      </TableCell>
+                    )}
                     <TableCell className="font-mono text-xs font-medium">{inv.number}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {inv.user?.email ?? "—"}
@@ -204,6 +269,32 @@ export default function AdminInvoicesPage() {
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
             >
               Delete invoice
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              Delete {selected.size} invoice{selected.size === 1 ? "" : "s"}?
+            </DialogTitle>
+            <DialogDescription>
+              This permanently removes the selected invoices and their line
+              items/payments. To keep history, use Void instead. This can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBulkConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={bulkDeleteMutation.isPending}
+              onClick={() => bulkDeleteMutation.mutate(Array.from(selected))}
+            >
+              Delete selected
             </Button>
           </DialogFooter>
         </DialogContent>

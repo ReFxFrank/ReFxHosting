@@ -864,6 +864,26 @@ export class BillingService {
     await this.prisma.invoice.delete({ where: { id } });
   }
 
+  /**
+   * Bulk-delete invoices. Each is attempted independently so one failure doesn't
+   * abort the batch; the result reports which were removed and which were skipped.
+   */
+  async deleteInvoices(
+    ids: string[],
+  ): Promise<{ deleted: string[]; skipped: { id: string; reason: string }[] }> {
+    const deleted: string[] = [];
+    const skipped: { id: string; reason: string }[] = [];
+    for (const id of ids) {
+      try {
+        await this.deleteInvoice(id);
+        deleted.push(id);
+      } catch (e) {
+        skipped.push({ id, reason: (e as Error).message });
+      }
+    }
+    return { deleted, skipped };
+  }
+
   /** Whether each payment gateway is configured (no secrets returned). Reads the
    *  effective config (owner-edited DB settings → env fallback). */
   async gatewayStatus(): Promise<{

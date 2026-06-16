@@ -784,6 +784,11 @@ export const api = {
     markInvoicePaid: (id: string) =>
       http.post<AdminInvoice>(`/admin/invoices/${id}/mark-paid`),
     deleteInvoice: (id: string) => http.delete<void>(`/admin/invoices/${id}`),
+    bulkDeleteInvoices: (ids: string[]) =>
+      http.post<{ deleted: string[]; skipped: { id: string; reason: string }[] }>(
+        "/admin/invoices/bulk-delete",
+        { ids },
+      ),
     payments: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminPayment>>("/admin/payments", { query }),
     paymentGateways: () => http.get<GatewayStatus>("/admin/payments/gateways"),

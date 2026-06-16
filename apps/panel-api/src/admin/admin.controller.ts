@@ -448,6 +448,15 @@ export class AdminController {
     return this.billing.listAllInvoices(pagination, state as InvoiceState | undefined);
   }
 
+  /** Bulk-delete invoices (must precede `invoices/:id` routes). */
+  @Post('invoices/bulk-delete')
+  @RequirePerm('billing.manage')
+  @HttpCode(200)
+  @Audit({ action: 'admin.invoice.bulk-delete', targetType: 'Invoice' })
+  bulkDeleteInvoices(@Body() dto: BulkIdsDto) {
+    return this.billing.deleteInvoices(dto.ids);
+  }
+
   @Post('invoices/:id/void')
   @RequirePerm('billing.manage')
   @Audit({ action: 'admin.invoice.void', targetType: 'Invoice', targetParam: 'id' })
