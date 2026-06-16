@@ -1487,6 +1487,89 @@ export class BillingService {
   }
 
   /**
+   * Email a proactive "your subscription renews on …" reminder for subscriptions
+   * whose period ends within `withinDays`, once per period. Claims each
+   * atomically (guarded update of `renewalReminderSentAt`) before sending, so
+   * concurrent schedulers don't double-send. Returns the count sent.
+   */
+  async sendRenewalReminders(withinDays = 3): Promise<number> {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + withinDays * 86_400_000);
+    const subs = await this.prisma.subscription.findMany({
+      where: {
+        autoRenew: true,
+        cancelAtPeriodEnd: false,
+        state: { in: [SubscriptionState.ACTIVE, SubscriptionState.TRIALING] },
+        currentPeriodEnd: { gt: now, lte: cutoff },
+      },
+      include: { user: true, product: true },
+    });
+
+    let sent = 0;
+    for (const sub of subs) {
+      // Claim the reminder for THIS period (not yet reminded since it started).
+      const claimed = await this.prisma.subscription.updateMany({
+        where: {
+          id: sub.id,
+          OR: [
+            { renewalReminderSentAt: null },
+            { renewalReminderSentAt: { lt: sub.currentPeriodStart } },
+          ],
+        },
+        data: { renewalReminderSentAt: new Date() },
+      });
+      if (claimed.count === 0) continue; // another run already sent it
+      if (!sub.user?.email) continue;
+
+      const price = await this.prisma.price.findUnique({
+        where: { id: sub.priceId },
+        select: { amountMinor: true, currency: true },
+      });
+      const quantity = sub.product.perSlot && sub.slots > 0 ? sub.slots : 1;
+      const hasPaymentMethod =
+        (await this.prisma.paymentMethod.count({
+          where: { userId: sub.userId, isDefault: true },
+        })) > 0;
+
+      await this.email.sendRenewalReminder(
+        { email: sub.user.email, firstName: sub.user.firstName },
+        {
+          productName: sub.product.name,
+          amountMinor: (price?.amountMinor ?? 0) * quantity,
+          currency: price?.currency ?? this.billingCfg.defaultCurrency,
+          renewsAt: sub.currentPeriodEnd,
+          hasPaymentMethod,
+        },
+      );
+      sent += 1;
+    }
+    return sent;
+  }
+
+  /** Email owners of default cards expiring this calendar month. */
+  async sendCardExpiryReminders(): Promise<number> {
+    const now = new Date();
+    const cards = await this.prisma.paymentMethod.findMany({
+      where: {
+        isDefault: true,
+        expYear: now.getUTCFullYear(),
+        expMonth: now.getUTCMonth() + 1,
+      },
+      include: { user: true },
+    });
+    let sent = 0;
+    for (const c of cards) {
+      if (!c.user?.email || !c.expMonth || !c.expYear) continue;
+      await this.email.sendCardExpiring(
+        { email: c.user.email, firstName: c.user.firstName },
+        { brand: c.brand, last4: c.last4, expMonth: c.expMonth, expYear: c.expYear },
+      );
+      sent += 1;
+    }
+    return sent;
+  }
+
+  /**
    * Past-due subscriptions to retry (dunning). Auto-renewing, not scheduled to
    * cancel, still PAST_DUE — each has an unpaid OPEN invoice the renew path
    * reuses (it never creates a second invoice for the same period).
@@ -1559,6 +1642,7 @@ export class BillingService {
           state: SubscriptionState.ACTIVE,
           currentPeriodStart: sub.currentPeriodEnd,
           currentPeriodEnd: addInterval(sub.currentPeriodEnd, sub.interval),
+          renewalReminderSentAt: null, // remind again next period
         },
       });
       return { invoiceId: invoice.id, paid: true };

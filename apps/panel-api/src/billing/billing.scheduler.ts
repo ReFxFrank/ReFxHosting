@@ -41,6 +41,22 @@ export class BillingScheduler {
     await this.enqueueDunning();
   }
 
+  /** Daily: proactive "your subscription renews soon" reminders. */
+  @Cron(CronExpression.EVERY_DAY_AT_9AM)
+  async renewalReminders(): Promise<void> {
+    if (!this.enabled) return;
+    const n = await this.billing.sendRenewalReminders();
+    if (n) this.logger.log(`Sent ${n} renewal reminder(s).`);
+  }
+
+  /** Monthly: warn owners whose default card expires this month. */
+  @Cron('0 9 1 * *')
+  async cardExpiryReminders(): Promise<void> {
+    if (!this.enabled) return;
+    const n = await this.billing.sendCardExpiryReminders();
+    if (n) this.logger.log(`Sent ${n} card-expiry reminder(s).`);
+  }
+
   /** Enqueue a renewal for each subscription whose period has ended. */
   async enqueueRenewals(): Promise<number> {
     const ids = await this.billing.findDueSubscriptions();

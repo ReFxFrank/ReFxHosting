@@ -228,6 +228,61 @@ export class EmailService {
     });
   }
 
+  /** Proactive reminder that a subscription is about to renew. */
+  async sendRenewalReminder(
+    user: MailRecipient,
+    sub: {
+      productName: string;
+      amountMinor: number;
+      currency: string;
+      renewsAt: Date;
+      hasPaymentMethod: boolean;
+    },
+  ): Promise<void> {
+    const amount = this.money(sub.amountMinor, sub.currency);
+    const date = sub.renewsAt.toISOString().slice(0, 10);
+    const greeting = user.firstName ? `Hi ${user.firstName},` : 'Hello,';
+    const action = sub.hasPaymentMethod
+      ? `We'll automatically charge your saved payment method on that date.`
+      : `You don't have a saved payment method — please add one so your service isn't interrupted.`;
+    await this.sendGeneric({
+      to: user.email,
+      subject: `Your ${sub.productName} renews on ${date}`,
+      text:
+        `${greeting}\n\n` +
+        `Your ${sub.productName} subscription renews on ${date} for ${amount}. ${action}\n\n` +
+        `Manage your subscription or payment methods: ${this.panelUrl}/billing`,
+      html:
+        `<p>${greeting}</p>` +
+        `<p>Your <strong>${sub.productName}</strong> subscription renews on <strong>${date}</strong> ` +
+        `for <strong>${amount}</strong>. ${action}</p>` +
+        `<p><a href="${this.panelUrl}/billing">Manage billing</a></p>`,
+    });
+  }
+
+  /** Warn that a saved card is expiring so renewals don't fail. */
+  async sendCardExpiring(
+    user: MailRecipient,
+    card: { brand: string | null; last4: string | null; expMonth: number; expYear: number },
+  ): Promise<void> {
+    const greeting = user.firstName ? `Hi ${user.firstName},` : 'Hello,';
+    const label = `${card.brand ?? 'card'} ending ${card.last4 ?? '••••'}`;
+    const exp = `${String(card.expMonth).padStart(2, '0')}/${card.expYear}`;
+    await this.sendGeneric({
+      to: user.email,
+      subject: 'Your saved card is expiring soon',
+      text:
+        `${greeting}\n\n` +
+        `Your ${label} expires ${exp}. Add an up-to-date card so your automatic ` +
+        `renewals keep working:\n\n${this.panelUrl}/billing`,
+      html:
+        `<p>${greeting}</p>` +
+        `<p>Your <strong>${label}</strong> expires <strong>${exp}</strong>. Add an up-to-date ` +
+        `card so your automatic renewals keep working.</p>` +
+        `<p><a href="${this.panelUrl}/billing">Update payment method</a></p>`,
+    });
+  }
+
   /** Format integer minor units as a currency string (e.g. 1999 USD → "19.99 USD"). */
   private money(amountMinor: number, currency: string): string {
     return `${(amountMinor / 100).toFixed(2)} ${currency.toUpperCase()}`;

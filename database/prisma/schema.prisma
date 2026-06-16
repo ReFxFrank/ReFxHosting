@@ -747,6 +747,9 @@ model Subscription {
   currentPeriodEnd   DateTime
   cancelAtPeriodEnd  Boolean        @default(false)
   autoRenew       Boolean           @default(true)
+  // Set when the upcoming-renewal reminder was emailed for the CURRENT period;
+  // cleared when the period rolls so the next period reminds again.
+  renewalReminderSentAt DateTime?
 
   // Processor linkage
   gateway         String            // "stripe" | "paypal"
