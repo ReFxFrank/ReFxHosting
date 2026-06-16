@@ -168,11 +168,21 @@ export class ServerResourcesService {
     });
   }
 
-  createSchedule(serverId: string, dto: CreateScheduleDto) {
+  /** The server owner's IANA timezone (drives cron interpretation). */
+  private async ownerTimezone(serverId: string): Promise<string> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: { owner: { select: { timezone: true } } },
+    });
+    return server?.owner?.timezone || 'UTC';
+  }
+
+  async createSchedule(serverId: string, dto: CreateScheduleDto) {
     if (!isValidCron(dto.cron)) {
       throw new BadRequestException('Invalid cron expression');
     }
     const isActive = dto.isActive ?? true;
+    const tz = await this.ownerTimezone(serverId);
     return this.prisma.schedule.create({
       data: {
         id: uuidv7(),
@@ -181,8 +191,9 @@ export class ServerResourcesService {
         cron: dto.cron,
         onlyWhenOnline: dto.onlyWhenOnline ?? false,
         isActive,
-        // Only schedule a next run when active; computed from the cron (UTC).
-        nextRunAt: isActive ? nextCronRun(dto.cron) : null,
+        // Only schedule a next run when active; cron is interpreted in the
+        // owner's timezone (so "4am" means 4am for them).
+        nextRunAt: isActive ? nextCronRun(dto.cron, new Date(), tz) : null,
         tasks: {
           create: (dto.tasks ?? []).map((t, i) => ({
             id: uuidv7(),
@@ -212,9 +223,11 @@ export class ServerResourcesService {
     }
     const cron = dto.cron ?? existing.cron;
     const isActive = dto.isActive ?? existing.isActive;
+    const tz = await this.ownerTimezone(serverId);
     const data: Prisma.ScheduleUpdateInput = {
-      // Recompute the next run whenever cron / active state could have changed.
-      nextRunAt: isActive ? nextCronRun(cron) : null,
+      // Recompute the next run whenever cron / active state could have changed,
+      // in the owner's timezone.
+      nextRunAt: isActive ? nextCronRun(cron, new Date(), tz) : null,
     };
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.cron !== undefined) data.cron = dto.cron;

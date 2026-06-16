@@ -43,14 +43,16 @@ export class ScheduleRunner {
       where: { isActive: true, nextRunAt: { not: null, lte: now } },
       include: {
         tasks: { orderBy: { sortOrder: 'asc' } },
-        server: { include: { node: true } },
+        server: { include: { node: true, owner: { select: { timezone: true } } } },
       },
     });
     for (const schedule of due) {
-      // Atomically claim: only the instance that flips THIS nextRunAt forward runs.
+      // Atomically claim: only the instance that flips THIS nextRunAt forward
+      // runs it. The next occurrence is computed in the owner's timezone.
+      const tz = schedule.server.owner?.timezone || 'UTC';
       const claimed = await this.prisma.schedule.updateMany({
         where: { id: schedule.id, nextRunAt: schedule.nextRunAt },
-        data: { nextRunAt: nextCronRun(schedule.cron, now), lastRunAt: now },
+        data: { nextRunAt: nextCronRun(schedule.cron, now, tz), lastRunAt: now },
       });
       if (claimed.count === 0) continue;
       if (schedule.onlyWhenOnline && schedule.server.state !== 'RUNNING') continue;
