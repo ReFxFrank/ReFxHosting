@@ -386,6 +386,13 @@ model GameTemplate {
   recMemoryMb     Int            @default(1024)
   recDiskMb       Int            @default(5120)
 
+  // Steam Workshop: when true, servers on this template expose a Workshop tab to
+  // manage Workshop items/collections. `workshopAppId` is the Steam app whose
+  // Workshop to use (often == steamAppId; some games publish under a different
+  // app). Applied via the egg's startup/install variables (WORKSHOP_*).
+  supportsWorkshop Boolean       @default(false)
+  workshopAppId    Int?
+
   // ---- Public storefront metadata ----------------------------------------
   // Opt-in: a template is hidden from the public storefront until an admin
   // publishes it (it always remains visible/usable in the admin panel).
@@ -500,6 +507,7 @@ model Server {
   schedules       Schedule[]
   subUsers        SubUser[]
   variables       ServerVariable[]
+  workshopMods    WorkshopMod[]
   gameHistory     GameSwitchLog[]
   stats           ServerStat[]
 
@@ -510,6 +518,30 @@ model Server {
   @@index([ownerId])
   @@index([nodeId])
   @@index([state])
+}
+
+enum WorkshopKind {
+  ITEM
+  COLLECTION
+}
+
+/// A Steam Workshop item or collection attached to a server. Applied to the
+/// running server via the egg's WORKSHOP_* startup/install variables (collection
+/// id for runtime-collection games like Garry's Mod; the item list for
+/// steamcmd-download games like Arma 3).
+model WorkshopMod {
+  id         String       @id @db.Uuid
+  serverId   String       @db.Uuid
+  server     Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  workshopId String       // numeric Steam published-file id
+  name       String?
+  kind       WorkshopKind @default(ITEM)
+  enabled    Boolean      @default(true)
+  sortOrder  Int          @default(0)
+  createdAt  DateTime     @default(now())
+
+  @@unique([serverId, workshopId])
+  @@index([serverId])
 }
 
 // Per-server override of a template variable's value.

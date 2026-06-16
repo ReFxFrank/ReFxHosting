@@ -29,10 +29,13 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
   const loader = server?.environment?.LOADER;
   const isMinecraft = slug === "minecraft" || slug.startsWith("minecraft-");
   const supportsMods = isMinecraft && loader !== "vanilla";
-  // Minecraft + Mods tabs are Minecraft-only (Mods also excludes Vanilla).
+  const supportsWorkshop = !!server?.template?.supportsWorkshop;
+  // Minecraft/Mods/Modpacks tabs are Minecraft-only; Workshop is Steam-only.
   const tabs = serverTabs(id).filter((t) => {
     if (t.href.endsWith("/minecraft")) return isMinecraft;
     if (t.href.endsWith("/mods")) return supportsMods;
+    if (t.href.endsWith("/modpacks")) return isMinecraft;
+    if (t.href.endsWith("/workshop")) return supportsWorkshop;
     return true;
   });
 

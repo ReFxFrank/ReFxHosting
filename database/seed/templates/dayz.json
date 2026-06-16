@@ -14,6 +14,8 @@
     "Default": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "steamAppId": 223350,
+  "supportsWorkshop": true,
+  "workshopAppId": 221100,
   "startupCommand": "./DayZServer -config=serverDZ.cfg -port={{SERVER_PORT}} -profiles=profiles -dologs -adminlog -netlog -freezecheck {{MODS}}",
   "startupDetect": "Server is now listening",
   "stopCommand": "^C",

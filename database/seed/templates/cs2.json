@@ -15,6 +15,8 @@
     "ReFx SteamCMD": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "steamAppId": 730,
+  "supportsWorkshop": true,
+  "workshopAppId": 730,
   "startupCommand": "./game/bin/linuxsteamrt64/cs2 -dedicated -port {{SERVER_PORT}} +map {{MAP}} +game_type {{GAME_TYPE}} +game_mode {{GAME_MODE}} +sv_setsteamaccount {{STEAM_ACC}} -maxplayers_override {{MAX_PLAYERS}} +rcon_password \"{{RCON_PASS}}\"",
   "startupDetect": "Connection to Steam servers successful|GC Connection established",
   "stopCommand": "quit",

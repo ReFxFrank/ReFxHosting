@@ -16,6 +16,7 @@ import { ServerResourcesService } from './server-resources.service';
 import { ScheduleRunner } from './schedule.runner';
 import { ModsService } from './mods.service';
 import { ModpackService } from './modpack.service';
+import { WorkshopService } from './workshop.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
@@ -39,6 +40,9 @@ import {
   SwitchGameDto,
   UpdateStartupDto,
   UpgradeServerDto,
+  AddWorkshopDto,
+  ToggleWorkshopDto,
+  ReorderWorkshopDto,
 } from './dto/server.dto';
 
 @ApiTags('servers')
@@ -51,6 +55,7 @@ export class ServersController {
     private readonly resources: ServerResourcesService,
     private readonly mods: ModsService,
     private readonly modpacks: ModpackService,
+    private readonly workshop: WorkshopService,
     private readonly scheduleRunner: ScheduleRunner,
   ) {}
 
@@ -233,6 +238,51 @@ export class ServersController {
   @Audit({ action: 'server.modpack.install', targetType: 'Server', targetParam: 'id' })
   modpacksInstall(@Param('id') id: string, @Body() dto: ModpackInstallDto) {
     return this.modpacks.install(id, dto.versionId);
+  }
+
+  // ---- Steam Workshop ----------------------------------------------------
+
+  @Get(':id/workshop')
+  @RequirePermissions('files.read')
+  workshopList(@Param('id') id: string) {
+    return this.workshop.list(id);
+  }
+
+  @Post(':id/workshop')
+  @RequirePermissions('files.write')
+  @Audit({ action: 'server.workshop.add', targetType: 'Server', targetParam: 'id' })
+  workshopAdd(@Param('id') id: string, @Body() dto: AddWorkshopDto) {
+    return this.workshop.add(id, dto.input);
+  }
+
+  @Patch(':id/workshop/reorder')
+  @RequirePermissions('files.write')
+  workshopReorder(@Param('id') id: string, @Body() dto: ReorderWorkshopDto) {
+    return this.workshop.reorder(id, dto.ids);
+  }
+
+  @Patch(':id/workshop/:modId')
+  @RequirePermissions('files.write')
+  workshopToggle(
+    @Param('id') id: string,
+    @Param('modId') modId: string,
+    @Body() dto: ToggleWorkshopDto,
+  ) {
+    return this.workshop.toggle(id, modId, dto.enabled);
+  }
+
+  @Delete(':id/workshop/:modId')
+  @RequirePermissions('files.write')
+  @Audit({ action: 'server.workshop.remove', targetType: 'Server', targetParam: 'id' })
+  workshopRemove(@Param('id') id: string, @Param('modId') modId: string) {
+    return this.workshop.remove(id, modId);
+  }
+
+  @Post(':id/workshop/apply')
+  @RequirePermissions('control.reinstall')
+  @Audit({ action: 'server.workshop.apply', targetType: 'Server', targetParam: 'id' })
+  workshopApply(@Param('id') id: string) {
+    return this.workshop.apply(id);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

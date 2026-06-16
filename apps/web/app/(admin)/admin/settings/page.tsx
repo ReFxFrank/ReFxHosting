@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send } from "lucide-react";
+import { Mail, Send, Boxes } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, ListSkeleton } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -20,7 +20,110 @@ export default function AdminSettingsPage() {
         description="Platform-wide configuration for the panel."
       />
       <EmailSettingsCard />
+      <SteamSettingsCard />
     </div>
+  );
+}
+
+function SteamSettingsCard() {
+  const queryClient = useQueryClient();
+  const { data: cfg, isLoading } = useQuery({
+    queryKey: ["admin", "steam-config"],
+    queryFn: () => api.admin.steamConfig(),
+  });
+
+  const [username, setUsername] = useState<string | null>(null);
+  const [password, setPassword] = useState("");
+  const [apiKey, setApiKey] = useState("");
+
+  const usernameV = username ?? cfg?.username ?? "";
+
+  const save = useMutation({
+    mutationFn: () => {
+      const input: Record<string, unknown> = { username: usernameV };
+      if (password) input.password = password;
+      if (apiKey) input.apiKey = apiKey;
+      return api.admin.setSteamConfig(input);
+    },
+    onSuccess: () => {
+      toast.success("Steam settings saved");
+      setPassword("");
+      setApiKey("");
+      queryClient.invalidateQueries({ queryKey: ["admin", "steam-config"] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to save"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Boxes className="size-4" /> Steam / Workshop
+        </CardTitle>
+        <CardDescription>
+          A central Steam login lets nodes download Workshop content that requires an
+          account (e.g. Arma 3). Anonymous still works for many free items. Secrets are
+          encrypted at rest and never returned.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <ListSkeleton rows={3} />
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <Badge variant={cfg?.loginConfigured ? "success" : "secondary"}>
+                {cfg?.loginConfigured ? "Login configured" : "No login (anonymous)"}
+              </Badge>
+              <Badge variant={cfg?.apiKeySet ? "success" : "secondary"}>
+                {cfg?.apiKeySet ? "API key set" : "No API key"}
+              </Badge>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Steam username</Label>
+                <Input
+                  autoComplete="off"
+                  value={usernameV}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="steam-account"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Steam password {cfg?.passwordSet && <span className="text-xs text-muted-foreground">(set — leave blank to keep)</span>}</Label>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Steam Web API key {cfg?.apiKeySet && <span className="text-xs text-muted-foreground">(set — leave blank to keep)</span>}</Label>
+              <Input
+                type="password"
+                autoComplete="off"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="optional — improves Workshop name/collection lookups"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Note: the account must <strong>own the game</strong> to download most of its
+              paid/Workshop content, and accounts with Steam Guard may need an exemption or
+              an app password for unattended steamcmd use.
+            </p>
+            <div className="flex justify-end">
+              <Button loading={save.isPending} onClick={() => save.mutate()}>
+                Save Steam settings
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

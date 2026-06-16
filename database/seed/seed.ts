@@ -110,6 +110,8 @@ interface TemplateFile {
   recCpuCores?: number;
   recMemoryMb?: number;
   recDiskMb?: number;
+  supportsWorkshop?: boolean;
+  workshopAppId?: number | null;
   variables?: TemplateVariableFile[];
 }
 
@@ -623,6 +625,8 @@ async function seedTemplates(
       recCpuCores: tpl.recCpuCores ?? 1,
       recMemoryMb: tpl.recMemoryMb ?? 1024,
       recDiskMb: tpl.recDiskMb ?? 5120,
+      supportsWorkshop: tpl.supportsWorkshop ?? false,
+      workshopAppId: tpl.workshopAppId ?? null,
     };
 
     // Public storefront defaults. Seeded (first-party) templates are published

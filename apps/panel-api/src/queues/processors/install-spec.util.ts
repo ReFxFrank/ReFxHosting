@@ -17,7 +17,14 @@ type ServerWithRelations = Prisma.ServerGetPayload<{
 
 export function buildInstallSpec(
   server: ServerWithRelations,
-  opts: { wipe?: boolean; sftpPassword?: string } = {},
+  opts: {
+    wipe?: boolean;
+    sftpPassword?: string;
+    /** Central Steam login, injected for Workshop-enabled templates so the egg's
+     *  steamcmd install can authenticate (anonymous can't fetch many Workshop
+     *  items). Never set for non-Workshop games. */
+    steam?: { username: string; password: string };
+  } = {},
 ): InstallSpec {
   const template = server.template!;
 
@@ -31,6 +38,18 @@ export function buildInstallSpec(
   }
   for (const ov of server.variables) {
     env[ov.envName] = ov.value;
+  }
+
+  // Steam Workshop appid + central login for Workshop-enabled games (the egg's
+  // install script reads these to run `steamcmd +login … +workshop_download_item`).
+  if (template.supportsWorkshop) {
+    if (template.workshopAppId != null) {
+      env.WORKSHOP_APP_ID = String(template.workshopAppId);
+    }
+    if (opts.steam?.username && opts.steam.password) {
+      env.STEAM_USERNAME = opts.steam.username;
+      env.STEAM_PASSWORD = opts.steam.password;
+    }
   }
 
   return {

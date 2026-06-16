@@ -80,6 +80,7 @@ import {
   GrantCreditDto,
   SetEmailConfigDto,
   SetGatewayConfigDto,
+  SetSteamConfigDto,
   SetUserRoleDto,
   TestEmailDto,
   UpdateAlertDto,
@@ -536,6 +537,21 @@ export class AdminController {
   @Audit({ action: 'admin.email.test', targetType: 'PlatformSetting' })
   sendTestEmail(@Body() dto: TestEmailDto) {
     return this.email.sendTest(dto.to);
+  }
+
+  // ---- Steam (central SteamCMD login + Web API key) ----------------------
+
+  @Get('settings/steam')
+  @RequirePerm('settings.manage')
+  steamConfig() {
+    return this.settings.steamConfigMasked();
+  }
+
+  @Patch('settings/steam')
+  @RequirePerm('settings.manage')
+  @Audit({ action: 'admin.steam.update', targetType: 'PlatformSetting' })
+  setSteamConfig(@Body() dto: SetSteamConfigDto) {
+    return this.settings.setSteamConfig(dto);
   }
 
   // ---- Products ----------------------------------------------------------

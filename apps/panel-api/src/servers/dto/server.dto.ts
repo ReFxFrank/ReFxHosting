@@ -286,3 +286,22 @@ export class AddSubUserDto {
   @ApiProperty({ type: [String] })
   permissions!: string[];
 }
+
+export class AddWorkshopDto {
+  @ApiProperty({ description: 'Workshop item/collection ID or Steam Workshop URL.' })
+  @IsString()
+  input!: string;
+}
+
+export class ToggleWorkshopDto {
+  @ApiProperty()
+  @IsBoolean()
+  enabled!: boolean;
+}
+
+export class ReorderWorkshopDto {
+  @ApiProperty({ type: [String], description: 'WorkshopMod ids in display order.' })
+  @IsArray()
+  @IsString({ each: true })
+  ids!: string[];
+}

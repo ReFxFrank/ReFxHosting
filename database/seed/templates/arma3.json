@@ -11,13 +11,15 @@
     "Default": "ghcr.io/parkervcp/steamcmd:debian"
   },
   "steamAppId": 233780,
+  "supportsWorkshop": true,
+  "workshopAppId": 107410,
   "startupCommand": "./arma3server_x64 -port={{SERVER_PORT}} -config=server.cfg -cfg=basic.cfg -name=refx -mod={{MODS}}",
   "startupDetect": "Host identity created",
   "stopCommand": "^C",
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 233780 validate +quit\necho 'Arma 3 install complete.'\n"
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 233780 validate +quit\n# Steam Workshop mods (managed in the panel → WORKSHOP_ITEMS). Best-effort:\n# failures never abort the base install. Requires a central Steam login that\n# OWNS Arma 3 for most Workshop items (anonymous can't fetch them).\nWS_APP=\"${WORKSHOP_APP_ID:-107410}\"\nif [ -n \"${WORKSHOP_ITEMS:-}\" ]; then\n  if [ -n \"${STEAM_USERNAME:-}\" ] && [ -n \"${STEAM_PASSWORD:-}\" ]; then\n    for id in $WORKSHOP_ITEMS; do\n      echo \"[workshop] downloading $id\"\n      steamcmd +force_install_dir /mnt/server +login \"$STEAM_USERNAME\" \"$STEAM_PASSWORD\" +workshop_download_item \"$WS_APP\" \"$id\" validate +quit || echo \"[workshop] $id failed\"\n      src=\"/mnt/server/steamapps/workshop/content/$WS_APP/$id\"\n      [ -d \"$src\" ] && ln -sfn \"$src\" \"/mnt/server/@ws_$id\" || true\n    done\n  else\n    echo \"[workshop] WORKSHOP_ITEMS set but no central Steam login configured — skipping (set it in Admin → Settings → Steam).\"\n  fi\nfi\necho 'Arma 3 install complete.'\n"
   },
   "configFiles": [
     { "path": "server.cfg", "parser": "file", "find": {} }

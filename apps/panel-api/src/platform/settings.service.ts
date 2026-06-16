@@ -20,6 +20,9 @@ const KEY = {
   smtpPassword: 'email.smtp.password',
   smtpFrom: 'email.smtp.from',
   smtpSecure: 'email.smtp.secure',
+  steamApiKey: 'steam.apiKey',
+  steamUsername: 'steam.username',
+  steamPassword: 'steam.password',
 } as const;
 
 export interface GatewayConfigInput {
@@ -50,6 +53,18 @@ export interface EffectiveEmailConfig {
   password: string;
   from: string;
   secure: boolean;
+}
+
+export interface SteamConfigInput {
+  apiKey?: string;
+  username?: string;
+  password?: string;
+}
+
+export interface EffectiveSteamConfig {
+  apiKey: string;
+  username: string;
+  password: string;
 }
 
 /**
@@ -222,5 +237,41 @@ export class SettingsService {
       );
     if (dto.paypalWebhookId !== undefined)
       await this.set(KEY.paypalWebhookId, dto.paypalWebhookId.trim(), false);
+  }
+
+  // ---- Steam (central SteamCMD login + Web API key) ----------------------
+
+  /** Effective Steam config (DB override → env fallback). Secrets decrypted. */
+  async steamConfig(): Promise<EffectiveSteamConfig> {
+    return {
+      apiKey: (await this.get(KEY.steamApiKey)) || process.env.STEAM_API_KEY || '',
+      username:
+        (await this.get(KEY.steamUsername)) || process.env.STEAM_USERNAME || '',
+      password:
+        (await this.get(KEY.steamPassword)) || process.env.STEAM_PASSWORD || '',
+    };
+  }
+
+  /** Masked Steam config for the owner UI — never returns the raw secrets. */
+  async steamConfigMasked() {
+    const cfg = await this.steamConfig();
+    return {
+      username: cfg.username,
+      apiKeySet: !!cfg.apiKey,
+      passwordSet: !!cfg.password,
+      // True when a login is usable for steamcmd Workshop downloads that require
+      // an authenticated account (anonymous still works for many free items).
+      loginConfigured: !!cfg.username && !!cfg.password,
+    };
+  }
+
+  /** Apply owner Steam edits; only provided fields change. Secrets encrypted. */
+  async setSteamConfig(dto: SteamConfigInput): Promise<void> {
+    if (dto.apiKey !== undefined)
+      await this.set(KEY.steamApiKey, dto.apiKey.trim(), true);
+    if (dto.username !== undefined)
+      await this.set(KEY.steamUsername, dto.username.trim(), false);
+    if (dto.password !== undefined)
+      await this.set(KEY.steamPassword, dto.password, true);
   }
 }

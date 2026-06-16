@@ -15,6 +15,8 @@
     "Java 17": "ghcr.io/pterodactyl/yolks:java_17"
   },
   "steamAppId": 380870,
+  "supportsWorkshop": true,
+  "workshopAppId": 108600,
   "startupCommand": "./start-server.sh -servername \"{{SERVER_NAME}}\" -adminpassword \"{{ADMIN_PASS}}\" -port {{SERVER_PORT}} -udpport {{UDP_PORT}} -cachedir=/mnt/server/Zomboid",
   "startupDetect": "SERVER STARTED|Server Steam ID",
   "stopCommand": "quit",

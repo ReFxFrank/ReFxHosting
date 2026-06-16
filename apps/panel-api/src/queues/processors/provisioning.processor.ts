@@ -4,6 +4,7 @@ import { Job } from 'bullmq';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NodeAgentClient, InstallSpec } from '../../agent/agent.client';
 import { CryptoService } from '../../common/crypto/crypto.service';
+import { SettingsService } from '../../platform/settings.service';
 import { JOB, ProvisionJob, QUEUE } from '../queue.constants';
 import { buildInstallSpec } from './install-spec.util';
 
@@ -20,6 +21,7 @@ export class ProvisioningProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly agent: NodeAgentClient,
     private readonly crypto: CryptoService,
+    private readonly settings: SettingsService,
   ) {
     super();
   }
@@ -46,9 +48,13 @@ export class ProvisioningProcessor extends WorkerHost {
     const sftpPassword = server.sftpPasswordEnc
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
+    const steam = server.template.supportsWorkshop
+      ? await this.settings.steamConfig()
+      : undefined;
     const spec: InstallSpec = buildInstallSpec(server, {
       wipe: true,
       sftpPassword,
+      steam,
     });
 
     try {

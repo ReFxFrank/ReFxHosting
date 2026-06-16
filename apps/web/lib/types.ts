@@ -120,7 +120,7 @@ export interface Server {
   nodeId: string;
   node?: Pick<Node, "id" | "name" | "fqdn" | "regionId">;
   templateId: string | null;
-  template?: Pick<GameTemplate, "id" | "name" | "slug"> | null;
+  template?: Pick<GameTemplate, "id" | "name" | "slug" | "supportsWorkshop" | "workshopAppId"> | null;
   templateVersion: number | null;
   state: ServerState;
   deployMethod: DeployMethod;
@@ -368,6 +368,8 @@ export interface GameTemplate {
   recCpuCores: number;
   recMemoryMb: number;
   recDiskMb: number;
+  supportsWorkshop?: boolean;
+  workshopAppId?: number | null;
   iconUrl?: string | null;
   variables?: TemplateVariable[];
   // Public storefront metadata
@@ -385,6 +387,27 @@ export interface GameTemplate {
 export interface StartingPrice {
   amountMinor: number;
   currency: string;
+}
+
+export type WorkshopKind = "ITEM" | "COLLECTION";
+
+/** A Steam Workshop item/collection attached to a server. */
+export interface WorkshopMod {
+  id: string;
+  serverId: string;
+  workshopId: string;
+  name: string | null;
+  kind: WorkshopKind;
+  enabled: boolean;
+  sortOrder: number;
+}
+
+/** Masked central Steam settings (never returns raw secrets). */
+export interface SteamConfigMasked {
+  username: string;
+  apiKeySet: boolean;
+  passwordSet: boolean;
+  loginConfigured: boolean;
 }
 
 /** An admin-curated team member for the public "Meet the team" page. */

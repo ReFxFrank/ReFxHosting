@@ -6,6 +6,7 @@ import { MinecraftResolverService } from './minecraft-resolver.service';
 import { ModrinthService } from './modrinth.service';
 import { ModsService } from './mods.service';
 import { ModpackService } from './modpack.service';
+import { WorkshopService } from './workshop.service';
 import { ScheduleRunner } from './schedule.runner';
 import { ServersController } from './servers.controller';
 import { ServersResolver } from './servers.resolver';
@@ -32,6 +33,7 @@ import { QUEUE } from '../queues/queue.constants';
     ModrinthService,
     ModsService,
     ModpackService,
+    WorkshopService,
     ModpackProcessor,
     ScheduleRunner,
     ServersResolver,

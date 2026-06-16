@@ -43,6 +43,8 @@ import type {
   StorefrontGame,
   StorefrontGameDetail,
   TeamMember,
+  WorkshopMod,
+  SteamConfigMasked,
   HomepageAlert,
   ModrinthProject,
   ModrinthVersion,
@@ -463,6 +465,19 @@ export const api = {
       id: string,
       input: Partial<{ hardwareTierId: string; slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
     ) => http.post<void>(`/servers/${id}/upgrade`, input),
+
+    // Steam Workshop
+    workshop: (id: string) => getList<WorkshopMod>(`/servers/${id}/workshop`),
+    workshopAdd: (id: string, input: string) =>
+      http.post<WorkshopMod>(`/servers/${id}/workshop`, { input }),
+    workshopToggle: (id: string, modId: string, enabled: boolean) =>
+      http.patch<WorkshopMod>(`/servers/${id}/workshop/${modId}`, { enabled }),
+    workshopReorder: (id: string, ids: string[]) =>
+      http.patch<WorkshopMod[]>(`/servers/${id}/workshop/reorder`, { ids }),
+    workshopRemove: (id: string, modId: string) =>
+      http.delete<void>(`/servers/${id}/workshop/${modId}`),
+    workshopApply: (id: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/workshop/apply`, {}),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),
@@ -926,6 +941,11 @@ export const api = {
         ? http.patch<TeamMember>(`/admin/staff/${id}`, body)
         : http.post<TeamMember>("/admin/staff", body),
     deleteStaff: (id: string) => http.delete<void>(`/admin/staff/${id}`),
+
+    // Central Steam (SteamCMD login + Web API key) for Workshop downloads.
+    steamConfig: () => http.get<SteamConfigMasked>("/admin/settings/steam"),
+    setSteamConfig: (input: { apiKey?: string; username?: string; password?: string }) =>
+      http.patch<void>("/admin/settings/steam", input),
 
     auditLogs: (query?: { actorId?: string; targetType?: string; page?: number }) =>
       http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),

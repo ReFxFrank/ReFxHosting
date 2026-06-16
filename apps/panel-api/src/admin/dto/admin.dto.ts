@@ -144,6 +144,26 @@ export class TestEmailDto {
   to!: string;
 }
 
+export class SetSteamConfigDto {
+  @ApiPropertyOptional({ description: 'Steam Web API key (write-only; stored encrypted).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  apiKey?: string;
+
+  @ApiPropertyOptional({ description: 'Central Steam username for steamcmd Workshop downloads.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  username?: string;
+
+  @ApiPropertyOptional({ description: 'Steam password (write-only; stored encrypted).' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(512)
+  password?: string;
+}
+
 export class CreateRoleDto {
   @ApiProperty({ description: 'Unique key/slug, e.g. "billing-manager".' })
   @IsString()
