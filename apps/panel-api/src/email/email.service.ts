@@ -62,12 +62,22 @@ export class EmailService {
       this.transporter = configured
         ? nodemailer.createTransport({
             host: cfg.host,
+            // Implicit TLS on 465; STARTTLS on 587/25. If `secure` wasn't set
+            // explicitly, infer it from the port so a common 465/587 mismatch
+            // (the usual cause of a hanging "test email") just works.
             port: cfg.port,
-            secure: cfg.secure,
+            secure: cfg.secure || cfg.port === 465,
+            // Enforce STARTTLS when not using implicit TLS (e.g. port 587).
+            requireTLS: !(cfg.secure || cfg.port === 465),
             auth:
               cfg.user || cfg.password
                 ? { user: cfg.user, pass: cfg.password }
                 : undefined,
+            // Fail fast with a real error instead of hanging when the port is
+            // blocked or the host is wrong (cloud providers often block SMTP).
+            connectionTimeout: 10_000,
+            greetingTimeout: 10_000,
+            socketTimeout: 20_000,
           })
         : nodemailer.createTransport({ jsonTransport: true });
       this.cachedSig = sig;
