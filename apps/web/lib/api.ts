@@ -301,6 +301,9 @@ export const api = {
     update: (input: ProfileUpdate) => http.patch<User>("/account", input),
     changePassword: (currentPassword: string, newPassword: string) =>
       http.post<void>("/account/password", { currentPassword, newPassword }),
+    // GDPR: export everything we hold, or delete the account.
+    exportData: () => http.get<Record<string, unknown>>("/account/export"),
+    deleteAccount: () => http.delete<void>("/account"),
     sessions: () => getList<Session>("/account/sessions"),
     revokeSession: (id: string) => http.delete<void>(`/account/sessions/${id}`),
     apiKeys: () => getList<ApiKey>("/account/api-keys"),
@@ -731,6 +734,7 @@ export const api = {
     setUserRole: (id: string, input: { role?: User["globalRole"]; roleId?: string }) =>
       http.patch<User>(`/admin/users/${id}/role`, input),
     deleteUser: (id: string) => http.delete<void>(`/admin/users/${id}`),
+    purgeUser: (id: string) => http.post<void>(`/admin/users/${id}/purge`),
 
     // Store credit (account balance) — view ledger + grant/deduct.
     userCredit: (id: string) => http.get<CreditLedger>(`/admin/users/${id}/credit`),

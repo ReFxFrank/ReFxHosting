@@ -253,6 +253,151 @@ export class UsersService {
     });
   }
 
+  /**
+   * Self-service account deletion. Soft-deletes + tombstones (reusing
+   * deleteUser's server guard) and revokes all sessions. An OWNER must transfer
+   * ownership first.
+   */
+  async deleteOwnAccount(userId: string): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: { globalRole: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    if (user.globalRole === GlobalRole.OWNER) {
+      throw new BadRequestException(
+        'Transfer ownership to another user before deleting your account',
+      );
+    }
+    await this.deleteUser(userId);
+    await this.prisma.session.deleteMany({ where: { userId } });
+  }
+
+  /**
+   * GDPR data export: the personal data we hold for a user, in one JSON object.
+   * Secrets (password hash, TOTP seed, gateway refs) are never included.
+   */
+  async exportData(userId: string): Promise<Record<string, unknown>> {
+    const [user, subscriptions, invoices, servers, paymentMethods, tickets, credit, apiKeys] =
+      await this.prisma.$transaction([
+        this.prisma.user.findUnique({
+          where: { id: userId },
+          select: {
+            id: true, email: true, firstName: true, lastName: true,
+            globalRole: true, state: true, locale: true, timezone: true,
+            phone: true, addressLine1: true, addressLine2: true, city: true,
+            region: true, postalCode: true, country: true,
+            emailVerifiedAt: true, totpEnabledAt: true, creditBalanceMinor: true,
+            createdAt: true,
+          },
+        }),
+        this.prisma.subscription.findMany({
+          where: { userId },
+          select: {
+            id: true, interval: true, slots: true, state: true,
+            currentPeriodStart: true, currentPeriodEnd: true, gateway: true,
+            createdAt: true, product: { select: { name: true } },
+          },
+        }),
+        this.prisma.invoice.findMany({
+          where: { userId },
+          select: {
+            id: true, number: true, state: true, currency: true,
+            subtotalMinor: true, discountMinor: true, taxMinor: true,
+            totalMinor: true, amountPaidMinor: true, createdAt: true, paidAt: true,
+            lineItems: { select: { description: true, quantity: true, amountMinor: true } },
+          },
+        }),
+        this.prisma.server.findMany({
+          where: { ownerId: userId, deletedAt: null },
+          select: { id: true, shortId: true, name: true, state: true },
+        }),
+        this.prisma.paymentMethod.findMany({
+          where: { userId },
+          select: { gateway: true, brand: true, last4: true, expMonth: true, expYear: true },
+        }),
+        this.prisma.ticket.findMany({
+          where: { requesterId: userId },
+          select: { number: true, subject: true, state: true, createdAt: true },
+        }),
+        this.prisma.creditTransaction.findMany({
+          where: { userId },
+          select: { amountMinor: true, reason: true, note: true, createdAt: true },
+        }),
+        this.prisma.apiKey.findMany({
+          where: { userId },
+          select: { name: true, prefix: true, scopes: true, createdAt: true },
+        }),
+      ]);
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      exportedAt: new Date().toISOString(),
+      account: user,
+      subscriptions,
+      invoices,
+      servers,
+      paymentMethods,
+      tickets,
+      creditTransactions: credit,
+      apiKeys,
+    };
+  }
+
+  /**
+   * GDPR erasure (admin). Anonymizes personal data and removes auth material,
+   * while RETAINING financial records (invoices/payments) for legal/tax reasons.
+   * Refuses if the user still owns live servers.
+   */
+  async purgeUser(id: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, deletedAt: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    const servers = await this.prisma.server.count({
+      where: { ownerId: id, deletedAt: null },
+    });
+    if (servers > 0) {
+      throw new BadRequestException(
+        'Cannot purge a user who still owns servers; delete or transfer them first',
+      );
+    }
+    const tombstone = user.email.startsWith('deleted:')
+      ? user.email
+      : `deleted:${Date.now()}:${user.email}`;
+    await this.prisma.$transaction([
+      this.prisma.session.deleteMany({ where: { userId: id } }),
+      this.prisma.webAuthnCredential.deleteMany({ where: { userId: id } }),
+      this.prisma.apiKey.deleteMany({ where: { userId: id } }),
+      this.prisma.paymentMethod.deleteMany({ where: { userId: id } }),
+      this.prisma.recoveryCode.deleteMany({ where: { userId: id } }),
+      this.prisma.passwordResetToken.deleteMany({ where: { userId: id } }),
+      this.prisma.emailVerificationToken.deleteMany({ where: { userId: id } }),
+      this.prisma.user.update({
+        where: { id },
+        data: {
+          deletedAt: user.deletedAt ?? new Date(),
+          state: UserState.BANNED,
+          email: tombstone,
+          firstName: null,
+          lastName: null,
+          phone: null,
+          addressLine1: null,
+          addressLine2: null,
+          city: null,
+          region: null,
+          postalCode: null,
+          country: null,
+          avatarUrl: null,
+          passwordHash: null,
+          totpSecretEnc: null,
+          totpEnabledAt: null,
+          gatewayCustomerId: null,
+        },
+      }),
+    ]);
+  }
+
   // ---- Sub-users (per-server collaborators) -----------------------------
 
   /** List active + revoked sub-user grants for a server. */

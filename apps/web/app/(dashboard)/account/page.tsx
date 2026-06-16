@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { startRegistration } from "@simplewebauthn/browser";
 import QRCode from "qrcode";
@@ -19,6 +20,8 @@ import {
   Plus,
   Trash2,
   AlertTriangle,
+  Download,
+  ShieldAlert,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
@@ -310,7 +313,92 @@ function SecurityTab() {
       <PasskeysCard />
       <ApiKeysCard />
       <SessionsCard />
+      <PrivacyCard />
     </div>
+  );
+}
+
+function PrivacyCard() {
+  const router = useRouter();
+  const logout = useAuthStore((s) => s.logout);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [ack, setAck] = useState("");
+
+  async function exportData() {
+    setExporting(true);
+    try {
+      const data = await api.account.exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `refx-account-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  const del = useMutation({
+    mutationFn: () => api.account.deleteAccount(),
+    onSuccess: async () => {
+      toast.success("Your account has been deleted");
+      await logout();
+      router.replace("/login");
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't delete account"),
+  });
+
+  return (
+    <Card className="border-destructive/30">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldAlert className="size-4" /> Privacy & data
+        </CardTitle>
+        <CardDescription>
+          Download everything we hold about you, or permanently close your account.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center justify-between gap-3">
+        <Button variant="outline" loading={exporting} onClick={exportData}>
+          <Download className="size-4" /> Download my data
+        </Button>
+        <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
+          <Trash2 className="size-4" /> Delete account
+        </Button>
+      </CardContent>
+
+      <Dialog open={confirmOpen} onOpenChange={(o) => { setConfirmOpen(o); if (!o) setAck(""); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete your account?</DialogTitle>
+            <DialogDescription>
+              This closes your account and revokes access. You can&apos;t do this while
+              you still own active servers — cancel or remove them first. Type{" "}
+              <span className="font-mono font-semibold">DELETE</span> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+          <Input value={ack} onChange={(e) => setAck(e.target.value)} placeholder="DELETE" />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={del.isPending}
+              disabled={ack !== "DELETE"}
+              onClick={() => del.mutate()}
+            >
+              Delete my account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
   );
 }
 

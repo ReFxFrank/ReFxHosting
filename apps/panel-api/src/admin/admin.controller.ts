@@ -315,6 +315,15 @@ export class AdminController {
     return this.users.deleteUser(id);
   }
 
+  /** GDPR erasure: anonymize personal data + remove auth material (keeps invoices). */
+  @Post('users/:id/purge')
+  @HttpCode(204)
+  @RequirePerm('users.manage')
+  @Audit({ action: 'admin.user.purge', targetType: 'User', targetParam: 'id' })
+  purgeUser(@Param('id') id: string) {
+    return this.users.purgeUser(id);
+  }
+
   /** A user's store-credit balance + ledger (admin account view). */
   @Get('users/:id/credit')
   @RequirePerm('users.read')

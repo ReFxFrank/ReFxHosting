@@ -16,6 +16,7 @@ import {
   Pause,
   Play,
   ShieldCheck,
+  ShieldAlert,
   CheckCircle2,
   XCircle,
   Wallet,
@@ -66,6 +67,7 @@ export default function AdminUserDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmPurge, setConfirmPurge] = useState(false);
   const [creditOpen, setCreditOpen] = useState(false);
   const [creditMode, setCreditMode] = useState<"grant" | "deduct">("grant");
   const [creditAmount, setCreditAmount] = useState("10.00");
@@ -141,6 +143,16 @@ export default function AdminUserDetailPage() {
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to delete user"),
   });
 
+  const purgeMutation = useMutation({
+    mutationFn: () => api.admin.purgeUser(id),
+    onSuccess: () => {
+      toast.success("Personal data purged");
+      setConfirmPurge(false);
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to purge data"),
+  });
+
   if (isLoading || !user) {
     return (
       <div className="space-y-6">
@@ -193,6 +205,9 @@ export default function AdminUserDetailPage() {
             )}
             <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="size-4" /> Delete
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setConfirmPurge(true)}>
+              <ShieldAlert className="size-4" /> Purge data
             </Button>
           </div>
           )
@@ -489,6 +504,32 @@ export default function AdminUserDetailPage() {
               onClick={() => deleteMutation.mutate()}
             >
               Delete user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmPurge} onOpenChange={setConfirmPurge}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Purge personal data?</DialogTitle>
+            <DialogDescription>
+              GDPR erasure: permanently anonymizes this user&apos;s personal data
+              (name, contact, address) and removes login credentials, passkeys, API
+              keys and saved cards. Invoices/payments are kept for legal records.
+              This can&apos;t be undone, and is blocked while they own active servers.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmPurge(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={purgeMutation.isPending}
+              onClick={() => purgeMutation.mutate()}
+            >
+              Purge data
             </Button>
           </DialogFooter>
         </DialogContent>

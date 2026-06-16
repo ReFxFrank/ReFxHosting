@@ -56,6 +56,21 @@ export class AccountController {
     return this.users.updateProfile(userId, dto);
   }
 
+  /** GDPR data export: everything we hold for the caller, as JSON. */
+  @Get('export')
+  @Audit({ action: 'account.export', targetType: 'User' })
+  exportData(@CurrentUser('id') userId: string) {
+    return this.users.exportData(userId);
+  }
+
+  /** Self-service account deletion (soft-delete + tombstone + revoke sessions). */
+  @Delete()
+  @HttpCode(204)
+  @Audit({ action: 'account.delete', targetType: 'User' })
+  deleteAccount(@CurrentUser('id') userId: string) {
+    return this.users.deleteOwnAccount(userId);
+  }
+
   // ---- API keys ----------------------------------------------------------
 
   @Get('api-keys')
