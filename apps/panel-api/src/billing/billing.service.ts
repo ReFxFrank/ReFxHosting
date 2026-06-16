@@ -35,6 +35,7 @@ import {
 } from '../queues/queue.constants';
 import { StripeGateway } from './gateways/stripe.gateway';
 import { PayPalGateway } from './gateways/paypal.gateway';
+import { EmailService } from '../email/email.service';
 import { addInterval } from './interval.util';
 import { generateInvoiceNumber } from './invoice-number.util';
 import { calculateTax } from './tax.util';
@@ -66,6 +67,7 @@ export class BillingService {
     private readonly stripe: StripeGateway,
     private readonly paypal: PayPalGateway,
     private readonly settings: SettingsService,
+    private readonly email: EmailService,
     @InjectQueue(QUEUE.BILLING_RENEWAL) private readonly renewalQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
   ) {
@@ -775,7 +777,30 @@ export class BillingService {
       await this.reactivateOnPayment(invoice.subscriptionId);
     }
 
+    // Email a receipt (best-effort; never blocks settlement).
+    const recipient = await this.invoiceRecipient(invoice.userId);
+    if (recipient) {
+      await this.email.sendPaymentReceipt(recipient, {
+        number: invoice.number,
+        amountMinor,
+        currency,
+      });
+    }
+
     return updated;
+  }
+
+  /** Resolve the billing email recipient for an invoice's owner. */
+  private async invoiceRecipient(
+    userId: string,
+  ): Promise<{ email: string; firstName: string | null } | null> {
+    const user = await this.prisma.user
+      .findUnique({
+        where: { id: userId },
+        select: { email: true, firstName: true },
+      })
+      .catch(() => null);
+    return user ?? null;
   }
 
   private async reactivateOnPayment(subscriptionId: string): Promise<void> {
@@ -827,6 +852,17 @@ export class BillingService {
         failureReason: reason,
       },
     });
+
+    // Notify the customer (best-effort).
+    const recipient = await this.invoiceRecipient(invoice.userId);
+    if (recipient) {
+      await this.email.sendPaymentFailed(recipient, {
+        number: invoice.number,
+        amountMinor: invoice.totalMinor,
+        currency: invoice.currency,
+        reason,
+      });
+    }
 
     const subscription = invoice.subscription;
     if (!subscription) {

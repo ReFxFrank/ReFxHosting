@@ -449,16 +449,20 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired verification token');
     }
 
-    await this.prisma.$transaction([
+    const [user] = await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: record.userId },
         data: { emailVerifiedAt: new Date(), state: 'ACTIVE' },
+        select: { email: true, firstName: true },
       }),
       this.prisma.emailVerificationToken.update({
         where: { id: record.id },
         data: { usedAt: new Date() },
       }),
     ]);
+
+    // Welcome the freshly-verified customer (best-effort).
+    await this.email.sendWelcome({ email: user.email, firstName: user.firstName });
   }
 
   /**

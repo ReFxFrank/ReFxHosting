@@ -105,6 +105,83 @@ export class EmailService implements OnModuleInit {
     });
   }
 
+  /** Welcome email after a customer verifies their address. */
+  async sendWelcome(user: MailRecipient): Promise<void> {
+    const greeting = user.firstName ? `Hi ${user.firstName},` : 'Welcome,';
+    await this.sendGeneric({
+      to: user.email,
+      subject: 'Welcome to ReFx Hosting',
+      text:
+        `${greeting}\n\n` +
+        `Your email is verified and your account is ready. You can deploy a server, ` +
+        `manage billing and open a support ticket any time from your dashboard:\n\n` +
+        `${this.panelUrl}/dashboard\n\nHappy hosting!`,
+      html:
+        `<p>${greeting}</p>` +
+        `<p>Your email is verified and your account is ready. You can deploy a server, ` +
+        `manage billing and open a support ticket any time from your dashboard.</p>` +
+        `<p><a href="${this.panelUrl}/dashboard">Open your dashboard</a></p>` +
+        `<p>Happy hosting!</p>`,
+    });
+  }
+
+  /** Receipt after a successful payment. */
+  async sendPaymentReceipt(
+    user: MailRecipient,
+    invoice: { number: number | string; amountMinor: number; currency: string },
+  ): Promise<void> {
+    const amount = this.money(invoice.amountMinor, invoice.currency);
+    const greeting = user.firstName ? `Hi ${user.firstName},` : 'Hello,';
+    await this.sendGeneric({
+      to: user.email,
+      subject: `Payment received — invoice ${invoice.number}`,
+      text:
+        `${greeting}\n\n` +
+        `We've received your payment of ${amount} for invoice ${invoice.number}. ` +
+        `Thank you!\n\nView your invoices: ${this.panelUrl}/billing`,
+      html:
+        `<p>${greeting}</p>` +
+        `<p>We've received your payment of <strong>${amount}</strong> for invoice ` +
+        `<strong>${invoice.number}</strong>. Thank you!</p>` +
+        `<p><a href="${this.panelUrl}/billing">View your invoices</a></p>`,
+    });
+  }
+
+  /** Notice when a payment attempt fails (dunning). */
+  async sendPaymentFailed(
+    user: MailRecipient,
+    invoice: {
+      number: number | string;
+      amountMinor: number;
+      currency: string;
+      reason?: string;
+    },
+  ): Promise<void> {
+    const amount = this.money(invoice.amountMinor, invoice.currency);
+    const greeting = user.firstName ? `Hi ${user.firstName},` : 'Hello,';
+    const reason = invoice.reason ? ` (${invoice.reason})` : '';
+    await this.sendGeneric({
+      to: user.email,
+      subject: `Payment failed — invoice ${invoice.number}`,
+      text:
+        `${greeting}\n\n` +
+        `We couldn't process your payment of ${amount} for invoice ${invoice.number}${reason}. ` +
+        `Please update your payment method or pay the invoice to avoid service interruption:\n\n` +
+        `${this.panelUrl}/billing`,
+      html:
+        `<p>${greeting}</p>` +
+        `<p>We couldn't process your payment of <strong>${amount}</strong> for invoice ` +
+        `<strong>${invoice.number}</strong>${reason}. Please update your payment method or ` +
+        `pay the invoice to avoid service interruption.</p>` +
+        `<p><a href="${this.panelUrl}/billing">Go to billing</a></p>`,
+    });
+  }
+
+  /** Format integer minor units as a currency string (e.g. 1999 USD → "19.99 USD"). */
+  private money(amountMinor: number, currency: string): string {
+    return `${(amountMinor / 100).toFixed(2)} ${currency.toUpperCase()}`;
+  }
+
   async sendGeneric(opts: {
     to: string;
     subject: string;

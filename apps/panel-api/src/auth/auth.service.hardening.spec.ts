@@ -70,6 +70,7 @@ describe('AuthService hardening', () => {
     email = {
       sendPasswordReset: jest.fn().mockResolvedValue(undefined),
       sendEmailVerification: jest.fn().mockResolvedValue(undefined),
+      sendWelcome: jest.fn().mockResolvedValue(undefined),
       sendGeneric: jest.fn().mockResolvedValue(undefined),
     };
 
