@@ -97,6 +97,13 @@ docker compose -f infra/docker/docker-compose.yml --env-file .env up -d --build 
   `TRUST_PROXY`); **self-healing migrations** (db-push fallback) + `AuthController`
   guard fix (the `/auth/me` 500 that blanked the panel); idle-session timeout.
 
+## ✅ Order page (GPortal-style, done)
+- Per-game cards → **slot slider** → **per-game configuration** (user-editable
+  template variables: text/number/boolean/enum) → **billing duration**
+  (weekly→annual) → **location** (only regions with an online node that has
+  capacity) → live total. Provisions only after payment clears.
+- PayPal `invoice_id` is unique per attempt (no more DUPLICATE_INVOICE_ID on retry).
+
 ## ⏭️ Possible next steps
 - Stream/agent-side fetch for modpack files >30 MiB (lift the panel upload cap).
 - Quilt loader support for modpacks.

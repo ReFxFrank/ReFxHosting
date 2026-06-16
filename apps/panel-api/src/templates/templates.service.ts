@@ -190,6 +190,23 @@ export class TemplatesService {
         recDiskMb: true,
         supportsLinux: true,
         supportsWindows: true,
+        // User-viewable variables so the order page can offer per-game config.
+        variables: {
+          where: { userViewable: true },
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            id: true,
+            envName: true,
+            displayName: true,
+            description: true,
+            type: true,
+            defaultValue: true,
+            rules: true,
+            userEditable: true,
+            userViewable: true,
+            sortOrder: true,
+          },
+        },
       },
     });
   }

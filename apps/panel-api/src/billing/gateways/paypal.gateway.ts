@@ -135,7 +135,9 @@ export class PayPalGateway implements PaymentGateway {
             purchase_units: [
               {
                 custom_id: invoice.id,
-                invoice_id: invoice.number,
+                // Unique per attempt (see createCheckoutSession) to avoid
+                // PayPal's DUPLICATE_INVOICE_ID on retries.
+                invoice_id: `${invoice.number}-${Date.now().toString(36)}`,
                 amount: {
                   currency_code: invoice.currency,
                   value: (invoice.totalMinor / 100).toFixed(2),
@@ -188,7 +190,10 @@ export class PayPalGateway implements PaymentGateway {
         purchase_units: [
           {
             custom_id: invoice.id,
-            invoice_id: invoice.number,
+            // Unique per attempt — PayPal rejects a reused invoice_id, so a
+            // retried checkout for the same invoice would otherwise 400. Our
+            // reconciliation uses custom_id (the internal invoice id), not this.
+            invoice_id: `${invoice.number}-${Date.now().toString(36)}`,
             amount: {
               currency_code: invoice.currency,
               value: (invoice.totalMinor / 100).toFixed(2),

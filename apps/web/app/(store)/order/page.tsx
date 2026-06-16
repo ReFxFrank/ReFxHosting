@@ -17,6 +17,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
@@ -72,8 +80,15 @@ export default function OrderPage() {
   const [regionId, setRegionId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [gateway, setGateway] = useState<"stripe" | "paypal">("stripe");
+  const [config, setConfig] = useState<Record<string, string>>({});
 
   const product = games.find((p) => p.id === productId) ?? null;
+  const template = product ? templatesById[product.gameTemplateId ?? ""] : null;
+  const configVars = (template?.variables ?? []).filter(
+    (v) => v.userEditable && v.type !== "SECRET",
+  );
+  const setConfigVal = (k: string, v: string) =>
+    setConfig((c) => ({ ...c, [k]: v }));
 
   // Deep link: /order?game=<template-slug>
   const presetApplied = useRef(false);
@@ -97,6 +112,17 @@ export default function OrderPage() {
     });
     setRegionId(null);
   }, [product]);
+
+  // Seed per-game config fields from their defaults when the game/template loads.
+  useEffect(() => {
+    if (!product) return;
+    const tpl = templatesById[product.gameTemplateId ?? ""];
+    const defaults: Record<string, string> = {};
+    for (const v of tpl?.variables ?? []) {
+      if (v.userEditable && v.type !== "SECRET") defaults[v.envName] = v.defaultValue ?? "";
+    }
+    setConfig(defaults);
+  }, [product, templatesById]);
 
   const price = product && interval
     ? product.prices.find((p) => p.interval === interval) ?? null
@@ -128,6 +154,7 @@ export default function OrderPage() {
         regionId: regionId ?? undefined,
         name: name.trim(),
         gateway,
+        environment: Object.keys(config).length ? config : undefined,
       }),
     onSuccess: (res) => {
       if (res?.checkoutUrl) {
@@ -240,6 +267,56 @@ export default function OrderPage() {
                 </div>
               )}
             </section>
+
+            {/* Per-game configuration (user-editable template variables) */}
+            {configVars.length > 0 && (
+              <section className="space-y-3 rounded-xl border p-4">
+                <h2 className="text-sm font-semibold">Configuration</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {configVars.map((v) => {
+                    const options = Array.isArray(v.rules?.options)
+                      ? (v.rules.options as unknown[]).map(String)
+                      : null;
+                    return (
+                      <div key={v.id} className="space-y-1.5">
+                        <Label>{v.displayName}</Label>
+                        {v.type === "BOOLEAN" ? (
+                          <div className="flex h-9 items-center">
+                            <Switch
+                              checked={config[v.envName] === "true"}
+                              onCheckedChange={(c: boolean) =>
+                                setConfigVal(v.envName, c ? "true" : "false")
+                              }
+                            />
+                          </div>
+                        ) : v.type === "ENUM" && options ? (
+                          <Select
+                            value={config[v.envName] ?? ""}
+                            onValueChange={(val) => setConfigVal(v.envName, val)}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+                            <SelectContent>
+                              {options.map((o) => (
+                                <SelectItem key={o} value={o}>{o}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            type={v.type === "NUMBER" ? "number" : "text"}
+                            value={config[v.envName] ?? ""}
+                            onChange={(e) => setConfigVal(v.envName, e.target.value)}
+                          />
+                        )}
+                        {v.description && (
+                          <p className="text-xs text-muted-foreground">{v.description}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             {/* Duration */}
             <section className="space-y-3 rounded-xl border p-4">

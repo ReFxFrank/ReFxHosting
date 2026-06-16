@@ -487,6 +487,7 @@ export const api = {
       slots?: number;
       name: string;
       gateway?: "stripe" | "paypal";
+      environment?: Record<string, string>;
     }) => http.post<{ checkoutUrl?: string; serverId?: string; invoiceId?: string }>("/orders", input),
   },
 
