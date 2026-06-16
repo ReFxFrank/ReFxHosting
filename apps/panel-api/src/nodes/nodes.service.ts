@@ -101,32 +101,33 @@ export class NodesService {
     const region = await this.prisma.region.findUnique({ where: { id } });
     if (!region) throw new NotFoundException('Location not found');
 
-    // Count ALL nodes that reference this region — including soft-deleted ones,
-    // which still hold the (non-nullable) regionId foreign key and would make the
-    // delete fail with a raw "Foreign key constraint failed".
+    // Active nodes block deletion — move or delete them first.
     const active = await this.prisma.node.count({
       where: { regionId: id, deletedAt: null },
     });
-    const total = await this.prisma.node.count({ where: { regionId: id } });
     if (active > 0) {
       throw new BadRequestException(
         'Cannot delete a location that still has nodes; move or delete them first',
       );
     }
-    if (total > 0) {
-      throw new BadRequestException(
-        'This location still has removed nodes referencing it and cannot be deleted yet',
-      );
-    }
+
+    // Only soft-deleted ("removed") nodes remain. They still hold the
+    // non-nullable regionId FK, so the region delete would otherwise fail. Purge
+    // them here (their heartbeats + allocations cascade at the DB level), then
+    // delete the region — all in one transaction so it's all-or-nothing.
     try {
-      await this.prisma.region.delete({ where: { id } });
+      await this.prisma.$transaction([
+        this.prisma.node.deleteMany({ where: { regionId: id } }),
+        this.prisma.region.delete({ where: { id } }),
+      ]);
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
         e.code === 'P2003'
       ) {
+        // A removed node still has servers attached (Server→Node is RESTRICT).
         throw new BadRequestException(
-          'Location is still referenced and cannot be deleted',
+          'A removed node in this location still has servers attached — delete those servers first.',
         );
       }
       throw e;
