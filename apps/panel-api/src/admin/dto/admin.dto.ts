@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
+  IsIn,
   IsInt,
   IsNumber,
   IsObject,
@@ -85,6 +86,11 @@ export class SetGatewayConfigDto {
   @IsString()
   @MaxLength(255)
   paypalClientSecret?: string;
+
+  @ApiPropertyOptional({ description: 'PayPal environment.', enum: ['sandbox', 'live'] })
+  @IsOptional()
+  @IsIn(['sandbox', 'live'])
+  paypalMode?: string;
 }
 
 /** Owner-editable SMTP / email settings. */

@@ -112,6 +112,14 @@ export class BillingService {
         diskMb: dto.diskMb,
         slots: dto.slots,
         allowedTemplateIds: dto.allowedTemplateIds ?? [],
+        perSlot: dto.perSlot ?? false,
+        gameTemplateId: dto.gameTemplateId ?? null,
+        minSlots: dto.minSlots ?? undefined,
+        maxSlots: dto.maxSlots ?? undefined,
+        slotStep: dto.slotStep ?? undefined,
+        cpuPerSlot: dto.cpuPerSlot ?? undefined,
+        memoryMbPerSlot: dto.memoryMbPerSlot ?? undefined,
+        diskMbPerSlot: dto.diskMbPerSlot ?? undefined,
       },
     });
   }
@@ -582,9 +590,12 @@ export class BillingService {
         }
         return { paid: false, checkoutUrl: session.url };
       } catch (e) {
-        this.logger.error(`PayPal checkout failed: ${(e as Error).message}`);
+        const detail = (e as Error).message ?? 'unknown error';
+        this.logger.error(`PayPal checkout failed: ${detail}`);
+        // Surface PayPal's own reason (e.g. invalid_client = wrong keys/mode) so
+        // the owner can fix it without digging through logs.
         throw new BadGatewayException(
-          'Could not start PayPal checkout. Check the PayPal keys/mode in Payments settings.',
+          `Could not start PayPal checkout: ${detail}. Check the PayPal keys and sandbox/live mode in Payments settings.`,
         );
       }
     }

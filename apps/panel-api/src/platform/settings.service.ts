@@ -12,6 +12,7 @@ const KEY = {
   stripeStatementDescriptor: 'gateway.stripe.statementDescriptor',
   paypalClientId: 'gateway.paypal.clientId',
   paypalClientSecret: 'gateway.paypal.clientSecret',
+  paypalMode: 'gateway.paypal.mode',
   smtpHost: 'email.smtp.host',
   smtpPort: 'email.smtp.port',
   smtpUser: 'email.smtp.user',
@@ -28,6 +29,7 @@ export interface GatewayConfigInput {
   stripeStatementDescriptor?: string;
   paypalClientId?: string;
   paypalClientSecret?: string;
+  paypalMode?: string; // 'sandbox' | 'live'
 }
 
 export interface EmailConfigInput {
@@ -105,12 +107,17 @@ export class SettingsService {
     };
   }
 
-  async paypalConfig(): Promise<{ clientId: string; clientSecret: string }> {
+  async paypalConfig(): Promise<{
+    clientId: string;
+    clientSecret: string;
+    mode: string;
+  }> {
     const env = this.config.get<AppConfig['paypal']>('paypal')!;
     return {
       clientId: (await this.get(KEY.paypalClientId)) || env.clientId || '',
       clientSecret:
         (await this.get(KEY.paypalClientSecret)) || env.clientSecret || '',
+      mode: (await this.get(KEY.paypalMode)) || env.mode || 'sandbox',
     };
   }
 
@@ -131,6 +138,7 @@ export class SettingsService {
         configured: !!paypal.clientId && !!paypal.clientSecret,
         clientId: paypal.clientId,
         clientSecretSet: !!paypal.clientSecret,
+        mode: paypal.mode,
       },
     };
   }
@@ -198,5 +206,11 @@ export class SettingsService {
       await this.set(KEY.paypalClientId, dto.paypalClientId.trim(), false);
     if (dto.paypalClientSecret !== undefined)
       await this.set(KEY.paypalClientSecret, dto.paypalClientSecret.trim(), true);
+    if (dto.paypalMode !== undefined)
+      await this.set(
+        KEY.paypalMode,
+        dto.paypalMode === 'live' ? 'live' : 'sandbox',
+        false,
+      );
   }
 }

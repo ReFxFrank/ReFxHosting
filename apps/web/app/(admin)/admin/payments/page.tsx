@@ -153,11 +153,13 @@ function GatewayConfigDialog({
   const [descriptor, setDescriptor] = useState<string | null>(null);
   const [paypalId, setPaypalId] = useState<string | null>(null);
   const [paypalSecret, setPaypalSecret] = useState("");
+  const [paypalMode, setPaypalMode] = useState<string | null>(null);
 
   // Initialize prefilled fields once config loads.
   const pub = stripePub ?? cfg?.stripe.publishableKey ?? "";
   const desc = descriptor ?? cfg?.stripe.statementDescriptor ?? "";
   const ppId = paypalId ?? cfg?.paypal.clientId ?? "";
+  const ppMode = paypalMode ?? cfg?.paypal.mode ?? "sandbox";
 
   const save = useMutation({
     mutationFn: () => {
@@ -167,6 +169,7 @@ function GatewayConfigDialog({
       input.stripePublishableKey = pub;
       input.stripeStatementDescriptor = desc;
       input.paypalClientId = ppId;
+      input.paypalMode = ppMode;
       if (paypalSecret) input.paypalClientSecret = paypalSecret;
       return api.admin.setGatewayConfig(input);
     },
@@ -265,6 +268,31 @@ function GatewayConfigDialog({
               value={paypalSecret}
               onChange={(e) => setPaypalSecret(e.target.value)}
             />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Environment</Label>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={ppMode === "sandbox" ? "default" : "outline"}
+                onClick={() => setPaypalMode("sandbox")}
+              >
+                Sandbox
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={ppMode === "live" ? "default" : "outline"}
+                onClick={() => setPaypalMode("live")}
+              >
+                Live
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Must match your keys — live keys with sandbox mode (or vice-versa) fail
+              with &quot;invalid_client&quot;.
+            </p>
           </div>
         </div>
 

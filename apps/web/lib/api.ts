@@ -643,6 +643,7 @@ export const api = {
       stripeStatementDescriptor?: string;
       paypalClientId?: string;
       paypalClientSecret?: string;
+      paypalMode?: string;
     }) => http.patch<void>("/admin/payments/gateways/config", input),
 
     // Email / SMTP settings (settings.manage).

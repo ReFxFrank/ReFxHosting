@@ -79,4 +79,52 @@ export class CreateProductDto {
   @IsArray()
   @IsUUID('all', { each: true })
   allowedTemplateIds?: string[];
+
+  // ---- GPortal-style per-slot pricing ------------------------------------
+
+  @ApiPropertyOptional({ description: 'Price/provision per slot (slot slider on order page).' })
+  @IsOptional()
+  @IsBoolean()
+  perSlot?: boolean;
+
+  @ApiPropertyOptional({ description: 'Game this per-slot product sells.' })
+  @IsOptional()
+  @IsUUID()
+  gameTemplateId?: string;
+
+  @ApiPropertyOptional({ description: 'Minimum slots.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  minSlots?: number;
+
+  @ApiPropertyOptional({ description: 'Maximum slots.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  maxSlots?: number;
+
+  @ApiPropertyOptional({ description: 'Slot slider step.' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  slotStep?: number;
+
+  @ApiPropertyOptional({ description: 'vCPU cores per slot.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  cpuPerSlot?: number;
+
+  @ApiPropertyOptional({ description: 'Memory (MiB) per slot.' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  memoryMbPerSlot?: number;
+
+  @ApiPropertyOptional({ description: 'Disk (MiB) per slot.' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  diskMbPerSlot?: number;
 }
