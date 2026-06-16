@@ -425,6 +425,15 @@ export class AdminController {
     return this.billing.voidInvoice(id);
   }
 
+  /** Manually settle an open invoice (e.g. off-platform payment received). */
+  @Post('invoices/:id/mark-paid')
+  @HttpCode(200)
+  @RequirePerm('billing.manage')
+  @Audit({ action: 'admin.invoice.mark-paid', targetType: 'Invoice', targetParam: 'id' })
+  markInvoicePaid(@Param('id') id: string) {
+    return this.billing.markInvoiceManuallyPaid(id);
+  }
+
   @Delete('invoices/:id')
   @RequirePerm('billing.manage')
   @HttpCode(204)

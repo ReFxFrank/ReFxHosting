@@ -586,16 +586,86 @@ export class BillingService {
         'A paid invoice cannot be voided; issue a refund instead',
       );
     }
-    return this.prisma.invoice.update({
+    const updated = await this.prisma.invoice.update({
       where: { id },
       data: { state: InvoiceState.VOID },
     });
+    // Release any server reserved by this unpaid order so it disappears from the
+    // customer's dashboard (it was never provisioned).
+    if (invoice.subscriptionId) {
+      await this.releaseUnpaidReservation(invoice.subscriptionId);
+    }
+    return updated;
+  }
+
+  /**
+   * Manually settle an OPEN invoice (admin "mark as paid" — e.g. an off-platform
+   * bank transfer). Runs the normal paid path, so the reserved server is
+   * provisioned, the subscription reactivates and a receipt is sent.
+   */
+  async markInvoiceManuallyPaid(id: string): Promise<Invoice> {
+    const invoice = await this.prisma.invoice.findUnique({ where: { id } });
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.state === InvoiceState.PAID) return invoice;
+    if (invoice.state !== InvoiceState.OPEN) {
+      throw new BadRequestException(`Invoice is ${invoice.state}, not payable`);
+    }
+    return this.markInvoicePaid(id, {
+      gateway: 'manual',
+      gatewayRef: `manual-${id}`,
+      amountMinor: Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)),
+      currency: invoice.currency,
+    });
+  }
+
+  /**
+   * Soft-delete servers a subscription reserved but never paid for (state
+   * PENDING_PAYMENT), freeing their allocations, and cancel the subscription if
+   * nothing of it remains live. Used when an unpaid invoice is voided/deleted.
+   */
+  private async releaseUnpaidReservation(subscriptionId: string): Promise<void> {
+    const pending = await this.prisma.server.findMany({
+      where: { subscriptionId, deletedAt: null, state: 'PENDING_PAYMENT' },
+      select: { id: true },
+    });
+    for (const s of pending) {
+      await this.prisma.$transaction([
+        this.prisma.allocation.updateMany({
+          where: { serverId: s.id },
+          data: { serverId: null, isPrimary: false },
+        }),
+        this.prisma.server.update({
+          where: { id: s.id },
+          data: { deletedAt: new Date(), state: 'OFFLINE' },
+        }),
+      ]);
+    }
+    // If the subscription now has no live servers and no settled invoice, cancel it.
+    const [liveServers, paidInvoices] = await this.prisma.$transaction([
+      this.prisma.server.count({ where: { subscriptionId, deletedAt: null } }),
+      this.prisma.invoice.count({
+        where: { subscriptionId, state: InvoiceState.PAID },
+      }),
+    ]);
+    if (liveServers === 0 && paidInvoices === 0) {
+      await this.prisma.subscription.update({
+        where: { id: subscriptionId },
+        data: {
+          state: SubscriptionState.CANCELED,
+          autoRenew: false,
+          cancelAtPeriodEnd: false,
+        },
+      });
+    }
   }
 
   /** Permanently delete an invoice (and its line items/payments via cascade). */
   async deleteInvoice(id: string): Promise<void> {
     const invoice = await this.prisma.invoice.findUnique({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
+    if (invoice.state !== InvoiceState.PAID && invoice.subscriptionId) {
+      await this.releaseUnpaidReservation(invoice.subscriptionId);
+    }
     await this.prisma.invoice.delete({ where: { id } });
   }
 

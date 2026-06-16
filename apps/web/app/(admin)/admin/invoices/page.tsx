@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ReceiptText, Search, MoreHorizontal, Ban, Trash2 } from "lucide-react";
+import { ReceiptText, Search, MoreHorizontal, Ban, Trash2, CheckCircle2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -68,6 +68,15 @@ export default function AdminInvoicesPage() {
       invalidate();
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to void invoice"),
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: (id: string) => api.admin.markInvoicePaid(id),
+    onSuccess: () => {
+      toast.success("Invoice marked paid — server provisioning");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to mark paid"),
   });
 
   const deleteMutation = useMutation({
@@ -142,6 +151,12 @@ export default function AdminInvoicesPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              disabled={inv.state !== "OPEN"}
+                              onSelect={() => markPaidMutation.mutate(inv.id)}
+                            >
+                              <CheckCircle2 /> Mark as paid
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               disabled={inv.state === "PAID" || inv.state === "VOID"}
                               onSelect={() => voidMutation.mutate(inv.id)}

@@ -144,21 +144,57 @@ export class CouponsService {
     return { coupon, discountMinor };
   }
 
-  /** Record a redemption + bump the usage counter (call after the invoice is created). */
-  async recordRedemption(
-    couponId: string,
-    userId: string,
+  /**
+   * Atomically reserve a redemption BEFORE the invoice exists, enforcing the
+   * caps so concurrent checkouts can't exceed them: the global cap is a guarded
+   * conditional increment (only succeeds while `timesRedeemed < maxRedemptions`).
+   * Returns the redemption id to attach to the invoice once it's created. Throws
+   * if a cap is hit. Call inside the order flow before creating the subscription.
+   */
+  async reserveRedemption(couponId: string, userId: string): Promise<string> {
+    return this.prisma.$transaction(async (tx) => {
+      const coupon = await tx.coupon.findUnique({ where: { id: couponId } });
+      if (!coupon || !coupon.isActive) {
+        throw new BadRequestException('Invalid coupon code');
+      }
+      if (coupon.maxPerUser != null) {
+        const used = await tx.couponRedemption.count({
+          where: { couponId, userId },
+        });
+        if (used >= coupon.maxPerUser) {
+          throw new BadRequestException('You have already used this coupon');
+        }
+      }
+      if (coupon.maxRedemptions != null) {
+        const bumped = await tx.coupon.updateMany({
+          where: { id: couponId, timesRedeemed: { lt: coupon.maxRedemptions } },
+          data: { timesRedeemed: { increment: 1 } },
+        });
+        if (bumped.count === 0) {
+          throw new BadRequestException('This coupon has reached its redemption limit');
+        }
+      } else {
+        await tx.coupon.update({
+          where: { id: couponId },
+          data: { timesRedeemed: { increment: 1 } },
+        });
+      }
+      const id = uuidv7();
+      await tx.couponRedemption.create({
+        data: { id, couponId, userId, invoiceId: null, amountMinor: 0 },
+      });
+      return id;
+    });
+  }
+
+  /** Attach the created invoice + final discount to a reserved redemption. */
+  async attachRedemption(
+    redemptionId: string,
     invoiceId: string,
     amountMinor: number,
   ): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.couponRedemption.create({
-        data: { id: uuidv7(), couponId, userId, invoiceId, amountMinor },
-      }),
-      this.prisma.coupon.update({
-        where: { id: couponId },
-        data: { timesRedeemed: { increment: 1 } },
-      }),
-    ]);
+    await this.prisma.couponRedemption
+      .update({ where: { id: redemptionId }, data: { invoiceId, amountMinor } })
+      .catch(() => undefined);
   }
 }

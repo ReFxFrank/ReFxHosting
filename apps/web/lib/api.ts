@@ -730,6 +730,8 @@ export const api = {
     invoices: (query?: { page?: number; q?: string; state?: string }) =>
       http.get<Paginated<AdminInvoice>>("/admin/invoices", { query }),
     voidInvoice: (id: string) => http.post<AdminInvoice>(`/admin/invoices/${id}/void`),
+    markInvoicePaid: (id: string) =>
+      http.post<AdminInvoice>(`/admin/invoices/${id}/mark-paid`),
     deleteInvoice: (id: string) => http.delete<void>(`/admin/invoices/${id}`),
     payments: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminPayment>>("/admin/payments", { query }),

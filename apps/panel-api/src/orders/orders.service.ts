@@ -82,13 +82,15 @@ export class OrdersService {
     // Validate any coupon / gift card UP FRONT so a bad code fails before we
     // create a subscription. Coupon discount is computed against the subtotal.
     let discountMinor = 0;
-    let couponId: string | undefined;
     let couponCode: string | undefined;
+    let couponRedemptionId: string | undefined;
     if (dto.couponCode?.trim()) {
       const v = await this.coupons.validate(dto.couponCode, userId, subtotalMinor);
       discountMinor = v.discountMinor;
-      couponId = v.coupon.id;
       couponCode = v.coupon.code;
+      // Atomically reserve a redemption (enforces caps) BEFORE we create the
+      // subscription, so a cap hit fails the order cleanly with no orphan rows.
+      couponRedemptionId = await this.coupons.reserveRedemption(v.coupon.id, userId);
     }
     if (dto.giftCardCode?.trim()) {
       await this.giftCards.lookup(dto.giftCardCode); // throws if invalid
@@ -107,8 +109,8 @@ export class OrdersService {
       subscription.id,
       { discountMinor, couponCode },
     );
-    if (couponId) {
-      await this.coupons.recordRedemption(couponId, userId, invoice.id, discountMinor);
+    if (couponRedemptionId) {
+      await this.coupons.attachRedemption(couponRedemptionId, invoice.id, discountMinor);
     }
 
     // 3) Apply a gift card, then account credit, toward the (discounted) total,
