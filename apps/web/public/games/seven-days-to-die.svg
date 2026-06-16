@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450" role="img" aria-label="7 Days to Die">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#0c1830"/><stop offset="1" stop-color="#070b12"/></linearGradient>
+    <radialGradient id="acc" cx="0.5" cy="0.34" r="0.7"><stop offset="0" stop-color="#c0563b" stop-opacity="0.40"/><stop offset="0.6" stop-color="#c0563b" stop-opacity="0.06"/><stop offset="1" stop-color="#c0563b" stop-opacity="0"/></radialGradient>
+    <radialGradient id="blu" cx="0.92" cy="1" r="0.9"><stop offset="0" stop-color="#0072ff" stop-opacity="0.38"/><stop offset="0.6" stop-color="#0072ff" stop-opacity="0.06"/><stop offset="1" stop-color="#0072ff" stop-opacity="0"/></radialGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c0563b" stop-opacity="0"/><stop offset="0.5" stop-color="#c0563b" stop-opacity="0.9"/><stop offset="1" stop-color="#c0563b" stop-opacity="0"/></linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse"><path d="M48 0H0V48" fill="none" stroke="#ffffff" stroke-opacity="0.04" stroke-width="1"/></pattern>
+  </defs>
+  <rect width="800" height="450" fill="url(#bg)"/>
+  <rect width="800" height="450" fill="url(#grid)"/>
+  <rect width="800" height="450" fill="url(#acc)"/>
+  <rect width="800" height="450" fill="url(#blu)"/>
+  <rect x="0" y="0" width="800" height="3" fill="url(#beam)"/>
+  <text x="400" y="214" font-family="Inter, system-ui, sans-serif" font-size="180" font-weight="900" fill="#c0563b" opacity="0.85" text-anchor="middle">7</text>
+  <g font-family="Inter, system-ui, sans-serif" text-anchor="middle">
+    <text x="400" y="300" font-size="14" font-weight="700" letter-spacing="6" fill="#c0563b" opacity="0.95">SURVIVAL</text>
+    <text x="400" y="344" font-size="38" font-weight="800" letter-spacing="1" fill="#eaf2ff">7 Days to Die</text>
+  </g>
+</svg>
