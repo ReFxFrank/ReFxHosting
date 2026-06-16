@@ -514,9 +514,18 @@ export const api = {
     categories: () => getList<TicketCategory>("/support/categories"),
     createCategory: (input: { name: string; slug: string; slaFirstResponseMin?: number; slaResolutionMin?: number }) =>
       http.post<TicketCategory>("/support/categories", input),
+    updateCategory: (
+      id: string,
+      input: Partial<{ name: string; slug: string; slaFirstResponseMin: number; slaResolutionMin: number }>,
+    ) => http.patch<TicketCategory>(`/support/categories/${id}`, input),
+    deleteCategory: (id: string) => http.delete<void>(`/support/categories/${id}`),
     cannedResponses: () => getList<CannedResponse>("/support/canned-responses"),
     createCannedResponse: (input: { title: string; body: string; tags?: string[] }) =>
       http.post<CannedResponse>("/support/canned-responses", input),
+    updateCannedResponse: (
+      id: string,
+      input: Partial<{ title: string; body: string; tags: string[] }>,
+    ) => http.patch<CannedResponse>(`/support/canned-responses/${id}`, input),
     deleteCannedResponse: (id: string) =>
       http.delete<void>(`/support/canned-responses/${id}`),
     kb: (query?: { search?: string; category?: string }) =>

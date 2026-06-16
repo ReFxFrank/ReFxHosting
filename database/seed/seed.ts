@@ -120,16 +120,24 @@ interface TemplateFile {
 async function seedOwner() {
   const email = 'owner@refx.example';
   const password = process.env.SEED_OWNER_PASSWORD || 'ChangeMe!123';
-  const passwordHash = await argon2.hash(password, ARGON2_OPTS);
 
-  const owner = await prisma.user.upsert({
-    where: { email },
-    // Do NOT clobber an existing owner on re-seed: the seed runs on every
-    // deploy, and rewriting passwordHash here would silently reset the owner's
-    // password (and undo any role/state change) every time. Leave an existing
-    // account entirely as-is; only seed credentials on first creation.
-    update: {},
-    create: {
+  // Only bootstrap an owner when the platform has NO active owner at all. This
+  // is a safety net so a fresh install (or one where every owner was removed)
+  // is never locked out — it is NOT a demo account that gets recreated on every
+  // deploy. Once you have any active owner (this one kept, or your own), a
+  // deleted account stays deleted across rebuilds.
+  const existingOwner = await prisma.user.findFirst({
+    where: { globalRole: 'OWNER', deletedAt: null },
+    select: { id: true, email: true },
+  });
+  if (existingOwner) {
+    console.log(`  • OWNER user: ${existingOwner.email} (exists — not reseeded)`);
+    return existingOwner;
+  }
+
+  const passwordHash = await argon2.hash(password, ARGON2_OPTS);
+  const owner = await prisma.user.create({
+    data: {
       id: uuidv7(),
       email,
       passwordHash,
@@ -143,7 +151,7 @@ async function seedOwner() {
     },
   });
 
-  console.log(`  • OWNER user: ${owner.email} (${owner.id})`);
+  console.log(`  • OWNER user: ${owner.email} (${owner.id}) — bootstrapped`);
   return owner;
 }
 
@@ -571,20 +579,41 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
 async function main() {
   console.log('Seeding ReFx Hosting database…');
 
+  // Essential bootstrap — always applied so the platform is operable and the
+  // RBAC permission sets stay current. These never resurrect deleted data:
+  // seedOwner only creates an owner when none exists, and seedRoles upserts the
+  // fixed system roles (which are not user-deletable anyway).
   console.log('Identity:');
   await seedOwner();
   await seedRoles();
 
-  console.log('Infrastructure:');
-  await seedRegionAndNode();
+  // Demo / sample content (regions, a sample node, ticket categories, game
+  // categories, products, templates). This is example data for a fresh install,
+  // NOT a managed dataset — re-upserting it on every deploy would resurrect
+  // anything an operator deleted. So it only runs when SEED_DEMO is enabled, or
+  // automatically on a first run (no regions yet). Set SEED_DEMO=false to keep
+  // it off; SEED_DEMO=true to force it.
+  const demoFlag = (process.env.SEED_DEMO ?? '').toLowerCase();
+  const firstRun = (await prisma.region.count()) === 0;
+  const seedDemo =
+    demoFlag === 'true' || demoFlag === '1' || (demoFlag === '' && firstRun);
 
-  console.log('Support:');
-  await seedTicketCategories();
+  if (seedDemo) {
+    console.log('Infrastructure:');
+    await seedRegionAndNode();
 
-  console.log('Catalog:');
-  const categorySlugToId = await seedGameCategories();
-  await seedProducts();
-  await seedTemplates(categorySlugToId);
+    console.log('Support:');
+    await seedTicketCategories();
+
+    console.log('Catalog:');
+    const categorySlugToId = await seedGameCategories();
+    await seedProducts();
+    await seedTemplates(categorySlugToId);
+  } else {
+    console.log(
+      'Demo content: skipped (already initialised; set SEED_DEMO=true to force).',
+    );
+  }
 
   console.log('Seed complete.');
 }

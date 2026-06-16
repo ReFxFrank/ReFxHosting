@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { LifeBuoy, Search, Send, MessageSquareReply, Lock } from "lucide-react";
+import { LifeBuoy, Search, Send, MessageSquareReply, Lock, Settings2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -99,6 +100,13 @@ export default function AdminSupportPage() {
       <PageHeader
         title="Support tickets"
         description="The full ticket queue. Reply, set priority and status, categorise and assign."
+        actions={
+          <Button asChild variant="outline">
+            <Link href="/admin/support/settings">
+              <Settings2 className="size-4" /> Categories &amp; responses
+            </Link>
+          </Button>
+        }
       />
 
       <div className="flex flex-wrap items-center gap-3">

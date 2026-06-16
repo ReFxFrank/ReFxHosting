@@ -26,9 +26,11 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { AddMessageDto } from './dto/add-message.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { CreateCannedResponseDto } from './dto/create-canned-response.dto';
+import { UpdateCannedResponseDto } from './dto/update-canned-response.dto';
 import { CreateKbArticleDto } from './dto/create-kb-article.dto';
 import { UpdateKbArticleDto } from './dto/update-kb-article.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 /** Body for the assign endpoint. */
 class AssignTicketBody {
@@ -140,6 +142,21 @@ export class SupportController {
     return this.support.createCannedResponse(dto);
   }
 
+  @Patch('canned-responses/:id')
+  @UseGuards(RolesGuard)
+  @Roles(GlobalRole.SUPPORT)
+  @Audit({
+    action: 'support.canned.update',
+    targetType: 'CannedResponse',
+    targetParam: 'id',
+  })
+  updateCannedResponse(
+    @Param('id') id: string,
+    @Body() dto: UpdateCannedResponseDto,
+  ) {
+    return this.support.updateCannedResponse(id, dto);
+  }
+
   @Delete('canned-responses/:id')
   @HttpCode(200)
   @UseGuards(RolesGuard)
@@ -212,5 +229,30 @@ export class SupportController {
   @Audit({ action: 'support.category.create', targetType: 'TicketCategory' })
   createCategory(@Body() dto: CreateCategoryDto) {
     return this.support.createCategory(dto);
+  }
+
+  @Patch('categories/:id')
+  @UseGuards(RolesGuard)
+  @Roles(GlobalRole.ADMIN)
+  @Audit({
+    action: 'support.category.update',
+    targetType: 'TicketCategory',
+    targetParam: 'id',
+  })
+  updateCategory(@Param('id') id: string, @Body() dto: UpdateCategoryDto) {
+    return this.support.updateCategory(id, dto);
+  }
+
+  @Delete('categories/:id')
+  @HttpCode(200)
+  @UseGuards(RolesGuard)
+  @Roles(GlobalRole.ADMIN)
+  @Audit({
+    action: 'support.category.delete',
+    targetType: 'TicketCategory',
+    targetParam: 'id',
+  })
+  deleteCategory(@Param('id') id: string) {
+    return this.support.deleteCategory(id);
   }
 }

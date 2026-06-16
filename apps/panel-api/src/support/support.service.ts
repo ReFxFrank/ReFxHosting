@@ -27,9 +27,11 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { AddMessageDto } from './dto/add-message.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { CreateCannedResponseDto } from './dto/create-canned-response.dto';
+import { UpdateCannedResponseDto } from './dto/update-canned-response.dto';
 import { CreateKbArticleDto } from './dto/create-kb-article.dto';
 import { UpdateKbArticleDto } from './dto/update-kb-article.dto';
 import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
 
 /** Ticket with its messages eager-loaded (the common detail shape). */
 export type TicketWithMessages = Ticket & { messages: TicketMessage[] };
@@ -343,6 +345,22 @@ export class SupportService {
     });
   }
 
+  async updateCannedResponse(
+    id: string,
+    dto: UpdateCannedResponseDto,
+  ): Promise<CannedResponse> {
+    const existing = await this.prisma.cannedResponse.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) throw new NotFoundException('Canned response not found');
+    const data: Prisma.CannedResponseUpdateInput = {};
+    if (dto.title !== undefined) data.title = dto.title;
+    if (dto.body !== undefined) data.body = dto.body;
+    if (dto.tags !== undefined) data.tags = dto.tags;
+    return this.prisma.cannedResponse.update({ where: { id }, data });
+  }
+
   async deleteCannedResponse(id: string): Promise<{ id: string }> {
     const existing = await this.prisma.cannedResponse.findUnique({
       where: { id },
@@ -451,6 +469,60 @@ export class SupportService {
         slaResolutionMin: dto.slaResolutionMin ?? undefined,
       },
     });
+  }
+
+  async updateCategory(
+    id: string,
+    dto: UpdateCategoryDto,
+  ): Promise<TicketCategory> {
+    const category = await this.prisma.ticketCategory.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!category) throw new NotFoundException('Category not found');
+
+    if (dto.slug) {
+      const clash = await this.prisma.ticketCategory.findUnique({
+        where: { slug: dto.slug },
+        select: { id: true },
+      });
+      if (clash && clash.id !== id) {
+        throw new ConflictException('A category with that slug already exists');
+      }
+    }
+
+    const data: Prisma.TicketCategoryUpdateInput = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.slug !== undefined) data.slug = dto.slug;
+    if (dto.slaFirstResponseMin !== undefined) {
+      data.slaFirstResponseMin = dto.slaFirstResponseMin;
+    }
+    if (dto.slaResolutionMin !== undefined) {
+      data.slaResolutionMin = dto.slaResolutionMin;
+    }
+    return this.prisma.ticketCategory.update({ where: { id }, data });
+  }
+
+  /** Delete a category, first detaching it from any tickets/messages. */
+  async deleteCategory(id: string): Promise<{ id: string }> {
+    const category = await this.prisma.ticketCategory.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!category) throw new NotFoundException('Category not found');
+
+    await this.prisma.$transaction([
+      this.prisma.ticket.updateMany({
+        where: { categoryId: id },
+        data: { categoryId: null },
+      }),
+      this.prisma.ticketMessage.updateMany({
+        where: { categoryId: id },
+        data: { categoryId: null },
+      }),
+      this.prisma.ticketCategory.delete({ where: { id } }),
+    ]);
+    return { id };
   }
 
   // ---- Helpers -----------------------------------------------------------
