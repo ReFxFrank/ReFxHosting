@@ -234,6 +234,12 @@ export class ServersController {
 
   // ---- upgrade (resize alias + price preview) ----------------------------
 
+  @Get(':id/upgrade/options')
+  @RequirePermissions('server.read')
+  upgradeOptions(@Param('id') id: string) {
+    return this.servers.upgradeOptions(id);
+  }
+
   @Post(':id/upgrade')
   @RequirePermissions('control.resize')
   @Audit({ action: 'server.upgrade', targetType: 'Server', targetParam: 'id' })
@@ -251,6 +257,7 @@ export class ServersController {
   @RequirePermissions('server.read')
   upgradePreviewGet(@Param('id') id: string, @Query() dto: UpgradeServerDto) {
     return this.servers.upgradePreview(id, {
+      slots: dto.slots ? Number(dto.slots) : undefined,
       cpuCores: dto.cpuCores ? Number(dto.cpuCores) : undefined,
       memoryMb: dto.memoryMb ? Number(dto.memoryMb) : undefined,
       diskMb: dto.diskMb ? Number(dto.diskMb) : undefined,

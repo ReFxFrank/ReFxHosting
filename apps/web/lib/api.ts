@@ -406,13 +406,35 @@ export const api = {
       http.post<void>(`/servers/${id}/switch-game`, input),
 
     // Resource upgrade/downgrade.
-    upgradePreview: (id: string, input: { cpuCores: number; memoryMb: number; diskMb: number }) =>
+    upgradeOptions: (id: string) =>
+      http.get<{
+        perSlot: boolean;
+        currency: string;
+        interval: string;
+        slots: number;
+        minSlots: number;
+        maxSlots: number;
+        slotStep: number;
+        cpuPerSlot: number;
+        memoryMbPerSlot: number;
+        diskMbPerSlot: number;
+        perSlotAmountMinor: number;
+        cpuCores: number;
+        memoryMb: number;
+        diskMb: number;
+      }>(`/servers/${id}/upgrade/options`),
+    upgradePreview: (
+      id: string,
+      input: Partial<{ slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
+    ) =>
       http.post<{ amountMinor: number; currency: string; interval: string; deltaMinor: number }>(
         `/servers/${id}/upgrade/preview`,
         input,
       ),
-    upgrade: (id: string, input: { cpuCores: number; memoryMb: number; diskMb: number }) =>
-      http.post<void>(`/servers/${id}/upgrade`, input),
+    upgrade: (
+      id: string,
+      input: Partial<{ slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
+    ) => http.post<void>(`/servers/${id}/upgrade`, input),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),

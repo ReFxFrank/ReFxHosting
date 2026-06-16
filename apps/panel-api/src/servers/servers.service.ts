@@ -26,6 +26,7 @@ import {
   CreateServerDto,
   ResizeServerDto,
   SwitchGameDto,
+  UpgradeServerDto,
 } from './dto/server.dto';
 import { AdminCreateServerDto } from '../admin/dto/admin.dto';
 import {
@@ -712,21 +713,113 @@ export class ServersService {
   // ---- upgrade (resize alias + price preview) ----------------------------
 
   /** Reuses the resize logic; `upgrade` is the web-facing name. */
-  async upgrade(
-    id: string,
-    dto: ResizeServerDto,
-  ): Promise<Server> {
+  async upgrade(id: string, dto: UpgradeServerDto): Promise<Server> {
+    // Per-slot products upgrade by SLOT COUNT (resources + price scale together);
+    // a legacy flat product still resizes raw resources.
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      include: { node: true, subscription: { include: { product: true } } },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    const product = server.subscription?.product;
+
+    if (product?.perSlot && dto.slots != null) {
+      const slots = Math.min(
+        Math.max(dto.slots, product.minSlots || 1),
+        product.maxSlots || dto.slots,
+      );
+      const limits = {
+        cpuCores: +((product.cpuPerSlot || 0) * slots).toFixed(2),
+        memoryMb: (product.memoryMbPerSlot || 0) * slots,
+        diskMb: (product.diskMbPerSlot || 0) * slots,
+      };
+      // Node must absorb the delta (only when growing).
+      const cap = await this.nodes.capacity(server.nodeId);
+      if (
+        limits.memoryMb - server.memoryMb > cap.memory.free ||
+        limits.cpuCores - server.cpuCores > cap.cpu.free ||
+        limits.diskMb - server.diskMb > cap.disk.free
+      ) {
+        throw new ConflictException('Node lacks capacity for this upgrade');
+      }
+      await this.prisma.subscription.update({
+        where: { id: server.subscriptionId! },
+        data: { slots },
+      });
+      const updated = await this.prisma.server.update({
+        where: { id },
+        data: { slots, ...limits },
+      });
+      await this.agent.reconfigure(server.node, {
+        serverId: id,
+        limits: {
+          cpuCores: updated.cpuCores,
+          memoryMb: updated.memoryMb,
+          swapMb: updated.swapMb,
+          diskMb: updated.diskMb,
+          ioWeight: updated.ioWeight,
+        },
+      });
+      return updated;
+    }
+
     return this.resize(id, dto);
   }
 
+  /** Per-slot upgrade context for the storefront upgrade page. */
+  async upgradeOptions(id: string): Promise<{
+    perSlot: boolean;
+    currency: string;
+    interval: string;
+    slots: number;
+    minSlots: number;
+    maxSlots: number;
+    slotStep: number;
+    cpuPerSlot: number;
+    memoryMbPerSlot: number;
+    diskMbPerSlot: number;
+    perSlotAmountMinor: number;
+    cpuCores: number;
+    memoryMb: number;
+    diskMb: number;
+  }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      include: {
+        subscription: { include: { product: { include: { prices: true } } } },
+      },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    const sub = server.subscription;
+    const product = sub?.product;
+    const price = product?.prices.find((p) => p.id === sub?.priceId);
+
+    return {
+      perSlot: !!product?.perSlot,
+      currency: price?.currency ?? 'USD',
+      interval: sub?.interval ?? 'MONTHLY',
+      slots: sub?.slots ?? server.slots ?? 1,
+      minSlots: product?.minSlots ?? 1,
+      maxSlots: product?.maxSlots ?? 64,
+      slotStep: product?.slotStep || 1,
+      cpuPerSlot: product?.cpuPerSlot ?? 0,
+      memoryMbPerSlot: product?.memoryMbPerSlot ?? 0,
+      diskMbPerSlot: product?.diskMbPerSlot ?? 0,
+      perSlotAmountMinor: price?.amountMinor ?? 0,
+      cpuCores: server.cpuCores,
+      memoryMb: server.memoryMb,
+      diskMb: server.diskMb,
+    };
+  }
+
   /**
-   * Best-effort price delta for an upgrade. Compares the funding subscription's
-   * current price against the cheapest active Product matching the requested
-   * resources. Proration specifics are intentionally simplified.
+   * Price preview for an upgrade. Per-slot products price as
+   * `perSlotAmount × slots`; legacy flat products fall back to the cheapest
+   * covering product. Proration specifics are intentionally simplified.
    */
   async upgradePreview(
     id: string,
-    dto: { cpuCores?: number; memoryMb?: number; diskMb?: number },
+    dto: { slots?: number; cpuCores?: number; memoryMb?: number; diskMb?: number },
   ): Promise<{
     amountMinor: number;
     currency: string;
@@ -742,19 +835,32 @@ export class ServersService {
     if (!server) throw new NotFoundException('Server not found');
 
     const sub = server.subscription;
-    const currentPrice = sub?.product.prices.find(
-      (p) => p.id === sub.priceId,
-    );
+    const currentPrice = sub?.product.prices.find((p) => p.id === sub.priceId);
     const currency = currentPrice?.currency ?? 'USD';
     const interval = sub?.interval ?? 'MONTHLY';
-    const currentAmount = currentPrice?.amountMinor ?? 0;
 
-    // Find the cheapest active product whose resources cover the request, on the
-    // same billing interval, to estimate the new recurring amount.
+    // Per-slot: recurring = per-slot rate × slots.
+    if (sub?.product.perSlot && dto.slots != null) {
+      const perSlot = currentPrice?.amountMinor ?? 0;
+      const currentSlots = sub.slots ?? 1;
+      const slots = Math.min(
+        Math.max(dto.slots, sub.product.minSlots || 1),
+        sub.product.maxSlots || dto.slots,
+      );
+      const newAmount = perSlot * slots;
+      return {
+        amountMinor: newAmount,
+        currency,
+        interval,
+        deltaMinor: newAmount - perSlot * currentSlots,
+      };
+    }
+
+    // Legacy flat products: cheapest active product covering the requested specs.
+    const currentAmount = currentPrice?.amountMinor ?? 0;
     const wantCpu = dto.cpuCores ?? server.cpuCores;
     const wantMem = dto.memoryMb ?? server.memoryMb;
     const wantDisk = dto.diskMb ?? server.diskMb;
-
     const candidates = await this.prisma.product.findMany({
       where: {
         isActive: true,
@@ -765,7 +871,6 @@ export class ServersService {
       },
       include: { prices: { where: { interval, isActive: true } } },
     });
-
     let newAmount = currentAmount;
     for (const product of candidates) {
       const price = product.prices.find((p) => p.currency === currency);
@@ -773,9 +878,6 @@ export class ServersService {
         newAmount = price.amountMinor;
       }
     }
-
-    // TODO(impl): real proration (remaining-period credit + new-period charge)
-    // via the billing gateway; this returns the recurring delta only.
     return {
       amountMinor: newAmount,
       currency,

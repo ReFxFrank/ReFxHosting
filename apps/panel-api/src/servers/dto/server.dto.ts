@@ -195,6 +195,12 @@ export class UpdateStartupDto {
 }
 
 export class UpgradeServerDto {
+  @ApiPropertyOptional({ description: 'New slot count (per-slot products).' })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  slots?: number;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()

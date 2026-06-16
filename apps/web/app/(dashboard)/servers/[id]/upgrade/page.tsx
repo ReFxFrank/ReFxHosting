@@ -4,7 +4,7 @@ import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Cpu, MemoryStick, HardDrive, ArrowRight, Loader2, TrendingUp, TrendingDown } from "lucide-react";
+import { Cpu, MemoryStick, HardDrive, ArrowRight, TrendingUp, TrendingDown } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
 import {
@@ -28,10 +28,6 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { cn, formatMb, formatMoney } from "@/lib/utils";
 
-const CPU = { min: 0.5, max: 8, step: 0.5 };
-const MEM = { min: 1024, max: 32768, step: 1024 };
-const DISK = { min: 5120, max: 204800, step: 5120 };
-
 function intervalLabel(interval: string) {
   const map: Record<string, string> = {
     WEEKLY: "/wk",
@@ -44,107 +40,51 @@ function intervalLabel(interval: string) {
   return map[interval] ?? `/${interval.toLowerCase()}`;
 }
 
-function ResourceRow({
-  icon: Icon,
-  label,
-  value,
-  min,
-  max,
-  step,
-  display,
-  onChange,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  display: string;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <Icon className="size-4 text-muted-foreground" />
-          {label}
-        </div>
-        <span className="font-mono text-sm tabular-nums">{display}</span>
-      </div>
-      <Slider value={value} min={min} max={max} step={step} onChange={onChange} />
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>{label === "CPU cores" ? `${min}` : formatMb(min)}</span>
-        <span>{label === "CPU cores" ? `${max}` : formatMb(max)}</span>
-      </div>
-    </div>
-  );
-}
-
 export default function UpgradePage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
 
-  const { data: server, isLoading } = useQuery({
-    queryKey: ["server", id],
-    queryFn: () => api.servers.get(id),
+  const { data: opts, isLoading } = useQuery({
+    queryKey: ["upgrade-options", id],
+    queryFn: () => api.servers.upgradeOptions(id),
   });
 
-  const [cpuCores, setCpuCores] = useState<number>(CPU.min);
-  const [memoryMb, setMemoryMb] = useState<number>(MEM.min);
-  const [diskMb, setDiskMb] = useState<number>(DISK.min);
+  const [slots, setSlots] = useState(1);
   const [initialized, setInitialized] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Seed sliders from current server values once loaded.
   useEffect(() => {
-    if (server && !initialized) {
-      setCpuCores(server.cpuCores);
-      setMemoryMb(server.memoryMb);
-      setDiskMb(server.diskMb);
+    if (opts && !initialized) {
+      setSlots(opts.slots);
       setInitialized(true);
     }
-  }, [server, initialized]);
+  }, [opts, initialized]);
 
-  // Debounce slider changes before requesting a preview.
-  const [debounced, setDebounced] = useState({ cpuCores, memoryMb, diskMb });
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced({ cpuCores, memoryMb, diskMb }), 500);
-    return () => clearTimeout(t);
-  }, [cpuCores, memoryMb, diskMb]);
-
-  const unchanged =
-    !!server &&
-    cpuCores === server.cpuCores &&
-    memoryMb === server.memoryMb &&
-    diskMb === server.diskMb;
-
-  const { data: preview, isFetching: previewLoading } = useQuery({
-    queryKey: ["upgrade-preview", id, debounced.cpuCores, debounced.memoryMb, debounced.diskMb],
-    queryFn: () => api.servers.upgradePreview(id, debounced),
-    enabled: initialized,
-  });
+  // Per-slot pricing is deterministic, so the preview computes instantly
+  // client-side (no round-trip): resources and cost both scale with slots.
+  const derived = useMemo(() => {
+    if (!opts) return null;
+    return {
+      cpuCores: Number((opts.cpuPerSlot * slots).toFixed(2)),
+      memoryMb: opts.memoryMbPerSlot * slots,
+      diskMb: opts.diskMbPerSlot * slots,
+      amountMinor: opts.perSlotAmountMinor * slots,
+    };
+  }, [opts, slots]);
 
   const upgradeMutation = useMutation({
-    mutationFn: () => api.servers.upgrade(id, { cpuCores, memoryMb, diskMb }),
+    mutationFn: () => api.servers.upgrade(id, { slots }),
     onSuccess: () => {
-      toast.success("Resources updated");
+      toast.success("Plan updated — new size applies now; billing adjusts next cycle.");
       queryClient.invalidateQueries({ queryKey: ["server", id] });
+      queryClient.invalidateQueries({ queryKey: ["upgrade-options", id] });
       setConfirmOpen(false);
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to apply changes"),
   });
 
-  const delta = preview?.deltaMinor ?? 0;
-  const isDowngrade = delta < 0;
-  const deltaDisplay = useMemo(() => {
-    if (!preview) return null;
-    const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
-    return `${sign}${formatMoney(Math.abs(delta), preview.currency)}`;
-  }, [preview, delta]);
-
-  if (isLoading || !server) {
+  if (isLoading || !opts || !derived) {
     return (
       <div className="space-y-6">
         <PageHeader title="Upgrade resources" />
@@ -156,196 +96,173 @@ export default function UpgradePage() {
     );
   }
 
+  if (!opts.perSlot) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Upgrade resources" />
+        <Card>
+          <CardContent className="p-6 text-sm text-muted-foreground">
+            This plan isn&apos;t slot-based and can&apos;t be resized here. Contact
+            support to change its resources.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const currentAmount = opts.perSlotAmountMinor * opts.slots;
+  const delta = derived.amountMinor - currentAmount;
+  const isDowngrade = delta < 0;
+  const unchanged = slots === opts.slots;
+  const deltaDisplay = `${delta > 0 ? "+" : delta < 0 ? "-" : ""}${formatMoney(Math.abs(delta), opts.currency)}`;
+  const ramGb = (derived.memoryMb / 1024).toFixed(derived.memoryMb % 1024 === 0 ? 0 : 1);
+  const diskGb = (derived.diskMb / 1024).toFixed(derived.diskMb % 1024 === 0 ? 0 : 1);
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Upgrade resources"
-        description="Scale your plan up or down. Changes are billed on your next cycle."
+        description="Scale your plan up or down. The new size applies now; billing adjusts on your next cycle."
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
-        {/* Sliders */}
         <Card>
           <CardHeader>
-            <CardTitle>Resources</CardTitle>
-            <CardDescription>Drag to adjust your allocation.</CardDescription>
+            <CardTitle>Plan size</CardTitle>
+            <CardDescription>
+              Drag to set your slot count — CPU, memory and disk scale together.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-8">
-            <ResourceRow
-              icon={Cpu}
-              label="CPU cores"
-              value={cpuCores}
-              min={CPU.min}
-              max={CPU.max}
-              step={CPU.step}
-              display={`${cpuCores} vCPU`}
-              onChange={setCpuCores}
-            />
-            <ResourceRow
-              icon={MemoryStick}
-              label="Memory"
-              value={memoryMb}
-              min={MEM.min}
-              max={MEM.max}
-              step={MEM.step}
-              display={formatMb(memoryMb)}
-              onChange={setMemoryMb}
-            />
-            <ResourceRow
-              icon={HardDrive}
-              label="Disk"
-              value={diskMb}
-              min={DISK.min}
-              max={DISK.max}
-              step={DISK.step}
-              display={formatMb(diskMb)}
-              onChange={setDiskMb}
-            />
+          <CardContent className="space-y-6">
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Slots</span>
+                <span className="font-mono text-sm tabular-nums">{slots}</span>
+              </div>
+              <Slider
+                value={slots}
+                min={opts.minSlots}
+                max={opts.maxSlots}
+                step={opts.slotStep || 1}
+                onChange={setSlots}
+              />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>{opts.minSlots}</span>
+                <span>{opts.maxSlots}</span>
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <DerivedStat icon={Cpu} label="CPU" value={`${derived.cpuCores} vCPU`} />
+              <DerivedStat icon={MemoryStick} label="Memory" value={`${ramGb} GB`} />
+              <DerivedStat icon={HardDrive} label="Disk" value={`${diskGb} GB`} />
+            </div>
           </CardContent>
         </Card>
 
-        {/* Price preview */}
         <Card className="lg:sticky lg:top-6">
           <CardHeader>
             <CardTitle>Price preview</CardTitle>
-            <CardDescription>Estimated recurring cost for the new plan.</CardDescription>
+            <CardDescription>Recurring cost for the new plan size.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="rounded-lg border bg-muted/30 p-4">
-              {previewLoading || !preview ? (
-                <div className="flex h-16 items-center justify-center text-muted-foreground">
-                  <Loader2 className="size-5 animate-spin" />
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">New recurring price</p>
-                  <p className="text-2xl font-semibold tracking-tight">
-                    {formatMoney(preview.amountMinor, preview.currency)}
-                    <span className="ml-1 text-sm font-normal text-muted-foreground">
-                      {intervalLabel(preview.interval)}
-                    </span>
-                  </p>
-                  {delta !== 0 && deltaDisplay && (
-                    <p
-                      className={cn(
-                        "inline-flex items-center gap-1 text-sm font-medium",
-                        isDowngrade ? "text-success" : "text-primary",
-                      )}
-                    >
-                      {isDowngrade ? (
-                        <TrendingDown className="size-4" />
-                      ) : (
-                        <TrendingUp className="size-4" />
-                      )}
-                      {deltaDisplay} {isDowngrade ? "saved" : "more"}
-                    </p>
+              <p className="text-xs text-muted-foreground">New recurring price</p>
+              <p className="text-2xl font-semibold tracking-tight">
+                {formatMoney(derived.amountMinor, opts.currency)}
+                <span className="ml-1 text-sm font-normal text-muted-foreground">
+                  {intervalLabel(opts.interval)}
+                </span>
+              </p>
+              {delta !== 0 && (
+                <p
+                  className={cn(
+                    "inline-flex items-center gap-1 text-sm font-medium",
+                    isDowngrade ? "text-success" : "text-primary",
                   )}
-                </div>
+                >
+                  {isDowngrade ? <TrendingDown className="size-4" /> : <TrendingUp className="size-4" />}
+                  {deltaDisplay} {isDowngrade ? "saved" : "more"}
+                </p>
               )}
             </div>
 
-            {/* Current vs new comparison */}
             <div className="space-y-2 text-sm">
-              <ComparisonRow
-                label="CPU"
-                from={`${server.cpuCores} vCPU`}
-                to={`${cpuCores} vCPU`}
-                changed={cpuCores !== server.cpuCores}
-              />
-              <ComparisonRow
-                label="Memory"
-                from={formatMb(server.memoryMb)}
-                to={formatMb(memoryMb)}
-                changed={memoryMb !== server.memoryMb}
-              />
-              <ComparisonRow
-                label="Disk"
-                from={formatMb(server.diskMb)}
-                to={formatMb(diskMb)}
-                changed={diskMb !== server.diskMb}
-              />
+              <ComparisonRow label="Slots" from={`${opts.slots}`} to={`${slots}`} changed={slots !== opts.slots} />
+              <ComparisonRow label="CPU" from={`${opts.cpuCores} vCPU`} to={`${derived.cpuCores} vCPU`} changed={derived.cpuCores !== opts.cpuCores} />
+              <ComparisonRow label="Memory" from={formatMb(opts.memoryMb)} to={formatMb(derived.memoryMb)} changed={derived.memoryMb !== opts.memoryMb} />
+              <ComparisonRow label="Disk" from={formatMb(opts.diskMb)} to={formatMb(derived.diskMb)} changed={derived.diskMb !== opts.diskMb} />
             </div>
 
-            <Button
-              className="w-full"
-              disabled={unchanged || previewLoading}
-              onClick={() => setConfirmOpen(true)}
-            >
+            <Button className="w-full" disabled={unchanged} onClick={() => setConfirmOpen(true)}>
               Apply changes
             </Button>
           </CardContent>
         </Card>
       </div>
 
-      {/* Confirm dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirm resource change</DialogTitle>
-            <DialogDescription>
-              Review your new allocation before applying.
-            </DialogDescription>
+            <DialogTitle>Confirm plan change</DialogTitle>
+            <DialogDescription>Review your new plan size before applying.</DialogDescription>
           </DialogHeader>
-
           <div className="space-y-2 text-sm">
-            <ComparisonRow
-              label="CPU"
-              from={`${server.cpuCores} vCPU`}
-              to={`${cpuCores} vCPU`}
-              changed={cpuCores !== server.cpuCores}
-            />
-            <ComparisonRow
-              label="Memory"
-              from={formatMb(server.memoryMb)}
-              to={formatMb(memoryMb)}
-              changed={memoryMb !== server.memoryMb}
-            />
-            <ComparisonRow
-              label="Disk"
-              from={formatMb(server.diskMb)}
-              to={formatMb(diskMb)}
-              changed={diskMb !== server.diskMb}
-            />
+            <ComparisonRow label="Slots" from={`${opts.slots}`} to={`${slots}`} changed={slots !== opts.slots} />
+            <ComparisonRow label="CPU" from={`${opts.cpuCores} vCPU`} to={`${derived.cpuCores} vCPU`} changed={derived.cpuCores !== opts.cpuCores} />
+            <ComparisonRow label="Memory" from={formatMb(opts.memoryMb)} to={formatMb(derived.memoryMb)} changed={derived.memoryMb !== opts.memoryMb} />
+            <ComparisonRow label="Disk" from={formatMb(opts.diskMb)} to={formatMb(derived.diskMb)} changed={derived.diskMb !== opts.diskMb} />
           </div>
-
-          {preview && (
-            <div className="rounded-lg bg-muted/50 p-3 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">New recurring price</span>
-                <span className="font-medium">
-                  {formatMoney(preview.amountMinor, preview.currency)}
-                  {intervalLabel(preview.interval)}
+          <div className="rounded-lg bg-muted/50 p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">New recurring price</span>
+              <span className="font-medium">
+                {formatMoney(derived.amountMinor, opts.currency)}
+                {intervalLabel(opts.interval)}
+              </span>
+            </div>
+            {delta !== 0 && (
+              <div className="mt-1 flex items-center justify-between">
+                <span className="text-muted-foreground">{isDowngrade ? "Reduction" : "Increase"}</span>
+                <span className={cn("font-medium", isDowngrade ? "text-success" : "text-primary")}>
+                  {deltaDisplay}
                 </span>
               </div>
-              {delta !== 0 && deltaDisplay && (
-                <div className="mt-1 flex items-center justify-between">
-                  <span className="text-muted-foreground">
-                    {isDowngrade ? "Reduction" : "Increase"}
-                  </span>
-                  <span className={cn("font-medium", isDowngrade ? "text-success" : "text-primary")}>
-                    {deltaDisplay}
-                  </span>
-                </div>
-              )}
-              <p className="mt-2 text-xs text-muted-foreground">
-                Prorated difference applies on your next billing cycle.
-              </p>
-            </div>
-          )}
-
+            )}
+            <p className="mt-2 text-xs text-muted-foreground">
+              The new size applies immediately; the price difference is reflected on your next invoice.
+            </p>
+          </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
-            <Button
-              loading={upgradeMutation.isPending}
-              onClick={() => upgradeMutation.mutate()}
-            >
+            <Button loading={upgradeMutation.isPending} onClick={() => upgradeMutation.mutate()}>
               Apply changes
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function DerivedStat({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-lg border p-3">
+      <Icon className="size-4 text-muted-foreground" />
+      <div>
+        <p className="refx-eyebrow">{label}</p>
+        <p className="text-sm font-semibold">{value}</p>
+      </div>
     </div>
   );
 }
