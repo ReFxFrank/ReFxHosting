@@ -18,20 +18,49 @@ import { Button } from "@/components/ui/button";
 const WARN_AFTER_MS = 13 * 60 * 1000; // 13 min idle
 const GRACE_MS = 2 * 60 * 1000; //        + 2 min to respond  = 15 min total
 
+/** Shared across tabs so activity in ANY tab keeps every tab signed in. */
+const ACTIVITY_KEY = "refx:last-activity";
+/** Throttle localStorage writes (activity fires constantly). */
+const WRITE_THROTTLE_MS = 2000;
+
+// Broad set, capture-phase so events a child stops (e.g. the xterm console
+// swallowing keydown) still count as activity. Pointer + input + focus cover
+// touch, trackpads and typing inside embedded widgets.
 const ACTIVITY_EVENTS = [
+  "pointerdown",
+  "pointermove",
   "mousedown",
-  "mousemove",
   "keydown",
   "touchstart",
   "scroll",
   "wheel",
+  "click",
+  "input",
+  "focusin",
 ] as const;
+
+function readShared(): number {
+  try {
+    return Number(window.localStorage.getItem(ACTIVITY_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+function writeShared(ts: number) {
+  try {
+    window.localStorage.setItem(ACTIVITY_KEY, String(ts));
+  } catch {
+    /* private mode / disabled storage — fall back to in-tab only */
+  }
+}
 
 /**
  * Signs an inactive client out cleanly. After WARN_AFTER_MS of no interaction it
- * shows a countdown dialog; staying keeps the session alive, otherwise (or on a
- * server-side session expiry) the user is redirected to /login instead of being
- * left looking at hidden/blank data. Mounted inside authenticated layouts only.
+ * shows a countdown dialog; ANY activity (in this tab OR another) keeps the
+ * session alive, otherwise (or on a server-side session expiry) the user is sent
+ * to /login. Activity is tracked in capture phase and shared across tabs via
+ * localStorage, so an active user is never logged out by a stale background tab.
+ * Mounted inside authenticated layouts only.
  */
 export function IdleSessionGuard() {
   const router = useRouter();
@@ -41,16 +70,34 @@ export function IdleSessionGuard() {
   const refreshUser = useAuthStore((s) => s.refreshUser);
 
   const lastActivity = useRef(0);
+  const lastWrite = useRef(0);
   const graceEnd = useRef(0);
+  const warnStart = useRef(0);
   const warning = useRef(false);
   const endedRef = useRef(false);
 
   const [warnOpen, setWarnOpen] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(Math.floor(GRACE_MS / 1000));
 
+  /** Record activity locally + (throttled) broadcast it to other tabs. */
+  const markActivity = useCallback((ts: number = Date.now()) => {
+    lastActivity.current = ts;
+    if (ts - lastWrite.current >= WRITE_THROTTLE_MS) {
+      lastWrite.current = ts;
+      writeShared(ts);
+    }
+  }, []);
+
+  /** Most-recent activity across this tab and all others. */
+  const effectiveLastActivity = useCallback(
+    () => Math.max(lastActivity.current, readShared()),
+    [],
+  );
+
   const endSession = useCallback(async () => {
     if (endedRef.current) return;
     endedRef.current = true;
+    warning.current = false;
     setWarnOpen(false);
     await logout();
     const search = typeof window !== "undefined" ? window.location.search : "";
@@ -61,23 +108,40 @@ export function IdleSessionGuard() {
   const stay = useCallback(() => {
     warning.current = false;
     setWarnOpen(false);
-    lastActivity.current = Date.now();
-    // Revalidate the session in the background (refreshes the access token if
-    // it expired while idle); keeps the user signed in.
+    const ts = Date.now();
+    lastWrite.current = ts;
+    lastActivity.current = ts;
+    writeShared(ts); // tell other tabs we're here too
+    // Revalidate in the background (refreshes the access token if it expired
+    // while idle); keeps the user signed in.
     void refreshUser();
   }, [refreshUser]);
 
-  // Track activity (ignored while the warning is up — the user must respond).
+  // Track activity (capture phase so nothing can swallow it before us).
   useEffect(() => {
-    const onActivity = () => {
-      if (!warning.current) lastActivity.current = Date.now();
-    };
+    const onActivity = () => markActivity();
     ACTIVITY_EVENTS.forEach((e) =>
-      window.addEventListener(e, onActivity, { passive: true }),
+      window.addEventListener(e, onActivity, { capture: true, passive: true }),
     );
-    return () =>
-      ACTIVITY_EVENTS.forEach((e) => window.removeEventListener(e, onActivity));
-  }, []);
+    // Returning to the tab (or another tab broadcasting activity) counts too.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") markActivity();
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === ACTIVITY_KEY && e.newValue) {
+        lastActivity.current = Math.max(lastActivity.current, Number(e.newValue) || 0);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      ACTIVITY_EVENTS.forEach((e) =>
+        window.removeEventListener(e, onActivity, { capture: true } as EventListenerOptions),
+      );
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [markActivity]);
 
   // A server-side session expiry (refresh token rejected) ends the session now.
   useEffect(() => {
@@ -90,25 +154,33 @@ export function IdleSessionGuard() {
   useEffect(() => {
     if (status !== "authenticated") return;
     endedRef.current = false;
-    lastActivity.current = Date.now(); // fresh baseline when the session starts
+    markActivity(Date.now()); // fresh baseline when the session starts
     const tick = setInterval(() => {
       const now = Date.now();
+      const last = effectiveLastActivity();
       if (warning.current) {
+        // Any activity after the warning opened (this tab or another) cancels it.
+        if (last > warnStart.current) {
+          warning.current = false;
+          setWarnOpen(false);
+          return;
+        }
         const remaining = graceEnd.current - now;
         if (remaining <= 0) {
           void endSession();
         } else {
           setSecondsLeft(Math.ceil(remaining / 1000));
         }
-      } else if (now - lastActivity.current >= WARN_AFTER_MS) {
+      } else if (now - last >= WARN_AFTER_MS) {
         warning.current = true;
+        warnStart.current = now;
         graceEnd.current = now + GRACE_MS;
         setSecondsLeft(Math.floor(GRACE_MS / 1000));
         setWarnOpen(true);
       }
     }, 1000);
     return () => clearInterval(tick);
-  }, [status, endSession]);
+  }, [status, endSession, effectiveLastActivity, markActivity]);
 
   if (status !== "authenticated") return null;
 
