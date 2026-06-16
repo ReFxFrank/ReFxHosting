@@ -7,6 +7,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { WorkshopKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { CryptoService } from '../common/crypto/crypto.service';
 import { uuidv7 } from '../common/util/uuid';
 import { JOB, QUEUE, ReinstallJob } from '../queues/queue.constants';
 
@@ -23,8 +24,49 @@ import { JOB, QUEUE, ReinstallJob } from '../queues/queue.constants';
 export class WorkshopService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
     @InjectQueue(QUEUE.REINSTALL) private readonly reinstallQueue: Queue<ReinstallJob>,
   ) {}
+
+  // ---- Per-server Steam login (customer-owned) ---------------------------
+
+  /** Masked Steam-login status for the Workshop tab — never returns the password. */
+  async steamStatus(serverId: string): Promise<{ username: string; hasLogin: boolean }> {
+    const server = await this.loadServer(serverId);
+    return {
+      username: server.steamUsername ?? '',
+      hasLogin: !!(server.steamUsername && server.steamPasswordEnc),
+    };
+  }
+
+  /** Set the customer's own Steam login for this server (password encrypted). */
+  async setSteamLogin(
+    serverId: string,
+    dto: { username: string; password: string },
+  ): Promise<{ username: string; hasLogin: boolean }> {
+    await this.loadServer(serverId);
+    const username = dto.username.trim();
+    if (!username || !dto.password) {
+      throw new BadRequestException('Enter your Steam username and password');
+    }
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: {
+        steamUsername: username,
+        steamPasswordEnc: this.crypto.encrypt(dto.password),
+      },
+    });
+    return { username, hasLogin: true };
+  }
+
+  /** Remove the customer's stored Steam login for this server. */
+  async clearSteamLogin(serverId: string): Promise<void> {
+    await this.loadServer(serverId);
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { steamUsername: null, steamPasswordEnc: null },
+    });
+  }
 
   private async loadServer(serverId: string) {
     const server = await this.prisma.server.findFirst({

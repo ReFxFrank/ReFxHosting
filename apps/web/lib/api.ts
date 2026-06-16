@@ -478,6 +478,16 @@ export const api = {
       http.delete<void>(`/servers/${id}/workshop/${modId}`),
     workshopApply: (id: string) =>
       http.post<{ accepted: true }>(`/servers/${id}/workshop/apply`, {}),
+    // The customer's own Steam login for this server's Workshop downloads.
+    workshopSteam: (id: string) =>
+      http.get<{ username: string; hasLogin: boolean }>(`/servers/${id}/workshop/steam`),
+    workshopSetSteam: (id: string, username: string, password: string) =>
+      http.put<{ username: string; hasLogin: boolean }>(`/servers/${id}/workshop/steam`, {
+        username,
+        password,
+      }),
+    workshopClearSteam: (id: string) =>
+      http.delete<void>(`/servers/${id}/workshop/steam`),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),

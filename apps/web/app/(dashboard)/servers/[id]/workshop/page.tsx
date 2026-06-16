@@ -12,6 +12,8 @@ import {
   RefreshCw,
   ExternalLink,
   Layers,
+  KeyRound,
+  ShieldAlert,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { EmptyState } from "@/components/shared";
@@ -83,6 +85,8 @@ export default function WorkshopPage() {
 
   return (
     <div className="space-y-6">
+      <SteamLoginCard serverId={id} />
+
       <Card>
         <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
           <div className="space-y-1">
@@ -200,4 +204,106 @@ export default function WorkshopPage() {
 
 function cnTrunc(muted: boolean) {
   return `truncate font-medium${muted ? " text-muted-foreground line-through" : ""}`;
+}
+
+/** The customer's OWN Steam login for this server's Workshop downloads. */
+function SteamLoginCard({ serverId }: { serverId: string }) {
+  const qc = useQueryClient();
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["server", serverId, "workshop-steam"],
+    queryFn: () => api.servers.workshopSteam(serverId),
+  });
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: ["server", serverId, "workshop-steam"] });
+
+  const save = useMutation({
+    mutationFn: () => api.servers.workshopSetSteam(serverId, username.trim(), password),
+    onSuccess: () => {
+      toast.success("Steam login saved — it's used on the next Apply/reinstall.");
+      setUsername("");
+      setPassword("");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to save"),
+  });
+
+  const clear = useMutation({
+    mutationFn: () => api.servers.workshopClearSteam(serverId),
+    onSuccess: () => { toast.success("Steam login removed"); invalidate(); },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to remove"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <KeyRound className="size-4" /> Your Steam account
+        </CardTitle>
+        <CardDescription>
+          Many Workshop items (e.g. Arma 3) can only be downloaded by a Steam account
+          that <strong>owns the game</strong>. Use your own — the password is encrypted
+          and only used on the node to fetch your mods; it&apos;s never shown again.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading ? (
+          <Skeleton className="h-10 w-full" />
+        ) : (
+          <>
+            <div className="flex items-center gap-2 text-sm">
+              <Badge variant={data?.hasLogin ? "success" : "secondary"}>
+                {data?.hasLogin ? `Connected as ${data.username}` : "Not connected"}
+              </Badge>
+              {data?.hasLogin && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  loading={clear.isPending}
+                  onClick={() => clear.mutate()}
+                >
+                  Disconnect
+                </Button>
+              )}
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                autoComplete="off"
+                placeholder="Steam username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+              />
+              <Input
+                type="password"
+                autoComplete="new-password"
+                placeholder={data?.hasLogin ? "New password (to update)" : "Steam password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-2.5 text-xs text-muted-foreground">
+              <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+              <span>
+                If your account uses <strong>Steam Guard</strong>, unattended downloads may
+                fail — use a dedicated account with Steam Guard configured for shared use,
+                or one that owns the game with Guard handled. We never share your password.
+              </span>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                loading={save.isPending}
+                disabled={!username.trim() || !password}
+                onClick={() => save.mutate()}
+              >
+                Save Steam login
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
 }

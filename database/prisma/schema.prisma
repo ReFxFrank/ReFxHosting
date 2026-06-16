@@ -501,6 +501,12 @@ model Server {
   // SFTP credentials are derived; password is per-server, rotated on demand.
   sftpPasswordEnc String?
 
+  // The customer's OWN Steam login for downloading Workshop content that needs an
+  // account that owns the game (e.g. Arma 3). Password is AES-256-GCM encrypted;
+  // used at install time on the node and never returned to the client.
+  steamUsername   String?
+  steamPasswordEnc String?
+
   allocations     Allocation[]
   backups         Backup[]
   databases       ServerDatabase[]

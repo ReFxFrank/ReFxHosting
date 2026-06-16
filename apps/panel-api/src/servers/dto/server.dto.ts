@@ -305,3 +305,13 @@ export class ReorderWorkshopDto {
   @IsString({ each: true })
   ids!: string[];
 }
+
+export class SetSteamLoginDto {
+  @ApiProperty({ description: 'Your Steam account username.' })
+  @IsString()
+  username!: string;
+
+  @ApiProperty({ description: 'Your Steam account password (stored encrypted).' })
+  @IsString()
+  password!: string;
+}

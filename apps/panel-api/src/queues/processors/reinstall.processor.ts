@@ -52,8 +52,15 @@ export class ReinstallProcessor extends WorkerHost {
     const sftpPassword = server.sftpPasswordEnc
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
+    // Prefer the customer's own Steam login for this server; fall back to the
+    // optional central admin login.
     const steam = server.template.supportsWorkshop
-      ? await this.settings.steamConfig()
+      ? server.steamUsername && server.steamPasswordEnc
+        ? {
+            username: server.steamUsername,
+            password: this.crypto.decrypt(server.steamPasswordEnc),
+          }
+        : await this.settings.steamConfig()
       : undefined;
     const spec = buildInstallSpec(server, {
       wipe: !preserveData,
