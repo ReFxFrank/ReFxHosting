@@ -486,6 +486,8 @@ export interface Price {
   interval: BillingInterval;
   currency: string;
   amountMinor: number;
+  stripePriceId?: string | null;
+  isActive?: boolean;
 }
 
 export interface Product {

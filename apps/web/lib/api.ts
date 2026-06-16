@@ -18,6 +18,8 @@ import type {
   Notification,
   Paginated,
   PaymentMethod,
+  Price,
+  BillingInterval,
   Product,
   Schedule,
   Server,
@@ -578,6 +580,18 @@ export const api = {
       input.id
         ? http.patch<Product>(`/admin/products/${input.id}`, input)
         : http.post<Product>("/admin/products", input),
+    deleteProduct: (id: string) => http.delete<void>(`/admin/products/${id}`),
+
+    // Per-product, per-interval pricing.
+    createPrice: (
+      productId: string,
+      input: { interval: BillingInterval; currency?: string; amountMinor: number; stripePriceId?: string; isActive?: boolean },
+    ) => http.post<Price>(`/admin/products/${productId}/prices`, input),
+    updatePrice: (
+      priceId: string,
+      input: Partial<{ interval: BillingInterval; currency: string; amountMinor: number; stripePriceId: string; isActive: boolean }>,
+    ) => http.patch<Price>(`/admin/prices/${priceId}`, input),
+    deletePrice: (priceId: string) => http.delete<void>(`/admin/prices/${priceId}`),
 
     servers: () => getList<AdminServer>("/admin/servers"),
     createServer: (input: {

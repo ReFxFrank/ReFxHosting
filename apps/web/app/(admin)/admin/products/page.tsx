@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Package, Plus, Pencil } from "lucide-react";
+import { Package, Plus, Pencil, Trash2, Tag } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -34,8 +34,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { formatMb } from "@/lib/utils";
-import type { Product, ProductType } from "@/lib/types";
+import { formatMb, formatMoney } from "@/lib/utils";
+import type { BillingInterval, Price, Product, ProductType } from "@/lib/types";
 
 const TYPE_OPTIONS: { value: ProductType; label: string }[] = [
   { value: "GAME_SERVER", label: "Game server" },
@@ -44,13 +44,32 @@ const TYPE_OPTIONS: { value: ProductType; label: string }[] = [
   { value: "ADDON", label: "Add-on" },
 ];
 
+const INTERVALS: { value: BillingInterval; label: string }[] = [
+  { value: "MONTHLY", label: "Monthly" },
+  { value: "QUARTERLY", label: "Quarterly" },
+  { value: "SEMIANNUAL", label: "Semi-annual" },
+  { value: "ANNUAL", label: "Annual" },
+];
+
 function typeLabel(t: ProductType) {
   return TYPE_OPTIONS.find((o) => o.value === t)?.label ?? t;
+}
+function intervalLabel(i: BillingInterval) {
+  return INTERVALS.find((o) => o.value === i)?.label ?? i;
+}
+function slugify(s: string) {
+  return s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 }
 
 interface ProductForm {
   id?: string;
   name: string;
+  slug: string;
+  description: string;
   type: ProductType;
   cpuCores: number;
   memoryMb: number;
@@ -61,6 +80,8 @@ interface ProductForm {
 
 const emptyForm: ProductForm = {
   name: "",
+  slug: "",
+  description: "",
   type: "GAME_SERVER",
   cpuCores: 2,
   memoryMb: 4096,
@@ -72,7 +93,10 @@ const emptyForm: ProductForm = {
 export default function AdminProductsPage() {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
+  // Whether the user manually edited the slug (so we stop auto-deriving it).
+  const [slugTouched, setSlugTouched] = useState(false);
   const [form, setForm] = useState<ProductForm>(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
 
   const { data: products, isLoading } = useQuery({
     queryKey: ["admin", "products"],
@@ -84,10 +108,11 @@ export default function AdminProductsPage() {
 
   const saveMutation = useMutation({
     mutationFn: (input: Partial<Product>) => api.admin.saveProduct(input),
-    onSuccess: () => {
+    onSuccess: (saved) => {
       toast.success("Product saved");
       invalidate();
-      setEditOpen(false);
+      // Keep the dialog open on first create so pricing can be added immediately.
+      setForm((f) => ({ ...f, id: saved.id }));
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to save product"),
@@ -104,8 +129,20 @@ export default function AdminProductsPage() {
       toast.error(e instanceof ApiError ? e.message : "Failed to update product"),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.admin.deleteProduct(id),
+    onSuccess: () => {
+      toast.success("Product deactivated");
+      setDeleteTarget(null);
+      invalidate();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to delete product"),
+  });
+
   function openNew() {
     setForm(emptyForm);
+    setSlugTouched(false);
     setEditOpen(true);
   }
 
@@ -113,6 +150,8 @@ export default function AdminProductsPage() {
     setForm({
       id: product.id,
       name: product.name,
+      slug: product.slug,
+      description: product.description ?? "",
       type: product.type,
       cpuCores: product.cpuCores ?? 0,
       memoryMb: product.memoryMb ?? 0,
@@ -120,14 +159,18 @@ export default function AdminProductsPage() {
       slots: product.slots ?? 0,
       isActive: product.isActive,
     });
+    setSlugTouched(true); // existing slug is authoritative; don't auto-rewrite
     setEditOpen(true);
   }
+
+  // The currently-edited product, re-read from the cache so its prices stay live.
+  const editingProduct = products?.find((p) => p.id === form.id) ?? null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description="Define the plans customers can order and their resource limits."
+        description="Define the plans customers can order, their resources, and pricing."
         actions={
           <Button onClick={openNew}>
             <Plus className="size-4" /> New product
@@ -146,15 +189,18 @@ export default function AdminProductsPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Resources</TableHead>
-                  <TableHead>Slots</TableHead>
+                  <TableHead>Pricing</TableHead>
                   <TableHead>Active</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead className="w-20" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {products.map((product) => (
                   <TableRow key={product.id}>
-                    <TableCell className="font-medium">{product.name}</TableCell>
+                    <TableCell className="font-medium">
+                      {product.name}
+                      <div className="font-mono text-xs text-muted-foreground">{product.slug}</div>
+                    </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{typeLabel(product.type)}</Badge>
                     </TableCell>
@@ -163,8 +209,17 @@ export default function AdminProductsPage() {
                       {formatMb(product.memoryMb ?? 0)} ·{" "}
                       {formatMb(product.diskMb ?? 0)}
                     </TableCell>
-                    <TableCell className="tabular-nums text-sm text-muted-foreground">
-                      {product.slots ?? "—"}
+                    <TableCell className="text-xs text-muted-foreground">
+                      {product.prices?.length
+                        ? product.prices
+                            .map(
+                              (p) =>
+                                `${formatMoney(p.amountMinor, p.currency)}/${intervalLabel(
+                                  p.interval,
+                                ).toLowerCase()}`,
+                            )
+                            .join(" · ")
+                        : "No pricing"}
                     </TableCell>
                     <TableCell>
                       <Switch
@@ -174,13 +229,19 @@ export default function AdminProductsPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => openEdit(product)}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon-sm" onClick={() => openEdit(product)}>
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(product)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -203,23 +264,44 @@ export default function AdminProductsPage() {
 
       {/* Create / edit dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{form.id ? "Edit product" : "New product"}</DialogTitle>
+            <DialogTitle>{form.id ? `Edit ${form.name}` : "New product"}</DialogTitle>
             <DialogDescription>
-              Configure the plan name, type and included resources.
+              Configure the plan name, type, resources and pricing.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="product-name">Name</Label>
-              <Input
-                id="product-name"
-                placeholder="Starter Game Server"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="product-name">Name</Label>
+                <Input
+                  id="product-name"
+                  placeholder="Starter Game Server"
+                  value={form.name}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      name: e.target.value,
+                      slug: slugTouched ? f.slug : slugify(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="product-slug">Slug</Label>
+                <Input
+                  id="product-slug"
+                  placeholder="starter-game-server"
+                  value={form.slug}
+                  onChange={(e) => {
+                    setSlugTouched(true);
+                    setForm((f) => ({ ...f, slug: e.target.value }));
+                  }}
+                  className="font-mono text-xs"
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -241,6 +323,17 @@ export default function AdminProductsPage() {
               </Select>
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="product-desc">Description</Label>
+              <Textarea
+                id="product-desc"
+                rows={2}
+                placeholder="Shown on the storefront."
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="product-cpu">CPU cores</Label>
@@ -249,9 +342,7 @@ export default function AdminProductsPage() {
                   type="number"
                   min={0}
                   value={form.cpuCores}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, cpuCores: Number(e.target.value) }))
-                  }
+                  onChange={(e) => setForm((f) => ({ ...f, cpuCores: Number(e.target.value) }))}
                 />
               </div>
               <div className="space-y-1.5">
@@ -261,9 +352,7 @@ export default function AdminProductsPage() {
                   type="number"
                   min={0}
                   value={form.slots}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, slots: Number(e.target.value) }))
-                  }
+                  onChange={(e) => setForm((f) => ({ ...f, slots: Number(e.target.value) }))}
                 />
               </div>
               <div className="space-y-1.5">
@@ -273,9 +362,7 @@ export default function AdminProductsPage() {
                   type="number"
                   min={0}
                   value={form.memoryMb}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, memoryMb: Number(e.target.value) }))
-                  }
+                  onChange={(e) => setForm((f) => ({ ...f, memoryMb: Number(e.target.value) }))}
                 />
               </div>
               <div className="space-y-1.5">
@@ -285,9 +372,7 @@ export default function AdminProductsPage() {
                   type="number"
                   min={0}
                   value={form.diskMb}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, diskMb: Number(e.target.value) }))
-                  }
+                  onChange={(e) => setForm((f) => ({ ...f, diskMb: Number(e.target.value) }))}
                 />
               </div>
             </div>
@@ -305,23 +390,34 @@ export default function AdminProductsPage() {
               />
             </div>
 
-            {/* TODO(impl): per-interval price editing (Price[] with currency / amountMinor). */}
-            <p className="text-xs text-muted-foreground">
-              Pricing is managed separately. TODO(impl): inline price editor.
-            </p>
+            {/* Pricing — available once the product exists. */}
+            <div className="space-y-2 rounded-lg border p-3">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Tag className="size-4" /> Pricing
+              </div>
+              {form.id && editingProduct ? (
+                <PriceEditor productId={form.id} prices={editingProduct.prices ?? []} />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Save the product first, then add per-interval pricing here.
+                </p>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditOpen(false)}>
-              Cancel
+              Close
             </Button>
             <Button
               loading={saveMutation.isPending}
-              disabled={!form.name.trim()}
+              disabled={!form.name.trim() || !form.slug.trim()}
               onClick={() =>
                 saveMutation.mutate({
                   id: form.id,
                   name: form.name,
+                  slug: form.slug,
+                  description: form.description || undefined,
                   type: form.type,
                   cpuCores: form.cpuCores,
                   memoryMb: form.memoryMb,
@@ -331,11 +427,201 @@ export default function AdminProductsPage() {
                 })
               }
             >
-              Save product
+              {form.id ? "Save changes" : "Create product"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirm */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleteTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              The product is deactivated and hidden from the storefront. Existing
+              subscriptions and invoice history are preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              Deactivate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+/** Inline per-interval price rows with add / edit / delete. */
+function PriceEditor({ productId, prices }: { productId: string; prices: Price[] }) {
+  const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+
+  const [interval, setInterval] = useState<BillingInterval>("MONTHLY");
+  const [currency, setCurrency] = useState("USD");
+  const [amount, setAmount] = useState("");
+
+  const create = useMutation({
+    mutationFn: () =>
+      api.admin.createPrice(productId, {
+        interval,
+        currency: currency.toUpperCase(),
+        amountMinor: Math.round(parseFloat(amount || "0") * 100),
+      }),
+    onSuccess: () => {
+      toast.success("Price added");
+      setAmount("");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to add price"),
+  });
+
+  const update = useMutation({
+    mutationFn: (vars: { id: string; amountMinor: number }) =>
+      api.admin.updatePrice(vars.id, { amountMinor: vars.amountMinor }),
+    onSuccess: () => {
+      toast.success("Price updated");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to update price"),
+  });
+
+  const remove = useMutation({
+    mutationFn: (id: string) => api.admin.deletePrice(id),
+    onSuccess: () => {
+      toast.success("Price removed");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to remove price"),
+  });
+
+  return (
+    <div className="space-y-2">
+      {prices.length > 0 && (
+        <div className="space-y-1.5">
+          {prices.map((p) => (
+            <PriceRow
+              key={p.id}
+              price={p}
+              onSave={(amountMinor) => update.mutate({ id: p.id, amountMinor })}
+              onDelete={() => remove.mutate(p.id)}
+              saving={update.isPending}
+              deleting={remove.isPending}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Add a new price */}
+      <div className="flex flex-wrap items-end gap-2 border-t pt-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Interval</Label>
+          <Select value={interval} onValueChange={(v) => setInterval(v as BillingInterval)}>
+            <SelectTrigger className="h-8 w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {INTERVALS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Currency</Label>
+          <Input
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            className="h-8 w-20 font-mono uppercase"
+            maxLength={3}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">Amount</Label>
+          <Input
+            type="number"
+            min={0}
+            step="0.01"
+            placeholder="9.99"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            className="h-8 w-28"
+          />
+        </div>
+        <Button
+          size="sm"
+          loading={create.isPending}
+          disabled={!amount || parseFloat(amount) < 0}
+          onClick={() => create.mutate()}
+        >
+          <Plus className="size-4" /> Add
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PriceRow({
+  price,
+  onSave,
+  onDelete,
+  saving,
+  deleting,
+}: {
+  price: Price;
+  onSave: (amountMinor: number) => void;
+  onDelete: () => void;
+  saving: boolean;
+  deleting: boolean;
+}) {
+  const [value, setValue] = useState((price.amountMinor / 100).toFixed(2));
+  const dirty = Math.round(parseFloat(value || "0") * 100) !== price.amountMinor;
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border px-2.5 py-1.5">
+      <Badge variant="secondary" className="w-24 justify-center">
+        {intervalLabel(price.interval)}
+      </Badge>
+      <span className="font-mono text-xs text-muted-foreground">{price.currency}</span>
+      <Input
+        type="number"
+        min={0}
+        step="0.01"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="h-8 w-28"
+      />
+      <div className="ml-auto flex items-center gap-1">
+        <Button
+          size="sm"
+          variant={dirty ? "default" : "ghost"}
+          disabled={!dirty || saving}
+          onClick={() => onSave(Math.round(parseFloat(value || "0") * 100))}
+        >
+          Save
+        </Button>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className="text-destructive hover:text-destructive"
+          disabled={deleting}
+          onClick={onDelete}
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
     </div>
   );
 }
