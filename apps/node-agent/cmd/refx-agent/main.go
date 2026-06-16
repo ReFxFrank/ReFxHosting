@@ -94,7 +94,15 @@ func run(ctx context.Context, cfgPath string) error {
 	mgr, dockerRT := buildManager(log, cfg, caps)
 
 	// --- TLS for the control API + SFTP host key ---------------------------
-	tlsCfg, fingerprint, err := loadOrGenerateTLS(cfg.API.TLSCert, cfg.API.TLSKey)
+	// Default to a persisted self-signed cert under the data dir when no explicit
+	// paths are configured, so the cert (and its pinned fingerprint) survives
+	// restarts instead of being regenerated each start.
+	certPath, keyPath := cfg.API.TLSCert, cfg.API.TLSKey
+	if certPath == "" || keyPath == "" {
+		certPath = filepath.Join(cfg.DataDir, "agent_cert.pem")
+		keyPath = filepath.Join(cfg.DataDir, "agent_key.pem")
+	}
+	tlsCfg, fingerprint, err := loadOrGenerateTLS(certPath, keyPath)
 	if err != nil {
 		return err
 	}

@@ -25,15 +25,29 @@ import (
 // so the agent can report it to the panel for pinning.
 func loadOrGenerateTLS(certPath, keyPath string) (*tls.Config, string, error) {
 	if certPath != "" && keyPath != "" {
-		cert, err := tls.LoadX509KeyPair(certPath, keyPath)
-		if err != nil {
-			return nil, "", fmt.Errorf("load tls keypair: %w", err)
+		// Reuse an existing keypair when present.
+		if cert, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
+			fp := sha256.Sum256(cert.Certificate[0])
+			return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}, hex.EncodeToString(fp[:]), nil
 		}
-		fp := sha256.Sum256(cert.Certificate[0])
+		// Otherwise generate one and PERSIST it to these paths, so subsequent
+		// restarts reuse the same cert (keeping the panel's pinned fingerprint
+		// valid instead of regenerating a new cert every start).
+		cert, der, certPEM, keyPEM, err := generateSelfSigned()
+		if err != nil {
+			return nil, "", err
+		}
+		if werr := os.WriteFile(certPath, certPEM, 0o600); werr != nil {
+			return nil, "", fmt.Errorf("persist tls cert: %w", werr)
+		}
+		if werr := os.WriteFile(keyPath, keyPEM, 0o600); werr != nil {
+			return nil, "", fmt.Errorf("persist tls key: %w", werr)
+		}
+		fp := sha256.Sum256(der)
 		return &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}, hex.EncodeToString(fp[:]), nil
 	}
 
-	cert, der, err := generateSelfSigned()
+	cert, der, _, _, err := generateSelfSigned()
 	if err != nil {
 		return nil, "", err
 	}
@@ -42,11 +56,12 @@ func loadOrGenerateTLS(certPath, keyPath string) (*tls.Config, string, error) {
 }
 
 // generateSelfSigned creates an in-memory self-signed ECDSA certificate valid
-// for the node's hostnames/IPs.
-func generateSelfSigned() (tls.Certificate, []byte, error) {
+// for the node's hostnames/IPs. It returns the parsed keypair, the cert DER (for
+// fingerprinting) and the PEM-encoded cert/key (for optional persistence).
+func generateSelfSigned() (tls.Certificate, []byte, []byte, []byte, error) {
 	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return tls.Certificate{}, nil, err
+		return tls.Certificate{}, nil, nil, nil, err
 	}
 	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	host, _ := os.Hostname()
@@ -63,16 +78,16 @@ func generateSelfSigned() (tls.Certificate, []byte, error) {
 	}
 	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &priv.PublicKey, priv)
 	if err != nil {
-		return tls.Certificate{}, nil, err
+		return tls.Certificate{}, nil, nil, nil, err
 	}
 	keyDER, err := x509.MarshalECPrivateKey(priv)
 	if err != nil {
-		return tls.Certificate{}, nil, err
+		return tls.Certificate{}, nil, nil, nil, err
 	}
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
 	cert, err := tls.X509KeyPair(certPEM, keyPEM)
-	return cert, der, err
+	return cert, der, certPEM, keyPEM, err
 }
 
 // loadOrGenerateHostKey returns a PEM-encoded ed25519 SSH host key, generating
