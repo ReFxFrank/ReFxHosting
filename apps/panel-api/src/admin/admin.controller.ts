@@ -291,6 +291,15 @@ export class AdminController {
     return this.users.getProfile(id);
   }
 
+  /** Manually mark a user's email verified (stand-in until SMTP is configured). */
+  @Post('users/:id/verify-email')
+  @HttpCode(200)
+  @RequirePerm('users.manage')
+  @Audit({ action: 'admin.user.verify-email', targetType: 'User', targetParam: 'id' })
+  verifyUserEmail(@Param('id') id: string) {
+    return this.users.markEmailVerified(id);
+  }
+
   @Patch('users/:id/role')
   @RequirePerm('roles.manage')
   @Audit({ action: 'admin.user.role', targetType: 'User', targetParam: 'id' })

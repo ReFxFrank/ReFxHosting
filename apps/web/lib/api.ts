@@ -669,6 +669,8 @@ export const api = {
     userDetail: (id: string) => http.get<AdminUserDetail>(`/admin/users/${id}`),
     setUserState: (id: string, state: User["state"]) =>
       http.patch<User>(`/admin/users/${id}`, { state }),
+    verifyUserEmail: (id: string) =>
+      http.post<User>(`/admin/users/${id}/verify-email`),
     setUserRole: (id: string, input: { role?: User["globalRole"]; roleId?: string }) =>
       http.patch<User>(`/admin/users/${id}/role`, input),
     deleteUser: (id: string) => http.delete<void>(`/admin/users/${id}`),

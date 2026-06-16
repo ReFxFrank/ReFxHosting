@@ -131,6 +131,28 @@ export class UsersService {
   }
 
   /**
+   * Staff: manually mark a user's email verified (stand-in until SMTP / email
+   * verification links are configured). Stamps `emailVerifiedAt` if unset and
+   * activates an account still PENDING_VERIFICATION.
+   */
+  async markEmailVerified(id: string): Promise<User> {
+    const user = await this.prisma.user.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true, state: true, emailVerifiedAt: true },
+    });
+    if (!user) throw new NotFoundException('User not found');
+    return this.prisma.user.update({
+      where: { id },
+      data: {
+        emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+        ...(user.state === UserState.PENDING_VERIFICATION
+          ? { state: UserState.ACTIVE }
+          : {}),
+      },
+    });
+  }
+
+  /**
    * Assign an RBAC role to a user (owner-only, gated at the controller). Accepts
    * either a specific role id (system or custom) or a GlobalRole enum (mapped to
    * the matching system role). Keeps globalRole in sync with the role's tier for

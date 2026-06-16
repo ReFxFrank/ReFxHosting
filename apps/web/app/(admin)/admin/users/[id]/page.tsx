@@ -123,6 +123,15 @@ export default function AdminUserDetailPage() {
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to update account"),
   });
 
+  const verifyEmail = useMutation({
+    mutationFn: () => api.admin.verifyUserEmail(id),
+    onSuccess: () => {
+      toast.success("Email marked verified");
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to verify email"),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => api.admin.deleteUser(id),
     onSuccess: () => {
@@ -217,6 +226,21 @@ export default function AdminUserDetailPage() {
                 )}
               </span>
             </Row>
+            {!user.emailVerifiedAt && canManage && (
+              <div className="flex items-center justify-between gap-3 rounded-md border border-warning/30 bg-warning/5 px-2.5 py-2">
+                <span className="text-xs text-muted-foreground">
+                  Email not verified.
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  loading={verifyEmail.isPending}
+                  onClick={() => verifyEmail.mutate()}
+                >
+                  <CheckCircle2 className="size-4" /> Mark verified
+                </Button>
+              </div>
+            )}
             <Row label="Name">{fullName(user) || "—"}</Row>
             <Row label="2FA">
               <span className="flex items-center gap-1.5">
