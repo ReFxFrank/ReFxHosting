@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   generateRegistrationOptions,
@@ -28,6 +28,7 @@ const CHALLENGE_TTL_SECONDS = 300;
  */
 @Injectable()
 export class WebAuthnService {
+  private readonly logger = new Logger(WebAuthnService.name);
   private readonly rpId: string;
   private readonly rpName: string;
   private readonly origin: string;
@@ -45,6 +46,24 @@ export class WebAuthnService {
 
   private b64url(buf: Uint8Array): string {
     return Buffer.from(buf).toString('base64url');
+  }
+
+  /**
+   * Origins the browser assertion may legitimately come from. The configured
+   * PANEL_URL is authoritative, but we also accept the RP domain (and the dev
+   * localhost web/api ports) so a PANEL_URL that points at the API origin rather
+   * than the exact web origin doesn't silently break passkeys.
+   */
+  private expectedOrigins(): string[] {
+    const set = new Set<string>();
+    if (this.origin) set.add(this.origin.replace(/\/+$/, ''));
+    if (this.rpId === 'localhost') {
+      set.add('http://localhost:3000');
+      set.add('http://localhost:4000');
+    } else if (this.rpId) {
+      set.add(`https://${this.rpId}`);
+    }
+    return [...set];
   }
 
   private challengeKey(kind: 'reg' | 'auth', userId: string): string {
@@ -102,12 +121,21 @@ export class WebAuthnService {
       throw new BadRequestException('No registration in progress');
     }
 
-    const verification = await verifyRegistrationResponse({
-      response,
-      expectedChallenge,
-      expectedOrigin: this.origin,
-      expectedRPID: this.rpId,
-    });
+    let verification;
+    try {
+      verification = await verifyRegistrationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: this.expectedOrigins(),
+        expectedRPID: this.rpId,
+      });
+    } catch (e) {
+      // Surface the real reason (origin / RP-ID mismatch, bad attestation) so a
+      // misconfigured PANEL_URL/PANEL_RP_ID is obvious instead of a blank 500.
+      const detail = (e as Error).message ?? 'unknown error';
+      this.logger.warn(`Passkey registration failed: ${detail}`);
+      throw new BadRequestException(`Passkey registration failed: ${detail}`);
+    }
     if (!verification.verified || !verification.registrationInfo) {
       throw new BadRequestException('Registration verification failed');
     }
@@ -180,18 +208,25 @@ export class WebAuthnService {
       throw new BadRequestException('Unknown credential');
     }
 
-    const verification = await verifyAuthenticationResponse({
-      response,
-      expectedChallenge,
-      expectedOrigin: this.origin,
-      expectedRPID: this.rpId,
-      authenticator: {
-        credentialID: Buffer.from(cred.credentialId, 'base64url'),
-        credentialPublicKey: new Uint8Array(cred.publicKey),
-        counter: Number(cred.counter),
-        transports: cred.transports as AuthenticatorTransportFuture[],
-      },
-    });
+    let verification;
+    try {
+      verification = await verifyAuthenticationResponse({
+        response,
+        expectedChallenge,
+        expectedOrigin: this.expectedOrigins(),
+        expectedRPID: this.rpId,
+        authenticator: {
+          credentialID: Buffer.from(cred.credentialId, 'base64url'),
+          credentialPublicKey: new Uint8Array(cred.publicKey),
+          counter: Number(cred.counter),
+          transports: cred.transports as AuthenticatorTransportFuture[],
+        },
+      });
+    } catch (e) {
+      const detail = (e as Error).message ?? 'unknown error';
+      this.logger.warn(`Passkey authentication failed: ${detail}`);
+      throw new BadRequestException(`Passkey authentication failed: ${detail}`);
+    }
     if (!verification.verified) {
       throw new BadRequestException('Authentication verification failed');
     }
