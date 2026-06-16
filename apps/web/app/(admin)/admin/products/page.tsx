@@ -45,6 +45,8 @@ const TYPE_OPTIONS: { value: ProductType; label: string }[] = [
 ];
 
 const INTERVALS: { value: BillingInterval; label: string }[] = [
+  { value: "WEEKLY", label: "Weekly" },
+  { value: "BIWEEKLY", label: "Biweekly" },
   { value: "MONTHLY", label: "Monthly" },
   { value: "QUARTERLY", label: "Quarterly" },
   { value: "SEMIANNUAL", label: "Semi-annual" },

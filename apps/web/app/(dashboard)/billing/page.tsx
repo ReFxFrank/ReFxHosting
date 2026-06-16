@@ -87,6 +87,8 @@ const subStateMap: Record<
 };
 
 const intervalLabel: Record<BillingInterval, string> = {
+  WEEKLY: "Weekly",
+  BIWEEKLY: "Every 2 weeks",
   MONTHLY: "Monthly",
   QUARTERLY: "Quarterly",
   SEMIANNUAL: "Every 6 months",

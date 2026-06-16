@@ -657,6 +657,8 @@ enum ProductType {
 }
 
 enum BillingInterval {
+  WEEKLY
+  BIWEEKLY
   MONTHLY
   QUARTERLY
   SEMIANNUAL

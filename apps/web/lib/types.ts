@@ -491,7 +491,13 @@ export interface FileEntry {
 }
 
 // Billing
-export type BillingInterval = "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";
+export type BillingInterval =
+  | "WEEKLY"
+  | "BIWEEKLY"
+  | "MONTHLY"
+  | "QUARTERLY"
+  | "SEMIANNUAL"
+  | "ANNUAL";
 export type ProductType = "GAME_SERVER" | "VPS" | "DEDICATED" | "ADDON";
 
 export interface Price {

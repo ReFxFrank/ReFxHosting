@@ -90,6 +90,8 @@ export const ProductType = {
 export type ProductType = (typeof ProductType)[keyof typeof ProductType];
 
 export const BillingInterval = {
+  WEEKLY: 'WEEKLY',
+  BIWEEKLY: 'BIWEEKLY',
   MONTHLY: 'MONTHLY',
   QUARTERLY: 'QUARTERLY',
   SEMIANNUAL: 'SEMIANNUAL',

@@ -24,12 +24,21 @@ import { cn, formatMoney } from "@/lib/utils";
 import type { Product, BillingInterval } from "@/lib/types";
 
 const INTERVAL_LABEL: Record<BillingInterval, string> = {
+  WEEKLY: "Weekly",
+  BIWEEKLY: "Biweekly",
   MONTHLY: "Monthly",
   QUARTERLY: "Quarterly",
   SEMIANNUAL: "6 months",
   ANNUAL: "Yearly",
 };
-const INTERVAL_ORDER: BillingInterval[] = ["MONTHLY", "QUARTERLY", "SEMIANNUAL", "ANNUAL"];
+const INTERVAL_ORDER: BillingInterval[] = [
+  "WEEKLY",
+  "BIWEEKLY",
+  "MONTHLY",
+  "QUARTERLY",
+  "SEMIANNUAL",
+  "ANNUAL",
+];
 
 export default function OrderPage() {
   const router = useRouter();

@@ -34,6 +34,8 @@ const DISK = { min: 5120, max: 204800, step: 5120 };
 
 function intervalLabel(interval: string) {
   const map: Record<string, string> = {
+    WEEKLY: "/wk",
+    BIWEEKLY: "/2 wk",
     MONTHLY: "/mo",
     QUARTERLY: "/quarter",
     SEMIANNUAL: "/6 mo",

@@ -173,10 +173,14 @@ A server's provisioned resources are **per-slot × slot count**. Slot slider def
 
 | Term | Multiplier | Discount | Per-slot amount |
 |------|-----------|----------|-----------------|
+| Weekly | × 7⁄30 | — (proportional) | `monthly × 7 ÷ 30` (floor 25¢) |
+| Biweekly | × 14⁄30 | — (proportional) | `monthly × 14 ÷ 30` (floor 50¢) |
 | Monthly | × 1 | — | `monthly` |
 | Quarterly | × 3 | **−10%** | `monthly × 3 × 0.90` |
 | Semi-annual | × 6 | **−15%** | `monthly × 6 × 0.85` |
 | Annual | × 12 | **−20%** | `monthly × 12 × 0.80` |
+
+Terms shorter than a month (**weekly/biweekly**) are billed **proportionally with no discount**; renewals step by exact days (7/14), while monthly+ terms step by calendar month.
 
 _Example — a game with **8 GB** recommended RAM → **1 GB/slot** → **$1.50/slot/month**. A 10-slot monthly server = **$15.00/mo**; the same annually = `1.50 × 12 × 0.80 × 10` = **$144.00/yr** (≈ $12/mo). All amounts are stored as integer minor units (cents)._
 

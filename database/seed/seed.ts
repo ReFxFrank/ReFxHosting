@@ -632,8 +632,11 @@ async function seedPerSlotProducts() {
       },
     });
 
-    // Per-slot price per interval (discounts grow with term length).
+    // Per-slot price per interval. Short terms are charged proportionally (no
+    // discount); longer terms discount progressively.
     const prices: Array<[string, number]> = [
+      ['WEEKLY', Math.max(25, Math.round((monthly * 7) / 30))],
+      ['BIWEEKLY', Math.max(50, Math.round((monthly * 14) / 30))],
       ['MONTHLY', monthly],
       ['QUARTERLY', Math.round(monthly * 3 * 0.9)],
       ['SEMIANNUAL', Math.round(monthly * 6 * 0.85)],
