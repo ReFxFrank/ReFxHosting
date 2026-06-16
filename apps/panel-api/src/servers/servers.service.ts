@@ -62,17 +62,16 @@ export class ServersService {
   // ---- read --------------------------------------------------------------
 
   async list(user: AuthUser, pagination: PaginationDto): Promise<Paginated<Server>> {
-    const isAdmin = user.globalRole === 'ADMIN' || user.globalRole === 'OWNER';
+    // Client area is always scoped to the caller: servers they OWN or are an
+    // active sub-user on. Staff do NOT get a platform-wide view here even though
+    // they're ADMIN/OWNER — that lives in the admin panel (adminList). This keeps
+    // a customer's servers private to them + the sub-users they invite.
     const where: Prisma.ServerWhereInput = {
       deletedAt: null,
-      ...(isAdmin
-        ? {}
-        : {
-            OR: [
-              { ownerId: user.id },
-              { subUsers: { some: { userId: user.id, state: 'ACTIVE' } } },
-            ],
-          }),
+      OR: [
+        { ownerId: user.id },
+        { subUsers: { some: { userId: user.id, state: 'ACTIVE' } } },
+      ],
       ...(pagination.q ? { name: { contains: pagination.q, mode: 'insensitive' } } : {}),
     };
     const [data, total] = await this.prisma.$transaction([
