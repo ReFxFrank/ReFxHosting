@@ -50,8 +50,13 @@ const INTERVAL_ORDER: BillingInterval[] = [
   "ANNUAL",
 ];
 
-const isVoice = (p: Product) =>
-  p.billingModel === "PER_SLOT" || p.type === "VOICE_SERVER";
+// A product is a VOICE offering purely by its type (drives grouping + icon).
+// Its CONFIGURATION model (tier cards vs slot slider) is independent: that's the
+// billing model. A game can still be per-slot (legacy) and stays a game server.
+const isVoiceType = (p: Product) => p.type === "VOICE_SERVER";
+const isPerSlot = (p: Product) => p.billingModel === "PER_SLOT" || p.perSlot;
+const hasActiveTiers = (p: Product) =>
+  (p.hardwareTiers ?? []).some((t) => t.isActive !== false);
 
 function sortPrices(prices: Price[]) {
   return [...prices]
@@ -86,22 +91,20 @@ export default function OrderPage() {
     [templatesQ.data],
   );
 
-  // Orderable offerings: game products (with hardware tiers) and voice products
-  // (per-slot). Each must be active and bound to a template to provision.
+  // Orderable offerings: any active product bound to a template that is either
+  // hardware-tier (has active tiers) or per-slot. Grouped by type below.
   const offerings = useMemo(
     () =>
       (productsQ.data ?? []).filter(
         (p) =>
           p.isActive &&
           p.gameTemplateId &&
-          (isVoice(p)
-            ? true
-            : (p.hardwareTiers ?? []).some((t) => t.isActive !== false)),
+          (hasActiveTiers(p) || isPerSlot(p)),
       ),
     [productsQ.data],
   );
-  const gameOfferings = useMemo(() => offerings.filter((p) => !isVoice(p)), [offerings]);
-  const voiceOfferings = useMemo(() => offerings.filter((p) => isVoice(p)), [offerings]);
+  const gameOfferings = useMemo(() => offerings.filter((p) => !isVoiceType(p)), [offerings]);
+  const voiceOfferings = useMemo(() => offerings.filter((p) => isVoiceType(p)), [offerings]);
 
   const [productId, setProductId] = useState<string | null>(null);
   const [tierId, setTierId] = useState<string | null>(null);
@@ -119,7 +122,9 @@ export default function OrderPage() {
   const [useCredit, setUseCredit] = useState(false);
 
   const product = offerings.find((p) => p.id === productId) ?? null;
-  const voice = product ? isVoice(product) : false;
+  // voiceType drives grouping/icon/labels; perSlot drives the configuration UI.
+  const voiceType = product ? isVoiceType(product) : false;
+  const perSlot = product ? isPerSlot(product) : false;
   const tiers = useMemo(
     () =>
       (product?.hardwareTiers ?? [])
@@ -127,7 +132,7 @@ export default function OrderPage() {
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [product],
   );
-  const tier = voice ? null : tiers.find((t) => t.id === tierId) ?? null;
+  const tier = perSlot ? null : tiers.find((t) => t.id === tierId) ?? null;
   const template = product ? templatesById[product.gameTemplateId ?? ""] : null;
   const configVars = (template?.variables ?? []).filter(
     (v) => v.userEditable && v.type !== "SECRET",
@@ -138,8 +143,8 @@ export default function OrderPage() {
   // The price list to choose a billing interval from: tier prices (game) or
   // product prices (voice).
   const sortedPriceList = useMemo(
-    () => sortPrices(voice ? product?.prices ?? [] : tier?.prices ?? []),
-    [voice, product, tier],
+    () => sortPrices(perSlot ? product?.prices ?? [] : tier?.prices ?? []),
+    [perSlot, product, tier],
   );
   const price = interval
     ? sortedPriceList.find((p) => p.interval === interval) ?? null
@@ -170,7 +175,7 @@ export default function OrderPage() {
     if (!product) return;
     setRegionId(null);
     setNodeId(null);
-    if (isVoice(product)) {
+    if (isPerSlot(product)) {
       setTierId(null);
       setSlots((s) => clampSlots(s, product));
     } else {
@@ -208,7 +213,7 @@ export default function OrderPage() {
   // Reserved resources drive the location/node capacity check.
   const limits = !product
     ? null
-    : voice
+    : perSlot
     ? {
         cpuCores: +(product.cpuPerSlot * slots).toFixed(2),
         memoryMb: product.memoryMbPerSlot * slots,
@@ -233,7 +238,7 @@ export default function OrderPage() {
   }, [regionId]);
 
   // Pricing preview (the backend recomputes authoritatively, incl. tax).
-  const quantity = voice ? slots : 1;
+  const quantity = perSlot ? slots : 1;
   const subtotalMinor = price ? price.amountMinor * quantity : 0;
   const discountMinor = coupon ? Math.min(coupon.discountMinor, subtotalMinor) : 0;
   const afterDiscount = Math.max(0, subtotalMinor - discountMinor);
@@ -279,8 +284,8 @@ export default function OrderPage() {
         productId: product!.id,
         priceId: price!.id,
         templateId: product!.gameTemplateId!,
-        hardwareTierId: voice ? undefined : tier?.id,
-        slots: voice ? slots : undefined,
+        hardwareTierId: perSlot ? undefined : tier?.id,
+        slots: perSlot ? slots : undefined,
         regionId: regionId ?? undefined,
         nodeId: nodeId ?? undefined,
         name: name.trim(),
@@ -312,7 +317,7 @@ export default function OrderPage() {
     !!product &&
     !!price &&
     !!name.trim() &&
-    (voice ? slots > 0 : !!tier) &&
+    (perSlot ? slots > 0 : !!tier) &&
     (!(locationsQ.data?.length) || !!regionId);
 
   if (productsQ.isLoading) {
@@ -389,8 +394,8 @@ export default function OrderPage() {
       {product && (
         <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
           <div className="space-y-6">
-            {/* Step 2 — hardware tiers (game) OR slot selector (voice) */}
-            {!voice ? (
+            {/* Step 2 — hardware tiers (tiered) OR slot selector (per-slot) */}
+            {!perSlot ? (
               <section className="space-y-3">
                 <h2 className="text-sm font-semibold">2 · Choose a hardware tier</h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -508,7 +513,7 @@ export default function OrderPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {voice ? "This product has no pricing yet." : "Select a tier to see pricing."}
+                  {perSlot ? "This product has no pricing yet." : "Select a tier to see pricing."}
                 </p>
               )}
             </section>
@@ -562,7 +567,7 @@ export default function OrderPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No locations currently have capacity for this size{voice ? " — try fewer slots." : "."}
+                  No locations currently have capacity for this size{perSlot ? " — try fewer slots." : "."}
                 </p>
               )}
             </section>
@@ -572,7 +577,7 @@ export default function OrderPage() {
               <Label htmlFor="srv-name">5 · Server name</Label>
               <Input
                 id="srv-name"
-                placeholder={voice ? "My community voice" : "My awesome server"}
+                placeholder={voiceType ? "My community voice" : "My awesome server"}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
@@ -583,8 +588,8 @@ export default function OrderPage() {
           <aside className="lg:sticky lg:top-6 h-fit space-y-3 rounded-xl border p-4">
             <h2 className="text-sm font-semibold">Summary</h2>
             <Row label="Product" value={product.name} />
-            <Row label="Type" value={voice ? "Voice server" : "Game server"} />
-            {voice ? (
+            <Row label="Type" value={voiceType ? "Voice server" : "Game server"} />
+            {perSlot ? (
               <Row label="Slots" value={String(slots)} />
             ) : (
               <Row label="Tier" value={tier?.name ?? "—"} />
@@ -752,9 +757,9 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Cheapest active price across a product's tiers (game) or its prices (voice). */
+/** Cheapest active price across a product's prices (per-slot) or tiers (tiered). */
 function fromPrice(product: Product): Price | null {
-  const all = isVoice(product)
+  const all = isPerSlot(product)
     ? product.prices ?? []
     : (product.hardwareTiers ?? []).flatMap((t) => t.prices ?? []);
   const active = all.filter((p) => p.isActive !== false);
@@ -774,7 +779,8 @@ function OfferingCard({
   onSelect: () => void;
 }) {
   const from = fromPrice(product);
-  const voice = isVoice(product);
+  const voiceType = isVoiceType(product);
+  const perSlot = isPerSlot(product);
   return (
     <button
       onClick={onSelect}
@@ -783,7 +789,7 @@ function OfferingCard({
         active ? "border-primary bg-primary/5" : "hover:bg-accent/40",
       )}
     >
-      {voice ? (
+      {voiceType ? (
         <span className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-white/5">
           <Mic className="size-6 text-muted-foreground" />
         </span>
@@ -800,7 +806,7 @@ function OfferingCard({
         {from && (
           <p className="text-xs text-muted-foreground">
             from {formatMoney(from.amountMinor, from.currency)}
-            {voice ? "/slot" : ""}
+            {perSlot ? "/slot" : ""}
           </p>
         )}
       </div>

@@ -416,6 +416,14 @@ async function seedGameTierProducts() {
       },
     });
 
+    // Converting a legacy per-slot game product → retire its product-level
+    // (per-slot) prices so only tier prices remain active on the storefront.
+    // Subscriptions reference prices by id, so deactivating doesn't affect them.
+    await prisma.price.updateMany({
+      where: { productId: product.id, hardwareTierId: null, isActive: true },
+      data: { isActive: false },
+    });
+
     // Tier definitions scaled around the template's recommended specs.
     const tiers: Array<{
       name: string;
