@@ -502,6 +502,18 @@ export const api = {
           diskMb: limits.diskMb,
         },
       }),
+    nodes: (
+      regionId: string,
+      limits: { cpuCores: number; memoryMb: number; diskMb: number },
+    ) =>
+      getList<{ id: string; name: string }>("/catalog/nodes", {
+        query: {
+          regionId,
+          cpuCores: limits.cpuCores,
+          memoryMb: limits.memoryMb,
+          diskMb: limits.diskMb,
+        },
+      }),
     categories: () => getList<GameCategory>("/catalog/categories"),
     templates: (query?: { categoryId?: string; search?: string }) =>
       getList<GameTemplate>("/catalog/templates", { query }),
@@ -524,6 +536,7 @@ export const api = {
       priceId: string;
       templateId: string;
       regionId?: string;
+      nodeId?: string;
       slots?: number;
       name: string;
       gateway?: "stripe" | "paypal";

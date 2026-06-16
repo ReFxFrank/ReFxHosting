@@ -7,7 +7,6 @@ import {
   Cpu,
   MemoryStick,
   HardDrive,
-  MapPin,
   ShoppingCart,
   Server as ServerIcon,
 } from "lucide-react";
@@ -83,6 +82,7 @@ export default function OrderPage() {
   const [slots, setSlots] = useState(1);
   const [interval, setInterval] = useState<BillingInterval | null>(null);
   const [regionId, setRegionId] = useState<string | null>(null);
+  const [nodeId, setNodeId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [gateway, setGateway] = useState<"stripe" | "paypal">("stripe");
   const [config, setConfig] = useState<Record<string, string>>({});
@@ -121,6 +121,7 @@ export default function OrderPage() {
       return cur && ints.includes(cur) ? cur : (ints[0] ?? null);
     });
     setRegionId(null);
+    setNodeId(null);
   }, [product]);
 
   // Seed per-game config fields from their defaults when the game/template loads.
@@ -151,6 +152,18 @@ export default function OrderPage() {
     queryFn: () => api.catalog.locations(limits!),
     enabled: !!limits,
   });
+
+  // Nodes in the chosen region with capacity (lets the customer pick a specific
+  // node, or leave it on Auto for the scheduler to choose the best one).
+  const nodesQ = useQuery({
+    queryKey: ["catalog", "nodes", regionId, limits?.cpuCores, limits?.memoryMb, limits?.diskMb],
+    queryFn: () => api.catalog.nodes(regionId!, limits!),
+    enabled: !!regionId && !!limits,
+  });
+  // Changing region invalidates the node choice.
+  useEffect(() => {
+    setNodeId(null);
+  }, [regionId]);
 
   // Pricing preview (the backend recomputes authoritatively, incl. tax).
   const subtotalMinor = price ? price.amountMinor * slots : 0;
@@ -200,6 +213,7 @@ export default function OrderPage() {
         templateId: product!.gameTemplateId!,
         slots,
         regionId: regionId ?? undefined,
+        nodeId: nodeId ?? undefined,
         name: name.trim(),
         gateway,
         environment: Object.keys(config).length ? config : undefined,
@@ -399,32 +413,52 @@ export default function OrderPage() {
               </div>
             </section>
 
-            {/* Location */}
+            {/* Location + node */}
             <section className="space-y-3 rounded-xl border p-4">
               <h2 className="text-sm font-semibold">4 · Location</h2>
               {locationsQ.isLoading ? (
-                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-10 w-full" />
               ) : locationsQ.data?.length ? (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {locationsQ.data.map((r) => {
-                    const active = r.id === regionId;
-                    return (
-                      <button
-                        key={r.id}
-                        onClick={() => setRegionId(r.id)}
-                        className={cn(
-                          "flex items-center gap-2 rounded-lg border p-3 text-left text-sm transition-colors",
-                          active ? "border-primary bg-primary/5" : "hover:bg-accent/40",
-                        )}
-                      >
-                        <MapPin className="size-4 text-muted-foreground" />
-                        <span>
-                          <span className="font-medium">{r.name}</span>
-                          <span className="block text-xs text-muted-foreground">{r.country}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Region</Label>
+                    <Select value={regionId ?? ""} onValueChange={setRegionId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choose a region…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {locationsQ.data.map((r) => (
+                          <SelectItem key={r.id} value={r.id}>
+                            {r.name}
+                            {r.country ? ` · ${r.country}` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Node</Label>
+                    <Select
+                      value={nodeId ?? "auto"}
+                      onValueChange={(v) => setNodeId(v === "auto" ? null : v)}
+                      disabled={!regionId}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={regionId ? "Auto (best available)" : "Pick a region first"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">Auto (best available)</SelectItem>
+                        {(nodesQ.data ?? []).map((n) => (
+                          <SelectItem key={n.id} value={n.id}>{n.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {regionId && !nodesQ.isLoading && (nodesQ.data?.length ?? 0) === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No nodes with capacity here — try another region or fewer slots.
+                      </p>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">

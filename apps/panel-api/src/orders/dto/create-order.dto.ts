@@ -36,6 +36,11 @@ export class CreateOrderDto {
   @IsString()
   regionId?: string;
 
+  @ApiPropertyOptional({ description: 'Specific node to place on (validated for eligibility).' })
+  @IsOptional()
+  @IsString()
+  nodeId?: string;
+
   @ApiPropertyOptional({ description: 'Slot quantity for per-slot products.' })
   @IsOptional()
   @IsInt()

@@ -40,6 +40,7 @@ export class OrdersService {
       templateId: string;
       name: string;
       regionId?: string;
+      nodeId?: string;
       slots?: number;
       paymentMethodId?: string;
       gateway?: 'stripe' | 'paypal';
@@ -167,6 +168,7 @@ export class OrdersService {
         subscriptionId: subscription.id,
         templateId: dto.templateId,
         regionId: dto.regionId,
+        nodeId: dto.nodeId,
         environment: dto.environment,
       },
       { deferProvision: !paidNow },

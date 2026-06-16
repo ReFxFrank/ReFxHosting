@@ -38,6 +38,22 @@ export class CatalogController {
     });
   }
 
+  /** Nodes in a region with capacity for a given config — storefront node picker. */
+  @Get('nodes')
+  nodes_(
+    @Query('regionId') regionId: string,
+    @Query('cpuCores') cpuCores?: string,
+    @Query('memoryMb') memoryMb?: string,
+    @Query('diskMb') diskMb?: string,
+  ) {
+    if (!regionId) return [];
+    return this.nodes.nodesWithCapacity(regionId, {
+      cpuCores: Number(cpuCores) || 0,
+      memoryMb: Number(memoryMb) || 0,
+      diskMb: Number(diskMb) || 0,
+    });
+  }
+
   // ---- public storefront --------------------------------------------------
 
   /** Published games for the public homepage/catalog (safe fields + price). */

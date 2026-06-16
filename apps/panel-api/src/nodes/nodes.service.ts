@@ -384,6 +384,64 @@ export class NodesService {
   }
 
   /**
+   * ONLINE, non-maintenance nodes IN a region with free capacity for `limits` —
+   * powers the storefront node picker (only nodes an order can actually land on).
+   */
+  async nodesWithCapacity(
+    regionId: string,
+    limits: { cpuCores: number; memoryMb: number; diskMb: number },
+  ): Promise<Array<{ id: string; name: string }>> {
+    const candidates = await this.prisma.node.findMany({
+      where: { deletedAt: null, state: 'ONLINE', maintenance: false, regionId },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    const out: Array<{ id: string; name: string }> = [];
+    for (const n of candidates) {
+      const cap = await this.capacity(n.id);
+      if (
+        cap.cpu.free >= limits.cpuCores &&
+        cap.memory.free >= limits.memoryMb &&
+        cap.disk.free >= limits.diskMb
+      ) {
+        out.push({ id: n.id, name: n.name });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Validate that a customer-chosen node can actually take this order: it exists,
+   * is ONLINE and not in maintenance, is in the chosen region (when given), and
+   * still has free capacity for the plan. Throws a clear error otherwise.
+   */
+  async assertEligibleForOrder(
+    nodeId: string,
+    limits: { cpuCores: number; memoryMb: number; diskMb: number },
+    regionId?: string,
+  ): Promise<void> {
+    const node = await this.prisma.node.findFirst({
+      where: { id: nodeId, deletedAt: null },
+      select: { id: true, state: true, maintenance: true, regionId: true },
+    });
+    if (!node) throw new BadRequestException('Selected node is unavailable');
+    if (node.state !== 'ONLINE' || node.maintenance) {
+      throw new BadRequestException('Selected node is not accepting new servers');
+    }
+    if (regionId && node.regionId !== regionId) {
+      throw new BadRequestException('Selected node is not in the chosen region');
+    }
+    const cap = await this.capacity(nodeId);
+    if (
+      cap.cpu.free < limits.cpuCores ||
+      cap.memory.free < limits.memoryMb ||
+      cap.disk.free < limits.diskMb
+    ) {
+      throw new BadRequestException('Selected node no longer has capacity for this plan');
+    }
+  }
+
+  /**
    * Regions that currently have at least one ONLINE, non-maintenance node with
    * enough free capacity for `limits`. Powers the storefront location picker so
    * customers only see places their order can actually be provisioned.

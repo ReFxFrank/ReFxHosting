@@ -149,9 +149,12 @@ export class ServersService {
           diskMb: prod.diskMb ?? template.recDiskMb,
         };
 
-    // Node placement: explicit, or scheduled within the chosen region.
+    // Node placement: a customer-chosen node is validated for eligibility +
+    // capacity; otherwise the scheduler picks the best node in the chosen region.
     let nodeId = dto.nodeId;
-    if (!nodeId) {
+    if (nodeId) {
+      await this.nodes.assertEligibleForOrder(nodeId, limits, dto.regionId);
+    } else {
       const node = await this.nodes.pickNodeFor(limits, dto.regionId);
       if (!node) {
         // Surface WHY nothing fit (configured capacity vs. the plan's reserved
