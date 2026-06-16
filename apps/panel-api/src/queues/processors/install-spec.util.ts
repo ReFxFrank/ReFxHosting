@@ -20,10 +20,11 @@ export function buildInstallSpec(
   opts: {
     wipe?: boolean;
     sftpPassword?: string;
-    /** Central Steam login, injected for Workshop-enabled templates so the egg's
-     *  steamcmd install can authenticate (anonymous can't fetch many Workshop
-     *  items). Never set for non-Workshop games. */
-    steam?: { username: string; password: string };
+    /** Steam login, injected for Workshop-enabled templates so the egg's steamcmd
+     *  install can authenticate (anonymous can't fetch many Workshop items).
+     *  `guardCode` is a one-time Steam Guard code for the login. Never set for
+     *  non-Workshop games. */
+    steam?: { username: string; password: string; guardCode?: string };
   } = {},
 ): InstallSpec {
   const template = server.template!;
@@ -49,6 +50,7 @@ export function buildInstallSpec(
     if (opts.steam?.username && opts.steam.password) {
       env.STEAM_USERNAME = opts.steam.username;
       env.STEAM_PASSWORD = opts.steam.password;
+      if (opts.steam.guardCode) env.STEAM_GUARD_CODE = opts.steam.guardCode;
     }
   }
 

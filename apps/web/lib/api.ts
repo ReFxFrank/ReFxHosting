@@ -476,8 +476,10 @@ export const api = {
       http.patch<WorkshopMod[]>(`/servers/${id}/workshop/reorder`, { ids }),
     workshopRemove: (id: string, modId: string) =>
       http.delete<void>(`/servers/${id}/workshop/${modId}`),
-    workshopApply: (id: string) =>
-      http.post<{ accepted: true }>(`/servers/${id}/workshop/apply`, {}),
+    workshopApply: (id: string, steamGuardCode?: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/workshop/apply`, {
+        ...(steamGuardCode ? { steamGuardCode } : {}),
+      }),
     // The customer's own Steam login for this server's Workshop downloads.
     workshopSteam: (id: string) =>
       http.get<{ username: string; hasLogin: boolean }>(`/servers/${id}/workshop/steam`),

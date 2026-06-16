@@ -30,12 +30,18 @@ export default function WorkshopPage() {
   const { id } = useParams<{ id: string }>();
   const qc = useQueryClient();
   const [input, setInput] = useState("");
+  const [guardCode, setGuardCode] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["server", id, "workshop"],
     queryFn: () => api.servers.workshop(id),
   });
   const mods = data ?? [];
+  // Shared cache with SteamLoginCard — tells us whether to offer a Guard code.
+  const { data: steam } = useQuery({
+    queryKey: ["server", id, "workshop-steam"],
+    queryFn: () => api.servers.workshopSteam(id),
+  });
   const invalidate = () => qc.invalidateQueries({ queryKey: ["server", id, "workshop"] });
 
   const add = useMutation({
@@ -67,9 +73,10 @@ export default function WorkshopPage() {
   });
 
   const apply = useMutation({
-    mutationFn: () => api.servers.workshopApply(id),
+    mutationFn: () => api.servers.workshopApply(id, guardCode.trim() || undefined),
     onSuccess: () => {
       toast.success("Applying — the server is reinstalling to fetch your Workshop content.");
+      setGuardCode("");
       qc.invalidateQueries({ queryKey: ["server", id] });
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to apply"),
@@ -97,14 +104,25 @@ export default function WorkshopPage() {
               Add Workshop items or a collection by ID or URL, then Apply to install them.
             </CardDescription>
           </div>
-          <Button
-            size="sm"
-            loading={apply.isPending}
-            disabled={mods.length === 0}
-            onClick={() => apply.mutate()}
-          >
-            <RefreshCw className="size-4" /> Apply &amp; reinstall
-          </Button>
+          <div className="flex flex-col items-end gap-2">
+            {steam?.hasLogin && (
+              <Input
+                value={guardCode}
+                onChange={(e) => setGuardCode(e.target.value)}
+                placeholder="Steam Guard code (if asked)"
+                className="h-8 w-44 text-sm"
+                aria-label="Steam Guard code"
+              />
+            )}
+            <Button
+              size="sm"
+              loading={apply.isPending}
+              disabled={mods.length === 0}
+              onClick={() => apply.mutate()}
+            >
+              <RefreshCw className="size-4" /> Apply &amp; reinstall
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">
@@ -287,9 +305,12 @@ function SteamLoginCard({ serverId }: { serverId: string }) {
             <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-2.5 text-xs text-muted-foreground">
               <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
               <span>
-                If your account uses <strong>Steam Guard</strong>, unattended downloads may
-                fail — use a dedicated account with Steam Guard configured for shared use,
-                or one that owns the game with Guard handled. We never share your password.
+                Using <strong>Steam Guard</strong>? Enter your current code in the
+                <strong> Steam Guard code</strong> box next to <strong>Apply</strong> — it&apos;s
+                passed to Steam for that download and this machine is then remembered, so
+                you usually only need it once. <strong>Email</strong> codes work best;
+                mobile-authenticator codes can expire before the install runs. We never
+                share your password.
               </span>
             </div>
             <div className="flex justify-end">

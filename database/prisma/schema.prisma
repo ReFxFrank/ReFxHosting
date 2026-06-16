@@ -506,6 +506,10 @@ model Server {
   // used at install time on the node and never returned to the client.
   steamUsername   String?
   steamPasswordEnc String?
+  // A one-time Steam Guard code supplied for the NEXT install (e.g. emailed/app
+  // code for a Guard-protected account). Consumed + cleared by the install job;
+  // after a successful guarded login the node remembers the machine (sentry).
+  steamGuardCode  String?
 
   allocations     Allocation[]
   backups         Backup[]

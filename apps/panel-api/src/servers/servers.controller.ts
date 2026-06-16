@@ -44,6 +44,7 @@ import {
   ToggleWorkshopDto,
   ReorderWorkshopDto,
   SetSteamLoginDto,
+  ApplyWorkshopDto,
 } from './dto/server.dto';
 
 @ApiTags('servers')
@@ -282,8 +283,8 @@ export class ServersController {
   @Post(':id/workshop/apply')
   @RequirePermissions('control.reinstall')
   @Audit({ action: 'server.workshop.apply', targetType: 'Server', targetParam: 'id' })
-  workshopApply(@Param('id') id: string) {
-    return this.workshop.apply(id);
+  workshopApply(@Param('id') id: string, @Body() dto: ApplyWorkshopDto) {
+    return this.workshop.apply(id, { steamGuardCode: dto.steamGuardCode });
   }
 
   // Per-server Steam login (the customer's own account, for Workshop downloads).

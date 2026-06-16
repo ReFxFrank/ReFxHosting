@@ -53,12 +53,14 @@ export class ReinstallProcessor extends WorkerHost {
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
     // Prefer the customer's own Steam login for this server; fall back to the
-    // optional central admin login.
+    // optional central admin login. A one-time Steam Guard code (if supplied for
+    // this install) rides along and is cleared once consumed below.
     const steam = server.template.supportsWorkshop
       ? server.steamUsername && server.steamPasswordEnc
         ? {
             username: server.steamUsername,
             password: this.crypto.decrypt(server.steamPasswordEnc),
+            guardCode: server.steamGuardCode ?? undefined,
           }
         : await this.settings.steamConfig()
       : undefined;
@@ -67,6 +69,13 @@ export class ReinstallProcessor extends WorkerHost {
       sftpPassword,
       steam,
     });
+    // One-time code: clear it now that it's baked into this install spec.
+    if (server.steamGuardCode) {
+      await this.prisma.server.update({
+        where: { id: serverId },
+        data: { steamGuardCode: null },
+      });
+    }
 
     try {
       await this.agent.reinstall(server.node, spec);

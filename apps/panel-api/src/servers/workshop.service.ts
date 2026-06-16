@@ -156,8 +156,21 @@ export class WorkshopService {
    * egg consumes, then reinstall (preserving data) so steamcmd downloads run and
    * the new startup args take effect.
    */
-  async apply(serverId: string): Promise<{ accepted: true }> {
+  async apply(
+    serverId: string,
+    opts: { steamGuardCode?: string } = {},
+  ): Promise<{ accepted: true }> {
     const server = await this.loadServer(serverId);
+
+    // Stash a one-time Steam Guard code for this install (consumed + cleared by
+    // the reinstall job). Only meaningful with a per-server login set.
+    const guardCode = opts.steamGuardCode?.trim();
+    if (guardCode) {
+      await this.prisma.server.update({
+        where: { id: serverId },
+        data: { steamGuardCode: guardCode },
+      });
+    }
     const mods = await this.prisma.workshopMod.findMany({
       where: { serverId, enabled: true },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],

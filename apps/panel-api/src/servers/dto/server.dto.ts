@@ -315,3 +315,10 @@ export class SetSteamLoginDto {
   @IsString()
   password!: string;
 }
+
+export class ApplyWorkshopDto {
+  @ApiPropertyOptional({ description: 'One-time Steam Guard code for this install (if your account uses Steam Guard).' })
+  @IsOptional()
+  @IsString()
+  steamGuardCode?: string;
+}
