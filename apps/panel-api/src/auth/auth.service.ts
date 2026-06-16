@@ -46,15 +46,25 @@ export class AuthService {
   // ---- registration / login ---------------------------------------------
 
   async register(dto: RegisterDto): Promise<{ id: string; email: string }> {
-    const existing = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
-    });
-    if (existing) throw new ConflictException('Email already registered');
+    const email = dto.email.toLowerCase();
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      // Only a live account blocks reuse. A soft-deleted account that still
+      // holds this address (e.g. deleted before the address was tombstoned) is
+      // released here so the address becomes available again.
+      if (!existing.deletedAt) {
+        throw new ConflictException('Email already registered');
+      }
+      await this.prisma.user.update({
+        where: { id: existing.id },
+        data: { email: `deleted:${Date.now()}:${email}` },
+      });
+    }
 
     const user = await this.prisma.user.create({
       data: {
         id: uuidv7(),
-        email: dto.email.toLowerCase(),
+        email,
         passwordHash: await argon2.hash(dto.password, ARGON_OPTS),
         firstName: dto.firstName,
         lastName: dto.lastName,

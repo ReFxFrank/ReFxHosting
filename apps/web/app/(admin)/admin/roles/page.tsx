@@ -135,7 +135,9 @@ export default function AdminRolesPage() {
   }
 
   const isWildcard = form.permissions.includes("*");
-  const permsLocked = !!editing?.isSystem; // system role permissions are fixed
+  // Every role's permissions are editable except the built-in Owner role, which
+  // always keeps full access (the API also enforces this).
+  const permsLocked = editing?.key === "owner";
 
   return (
     <div className="space-y-6">
@@ -155,7 +157,7 @@ export default function AdminRolesPage() {
           <CardTitle className="flex items-center gap-2 text-base">
             <ShieldCheck className="size-4" /> Roles
           </CardTitle>
-          <CardDescription>System roles are fixed; create custom roles with any permission set.</CardDescription>
+          <CardDescription>Tune any role&apos;s permissions, or create custom roles. The Owner role always keeps full access.</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {rolesQ.isLoading ? (
@@ -294,7 +296,7 @@ export default function AdminRolesPage() {
             <DialogTitle>{editing ? `Edit ${editing.name}` : "New role"}</DialogTitle>
             <DialogDescription>
               {permsLocked
-                ? "This is a system role — its permissions are fixed, but you can rename it."
+                ? "The Owner role always has full access — you can rename it, but its permissions can't be reduced."
                 : "Toggle the permissions this role grants."}
             </DialogDescription>
           </DialogHeader>

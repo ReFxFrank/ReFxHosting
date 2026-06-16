@@ -72,9 +72,17 @@ export class RolesService {
     const data: Prisma.RoleUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name.trim();
     if (dto.description !== undefined) data.description = dto.description?.trim() || null;
-    // System roles keep their permission sets fixed; only custom roles are editable.
-    if (dto.permissions !== undefined && !role.isSystem) {
-      data.permissions = this.sanitizePermissions(dto.permissions);
+    // Permissions are editable on every role — including the built-in
+    // admin/support/customer — so an owner can tailor exactly what each tier can
+    // do. The only guardrail: the `owner` role always retains the `*` wildcard,
+    // so an owner can never accidentally strip away owner power and lock the
+    // whole platform out of role/payment management.
+    if (dto.permissions !== undefined) {
+      const perms = this.sanitizePermissions(dto.permissions);
+      data.permissions =
+        role.key === 'owner' && !perms.includes(WILDCARD)
+          ? [WILDCARD, ...perms]
+          : perms;
     }
     return this.prisma.role.update({ where: { id }, data });
   }

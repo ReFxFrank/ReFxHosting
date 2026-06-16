@@ -202,7 +202,11 @@ export class UsersService {
   async deleteUser(id: string): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true, _count: { select: { ownedServers: true } } },
+      select: {
+        id: true,
+        email: true,
+        _count: { select: { ownedServers: true } },
+      },
     });
     if (!user) throw new NotFoundException('User not found');
     const servers = await this.prisma.server.count({
@@ -213,9 +217,17 @@ export class UsersService {
         'Cannot delete a user who still owns servers; delete or transfer their servers first',
       );
     }
+    // Release the email so it can be registered again. The address is unique, so
+    // a soft-deleted row would otherwise keep it reserved forever. We tombstone
+    // it (preserving the original, readable, after the marker) instead of losing
+    // it, which both frees the unique constraint and keeps an audit trail.
     await this.prisma.user.update({
       where: { id },
-      data: { deletedAt: new Date(), state: UserState.BANNED },
+      data: {
+        deletedAt: new Date(),
+        state: UserState.BANNED,
+        email: `deleted:${Date.now()}:${user.email}`,
+      },
     });
   }
 
