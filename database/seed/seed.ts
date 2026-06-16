@@ -450,13 +450,36 @@ async function seedProducts() {
   console.log(`  • Products: ${products.map((p) => p.slug).join(', ')}`);
 }
 
-async function seedTemplates(categorySlugToId: Record<string, string>) {
+/** Read existing game categories into a { slug: id } map (no writes). */
+async function loadGameCategoryMap(): Promise<Record<string, string>> {
+  const cats = await prisma.gameCategory.findMany({
+    select: { id: true, slug: true },
+  });
+  return Object.fromEntries(cats.map((c) => [c.slug, c.id]));
+}
+
+async function seedTemplates(
+  categorySlugToId: Record<string, string>,
+  opts: { createOnly?: boolean } = {},
+) {
   const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.json'));
   let count = 0;
 
   for (const file of files) {
     const raw = readFileSync(join(TEMPLATES_DIR, file), 'utf8');
     const tpl = JSON.parse(raw) as TemplateFile;
+
+    // Create-only mode (every-deploy egg sync): if a template with this slug
+    // already exists, leave it completely untouched — never clobber admin tuning
+    // (publish state, art, variables) or re-import on each boot. Only brand-new
+    // eggs (new slugs) are added.
+    if (opts.createOnly) {
+      const existing = await prisma.gameTemplate.findUnique({
+        where: { slug: tpl.slug },
+        select: { id: true },
+      });
+      if (existing) continue;
+    }
 
     const categoryId =
       tpl.category && categorySlugToId[tpl.category] ? categorySlugToId[tpl.category] : null;
@@ -569,7 +592,9 @@ async function seedTemplates(categorySlugToId: Record<string, string>) {
     console.log(`    - ${tpl.slug} (${(tpl.variables ?? []).length} vars)`);
   }
 
-  console.log(`  • Game templates: ${count} loaded from ${TEMPLATES_DIR}`);
+  console.log(
+    `  • Game templates: ${count} ${opts.createOnly ? 'new egg(s) created' : 'loaded'} from ${TEMPLATES_DIR}`,
+  );
 }
 
 /**
@@ -708,6 +733,15 @@ async function main() {
     console.log(
       'Demo content: skipped (already initialised; set SEED_DEMO=true to force).',
     );
+
+    // Curated game eggs ARE kept in sync every deploy (create-only): brand-new
+    // egg JSONs are imported automatically — no SEED_DEMO needed — while existing
+    // templates are left untouched. (A hard-deleted egg whose JSON still exists
+    // will be re-created; remove its file under database/seed/templates to retire
+    // it for good.)
+    console.log('Game eggs (auto-load):');
+    const categorySlugToId = await loadGameCategoryMap();
+    await seedTemplates(categorySlugToId, { createOnly: true });
   }
 
   // Ensure a per-slot storefront product exists for every game template that's

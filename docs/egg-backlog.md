@@ -1,9 +1,11 @@
 # Game egg backlog
 
 Tracks requested game templates ("eggs"). Each egg lives in
-`database/seed/templates/<slug>.json` and, on the next demo seed
-(`SEED_DEMO=true`), automatically gets a purchasable per-slot package
-(`gs-<slug>`) via `seedPerSlotProducts()`.
+`database/seed/templates/<slug>.json`. New eggs are **auto-loaded on every
+deploy** (create-only) by the seed runner — no `SEED_DEMO` flag needed — and each
+automatically gets a purchasable per-slot package (`gs-<slug>`) via
+`seedPerSlotProducts()`. Existing templates are left untouched (admin tuning,
+publish state and art are preserved).
 
 ## Done
 
@@ -53,7 +55,13 @@ done yet.
    survival / modded / sandbox / simulation / roleplay / shooter), `steamAppId`,
    `startupCommand`, `installScript`, `recCpuCores/recMemoryMb/recDiskMb`, and
    `variables`.
-3. Re-run the seed with `SEED_DEMO=true`. A `gs-<slug>` per-slot product +
+3. Redeploy (run the migrate/seed step, e.g. `infra/scripts/update-panel.sh`).
+   The egg auto-loads (create-only) and a `gs-<slug>` per-slot product +
    per-interval pricing is created automatically; tune it in Admin → Products.
+   No `SEED_DEMO` change is required.
 4. Optional: drop art at `apps/web/public/games/<slug>.svg` (falls back to a
    default otherwise).
+
+> To retire a seeded egg for good, delete it in the admin panel **and** remove
+> its `database/seed/templates/<slug>.json` file — otherwise the auto-loader
+> re-creates it on the next deploy.
