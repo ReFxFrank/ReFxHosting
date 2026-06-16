@@ -45,6 +45,7 @@ import type {
   ModrinthProject,
   ModrinthVersion,
   AdminUserDetail,
+  AdminCustomer,
   AdminInvoice,
   AdminSubscription,
   AdminPayment,
@@ -635,6 +636,9 @@ export const api = {
 
     users: (query?: { q?: string; role?: string; state?: string }) =>
       http.get<Paginated<User>>("/admin/users", { query }),
+    /** Paying customers (ACTIVE + PAID services) with per-row aggregates. */
+    customers: (query?: { page?: number; q?: string }) =>
+      http.get<Paginated<AdminCustomer>>("/admin/customers", { query }),
     userDetail: (id: string) => http.get<AdminUserDetail>(`/admin/users/${id}`),
     setUserState: (id: string, state: User["state"]) =>
       http.patch<User>(`/admin/users/${id}`, { state }),

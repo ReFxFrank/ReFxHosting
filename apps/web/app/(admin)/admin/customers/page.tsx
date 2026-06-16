@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatMoney } from "@/lib/utils";
 
 const STATE_VARIANT: Record<string, "success" | "warning" | "destructive" | "secondary"> = {
   ACTIVE: "success",
@@ -31,8 +31,8 @@ export default function AdminCustomersPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "customers", search],
-    // Server-side role filter so large datasets paginate correctly.
-    queryFn: () => api.admin.users({ role: "CUSTOMER", q: search || undefined }),
+    // Paying customers: accounts with an ACTIVE subscription backed by a PAID invoice.
+    queryFn: () => api.admin.customers(search ? { q: search } : undefined),
   });
 
   const customers = useMemo(() => data?.data ?? [], [data]);
@@ -41,7 +41,7 @@ export default function AdminCustomersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Customers"
-        description="Customer accounts on the platform. Staff accounts and account actions are under Users."
+        description="Accounts with an active, paid service. Staff accounts and all users are under Users."
         actions={
           <Button asChild variant="outline" size="sm">
             <Link href="/admin/users">All users</Link>
@@ -69,7 +69,9 @@ export default function AdminCustomersPage() {
                 <TableRow>
                   <TableHead>Customer</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="hidden sm:table-cell">Joined</TableHead>
+                  <TableHead className="hidden sm:table-cell">Services</TableHead>
+                  <TableHead className="hidden md:table-cell">Lifetime spend</TableHead>
+                  <TableHead className="hidden lg:table-cell">Joined</TableHead>
                   <TableHead className="w-20" />
                 </TableRow>
               </TableHeader>
@@ -85,7 +87,16 @@ export default function AdminCustomersPage() {
                     <TableCell>
                       <Badge variant={STATE_VARIANT[u.state] ?? "secondary"}>{u.state}</Badge>
                     </TableCell>
-                    <TableCell className="hidden text-muted-foreground sm:table-cell">
+                    <TableCell className="hidden tabular-nums sm:table-cell">
+                      {u.activeServices}
+                      {u.servers ? (
+                        <span className="text-xs text-muted-foreground"> · {u.servers} server{u.servers === 1 ? "" : "s"}</span>
+                      ) : null}
+                    </TableCell>
+                    <TableCell className="hidden tabular-nums md:table-cell">
+                      {formatMoney(u.lifetimeSpendMinor, "USD")}
+                    </TableCell>
+                    <TableCell className="hidden text-muted-foreground lg:table-cell">
                       {formatDate(u.createdAt)}
                     </TableCell>
                     <TableCell>

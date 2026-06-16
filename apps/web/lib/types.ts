@@ -230,6 +230,20 @@ export interface AdminUserDetail extends User {
   _count?: { ownedServers: number; subscriptions: number; tickets: number };
 }
 
+/** A paying customer row (ACTIVE + PAID services) for the admin Customers table. */
+export interface AdminCustomer {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  state: UserState;
+  globalRole: GlobalRole;
+  createdAt: string;
+  activeServices: number;
+  servers: number;
+  lifetimeSpendMinor: number;
+}
+
 export interface ServerStat {
   cpuPct: number;
   memUsedMb: number;

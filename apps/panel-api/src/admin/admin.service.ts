@@ -1,12 +1,19 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   BillingInterval,
+  InvoiceState,
+  Prisma,
   ServerState,
   SubscriptionState,
   TicketState,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { intervalMonths } from '../billing/interval.util';
+import {
+  Paginated,
+  PaginationDto,
+  paginate,
+} from '../common/dto/pagination.dto';
 
 /**
  * Cross-domain admin aggregations that don't belong to a single feature service.
@@ -15,6 +22,96 @@ import { intervalMonths } from '../billing/interval.util';
 @Injectable()
 export class AdminService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Paying customers: accounts that have at least one ACTIVE subscription backed
+   * by a PAID invoice. (The "Users" list is everyone; "Customers" is people who
+   * actually have a live, paid service.) Returns lightweight per-row aggregates
+   * for the staff table: active services, server count and lifetime spend.
+   */
+  async listCustomers(pagination: PaginationDto): Promise<
+    Paginated<{
+      id: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+      state: string;
+      globalRole: string;
+      createdAt: Date;
+      activeServices: number;
+      servers: number;
+      lifetimeSpendMinor: number;
+    }>
+  > {
+    const where: Prisma.UserWhereInput = {
+      deletedAt: null,
+      subscriptions: {
+        some: {
+          state: SubscriptionState.ACTIVE,
+          invoices: { some: { state: InvoiceState.PAID } },
+        },
+      },
+    };
+    if (pagination.q) {
+      where.OR = [
+        { email: { contains: pagination.q, mode: 'insensitive' } },
+        { firstName: { contains: pagination.q, mode: 'insensitive' } },
+        { lastName: { contains: pagination.q, mode: 'insensitive' } },
+      ];
+    }
+
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        skip: pagination.skip,
+        take: pagination.take,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          state: true,
+          globalRole: true,
+          createdAt: true,
+          _count: { select: { ownedServers: true } },
+          subscriptions: {
+            where: { state: SubscriptionState.ACTIVE },
+            select: { id: true },
+          },
+        },
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+
+    // Lifetime spend per user (sum of settled invoices) in one grouped query.
+    const ids = users.map((u) => u.id);
+    const spend = ids.length
+      ? await this.prisma.invoice.groupBy({
+          by: ['userId'],
+          where: { userId: { in: ids }, state: InvoiceState.PAID },
+          _sum: { amountPaidMinor: true },
+        })
+      : [];
+    const spendById = new Map(
+      spend.map((s) => [s.userId, s._sum.amountPaidMinor ?? 0]),
+    );
+
+    const data = users.map((u) => ({
+      id: u.id,
+      email: u.email,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      state: u.state,
+      globalRole: u.globalRole,
+      createdAt: u.createdAt,
+      activeServices: u.subscriptions.length,
+      servers: u._count.ownedServers,
+      lifetimeSpendMinor: spendById.get(u.id) ?? 0,
+    }));
+
+    return paginate(data, total, pagination);
+  }
 
   /**
    * Full account view for the admin user-detail page: profile + contact, billing

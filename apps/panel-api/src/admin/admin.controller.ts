@@ -267,6 +267,13 @@ export class AdminController {
     });
   }
 
+  /** Paying customers — accounts with an ACTIVE subscription backed by a PAID invoice. */
+  @Get('customers')
+  @RequirePerm('users.read')
+  listCustomers(@Query() pagination: PaginationDto) {
+    return this.admin.listCustomers(pagination);
+  }
+
   @Get('users/:id')
   @RequirePerm('users.read')
   getUser(@Param('id') id: string) {
