@@ -20,7 +20,10 @@ const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-[#04070d]/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      // A plain dark scrim (no backdrop blur): a full-viewport backdrop-filter
+      // re-blurs the page on every repaint behind it, which is the main source of
+      // dialog jank while typing. The 85% scrim hides the background cleanly.
+      "fixed inset-0 z-50 bg-[#04070d]/85 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
     {...props}
@@ -37,7 +40,11 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "refx-beam fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-hidden border border-white/[0.08] bg-[linear-gradient(180deg,rgba(15,24,40,0.98),rgba(7,13,24,0.98))] p-6 shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_40px_90px_-30px_rgba(0,0,0,0.9)] backdrop-blur-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:rounded-xl",
+        // NB: the panel background is ~98% opaque, so a backdrop blur here is
+        // invisible yet very expensive — it re-blurs the page behind it on every
+        // repaint, which makes typing in dialog forms janky. Intentionally
+        // omitted; the overlay supplies the frosted-background effect.
+        "refx-beam fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-hidden border border-white/[0.08] bg-[linear-gradient(180deg,rgba(15,24,40,0.98),rgba(7,13,24,0.98))] p-6 shadow-[0_1px_0_rgba(255,255,255,0.06)_inset,0_40px_90px_-30px_rgba(0,0,0,0.9)] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 sm:rounded-xl",
         className,
       )}
       {...props}

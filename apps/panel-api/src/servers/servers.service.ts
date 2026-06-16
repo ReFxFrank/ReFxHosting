@@ -160,6 +160,18 @@ export class ServersService {
           diskMb: prod.diskMb ?? template.recDiskMb,
         };
 
+    // Voice / per-slot servers: record the purchased slot count in the container
+    // environment so the runtime (and TeamSpeak's ServerQuery, where used) can
+    // apply the slot cap. SLOTS is generic; TS3SERVER_MAX_CLIENTS is the
+    // TeamSpeak-specific knob the egg consumes.
+    if (prod.perSlot) {
+      const env = environment as Record<string, string>;
+      env.SLOTS = String(slots);
+      if (template.slug.startsWith('teamspeak')) {
+        env.TS3SERVER_MAX_CLIENTS = String(slots);
+      }
+    }
+
     // Node placement: a customer-chosen node is validated for eligibility +
     // capacity; otherwise the scheduler picks the best node in the chosen region.
     let nodeId = dto.nodeId;

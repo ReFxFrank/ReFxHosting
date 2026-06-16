@@ -3,7 +3,7 @@
   "slug": "teamspeak3",
   "author": "ops@refx.example",
   "description": "TeamSpeak 3 voice server — low-latency VoIP for gaming communities. Slot-based: priced per simultaneous user.",
-  "longDescription": "Host a TeamSpeak 3 voice server with crystal-clear, low-latency audio. Voice servers are billed per slot (the number of users who can connect at once) and run on lightweight resources compared to game servers. The ServerQuery admin token is printed to the console on first boot.",
+  "longDescription": "Host a TeamSpeak 3 voice server with crystal-clear, low-latency audio. Voice servers are billed per slot (simultaneous users) and run on lightweight resources compared to game servers. Connect on the assigned voice port shown in your panel. The purchased slot count is passed to the container as TS3SERVER_MAX_CLIENTS / SLOTS; the ServerQuery admin token (and privilege key) is printed to the console on first boot — TeamSpeak enforces the per-virtual-server slot cap via ServerQuery.",
   "category": "voice",
   "deployMethods": ["DOCKER"],
   "supportsLinux": true,

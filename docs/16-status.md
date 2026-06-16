@@ -96,6 +96,13 @@ beyond a single build session, and are called out so expectations are clear:
   node); full mutual-TLS with panel client certs is the remaining `TODO(impl)`.
   Host ports bind to loopback by default (`BIND_HOST`); a reverse proxy terminates
   TLS. Panel↔agent mTLS pinning is still `TODO(impl)`.
+- **TeamSpeak 3 slot-cap enforcement** — voice orders provision the official
+  `teamspeak` Docker image, and the purchased slot count is injected into the
+  container env (`TS3SERVER_MAX_CLIENTS` / `SLOTS`) and the voice port is the
+  assigned allocation. TeamSpeak applies the per-virtual-server slot limit via
+  **ServerQuery**, so wiring the env value to `virtualserver_maxclients` (and
+  surfacing the first-boot ServerQuery admin token / privilege key) is the
+  remaining `TODO(impl)`; beyond 32 slots also needs a TeamSpeak license.
 - **Load/scale validation** to the "tens of thousands of servers" target —
   the architecture (docs 01/09) supports it; it has not been benchmarked.
 - **OpenSearch indexing, migration importers** (Pterodactyl/AMP/TCAdmin) —
