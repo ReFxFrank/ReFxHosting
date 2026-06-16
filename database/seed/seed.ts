@@ -332,11 +332,26 @@ async function seedGameCategories() {
   return bySlug;
 }
 
-/** Interval price points derived from a monthly base (longer terms discounted). */
-function intervalPrices(monthly: number): Array<['MONTHLY' | 'QUARTERLY' | 'ANNUAL', number]> {
+type SeedInterval =
+  | 'WEEKLY'
+  | 'BIWEEKLY'
+  | 'MONTHLY'
+  | 'QUARTERLY'
+  | 'SEMIANNUAL'
+  | 'ANNUAL';
+
+/**
+ * Interval price points derived from a monthly base. Short terms are charged
+ * proportionally; longer terms discount progressively. Covers all six durations
+ * offered on the order page (weekly → annual).
+ */
+function intervalPrices(monthly: number): Array<[SeedInterval, number]> {
   return [
+    ['WEEKLY', Math.max(1, Math.round((monthly * 7) / 30))],
+    ['BIWEEKLY', Math.max(1, Math.round((monthly * 14) / 30))],
     ['MONTHLY', monthly],
     ['QUARTERLY', Math.round(monthly * 3 * 0.9)],
+    ['SEMIANNUAL', Math.round(monthly * 6 * 0.85)],
     ['ANNUAL', Math.round(monthly * 12 * 0.8)],
   ];
 }
@@ -345,11 +360,12 @@ function intervalPrices(monthly: number): Array<['MONTHLY' | 'QUARTERLY' | 'ANNU
 async function upsertTierPrice(
   productId: string,
   tierId: string,
-  interval: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL',
+  interval: SeedInterval,
   amountMinor: number,
 ) {
+  const prismaInterval = interval as Prisma.PriceCreateInput['interval'];
   const existing = await prisma.price.findFirst({
-    where: { productId, hardwareTierId: tierId, interval, currency: 'USD' },
+    where: { productId, hardwareTierId: tierId, interval: prismaInterval, currency: 'USD' },
     select: { id: true },
   });
   if (existing) return;
@@ -359,7 +375,7 @@ async function upsertTierPrice(
         id: uuidv7(),
         productId,
         hardwareTierId: tierId,
-        interval,
+        interval: prismaInterval,
         currency: 'USD',
         amountMinor,
         isActive: true,
@@ -528,14 +544,11 @@ async function seedVoiceProducts() {
     },
   });
 
-  // ~$0.10 per slot per month.
-  for (const [interval, amountMinor] of [
-    ['MONTHLY', 10],
-    ['QUARTERLY', 27],
-    ['ANNUAL', 96],
-  ] as Array<['MONTHLY' | 'QUARTERLY' | 'ANNUAL', number]>) {
+  // ~$0.10 per slot per month, across all six durations (per-slot price).
+  for (const [interval, amountMinor] of intervalPrices(10)) {
+    const prismaInterval = interval as Prisma.PriceCreateInput['interval'];
     const existing = await prisma.price.findFirst({
-      where: { productId: product.id, hardwareTierId: null, interval, currency: 'USD' },
+      where: { productId: product.id, hardwareTierId: null, interval: prismaInterval, currency: 'USD' },
       select: { id: true },
     });
     if (existing) continue;
@@ -543,7 +556,7 @@ async function seedVoiceProducts() {
       data: {
         id: uuidv7(),
         productId: product.id,
-        interval,
+        interval: prismaInterval,
         currency: 'USD',
         amountMinor,
         isActive: true,

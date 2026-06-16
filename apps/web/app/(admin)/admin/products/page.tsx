@@ -34,7 +34,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { formatMb, formatMoney } from "@/lib/utils";
+import { formatMoney } from "@/lib/utils";
 import type {
   BillingInterval,
   BillingModel,
@@ -80,6 +80,21 @@ function slugify(s: string) {
     .replace(/(^-|-$)/g, "");
 }
 
+/** True when a product is configured/priced per slot (voice / legacy). */
+function isPerSlotProduct(p: Product) {
+  return p.billingModel === "PER_SLOT" || p.perSlot;
+}
+
+/** Cheapest active price across a product's tiers (tiered) or itself (per-slot). */
+function lowestPrice(p: Product): Price | null {
+  const all = isPerSlotProduct(p)
+    ? p.prices ?? []
+    : (p.hardwareTiers ?? []).flatMap((t) => t.prices ?? []);
+  const active = all.filter((pr) => pr.isActive !== false);
+  if (!active.length) return null;
+  return active.reduce((a, b) => (b.amountMinor < a.amountMinor ? b : a));
+}
+
 interface ProductForm {
   id?: string;
   name: string;
@@ -87,13 +102,9 @@ interface ProductForm {
   description: string;
   type: ProductType;
   billingModel: BillingModel;
-  cpuCores: number;
-  memoryMb: number;
-  diskMb: number;
-  slots: number;
   isActive: boolean;
   gameTemplateId: string;
-  // Per-slot (voice) pricing
+  // Per-slot (voice) configuration
   minSlots: number;
   maxSlots: number;
   slotStep: number;
@@ -108,10 +119,6 @@ const emptyForm: ProductForm = {
   description: "",
   type: "GAME_SERVER",
   billingModel: "HARDWARE_TIER",
-  cpuCores: 2,
-  memoryMb: 4096,
-  diskMb: 20480,
-  slots: 0,
   isActive: true,
   gameTemplateId: "",
   minSlots: 10,
@@ -187,10 +194,6 @@ export default function AdminProductsPage() {
       type: product.type,
       billingModel:
         product.billingModel ?? (product.perSlot ? "PER_SLOT" : "HARDWARE_TIER"),
-      cpuCores: product.cpuCores ?? 0,
-      memoryMb: product.memoryMb ?? 0,
-      diskMb: product.diskMb ?? 0,
-      slots: product.slots ?? 0,
       isActive: product.isActive,
       gameTemplateId: product.gameTemplateId ?? "",
       minSlots: product.minSlots ?? 1,
@@ -217,7 +220,7 @@ export default function AdminProductsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description="Define the plans customers can order, their resources, and pricing."
+        description="Define what customers can order: game servers with hardware tiers, or voice servers priced per slot."
         actions={
           <Button onClick={openNew}>
             <Plus className="size-4" /> New product
@@ -235,7 +238,7 @@ export default function AdminProductsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Type</TableHead>
-                  <TableHead>Resources</TableHead>
+                  <TableHead>Configuration</TableHead>
                   <TableHead>Pricing</TableHead>
                   <TableHead>Active</TableHead>
                   <TableHead className="w-20" />
@@ -252,21 +255,27 @@ export default function AdminProductsPage() {
                       <Badge variant="secondary">{typeLabel(product.type)}</Badge>
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {product.cpuCores ?? 0} vCPU ·{" "}
-                      {formatMb(product.memoryMb ?? 0)} ·{" "}
-                      {formatMb(product.diskMb ?? 0)}
+                      {isPerSlotProduct(product) ? (
+                        <>
+                          <Badge variant="outline" className="mr-1 text-[10px]">Per slot</Badge>
+                          {product.minSlots}–{product.maxSlots} slots (step {product.slotStep})
+                        </>
+                      ) : (
+                        <>
+                          <Badge variant="outline" className="mr-1 text-[10px]">Hardware tiers</Badge>
+                          {(product.hardwareTiers?.length ?? 0)} tier
+                          {(product.hardwareTiers?.length ?? 0) === 1 ? "" : "s"}
+                        </>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {product.prices?.length
-                        ? product.prices
-                            .map(
-                              (p) =>
-                                `${formatMoney(p.amountMinor, p.currency)}/${intervalLabel(
-                                  p.interval,
-                                ).toLowerCase()}`,
-                            )
-                            .join(" · ")
-                        : "No pricing"}
+                      {(() => {
+                        const lo = lowestPrice(product);
+                        if (!lo) return "No pricing";
+                        return `from ${formatMoney(lo.amountMinor, lo.currency)}${
+                          isPerSlotProduct(product) ? "/slot" : ""
+                        }/${intervalLabel(lo.interval).toLowerCase()}`;
+                      })()}
                     </TableCell>
                     <TableCell>
                       <Switch
@@ -425,49 +434,6 @@ export default function AdminProductsPage() {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="product-cpu">CPU cores</Label>
-                <Input
-                  id="product-cpu"
-                  type="number"
-                  min={0}
-                  value={form.cpuCores}
-                  onChange={(e) => setForm((f) => ({ ...f, cpuCores: Number(e.target.value) }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="product-slots">Slots</Label>
-                <Input
-                  id="product-slots"
-                  type="number"
-                  min={0}
-                  value={form.slots}
-                  onChange={(e) => setForm((f) => ({ ...f, slots: Number(e.target.value) }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="product-mem">Memory (MB)</Label>
-                <Input
-                  id="product-mem"
-                  type="number"
-                  min={0}
-                  value={form.memoryMb}
-                  onChange={(e) => setForm((f) => ({ ...f, memoryMb: Number(e.target.value) }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="product-disk">Disk (MB)</Label>
-                <Input
-                  id="product-disk"
-                  type="number"
-                  min={0}
-                  value={form.diskMb}
-                  onChange={(e) => setForm((f) => ({ ...f, diskMb: Number(e.target.value) }))}
-                />
-              </div>
-            </div>
-
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div>
                 <p className="text-sm font-medium">Active</p>
@@ -573,19 +539,20 @@ export default function AdminProductsPage() {
                   slug: form.slug,
                   description: form.description || undefined,
                   type: form.type,
-                  cpuCores: form.cpuCores,
-                  memoryMb: form.memoryMb,
-                  diskMb: form.diskMb,
-                  slots: form.slots,
                   isActive: form.isActive,
                   billingModel: form.billingModel,
                   gameTemplateId: form.gameTemplateId || undefined,
-                  minSlots: form.minSlots,
-                  maxSlots: form.maxSlots,
-                  slotStep: form.slotStep,
-                  cpuPerSlot: form.cpuPerSlot,
-                  memoryMbPerSlot: form.memoryMbPerSlot,
-                  diskMbPerSlot: form.diskMbPerSlot,
+                  // Per-slot config is only meaningful for PER_SLOT products.
+                  ...(form.billingModel === "PER_SLOT"
+                    ? {
+                        minSlots: form.minSlots,
+                        maxSlots: form.maxSlots,
+                        slotStep: form.slotStep,
+                        cpuPerSlot: form.cpuPerSlot,
+                        memoryMbPerSlot: form.memoryMbPerSlot,
+                        diskMbPerSlot: form.diskMbPerSlot,
+                      }
+                    : {}),
                 })
               }
             >
