@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Server as ServerIcon,
@@ -17,9 +18,8 @@ import { PageHeader, StatCard, EmptyState } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, ServerStateBadge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatMoney, formatMb, formatRelative, pct } from "@/lib/utils";
+import { formatMoney, formatMb, formatRelative } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 
 export default function DashboardPage() {
@@ -28,6 +28,29 @@ export default function DashboardPage() {
     queryKey: ["dashboard"],
     queryFn: () => api.dashboard.summary(),
   });
+
+  const servers = useMemo(() => data?.servers ?? [], [data]);
+  // Allocated (provisioned) resources across the customer's servers. Live usage
+  // lives on each server's page; the dashboard shows what's reserved.
+  const allocated = useMemo(
+    () =>
+      servers.reduce(
+        (acc, s) => {
+          acc.cpu += s.cpuCores ?? 0;
+          acc.mem += s.memoryMb ?? 0;
+          acc.disk += s.diskMb ?? 0;
+          return acc;
+        },
+        { cpu: 0, mem: 0, disk: 0 },
+      ),
+    [servers],
+  );
+  const pendingCount = servers.filter((s) => s.state === "PENDING_PAYMENT").length;
+  const activeCount = servers.filter(
+    (s) => s.state !== "SUSPENDED" && s.state !== "PENDING_PAYMENT",
+  ).length;
+  const openInvoices = data?.billing.openInvoices ?? 0;
+  const needsPayment = openInvoices > 0 || pendingCount > 0;
 
   return (
     <div className="space-y-6">
@@ -43,6 +66,32 @@ export default function DashboardPage() {
           </Button>
         }
       />
+
+      {!isLoading && needsPayment && (
+        <Card className="border-warning/50 bg-warning/5">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 size-5 text-warning" />
+              <div>
+                <p className="font-medium">Payment required</p>
+                <p className="text-sm text-muted-foreground">
+                  {pendingCount > 0
+                    ? `You have ${pendingCount} server${pendingCount === 1 ? "" : "s"} awaiting payment. `
+                    : ""}
+                  {openInvoices > 0
+                    ? `${openInvoices} open invoice${openInvoices === 1 ? "" : "s"} — complete payment to activate your service.`
+                    : "Complete payment to start provisioning."}
+                </p>
+              </div>
+            </div>
+            <Button asChild>
+              <Link href="/billing">
+                <CreditCard className="size-4" /> Pay now
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {data?.alerts?.filter((a) => a.isActive).map((alert) => (
         <Card key={alert.id} className="border-warning/40 bg-warning/5">
@@ -63,20 +112,20 @@ export default function DashboardPage() {
           <>
             <StatCard
               label="Active servers"
-              value={data?.servers?.filter((s) => s.state !== "SUSPENDED").length ?? 0}
-              hint={`${data?.servers?.length ?? 0} total`}
+              value={activeCount}
+              hint={`${servers.length} total${pendingCount ? ` · ${pendingCount} awaiting payment` : ""}`}
               icon={ServerIcon}
             />
             <StatCard
-              label="CPU usage"
-              value={`${data?.usage.cpuPct ?? 0}%`}
-              hint="across all nodes"
+              label="Allocated vCPU"
+              value={Number(allocated.cpu.toFixed(2))}
+              hint={`across ${servers.length} server${servers.length === 1 ? "" : "s"}`}
               icon={Cpu}
             />
             <StatCard
-              label="Memory"
-              value={formatMb(data?.usage.memUsedMb ?? 0)}
-              hint={`of ${formatMb(data?.usage.memTotalMb ?? 0)}`}
+              label="Allocated memory"
+              value={formatMb(allocated.mem)}
+              hint={`${formatMb(allocated.disk)} disk`}
               icon={MemoryStick}
             />
             <StatCard
@@ -100,30 +149,35 @@ export default function DashboardPage() {
           <CardContent className="space-y-3">
             {isLoading ? (
               Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-16" />)
-            ) : data?.servers?.length ? (
-              data.servers.slice(0, 5).map((server) => (
-                <Link
-                  key={server.id}
-                  href={`/servers/${server.id}/console`}
-                  className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.015] p-3 transition-all hover:border-primary/30 hover:bg-primary/[0.06]"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate font-medium">{server.name}</p>
-                      <ServerStateBadge state={server.state} />
+            ) : servers.length ? (
+              servers.slice(0, 5).map((server) => {
+                const pending = server.state === "PENDING_PAYMENT";
+                return (
+                  <Link
+                    key={server.id}
+                    href={pending ? "/billing" : `/servers/${server.id}/console`}
+                    className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.015] p-3 transition-all hover:border-primary/30 hover:bg-primary/[0.06]"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate font-medium">{server.name}</p>
+                        <ServerStateBadge state={server.state} />
+                      </div>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {server.template?.name ?? "No game installed"} · {server.cpuCores} vCPU ·{" "}
+                        {formatMb(server.memoryMb)}
+                      </p>
                     </div>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {server.template?.name ?? "No game installed"} · {server.cpuCores} vCPU ·{" "}
-                      {formatMb(server.memoryMb)}
-                    </p>
-                  </div>
-                  {server.primaryAllocation && (
-                    <Badge variant="secondary" className="font-mono">
-                      {server.primaryAllocation.ip}:{server.primaryAllocation.port}
-                    </Badge>
-                  )}
-                </Link>
-              ))
+                    {pending ? (
+                      <Badge variant="warning">Complete payment</Badge>
+                    ) : server.primaryAllocation ? (
+                      <Badge variant="secondary" className="font-mono">
+                        {server.primaryAllocation.ip}:{server.primaryAllocation.port}
+                      </Badge>
+                    ) : null}
+                  </Link>
+                );
+              })
             ) : (
               <EmptyState
                 icon={ServerIcon}
@@ -169,30 +223,19 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {data?.usage && (
+      {servers.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Resource utilisation</CardTitle>
+            <CardTitle>Allocated resources</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-6 sm:grid-cols-3">
-            <UsageBar
-              icon={Cpu}
-              label="CPU"
-              value={data.usage.cpuPct}
-              display={`${data.usage.cpuPct}%`}
-            />
-            <UsageBar
-              icon={MemoryStick}
-              label="Memory"
-              value={pct(data.usage.memUsedMb, data.usage.memTotalMb)}
-              display={`${formatMb(data.usage.memUsedMb)} / ${formatMb(data.usage.memTotalMb)}`}
-            />
-            <UsageBar
-              icon={HardDrive}
-              label="Disk"
-              value={pct(data.usage.diskUsedMb, data.usage.diskTotalMb)}
-              display={`${formatMb(data.usage.diskUsedMb)} / ${formatMb(data.usage.diskTotalMb)}`}
-            />
+            <AllocatedStat icon={Cpu} label="vCPU" value={`${Number(allocated.cpu.toFixed(2))} cores`} />
+            <AllocatedStat icon={MemoryStick} label="Memory" value={formatMb(allocated.mem)} />
+            <AllocatedStat icon={HardDrive} label="Disk" value={formatMb(allocated.disk)} />
+            <p className="text-xs text-muted-foreground sm:col-span-3">
+              Reserved across your servers. Live CPU/RAM usage is shown on each
+              server&apos;s page.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -200,29 +243,24 @@ export default function DashboardPage() {
   );
 }
 
-function UsageBar({
+function AllocatedStat({
   icon: Icon,
   label,
   value,
-  display,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
-  value: number;
-  display: string;
+  value: string;
 }) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between text-sm">
-        <span className="flex items-center gap-2 text-muted-foreground">
-          <Icon className="size-4" /> {label}
-        </span>
-        <span className="font-medium">{display}</span>
+    <div className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.015] p-3">
+      <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <Icon className="size-4" />
       </div>
-      <Progress
-        value={value}
-        indicatorClassName={value > 90 ? "bg-destructive" : value > 70 ? "bg-warning" : "bg-primary"}
-      />
+      <div>
+        <p className="refx-eyebrow">{label}</p>
+        <p className="font-semibold">{value}</p>
+      </div>
     </div>
   );
 }
