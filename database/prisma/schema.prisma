@@ -774,6 +774,8 @@ model Invoice {
   currency       String        @default("USD")
 
   subtotalMinor  Int
+  discountMinor  Int           @default(0) // coupon discount applied to subtotal
+  couponCode     String?       // the coupon applied, if any
   taxMinor       Int           @default(0)
   totalMinor     Int
   amountPaidMinor Int          @default(0)
@@ -797,6 +799,73 @@ model Invoice {
 
   @@index([userId])
   @@index([state])
+}
+
+// ---- Coupons & gift cards --------------------------------------------------
+
+enum CouponKind {
+  PERCENT
+  FIXED
+}
+
+model Coupon {
+  id               String     @id @db.Uuid
+  code             String     @unique // stored uppercase
+  description      String?
+  kind             CouponKind
+  value            Int        // PERCENT: 1-100 ; FIXED: minor units (cents)
+  currency         String     @default("USD")
+  minSubtotalMinor Int?       // minimum order subtotal to qualify
+  maxRedemptions   Int?       // global cap (null = unlimited)
+  timesRedeemed    Int        @default(0)
+  maxPerUser       Int?       // per-customer cap (null = unlimited)
+  startsAt         DateTime?
+  expiresAt        DateTime?
+  isActive         Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  redemptions      CouponRedemption[]
+}
+
+model CouponRedemption {
+  id          String   @id @db.Uuid
+  couponId    String   @db.Uuid
+  coupon      Coupon   @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  userId      String   @db.Uuid
+  invoiceId   String?  @db.Uuid
+  amountMinor Int      // discount granted
+  createdAt   DateTime @default(now())
+
+  @@index([couponId])
+  @@index([userId])
+}
+
+model GiftCard {
+  id                  String   @id @db.Uuid
+  code                String   @unique
+  initialBalanceMinor Int
+  balanceMinor        Int      // remaining
+  currency            String   @default("USD")
+  isActive            Boolean  @default(true)
+  expiresAt           DateTime?
+  note                String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  transactions        GiftCardTransaction[]
+}
+
+model GiftCardTransaction {
+  id          String   @id @db.Uuid
+  giftCardId  String   @db.Uuid
+  giftCard    GiftCard @relation(fields: [giftCardId], references: [id], onDelete: Cascade)
+  userId      String   @db.Uuid
+  invoiceId   String?  @db.Uuid
+  amountMinor Int      // negative = spend, positive = top-up/refund
+  createdAt   DateTime @default(now())
+
+  @@index([giftCardId])
 }
 
 model InvoiceLineItem {

@@ -112,7 +112,9 @@ export class StripeGateway implements PaymentGateway {
     try {
       const stripe = await this.client();
       const intent = await stripe.paymentIntents.create({
-        amount: invoice.totalMinor,
+        // Charge the outstanding balance (total minus any credit already applied,
+        // e.g. a gift card).
+        amount: Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)),
         currency: invoice.currency.toLowerCase(),
         payment_method: paymentMethodRef,
         confirm: true,
@@ -166,7 +168,8 @@ export class StripeGateway implements PaymentGateway {
           quantity: 1,
           price_data: {
             currency: invoice.currency.toLowerCase(),
-            unit_amount: invoice.totalMinor,
+            // Outstanding balance (total minus any applied credit, e.g. gift card).
+            unit_amount: Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)),
             product_data: { name: `Invoice ${invoice.number}` },
           },
         },

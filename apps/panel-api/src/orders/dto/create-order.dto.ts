@@ -41,6 +41,16 @@ export class CreateOrderDto {
   @Min(1)
   slots?: number;
 
+  @ApiPropertyOptional({ description: 'Coupon code to apply.' })
+  @IsOptional()
+  @IsString()
+  couponCode?: string;
+
+  @ApiPropertyOptional({ description: 'Gift card code to redeem.' })
+  @IsOptional()
+  @IsString()
+  giftCardCode?: string;
+
   @ApiPropertyOptional({ description: 'Stored payment method to charge' })
   @IsOptional()
   @IsString()

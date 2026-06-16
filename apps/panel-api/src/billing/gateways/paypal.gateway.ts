@@ -140,7 +140,7 @@ export class PayPalGateway implements PaymentGateway {
                 invoice_id: `${invoice.number}-${Date.now().toString(36)}`,
                 amount: {
                   currency_code: invoice.currency,
-                  value: (invoice.totalMinor / 100).toFixed(2),
+                  value: (Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)) / 100).toFixed(2),
                 },
               },
             ],
@@ -196,7 +196,7 @@ export class PayPalGateway implements PaymentGateway {
             invoice_id: `${invoice.number}-${Date.now().toString(36)}`,
             amount: {
               currency_code: invoice.currency,
-              value: (invoice.totalMinor / 100).toFixed(2),
+              value: (Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)) / 100).toFixed(2),
             },
           },
         ],

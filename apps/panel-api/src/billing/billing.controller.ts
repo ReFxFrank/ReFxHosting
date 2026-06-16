@@ -12,6 +12,10 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { GlobalRole } from '@prisma/client';
 import { BillingService } from './billing.service';
+import { CouponsService } from './coupons.service';
+import { GiftCardsService } from './gift-cards.service';
+import { ValidateCouponDto } from './dto/coupon.dto';
+import { RedeemGiftCardDto } from './dto/gift-card.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -30,7 +34,40 @@ import {
 @UseGuards(JwtAuthGuard)
 @Controller('billing')
 export class BillingController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(
+    private readonly billing: BillingService,
+    private readonly coupons: CouponsService,
+    private readonly giftCards: GiftCardsService,
+  ) {}
+
+  /** Validate a coupon for a given subtotal (order-page preview). */
+  @Post('coupons/validate')
+  @HttpCode(200)
+  async validateCoupon(
+    @CurrentUser('id') userId: string,
+    @Body() dto: ValidateCouponDto,
+  ) {
+    const { coupon, discountMinor } = await this.coupons.validate(
+      dto.code,
+      userId,
+      dto.subtotalMinor,
+    );
+    return {
+      valid: true,
+      code: coupon.code,
+      kind: coupon.kind,
+      value: coupon.value,
+      discountMinor,
+    };
+  }
+
+  /** Look up a gift card's remaining balance (order-page preview). */
+  @Post('gift-cards/lookup')
+  @HttpCode(200)
+  async lookupGiftCard(@Body() dto: RedeemGiftCardDto) {
+    const card = await this.giftCards.lookup(dto.code);
+    return { code: card.code, balanceMinor: card.balanceMinor, currency: card.currency };
+  }
 
   // ---- Catalog -----------------------------------------------------------
 

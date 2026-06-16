@@ -812,7 +812,10 @@ export class BillingService {
    * item from the product/price, tax via the tax engine, and a year-scoped
    * invoice number.
    */
-  async createInvoiceForSubscription(subscriptionId: string): Promise<Invoice> {
+  async createInvoiceForSubscription(
+    subscriptionId: string,
+    opts: { discountMinor?: number; couponCode?: string } = {},
+  ): Promise<Invoice> {
     const subscription = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
       include: { product: true, user: true },
@@ -832,14 +835,17 @@ export class BillingService {
         : 1;
     const unitMinor = price.amountMinor;
     const subtotalMinor = unitMinor * quantity;
+    // Coupon discount reduces the taxable base; never exceeds the subtotal.
+    const discountMinor = Math.max(0, Math.min(opts.discountMinor ?? 0, subtotalMinor));
+    const taxableMinor = subtotalMinor - discountMinor;
 
     // Resolve a tax region. TODO(impl): persist a billing address on User and use
     // it here; for now derive nothing and treat as no-tax unless a region exists.
     const taxRegion = this.resolveTaxRegion(subscription);
-    const tax = calculateTax(subtotalMinor, {
+    const tax = calculateTax(taxableMinor, {
       region: taxRegion ?? '',
     });
-    const totalMinor = subtotalMinor + tax.taxMinor;
+    const totalMinor = taxableMinor + tax.taxMinor;
 
     const year = new Date().getUTCFullYear();
     const sequence = await this.nextInvoiceSequence(year);
@@ -859,6 +865,8 @@ export class BillingService {
         state: InvoiceState.OPEN,
         currency,
         subtotalMinor,
+        discountMinor,
+        couponCode: opts.couponCode ?? undefined,
         taxMinor: tax.taxMinor,
         totalMinor,
         amountPaidMinor: 0,
@@ -941,7 +949,9 @@ export class BillingService {
         where: { id: invoiceId },
         data: {
           state: InvoiceState.PAID,
-          amountPaidMinor: amountMinor,
+          // PAID means fully settled — record the full total (a gift-card credit
+          // may have already covered part, with the gateway charging the rest).
+          amountPaidMinor: invoice.totalMinor,
           paidAt: new Date(),
           gateway: details.gateway,
           gatewayInvoiceId: details.gatewayInvoiceId ?? invoice.gatewayInvoiceId,

@@ -28,6 +28,16 @@ import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 import { AuditService } from '../platform/audit.service';
 import { SettingsService } from '../platform/settings.service';
 import { EmailService } from '../email/email.service';
+import { CouponsService } from '../billing/coupons.service';
+import { GiftCardsService } from '../billing/gift-cards.service';
+import {
+  CreateCouponDto,
+  UpdateCouponDto,
+} from '../billing/dto/coupon.dto';
+import {
+  CreateGiftCardDto,
+  UpdateGiftCardDto,
+} from '../billing/dto/gift-card.dto';
 import { RolesService } from './roles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminPermissionGuard } from '../auth/guards/admin-permission.guard';
@@ -88,7 +98,61 @@ export class AdminController {
     private readonly roles: RolesService,
     private readonly settings: SettingsService,
     private readonly email: EmailService,
+    private readonly coupons: CouponsService,
+    private readonly giftCards: GiftCardsService,
   ) {}
+
+  // ---- Coupons -----------------------------------------------------------
+
+  @Get('coupons')
+  @RequirePerm('billing.manage')
+  listCoupons() {
+    return this.coupons.list();
+  }
+
+  @Post('coupons')
+  @RequirePerm('billing.manage')
+  @Audit({ action: 'admin.coupon.create', targetType: 'Coupon' })
+  createCoupon(@Body() dto: CreateCouponDto) {
+    return this.coupons.create(dto);
+  }
+
+  @Patch('coupons/:id')
+  @RequirePerm('billing.manage')
+  @Audit({ action: 'admin.coupon.update', targetType: 'Coupon', targetParam: 'id' })
+  updateCoupon(@Param('id') id: string, @Body() dto: UpdateCouponDto) {
+    return this.coupons.update(id, dto);
+  }
+
+  @Delete('coupons/:id')
+  @RequirePerm('billing.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.coupon.delete', targetType: 'Coupon', targetParam: 'id' })
+  async deleteCoupon(@Param('id') id: string) {
+    await this.coupons.remove(id);
+  }
+
+  // ---- Gift cards --------------------------------------------------------
+
+  @Get('gift-cards')
+  @RequirePerm('billing.manage')
+  listGiftCards() {
+    return this.giftCards.list();
+  }
+
+  @Post('gift-cards')
+  @RequirePerm('billing.manage')
+  @Audit({ action: 'admin.giftcard.create', targetType: 'GiftCard' })
+  createGiftCard(@Body() dto: CreateGiftCardDto) {
+    return this.giftCards.create(dto);
+  }
+
+  @Patch('gift-cards/:id')
+  @RequirePerm('billing.manage')
+  @Audit({ action: 'admin.giftcard.update', targetType: 'GiftCard', targetParam: 'id' })
+  updateGiftCard(@Param('id') id: string, @Body() dto: UpdateGiftCardDto) {
+    return this.giftCards.update(id, dto);
+  }
 
   // ---- Nodes -------------------------------------------------------------
 
