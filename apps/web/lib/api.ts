@@ -622,10 +622,12 @@ export const api = {
     }) => http.patch<void>("/admin/payments/gateways/config", input),
 
     products: () => getList<Product>("/admin/products"),
-    saveProduct: (input: Partial<Product>) =>
-      input.id
-        ? http.patch<Product>(`/admin/products/${input.id}`, input)
-        : http.post<Product>("/admin/products", input),
+    // Strip `id` from the body — it's in the URL on update, and the API rejects
+    // unknown fields (forbidNonWhitelisted) so `id` in the payload 400s.
+    saveProduct: ({ id, ...body }: Partial<Product>) =>
+      id
+        ? http.patch<Product>(`/admin/products/${id}`, body)
+        : http.post<Product>("/admin/products", body),
     deleteProduct: (id: string) => http.delete<void>(`/admin/products/${id}`),
 
     // Per-product, per-interval pricing.
@@ -654,16 +656,16 @@ export const api = {
     deleteServer: (id: string) => http.delete<void>(`/admin/servers/${id}`),
 
     templates: () => getList<GameTemplate>("/admin/templates"),
-    saveTemplate: (input: Partial<GameTemplate>) =>
-      input.id
-        ? http.patch<GameTemplate>(`/admin/templates/${input.id}`, input)
-        : http.post<GameTemplate>("/admin/templates", input),
+    saveTemplate: ({ id, ...body }: Partial<GameTemplate>) =>
+      id
+        ? http.patch<GameTemplate>(`/admin/templates/${id}`, body)
+        : http.post<GameTemplate>("/admin/templates", body),
 
     homepageAlerts: () => getList<HomepageAlert>("/admin/homepage-alerts"),
-    saveHomepageAlert: (input: Partial<HomepageAlert>) =>
-      input.id
-        ? http.patch<HomepageAlert>(`/admin/homepage-alerts/${input.id}`, input)
-        : http.post<HomepageAlert>("/admin/homepage-alerts", input),
+    saveHomepageAlert: ({ id, ...body }: Partial<HomepageAlert>) =>
+      id
+        ? http.patch<HomepageAlert>(`/admin/homepage-alerts/${id}`, body)
+        : http.post<HomepageAlert>("/admin/homepage-alerts", body),
     deleteHomepageAlert: (id: string) =>
       http.delete<void>(`/admin/homepage-alerts/${id}`),
 
@@ -671,10 +673,10 @@ export const api = {
       http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),
 
     alerts: () => getList<GlobalAlert>("/admin/alerts"),
-    saveAlert: (input: Partial<GlobalAlert>) =>
-      input.id
-        ? http.patch<GlobalAlert>(`/admin/alerts/${input.id}`, input)
-        : http.post<GlobalAlert>("/admin/alerts", input),
+    saveAlert: ({ id, ...body }: Partial<GlobalAlert>) =>
+      id
+        ? http.patch<GlobalAlert>(`/admin/alerts/${id}`, body)
+        : http.post<GlobalAlert>("/admin/alerts", body),
     deleteAlert: (id: string) => http.delete<void>(`/admin/alerts/${id}`),
 
     metrics: () =>
