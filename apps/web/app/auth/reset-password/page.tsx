@@ -58,7 +58,10 @@ function ResetPassword() {
         const { valid } = await api.auth.resetTokenValid(token);
         setStatus(valid ? "form" : "invalid");
       } catch {
-        setStatus("invalid");
+        // The check is best-effort: if it can't run (older API, network blip),
+        // don't block a possibly-valid link — show the form and let the
+        // authoritative submit decide. Only an explicit "not valid" => invalid.
+        setStatus("form");
       }
     })();
   }, [token]);

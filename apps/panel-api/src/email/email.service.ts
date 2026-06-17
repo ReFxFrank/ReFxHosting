@@ -106,7 +106,6 @@ export class EmailService {
     }
     const { html, text } = this.compose({
       title: 'SMTP test successful',
-      accent: 'success',
       preheader: 'Your ReFx Hosting SMTP settings are working.',
       intro: [
         'This is a test email confirming your SMTP settings are configured correctly. 🎉',
@@ -198,7 +197,6 @@ export class EmailService {
     const { html, text } = this.compose({
       title: 'Welcome to ReFx Hosting',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Welcome,',
-      accent: 'success',
       preheader: 'Your account is verified and ready to go.',
       intro: [
         'Your email is verified and your account is ready. Deploy a server, manage billing, and open support tickets any time from your dashboard.',
@@ -223,7 +221,6 @@ export class EmailService {
     const { html, text } = this.compose({
       title: 'Payment received',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
-      accent: 'success',
       preheader: `Payment received for invoice ${invoice.number}.`,
       intro: [
         `We've received your payment of <strong>${amount}</strong> for invoice <strong>${invoice.number}</strong>. Thank you!`,
@@ -253,7 +250,6 @@ export class EmailService {
     const { html, text } = this.compose({
       title: 'Payment failed',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
-      accent: 'danger',
       preheader: `We couldn't process your payment for invoice ${invoice.number}.`,
       intro: [
         `We couldn't process your payment of <strong>${amount}</strong> for invoice <strong>${invoice.number}</strong>${reason}.`,

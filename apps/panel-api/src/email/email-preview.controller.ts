@@ -48,7 +48,6 @@ const SAMPLES: Record<string, { subject: string; email: BrandedEmail }> = {
     email: {
       title: 'Welcome to ReFx Hosting',
       greeting: 'Hi Frank,',
-      accent: 'success',
       intro: [
         'Your email is verified and your account is ready. Deploy a server, manage billing, and open support tickets any time from your dashboard.',
       ],
@@ -61,7 +60,6 @@ const SAMPLES: Record<string, { subject: string; email: BrandedEmail }> = {
     email: {
       title: 'Payment received',
       greeting: 'Hi Frank,',
-      accent: 'success',
       intro: ["We've received your payment of <strong>19.99 USD</strong> for invoice <strong>1042</strong>. Thank you!"],
       button: { label: 'View your invoices', url: 'https://refx.gg/billing' },
     },
@@ -71,7 +69,6 @@ const SAMPLES: Record<string, { subject: string; email: BrandedEmail }> = {
     email: {
       title: 'Payment failed',
       greeting: 'Hi Frank,',
-      accent: 'danger',
       intro: [
         "We couldn't process your payment of <strong>19.99 USD</strong> for invoice <strong>1042</strong> (card declined).",
         'Please update your payment method or pay the invoice to avoid service interruption.',
@@ -105,7 +102,6 @@ const SAMPLES: Record<string, { subject: string; email: BrandedEmail }> = {
     subject: 'ReFx Hosting — SMTP test',
     email: {
       title: 'SMTP test successful',
-      accent: 'success',
       intro: [
         'This is a test email confirming your SMTP settings are configured correctly. 🎉',
         'Transactional emails — verification, password resets, receipts — will be delivered from here.',
