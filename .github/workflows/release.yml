@@ -107,7 +107,10 @@ jobs:
   release:
     name: Create GitHub release
     runs-on: ubuntu-latest
-    needs: [images, agent-binaries]
+    # Only needs the agent binaries (what's attached to the release); the Docker
+    # images publish to ghcr in parallel and aren't part of the release, so don't
+    # block the release (and the agent self-update) on the slow multi-arch build.
+    needs: [agent-binaries]
     steps:
       - uses: actions/download-artifact@v8
         with:
