@@ -335,6 +335,70 @@ export class NodesService {
     return { updating: true };
   }
 
+  private agentVersionCache?: { value: string | null; at: number };
+  private static readonly AGENT_VERSION_TTL = 15 * 60 * 1000; // 15 min
+
+  /**
+   * The latest published agent release tag (for the "update available" badge).
+   * Cached ~15min; null when GitHub is unreachable/rate-limited (badge hides).
+   */
+  async latestAgentVersion(): Promise<string | null> {
+    const now = Date.now();
+    if (
+      this.agentVersionCache &&
+      now - this.agentVersionCache.at < NodesService.AGENT_VERSION_TTL
+    ) {
+      return this.agentVersionCache.value;
+    }
+    let value: string | null = null;
+    try {
+      const res = await fetch(
+        'https://api.github.com/repos/refxfrank/refxhosting/releases/latest',
+        {
+          headers: {
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'ReFx-Panel',
+          },
+          signal: AbortSignal.timeout(6000),
+        },
+      );
+      if (res.ok) {
+        const json = (await res.json()) as { tag_name?: string };
+        value = json.tag_name || null;
+      }
+    } catch {
+      /* offline / rate-limited → leave null */
+    }
+    this.agentVersionCache = { value, at: now };
+    return value;
+  }
+
+  /**
+   * Self-update every (non-deleted) node's agent to the latest release. Best
+   * effort: unreachable nodes are reported in `failed`, not thrown.
+   */
+  async updateAllAgents(): Promise<{
+    updated: string[];
+    failed: { id: string; name: string; reason: string }[];
+  }> {
+    const nodes = await this.prisma.node.findMany({ where: { deletedAt: null } });
+    const updated: string[] = [];
+    const failed: { id: string; name: string; reason: string }[] = [];
+    for (const node of nodes) {
+      try {
+        await this.agent.updateAgent(node);
+        updated.push(node.id);
+      } catch (e) {
+        failed.push({
+          id: node.id,
+          name: node.name,
+          reason: e instanceof Error ? e.message : 'unreachable',
+        });
+      }
+    }
+    return { updated, failed };
+  }
+
   async update(id: string, dto: UpdateNodeDto): Promise<Node> {
     if (
       dto.allocationPortStart != null &&

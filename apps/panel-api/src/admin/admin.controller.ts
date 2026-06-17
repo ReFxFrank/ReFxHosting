@@ -193,6 +193,14 @@ export class AdminController {
     return this.nodes.listRegions();
   }
 
+  /** Latest published agent release tag (for the "update available" badge).
+   *  Static route — must precede `nodes/:id`. */
+  @Get('nodes/agent-latest')
+  @RequirePerm('nodes.read')
+  async agentLatestVersion() {
+    return { latest: await this.nodes.latestAgentVersion() };
+  }
+
   @Get('nodes/:id')
   @RequirePerm('nodes.read')
   getNode(@Param('id') id: string) {
@@ -234,6 +242,15 @@ export class AdminController {
   @Audit({ action: 'admin.node.update-agent', targetType: 'Node', targetParam: 'id' })
   updateNodeAgent(@Param('id') id: string) {
     return this.nodes.updateAgent(id);
+  }
+
+  /** Self-update every node's agent to the latest release (best-effort). */
+  @Post('nodes/update-all-agents')
+  @HttpCode(200)
+  @RequirePerm('nodes.manage')
+  @Audit({ action: 'admin.node.update-all-agents', targetType: 'Node' })
+  updateAllNodeAgents() {
+    return this.nodes.updateAllAgents();
   }
 
   /** Pin (trust-on-first-use) the node agent's current TLS certificate. */

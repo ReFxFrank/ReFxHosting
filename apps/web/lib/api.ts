@@ -749,6 +749,12 @@ export const api = {
       http.post<{ cleared: true }>(`/admin/nodes/${id}/steam-cache/clear`),
     updateNodeAgent: (id: string) =>
       http.post<{ updating: true }>(`/admin/nodes/${id}/update-agent`),
+    agentLatestVersion: () =>
+      http.get<{ latest: string | null }>(`/admin/nodes/agent-latest`),
+    updateAllNodeAgents: () =>
+      http.post<{ updated: string[]; failed: { id: string; name: string; reason: string }[] }>(
+        `/admin/nodes/update-all-agents`,
+      ),
     pinNodeCert: (id: string) =>
       http.post<{ sha256: string }>(`/admin/nodes/${id}/pin-cert`),
     unpinNodeCert: (id: string) => http.delete<void>(`/admin/nodes/${id}/pin-cert`),

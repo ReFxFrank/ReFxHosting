@@ -355,6 +355,32 @@ function NodePing({ nodeId, poll }: { nodeId: string; poll?: boolean }) {
   );
 }
 
+/** Agent version + "update available" indicator vs the latest published release. */
+function AgentVersionBadge({
+  current,
+  latest,
+}: {
+  current: string | null;
+  latest: string | null;
+}) {
+  if (!current) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  // Compare loosely (ignore a leading "v"): node reports the build's tag.
+  const norm = (v: string) => v.replace(/^v/, "");
+  const behind = latest != null && norm(current) !== norm(latest);
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-mono text-xs">{current}</span>
+      {behind ? (
+        <Badge variant="warning" className="w-fit text-[10px]">Update available</Badge>
+      ) : latest != null ? (
+        <Badge variant="success" className="w-fit text-[10px]">Up to date</Badge>
+      ) : null}
+    </div>
+  );
+}
+
 /** Three stacked gauges driven by a node's latest heartbeat vs capacity. */
 function NodeUsage({ node, compact }: { node: Node; compact?: boolean }) {
   const hb = node.latestHeartbeat;
@@ -449,6 +475,29 @@ export default function AdminNodesPage() {
     enabled: createOpen,
   });
 
+  // Latest published agent release → "update available" badges.
+  const { data: agentLatest } = useQuery({
+    queryKey: ["admin", "agent-latest"],
+    queryFn: () => api.admin.agentLatestVersion(),
+    staleTime: 10 * 60 * 1000,
+  });
+  const latestVersion = agentLatest?.latest ?? null;
+  const [updateAllOpen, setUpdateAllOpen] = useState(false);
+
+  const updateAllMutation = useMutation({
+    mutationFn: () => api.admin.updateAllNodeAgents(),
+    onSuccess: (res) => {
+      setUpdateAllOpen(false);
+      if (res.updated.length)
+        toast.success(`Updating ${res.updated.length} node${res.updated.length === 1 ? "" : "s"}…`);
+      if (res.failed.length)
+        toast.error(`${res.failed.length} unreachable — ${res.failed[0].name}: ${res.failed[0].reason}`);
+      if (!res.updated.length && !res.failed.length) toast.info("No nodes to update");
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to update agents"),
+  });
+
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
 
@@ -534,9 +583,14 @@ export default function AdminNodesPage() {
         title="Nodes"
         description="Manage daemon nodes, capacity and maintenance windows."
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4" /> Add node
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setUpdateAllOpen(true)}>
+              <Download className="size-4" /> Update all agents
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" /> Add node
+            </Button>
+          </div>
         }
       />
 
@@ -555,6 +609,7 @@ export default function AdminNodesPage() {
                   <TableHead>Ping</TableHead>
                   <TableHead className="w-48">Live usage</TableHead>
                   <TableHead>Servers</TableHead>
+                  <TableHead>Agent</TableHead>
                   <TableHead>Maintenance</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
@@ -595,6 +650,9 @@ export default function AdminNodesPage() {
                       <NodeUsage node={node} compact />
                     </TableCell>
                     <TableCell className="tabular-nums">{node.servers ?? 0}</TableCell>
+                    <TableCell>
+                      <AgentVersionBadge current={node.agentVersion} latest={latestVersion} />
+                    </TableCell>
                     <TableCell>
                       <Switch
                         checked={node.maintenance}
@@ -948,6 +1006,36 @@ export default function AdminNodesPage() {
               }
             >
               <RotateCw className="size-4" /> Restart agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update ALL agents confirmation */}
+      <Dialog open={updateAllOpen} onOpenChange={setUpdateAllOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update every node&apos;s agent?</DialogTitle>
+            <DialogDescription>
+              Each node downloads the latest released agent, verifies it, swaps it
+              in and restarts — no SSH. Running game servers keep running and
+              re-attach. Unreachable nodes are skipped and reported.
+              {latestVersion && (
+                <span className="mt-2 block">
+                  Latest release: <span className="font-mono">{latestVersion}</span>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUpdateAllOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={updateAllMutation.isPending}
+              onClick={() => updateAllMutation.mutate()}
+            >
+              <Download className="size-4" /> Update all
             </Button>
           </DialogFooter>
         </DialogContent>
