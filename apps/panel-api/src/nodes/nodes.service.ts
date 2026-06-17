@@ -445,6 +445,10 @@ export class NodesService {
   }
 
   async delete(id: string): Promise<void> {
+    const node = await this.prisma.node.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!node) throw new NotFoundException('Node not found');
     const servers = await this.prisma.server.count({
       where: { nodeId: id, deletedAt: null },
     });
@@ -455,7 +459,13 @@ export class NodesService {
     }
     await this.prisma.node.update({
       where: { id },
-      data: { deletedAt: new Date(), state: 'OFFLINE' },
+      data: {
+        deletedAt: new Date(),
+        state: 'OFFLINE',
+        // Release the globally-unique fqdn so a replacement node can reuse the
+        // same address; the soft-deleted row is retained for history/FKs.
+        fqdn: `${node.fqdn}#deleted-${Date.now()}`,
+      },
     });
   }
 
