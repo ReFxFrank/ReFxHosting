@@ -7,6 +7,7 @@ import { ModrinthService } from './modrinth.service';
 import { ModsService } from './mods.service';
 import { ModpackService } from './modpack.service';
 import { WorkshopService } from './workshop.service';
+import { VoiceService } from './voice.service';
 import { ScheduleRunner } from './schedule.runner';
 import { ServersController } from './servers.controller';
 import { ServersResolver } from './servers.resolver';
@@ -34,6 +35,7 @@ import { QUEUE } from '../queues/queue.constants';
     ModsService,
     ModpackService,
     WorkshopService,
+    VoiceService,
     ModpackProcessor,
     ScheduleRunner,
     ServersResolver,

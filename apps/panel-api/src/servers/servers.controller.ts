@@ -17,6 +17,7 @@ import { ScheduleRunner } from './schedule.runner';
 import { ModsService } from './mods.service';
 import { ModpackService } from './modpack.service';
 import { WorkshopService } from './workshop.service';
+import { VoiceService } from './voice.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
@@ -58,6 +59,7 @@ export class ServersController {
     private readonly mods: ModsService,
     private readonly modpacks: ModpackService,
     private readonly workshop: WorkshopService,
+    private readonly voice: VoiceService,
     private readonly scheduleRunner: ScheduleRunner,
   ) {}
 
@@ -306,6 +308,16 @@ export class ServersController {
   @Audit({ action: 'server.workshop.steam.clear', targetType: 'Server', targetParam: 'id' })
   workshopClearSteam(@Param('id') id: string) {
     return this.workshop.clearSteamLogin(id);
+  }
+
+  // ---- voice (TeamSpeak admin credentials + slot info) -------------------
+
+  // Gated on files.read: the launcher writes refx-voice.json to the volume, so
+  // anyone who can read files could read it directly — this just parses it.
+  @Get(':id/voice')
+  @RequirePermissions('files.read')
+  voiceInfo(@Param('id') id: string) {
+    return this.voice.info(id);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

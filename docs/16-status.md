@@ -106,13 +106,16 @@ beyond a single build session, and are called out so expectations are clear:
   node); full mutual-TLS with panel client certs is the remaining `TODO(impl)`.
   Host ports bind to loopback by default (`BIND_HOST`); a reverse proxy terminates
   TLS. Panel↔agent mTLS pinning is still `TODO(impl)`.
-- **TeamSpeak 3 slot-cap enforcement** — voice orders provision the official
-  `teamspeak` Docker image, and the purchased slot count is injected into the
-  container env (`TS3SERVER_MAX_CLIENTS` / `SLOTS`) and the voice port is the
-  assigned allocation. TeamSpeak applies the per-virtual-server slot limit via
-  **ServerQuery**, so wiring the env value to `virtualserver_maxclients` (and
-  surfacing the first-boot ServerQuery admin token / privilege key) is the
-  remaining `TODO(impl)`; beyond 32 slots also needs a TeamSpeak license.
+- **TeamSpeak 3 slot-cap enforcement** — **done**. The voice egg ships a launcher
+  (`refx-run.sh`/`refx-ts3-run.sh`) that runs `ts3server`, then via ServerQuery
+  (loopback, `serveredit virtualserver_maxclients=<slots>`) actually enforces the
+  purchased slot count every boot (so upgrades apply), since `ts3server` honours no
+  maxclients env on its own. It captures the first-boot ServerQuery admin password
+  + privilege key, persists them to `refx-voice.json` on the volume, and the panel's
+  per-server **Voice tab** (`GET /servers/:id/voice`, read on demand via the agent's
+  jailed file manager — not stored in the panel DB) surfaces the connection address,
+  slot count, privilege key, and ServerQuery admin login. Beyond 32 slots still needs
+  a TeamSpeak license.
 - **Load/scale validation** to the "tens of thousands of servers" target —
   the architecture (docs 01/09) supports it; it has not been benchmarked.
 - **OpenSearch indexing, migration importers** (Pterodactyl/AMP/TCAdmin) —

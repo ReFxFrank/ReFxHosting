@@ -45,6 +45,7 @@ import type {
   TeamMember,
   WorkshopMod,
   SteamConfigMasked,
+  VoiceInfo,
   HomepageAlert,
   ModrinthProject,
   ModrinthVersion,
@@ -496,6 +497,9 @@ export const api = {
       }),
     workshopClearSteam: (id: string) =>
       http.delete<void>(`/servers/${id}/workshop/steam`),
+
+    // Voice (TeamSpeak) — connection details + first-boot ServerQuery admin creds.
+    voice: (id: string) => http.get<VoiceInfo>(`/servers/${id}/voice`),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),

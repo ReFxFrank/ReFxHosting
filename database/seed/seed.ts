@@ -601,6 +601,36 @@ async function syncWorkshopEggs() {
   console.log(`  • Workshop eggs synced: ${count}`);
 }
 
+/**
+ * Backfill the launcher install script + startup command onto existing voice
+ * (TeamSpeak) templates. Like syncWorkshopEggs, this exists because the curated
+ * egg sync is create-only, so the slot-enforcing launcher wouldn't reach a
+ * TeamSpeak template imported before this feature. Scoped to install
+ * script + startup only; idempotent; runs every deploy.
+ */
+async function syncVoiceEggs() {
+  const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.json'));
+  let count = 0;
+  for (const file of files) {
+    const tpl = JSON.parse(readFileSync(join(TEMPLATES_DIR, file), 'utf8')) as TemplateFile;
+    if (!tpl.slug.startsWith('teamspeak')) continue;
+    const existing = await prisma.gameTemplate.findUnique({
+      where: { slug: tpl.slug },
+      select: { id: true },
+    });
+    if (!existing) continue; // brand-new eggs are created by seedTemplates
+    await prisma.gameTemplate.update({
+      where: { id: existing.id },
+      data: {
+        installScript: tpl.installScript as Prisma.InputJsonValue,
+        startupCommand: tpl.startupCommand,
+      },
+    });
+    count += 1;
+  }
+  console.log(`  • Voice eggs synced: ${count}`);
+}
+
 /** Read existing game categories into a { slug: id } map (no writes). */
 async function loadGameCategoryMap(): Promise<Record<string, string>> {
   const cats = await prisma.gameCategory.findMany({
@@ -827,6 +857,14 @@ async function main() {
     await syncWorkshopEggs();
   } catch (e) {
     console.error('  ! workshop egg sync failed:', (e as Error).message);
+  }
+
+  // Same rationale for voice (TeamSpeak): backfill the slot-enforcing launcher
+  // onto templates imported before this feature.
+  try {
+    await syncVoiceEggs();
+  } catch (e) {
+    console.error('  ! voice egg sync failed:', (e as Error).message);
   }
 
   console.log('Seed complete.');

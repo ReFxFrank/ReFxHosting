@@ -122,6 +122,7 @@ export const serverTabs = (id: string) => [
   { label: "Mods", href: `/servers/${id}/mods` },
   { label: "Modpacks", href: `/servers/${id}/modpacks` },
   { label: "Workshop", href: `/servers/${id}/workshop` },
+  { label: "Voice", href: `/servers/${id}/voice` },
   { label: "Switch Game", href: `/servers/${id}/switch-game` },
   { label: "Upgrade", href: `/servers/${id}/upgrade` },
   { label: "Settings", href: `/servers/${id}/settings` },

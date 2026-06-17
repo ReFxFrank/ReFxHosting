@@ -412,6 +412,19 @@ export interface SteamConfigMasked {
   guardCodePending: boolean;
 }
 
+/** TeamSpeak voice server connection details + first-boot ServerQuery admin creds. */
+export interface VoiceInfo {
+  address: string | null;
+  voicePort: number | null;
+  slots: number | null;
+  /** True once the server has booted and written its admin credentials. */
+  ready: boolean;
+  queryAdmin: string | null;
+  queryPassword: string | null;
+  queryPort: number;
+  privilegeKey: string | null;
+}
+
 /** An admin-curated team member for the public "Meet the team" page. */
 export interface TeamMember {
   id: string;
