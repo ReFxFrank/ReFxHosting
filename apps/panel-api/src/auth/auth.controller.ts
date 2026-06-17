@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { WebAuthnService } from './webauthn.service';
 import { ApiKeyService } from './api-key.service';
@@ -93,6 +94,8 @@ export class AuthController {
   @Public()
   @Post('resend-verification')
   @HttpCode(200)
+  // Tighter than the global limit: this sends an email, so cap re-requests.
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
   async resendVerification(@Body() dto: ResendVerificationDto) {
     await this.auth.resendVerification(dto.email);
     // Always succeed regardless of whether the email exists / is pending.
