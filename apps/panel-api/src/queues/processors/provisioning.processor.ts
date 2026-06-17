@@ -50,7 +50,9 @@ export class ProvisioningProcessor extends WorkerHost {
       : undefined;
     // Host account downloads the game; the customer's account downloads mods.
     const ws = server.template.supportsWorkshop;
-    const gameSteam = ws ? steamLogin(await this.settings.steamConfig()) : undefined;
+    const steamCfg = ws ? await this.settings.steamConfig() : undefined;
+    const gameSteam = steamCfg ? steamLogin(steamCfg) : undefined;
+    if (gameSteam && steamCfg?.guardCode) gameSteam.guardCode = steamCfg.guardCode;
     const steam =
       ws && server.steamUsername && server.steamPasswordEnc
         ? {
@@ -71,6 +73,7 @@ export class ProvisioningProcessor extends WorkerHost {
         data: { steamGuardCode: null },
       });
     }
+    if (gameSteam?.guardCode) await this.settings.consumeSteamGuardCode();
 
     try {
       await this.agent.install(server.node, spec);

@@ -55,7 +55,9 @@ export class ReinstallProcessor extends WorkerHost {
     // Two Steam logins for Workshop games: the HOST's account downloads the game
     // (admin → Settings → Steam), the CUSTOMER's own account downloads mods.
     const ws = server.template.supportsWorkshop;
-    const gameSteam = ws ? steamLogin(await this.settings.steamConfig()) : undefined;
+    const steamCfg = ws ? await this.settings.steamConfig() : undefined;
+    const gameSteam = steamCfg ? steamLogin(steamCfg) : undefined;
+    if (gameSteam && steamCfg?.guardCode) gameSteam.guardCode = steamCfg.guardCode;
     const steam =
       ws && server.steamUsername && server.steamPasswordEnc
         ? {
@@ -70,13 +72,16 @@ export class ReinstallProcessor extends WorkerHost {
       steam,
       gameSteam,
     });
-    // One-time code: clear it now that it's baked into this install spec.
+    // One-time codes: clear them now they're baked into this install spec — the
+    // per-server (mods) code on the server row and the central (game) code in
+    // settings. Steam remembers the machine via its sentry file after first use.
     if (server.steamGuardCode) {
       await this.prisma.server.update({
         where: { id: serverId },
         data: { steamGuardCode: null },
       });
     }
+    if (gameSteam?.guardCode) await this.settings.consumeSteamGuardCode();
 
     try {
       await this.agent.reinstall(server.node, spec);

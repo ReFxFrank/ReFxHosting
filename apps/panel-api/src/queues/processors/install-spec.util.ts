@@ -19,7 +19,7 @@ type ServerWithRelations = Prisma.ServerGetPayload<{
 export function steamLogin(cfg: {
   username: string;
   password: string;
-}): { username: string; password: string } | undefined {
+}): { username: string; password: string; guardCode?: string } | undefined {
   return cfg.username && cfg.password
     ? { username: cfg.username, password: cfg.password }
     : undefined;

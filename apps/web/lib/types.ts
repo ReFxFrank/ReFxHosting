@@ -408,6 +408,8 @@ export interface SteamConfigMasked {
   apiKeySet: boolean;
   passwordSet: boolean;
   loginConfigured: boolean;
+  /** A one-time Steam Guard code is staged for the next install. */
+  guardCodePending: boolean;
 }
 
 /** An admin-curated team member for the public "Meet the team" page. */

@@ -35,6 +35,7 @@ function SteamSettingsCard() {
   const [username, setUsername] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [guardCode, setGuardCode] = useState("");
 
   const usernameV = username ?? cfg?.username ?? "";
 
@@ -43,12 +44,14 @@ function SteamSettingsCard() {
       const input: Record<string, unknown> = { username: usernameV };
       if (password) input.password = password;
       if (apiKey) input.apiKey = apiKey;
+      if (guardCode.trim()) input.guardCode = guardCode.trim();
       return api.admin.setSteamConfig(input);
     },
     onSuccess: () => {
       toast.success("Steam settings saved");
       setPassword("");
       setApiKey("");
+      setGuardCode("");
       queryClient.invalidateQueries({ queryKey: ["admin", "steam-config"] });
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to save"),
@@ -80,6 +83,9 @@ function SteamSettingsCard() {
               <Badge variant={cfg?.apiKeySet ? "success" : "secondary"}>
                 {cfg?.apiKeySet ? "API key set" : "No API key"}
               </Badge>
+              {cfg?.guardCodePending && (
+                <Badge variant="warning">Steam Guard code staged</Badge>
+              )}
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -112,10 +118,33 @@ function SteamSettingsCard() {
                 placeholder="optional — improves Workshop name/collection lookups"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>
+                Steam Guard code{" "}
+                <span className="text-xs text-muted-foreground">
+                  (one-time — only needed the first time this account logs in on a node)
+                </span>
+              </Label>
+              <Input
+                autoComplete="off"
+                value={guardCode}
+                onChange={(e) => setGuardCode(e.target.value)}
+                placeholder="e.g. K4F9Q"
+              />
+              <p className="text-xs text-muted-foreground">
+                If the game-download account has Steam Guard enabled, steamcmd needs a
+                code the first time it logs in on each node. Enter your current code
+                here, save, then reinstall the server — it&apos;s passed to Steam for
+                that download and consumed immediately (it won&apos;t be reused).{" "}
+                <strong>Email</strong> codes work best; mobile-authenticator codes can
+                expire before the install runs. After the first successful login the node
+                is remembered, so you usually won&apos;t need this again.
+              </p>
+            </div>
             <p className="text-xs text-muted-foreground">
               Note: the account must <strong>own the game</strong> to download most of its
-              paid/Workshop content, and accounts with Steam Guard may need an exemption or
-              an app password for unattended steamcmd use.
+              paid/Workshop content. With Steam Guard on, use the code field above for the
+              first unattended steamcmd login on a node.
             </p>
             <div className="flex justify-end">
               <Button loading={save.isPending} onClick={() => save.mutate()}>

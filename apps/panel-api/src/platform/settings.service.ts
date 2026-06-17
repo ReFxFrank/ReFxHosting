@@ -23,6 +23,7 @@ const KEY = {
   steamApiKey: 'steam.apiKey',
   steamUsername: 'steam.username',
   steamPassword: 'steam.password',
+  steamGuardCode: 'steam.guardCode',
 } as const;
 
 export interface GatewayConfigInput {
@@ -59,12 +60,16 @@ export interface SteamConfigInput {
   apiKey?: string;
   username?: string;
   password?: string;
+  /** One-time Steam Guard code for the next game-download install (transient). */
+  guardCode?: string;
 }
 
 export interface EffectiveSteamConfig {
   apiKey: string;
   username: string;
   password: string;
+  /** Pending one-time Steam Guard code, consumed on the next install. */
+  guardCode: string;
 }
 
 /**
@@ -249,6 +254,8 @@ export class SettingsService {
         (await this.get(KEY.steamUsername)) || process.env.STEAM_USERNAME || '',
       password:
         (await this.get(KEY.steamPassword)) || process.env.STEAM_PASSWORD || '',
+      // Guard code is DB-only and transient (consumed on the next install).
+      guardCode: (await this.get(KEY.steamGuardCode)) || '',
     };
   }
 
@@ -262,6 +269,8 @@ export class SettingsService {
       // True when a login is usable for steamcmd Workshop downloads that require
       // an authenticated account (anonymous still works for many free items).
       loginConfigured: !!cfg.username && !!cfg.password,
+      // A Steam Guard code is staged and will be used on the next install.
+      guardCodePending: !!cfg.guardCode,
     };
   }
 
@@ -273,5 +282,18 @@ export class SettingsService {
       await this.set(KEY.steamUsername, dto.username.trim(), false);
     if (dto.password !== undefined)
       await this.set(KEY.steamPassword, dto.password, true);
+    if (dto.guardCode !== undefined)
+      await this.set(KEY.steamGuardCode, dto.guardCode.trim(), true);
+  }
+
+  /**
+   * Consume the staged game-download Steam Guard code: returns it and clears it
+   * so it's only ever used for a single install (codes are one-time/expiring).
+   */
+  async consumeSteamGuardCode(): Promise<string | undefined> {
+    const code = await this.get(KEY.steamGuardCode);
+    if (!code) return undefined;
+    await this.set(KEY.steamGuardCode, '');
+    return code;
   }
 }

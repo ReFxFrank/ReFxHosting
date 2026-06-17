@@ -162,6 +162,16 @@ export class SetSteamConfigDto {
   @IsString()
   @MaxLength(512)
   password?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'One-time Steam Guard code for the game-download account. Staged and ' +
+      'consumed on the next install; clears the machine prompt after first use.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  guardCode?: string;
 }
 
 export class CreateRoleDto {

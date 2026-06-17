@@ -956,8 +956,12 @@ export const api = {
 
     // Central Steam (SteamCMD login + Web API key) for Workshop downloads.
     steamConfig: () => http.get<SteamConfigMasked>("/admin/settings/steam"),
-    setSteamConfig: (input: { apiKey?: string; username?: string; password?: string }) =>
-      http.patch<void>("/admin/settings/steam", input),
+    setSteamConfig: (input: {
+      apiKey?: string;
+      username?: string;
+      password?: string;
+      guardCode?: string;
+    }) => http.patch<void>("/admin/settings/steam", input),
 
     auditLogs: (query?: { actorId?: string; targetType?: string; page?: number }) =>
       http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),
