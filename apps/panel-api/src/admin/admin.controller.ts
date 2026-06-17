@@ -52,7 +52,7 @@ import { RequirePerm } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { CreateNodeDto, UpdateNodeDto } from '../nodes/dto/node.dto';
+import { CreateNodeDto, UpdateNodeDto, UpdateAgentsDto } from '../nodes/dto/node.dto';
 import { CreateLocationDto, UpdateLocationDto } from '../nodes/dto/location.dto';
 import { CreateProductDto } from '../billing/dto/create-product.dto';
 import {
@@ -244,13 +244,13 @@ export class AdminController {
     return this.nodes.updateAgent(id);
   }
 
-  /** Self-update every node's agent to the latest release (best-effort). */
+  /** Self-update every node's agent to the latest release (or the given ids). */
   @Post('nodes/update-all-agents')
   @HttpCode(200)
   @RequirePerm('nodes.manage')
   @Audit({ action: 'admin.node.update-all-agents', targetType: 'Node' })
-  updateAllNodeAgents() {
-    return this.nodes.updateAllAgents();
+  updateAllNodeAgents(@Body() dto: UpdateAgentsDto) {
+    return this.nodes.updateAllAgents(dto.ids);
   }
 
   /** Pin (trust-on-first-use) the node agent's current TLS certificate. */

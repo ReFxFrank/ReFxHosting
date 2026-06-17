@@ -751,9 +751,10 @@ export const api = {
       http.post<{ updating: true }>(`/admin/nodes/${id}/update-agent`),
     agentLatestVersion: () =>
       http.get<{ latest: string | null }>(`/admin/nodes/agent-latest`),
-    updateAllNodeAgents: () =>
+    updateAllNodeAgents: (ids?: string[]) =>
       http.post<{ updated: string[]; failed: { id: string; name: string; reason: string }[] }>(
         `/admin/nodes/update-all-agents`,
+        ids && ids.length ? { ids } : {},
       ),
     pinNodeCert: (id: string) =>
       http.post<{ sha256: string }>(`/admin/nodes/${id}/pin-cert`),

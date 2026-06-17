@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsIn,
@@ -177,4 +178,15 @@ export class NodeRegisterDto {
   @IsOptional()
   @IsString()
   agentVersion?: string;
+}
+
+export class UpdateAgentsDto {
+  @ApiPropertyOptional({
+    description: 'Node ids to update; omit/empty to update every node.',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  ids?: string[];
 }

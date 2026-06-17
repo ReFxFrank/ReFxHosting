@@ -483,11 +483,13 @@ export default function AdminNodesPage() {
   });
   const latestVersion = agentLatest?.latest ?? null;
   const [updateAllOpen, setUpdateAllOpen] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const updateAllMutation = useMutation({
-    mutationFn: () => api.admin.updateAllNodeAgents(),
+    mutationFn: (ids?: string[]) => api.admin.updateAllNodeAgents(ids),
     onSuccess: (res) => {
       setUpdateAllOpen(false);
+      setSelected(new Set());
       if (res.updated.length)
         toast.success(`Updating ${res.updated.length} node${res.updated.length === 1 ? "" : "s"}…`);
       if (res.failed.length)
@@ -497,6 +499,17 @@ export default function AdminNodesPage() {
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to update agents"),
   });
+
+  const nodeList = nodes ?? [];
+  const allSelected = nodeList.length > 0 && selected.size === nodeList.length;
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(nodeList.map((n) => n.id)));
+  const toggleOne = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
@@ -585,7 +598,8 @@ export default function AdminNodesPage() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setUpdateAllOpen(true)}>
-              <Download className="size-4" /> Update all agents
+              <Download className="size-4" />{" "}
+              {selected.size ? `Update selected (${selected.size})` : "Update all agents"}
             </Button>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" /> Add node
@@ -602,6 +616,15 @@ export default function AdminNodesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all nodes"
+                      className="size-4 accent-[hsl(var(--primary))]"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                    />
+                  </TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>OS</TableHead>
@@ -616,7 +639,16 @@ export default function AdminNodesPage() {
               </TableHeader>
               <TableBody>
                 {nodes.map((node) => (
-                  <TableRow key={node.id}>
+                  <TableRow key={node.id} data-state={selected.has(node.id) ? "selected" : undefined}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${node.name}`}
+                        className="size-4 accent-[hsl(var(--primary))]"
+                        checked={selected.has(node.id)}
+                        onChange={() => toggleOne(node.id)}
+                      />
+                    </TableCell>
                     <TableCell>
                       <div className="font-medium">{node.name}</div>
                       <div className="font-mono text-xs text-muted-foreground">
@@ -671,6 +703,14 @@ export default function AdminNodesPage() {
                           onClick={() => setDetailNode(node)}
                         >
                           <Activity className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          title="Update agent"
+                          onClick={() => setUpdateTarget(node)}
+                        >
+                          <Download className="size-4" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -1015,7 +1055,11 @@ export default function AdminNodesPage() {
       <Dialog open={updateAllOpen} onOpenChange={setUpdateAllOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Update every node&apos;s agent?</DialogTitle>
+            <DialogTitle>
+              {selected.size
+                ? `Update ${selected.size} selected node${selected.size === 1 ? "" : "s"}?`
+                : "Update every node's agent?"}
+            </DialogTitle>
             <DialogDescription>
               Each node downloads the latest released agent, verifies it, swaps it
               in and restarts — no SSH. Running game servers keep running and
@@ -1033,9 +1077,11 @@ export default function AdminNodesPage() {
             </Button>
             <Button
               loading={updateAllMutation.isPending}
-              onClick={() => updateAllMutation.mutate()}
+              onClick={() =>
+                updateAllMutation.mutate(selected.size ? Array.from(selected) : undefined)
+              }
             >
-              <Download className="size-4" /> Update all
+              <Download className="size-4" /> {selected.size ? "Update selected" : "Update all"}
             </Button>
           </DialogFooter>
         </DialogContent>

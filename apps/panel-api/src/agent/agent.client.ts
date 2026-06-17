@@ -234,12 +234,16 @@ export class NodeAgentClient {
     return this.request(node, 'POST', `/api/v1/system/steam-cache/clear`);
   }
 
-  /** Self-update the agent to the latest published release, then re-exec. */
-  updateAgent(node: Node) {
-    // The agent downloads + swaps + re-execs; allow extra time for the download.
-    return this.request(node, 'POST', `/api/v1/system/update`, undefined, {
-      timeoutMs: 120_000,
-    });
+  /** Self-update the agent to the latest published release, then re-exec.
+   *  `githubToken` lets the agent download a private repo's release asset. */
+  updateAgent(node: Node, githubToken?: string) {
+    return this.request(
+      node,
+      'POST',
+      `/api/v1/system/update`,
+      githubToken ? { githubToken } : {},
+      { timeoutMs: 120_000 },
+    );
   }
 
   /** Push a server's SFTP credential to the agent so a rotation takes effect live. */

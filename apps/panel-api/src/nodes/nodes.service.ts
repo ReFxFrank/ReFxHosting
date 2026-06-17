@@ -326,12 +326,17 @@ export class NodesService {
    * prebuilt binary, verifies it, swaps it in and re-execs). Running game servers
    * keep running and re-attach — no SSH needed.
    */
+  /** Read-only GitHub token for downloading private-repo release assets. */
+  private githubToken(): string | undefined {
+    return process.env.GITHUB_TOKEN?.trim() || undefined;
+  }
+
   async updateAgent(id: string): Promise<{ updating: true }> {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
     });
     if (!node) throw new NotFoundException('Node not found');
-    await this.agent.updateAgent(node);
+    await this.agent.updateAgent(node, this.githubToken());
     return { updating: true };
   }
 
@@ -352,12 +357,14 @@ export class NodesService {
     }
     let value: string | null = null;
     try {
+      const token = this.githubToken();
       const res = await fetch(
         'https://api.github.com/repos/refxfrank/refxhosting/releases/latest',
         {
           headers: {
             Accept: 'application/vnd.github+json',
             'User-Agent': 'ReFx-Panel',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           signal: AbortSignal.timeout(6000),
         },
@@ -377,16 +384,22 @@ export class NodesService {
    * Self-update every (non-deleted) node's agent to the latest release. Best
    * effort: unreachable nodes are reported in `failed`, not thrown.
    */
-  async updateAllAgents(): Promise<{
+  async updateAllAgents(ids?: string[]): Promise<{
     updated: string[];
     failed: { id: string; name: string; reason: string }[];
   }> {
-    const nodes = await this.prisma.node.findMany({ where: { deletedAt: null } });
+    const nodes = await this.prisma.node.findMany({
+      where: {
+        deletedAt: null,
+        ...(ids && ids.length ? { id: { in: ids } } : {}),
+      },
+    });
+    const token = this.githubToken();
     const updated: string[] = [];
     const failed: { id: string; name: string; reason: string }[] = [];
     for (const node of nodes) {
       try {
-        await this.agent.updateAgent(node);
+        await this.agent.updateAgent(node, token);
         updated.push(node.id);
       } catch (e) {
         failed.push({
