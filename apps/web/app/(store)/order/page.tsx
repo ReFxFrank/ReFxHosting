@@ -140,6 +140,24 @@ export default function OrderPage() {
   const setConfigVal = (k: string, v: string) =>
     setConfig((c) => ({ ...c, [k]: v }));
 
+  // The unified `minecraft` egg gets a dedicated loader + version picker (the
+  // generic variable form left the version as a free-text "latest", so every
+  // order installed the newest release). Mirror the in-panel config card.
+  const isUnifiedMc = template?.slug === "minecraft";
+  const mcVersionsQ = useQuery({
+    queryKey: ["catalog", "minecraft-versions"],
+    queryFn: () => api.catalog.minecraftVersions(),
+    enabled: isUnifiedMc,
+  });
+  const MC_LOADERS = [
+    { value: "vanilla", label: "Vanilla" },
+    { value: "paper", label: "Paper" },
+    { value: "fabric", label: "Fabric" },
+    { value: "forge", label: "Forge" },
+    { value: "neoforge", label: "NeoForge" },
+  ];
+  const MC_NEEDS_BUILD = new Set(["fabric", "forge", "neoforge"]);
+
   // The price list to choose a billing interval from: tier prices (game) or
   // product prices (voice).
   const sortedPriceList = useMemo(
@@ -437,8 +455,51 @@ export default function OrderPage() {
               </section>
             )}
 
-            {/* Per-game configuration (user-editable template variables) */}
-            {configVars.length > 0 && (
+            {/* Per-game configuration */}
+            {isUnifiedMc ? (
+              <section className="space-y-3 rounded-xl border p-4">
+                <h2 className="text-sm font-semibold">Configuration</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Loader</Label>
+                    <Select value={config.LOADER ?? "paper"} onValueChange={(v) => setConfigVal("LOADER", v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {MC_LOADERS.map((l) => (
+                          <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Minecraft version</Label>
+                    <Select value={config.MINECRAFT_VERSION ?? "latest"} onValueChange={(v) => setConfigVal("MINECRAFT_VERSION", v)}>
+                      <SelectTrigger><SelectValue placeholder="Select version" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="latest">Latest (recommended)</SelectItem>
+                        {(mcVersionsQ.data?.versions ?? []).map((ver) => (
+                          <SelectItem key={ver} value={ver}>{ver}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {MC_NEEDS_BUILD.has(config.LOADER ?? "paper") && (
+                    <div className="space-y-1.5">
+                      <Label>Loader build</Label>
+                      <Input
+                        value={config.LOADER_VERSION ?? "latest"}
+                        onChange={(e) => setConfigVal("LOADER_VERSION", e.target.value)}
+                        placeholder="latest"
+                        className="font-mono text-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Pick your server software and version — we auto-select the matching Java runtime.
+                </p>
+              </section>
+            ) : configVars.length > 0 ? (
               <section className="space-y-3 rounded-xl border p-4">
                 <h2 className="text-sm font-semibold">Configuration</h2>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -485,7 +546,7 @@ export default function OrderPage() {
                   })}
                 </div>
               </section>
-            )}
+            ) : null}
 
             {/* Step 3 — billing duration */}
             <section className="space-y-3 rounded-xl border p-4">

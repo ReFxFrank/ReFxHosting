@@ -210,7 +210,7 @@ export class ServersService {
         slots: prod.perSlot
           ? slots
           : (tier?.recommendedPlayers ?? prod.slots ?? null),
-        startupCommand: template.startupCommand,
+        startupCommand: this.minecraftStartupFor(template, environment),
         dockerImage,
         environment,
         subscriptionId: subscription.id,
@@ -278,7 +278,7 @@ export class ServersService {
         memoryMb: dto.memoryMb,
         diskMb: dto.diskMb,
         swapMb: dto.swapMb ?? 0,
-        startupCommand: template.startupCommand,
+        startupCommand: this.minecraftStartupFor(template, environment),
         dockerImage,
         environment,
         subscriptionId: null,
@@ -431,7 +431,7 @@ export class ServersService {
           templateId: target.id,
           templateVersion: target.version,
           dockerImage,
-          startupCommand: target.startupCommand,
+          startupCommand: this.minecraftStartupFor(target, environment),
           deployMethod: (target.deployMethods[0] as any) ?? server.deployMethod,
           environment,
           state: 'SWITCHING_GAME',
@@ -1361,6 +1361,21 @@ export class ServersService {
       );
     }
     return env as Prisma.InputJsonObject;
+  }
+
+  /**
+   * Startup command for a new server. For the unified `minecraft` egg this picks
+   * the per-loader invocation (Fabric → fabric-server-launch.jar, Forge/NeoForge
+   * → @arg files) so an ordered non-Paper server boots instead of failing with
+   * "Unable to access jarfile server.jar". Other templates use their own command.
+   */
+  private minecraftStartupFor(
+    template: { slug: string | null; startupCommand: string },
+    environment: Record<string, unknown> | null | undefined,
+  ): string {
+    if (template.slug !== 'minecraft') return template.startupCommand;
+    const loader = String((environment ?? {})['LOADER'] ?? 'paper');
+    return isMinecraftLoader(loader) ? LOADER_STARTUP[loader] : template.startupCommand;
   }
 
   private resolveDockerImage(
