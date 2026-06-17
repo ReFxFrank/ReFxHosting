@@ -170,15 +170,54 @@ In the panel: **Admin → Nodes → Add**. Set its public hostname/IP and an
 shows a **bootstrap token**. Copy it.
 
 ### 2.2 Install the agent
-On the dedicated box (as root). The installer installs Docker, creates the
-`refx` user, writes `/etc/refx/config.yaml`, opens `8443`/`2022`, and starts the
-systemd service:
+
+There's no published agent release yet, so the node **builds the agent from
+source** (this is also what `update-agent.sh` does). It needs **Go 1.25** (newer
+than Ubuntu's apt Go) and Docker. As root:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/refxfrank/refxhosting/main/infra/scripts/install-node.sh -o install-node.sh
-sudo bash install-node.sh --panel-url https://api.refx.gg --token <NODE_TOKEN>
+# Docker
+curl -fsSL https://get.docker.com | sh && systemctl enable --now docker
+
+# Go 1.25 (to build the agent)
+curl -fsSL https://go.dev/dl/go1.25.0.linux-amd64.tar.gz -o /tmp/go.tgz
+rm -rf /usr/local/go && tar -C /usr/local -xzf /tmp/go.tgz
+echo 'export PATH=$PATH:/usr/local/go/bin' >/etc/profile.d/go.sh && export PATH=$PATH:/usr/local/go/bin
+
+# Build (clone owned by your admin user so update-agent.sh can rebuild later)
+apt -y install git
+git clone https://github.com/refxfrank/refxhosting.git /opt/refxhosting
+( cd /opt/refxhosting/apps/node-agent && go build -o refx-agent ./cmd/refx-agent )
+ln -sf /opt/refxhosting/apps/node-agent/refx-agent /usr/local/bin/refx-agent
+
+# refx user + data dirs (the agent runs non-root, with Docker access)
+useradd --system --home-dir /var/lib/refx --shell /usr/sbin/nologin refx 2>/dev/null || true
+usermod -aG docker refx
+install -d -o refx -g refx -m 0750 /var/lib/refx /var/lib/refx/servers /var/lib/refx/backups
+install -d -m 0750 /etc/refx
+
+# Config (paste the bootstrap token from 2.1; use the API URL, not the website)
+cat >/etc/refx/config.yaml <<EOF
+data_dir: /var/lib/refx
+panel:
+  url: https://api.refx.gg
+  bootstrap_token: <NODE_TOKEN>
+  skip_tls_verify: false
+api:
+  bind_addr: 0.0.0.0:8443
+sftp:
+  bind_addr: 0.0.0.0:2022
+runtime:
+  default: docker
+log:
+  level: info
+EOF
+chown refx:refx /etc/refx/config.yaml && chmod 600 /etc/refx/config.yaml
+
+# systemd service (runs /usr/local/bin/refx-agent -> the source build)
+cp /opt/refxhosting/infra/scripts/refx-agent.service /etc/systemd/system/
+systemctl daemon-reload && systemctl enable --now refx-agent
 ```
-> Use the **API** URL (`https://api.refx.gg`), not the website. The installer
-> sanity-checks this for you.
 
 Verify:
 ```bash
@@ -186,6 +225,9 @@ systemctl status refx-agent
 journalctl -u refx-agent -f      # watch it register
 ```
 The node should flip to **online** in Admin → Nodes within a few seconds.
+
+> Later updates: `cd /opt/refxhosting && bash infra/scripts/update-agent.sh`
+> (run as your admin user; rebuilds + restarts via systemd).
 
 ### 2.3 Node firewall
 The installer opens `8443` (panel→agent control) and `2022` (SFTP). Also open the
