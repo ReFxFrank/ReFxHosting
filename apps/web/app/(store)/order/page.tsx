@@ -144,10 +144,21 @@ export default function OrderPage() {
   // generic variable form left the version as a free-text "latest", so every
   // order installed the newest release). Mirror the in-panel config card.
   const isUnifiedMc = template?.slug === "minecraft";
+  const mcLoader = config.LOADER ?? "paper";
+  const mcVersion = config.MINECRAFT_VERSION ?? "latest";
+  const MC_NEEDS_BUILD = new Set(["fabric", "forge", "neoforge"]);
+  // Minecraft versions for the selected loader (refetched as the loader changes),
+  // so the dropdown only offers versions that loader can actually build.
   const mcVersionsQ = useQuery({
-    queryKey: ["catalog", "minecraft-versions"],
-    queryFn: () => api.catalog.minecraftVersions(),
+    queryKey: ["catalog", "minecraft-versions", mcLoader],
+    queryFn: () => api.catalog.minecraftVersions(mcLoader),
     enabled: isUnifiedMc,
+  });
+  // Loader build versions for the selected loader + Minecraft version.
+  const mcBuildsQ = useQuery({
+    queryKey: ["catalog", "minecraft-builds", mcLoader, mcVersion],
+    queryFn: () => api.catalog.minecraftBuilds(mcLoader, mcVersion),
+    enabled: isUnifiedMc && MC_NEEDS_BUILD.has(mcLoader),
   });
   const MC_LOADERS = [
     { value: "vanilla", label: "Vanilla" },
@@ -156,7 +167,13 @@ export default function OrderPage() {
     { value: "forge", label: "Forge" },
     { value: "neoforge", label: "NeoForge" },
   ];
-  const MC_NEEDS_BUILD = new Set(["fabric", "forge", "neoforge"]);
+  // Changing the loader invalidates the picked version+build; changing the
+  // version invalidates the build. Reset them so we never submit a combo the
+  // loader doesn't have.
+  const setMcLoader = (v: string) =>
+    setConfig((c) => ({ ...c, LOADER: v, MINECRAFT_VERSION: "latest", LOADER_VERSION: "latest" }));
+  const setMcVersion = (v: string) =>
+    setConfig((c) => ({ ...c, MINECRAFT_VERSION: v, LOADER_VERSION: "latest" }));
 
   // The price list to choose a billing interval from: tier prices (game) or
   // product prices (voice).
@@ -462,7 +479,7 @@ export default function OrderPage() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label>Loader</Label>
-                    <Select value={config.LOADER ?? "paper"} onValueChange={(v) => setConfigVal("LOADER", v)}>
+                    <Select value={mcLoader} onValueChange={setMcLoader}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {MC_LOADERS.map((l) => (
@@ -473,7 +490,7 @@ export default function OrderPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label>Minecraft version</Label>
-                    <Select value={config.MINECRAFT_VERSION ?? "latest"} onValueChange={(v) => setConfigVal("MINECRAFT_VERSION", v)}>
+                    <Select value={mcVersion} onValueChange={setMcVersion}>
                       <SelectTrigger><SelectValue placeholder="Select version" /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="latest">Latest (recommended)</SelectItem>
@@ -483,15 +500,18 @@ export default function OrderPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  {MC_NEEDS_BUILD.has(config.LOADER ?? "paper") && (
+                  {MC_NEEDS_BUILD.has(mcLoader) && (
                     <div className="space-y-1.5">
-                      <Label>Loader build</Label>
-                      <Input
-                        value={config.LOADER_VERSION ?? "latest"}
-                        onChange={(e) => setConfigVal("LOADER_VERSION", e.target.value)}
-                        placeholder="latest"
-                        className="font-mono text-sm"
-                      />
+                      <Label>{MC_LOADERS.find((l) => l.value === mcLoader)?.label} build</Label>
+                      <Select value={config.LOADER_VERSION ?? "latest"} onValueChange={(v) => setConfigVal("LOADER_VERSION", v)}>
+                        <SelectTrigger><SelectValue placeholder="Select build" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="latest">Latest (recommended)</SelectItem>
+                          {(mcBuildsQ.data?.builds ?? []).map((b) => (
+                            <SelectItem key={b} value={b}>{b}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 </div>

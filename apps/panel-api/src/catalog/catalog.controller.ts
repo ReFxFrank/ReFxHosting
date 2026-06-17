@@ -106,12 +106,26 @@ export class CatalogController {
   }
 
   /**
-   * Released Minecraft (Java Edition) versions for the version picker, newest
-   * first. Sourced from Mojang's manifest (cached ~1h) with a hardcoded
-   * fallback — always returns a non-empty list.
+   * Minecraft versions for the version picker, newest first, scoped to the chosen
+   * loader (vanilla/paper/fabric/forge/neoforge) so it only offers versions that
+   * loader can actually build. Sourced live from each loader's upstream (cached
+   * ~1h) with a graceful fallback — vanilla always returns a non-empty list.
    */
   @Get('minecraft-versions')
-  async minecraftVersionsList() {
-    return { versions: await this.minecraftVersions.list() };
+  async minecraftVersionsList(@Query('loader') loader?: string) {
+    return { versions: await this.minecraftVersions.list(loader) };
+  }
+
+  /**
+   * Loader build versions for a given Minecraft version, newest first — the
+   * Fabric loader / Forge build / NeoForge build dropdown. Empty for loaders with
+   * no build concept (vanilla/paper auto-pick the newest server build).
+   */
+  @Get('minecraft-builds')
+  async minecraftBuildsList(
+    @Query('loader') loader: string,
+    @Query('version') version: string,
+  ) {
+    return { builds: await this.minecraftVersions.builds(loader, version) };
   }
 }

@@ -586,9 +586,15 @@ export const api = {
     categories: () => getList<GameCategory>("/catalog/categories"),
     templates: (query?: { categoryId?: string; search?: string }) =>
       getList<GameTemplate>("/catalog/templates", { query }),
-    minecraftVersions: () =>
+    minecraftVersions: (loader?: string) =>
       http.get<{ versions: string[] }>("/catalog/minecraft-versions", {
         anonymous: true,
+        query: loader ? { loader } : undefined,
+      }),
+    minecraftBuilds: (loader: string, version: string) =>
+      http.get<{ builds: string[] }>("/catalog/minecraft-builds", {
+        anonymous: true,
+        query: { loader, version },
       }),
     // Public storefront (unauthenticated).
     games: () => getList<StorefrontGame>("/catalog/games", { anonymous: true }),
