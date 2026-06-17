@@ -309,7 +309,15 @@ func (d *DockerRuntime) ensureSteamHome() string {
 //     game server itself still runs strictly non-root.
 // Both are best-effort; failures are logged, not fatal.
 func (d *DockerRuntime) prepareDataDir(ctx context.Context, s *server.Server, image string) {
-	if goruntime.GOOS != "windows" {
+	// A ROOT agent can chown the host tree directly. A NON-root agent (the default
+	// systemd install runs as the unprivileged `refx` user) cannot: chown(2) to a
+	// different uid needs CAP_CHOWN, so files written by a root install image stay
+	// root-owned and the non-root runtime user (uid 1000) can't read them — the
+	// classic "Unable to access jarfile server.jar" on Minecraft. In that case fall
+	// back to the same trick used on Windows: a throwaway root container chowns the
+	// mount to 1000:1000. (chownTree silently ignores per-file errors, so we gate on
+	// the agent's own euid rather than trusting its return value.)
+	if goruntime.GOOS != "windows" && os.Geteuid() == 0 {
 		if err := chownTree(s.DataDir, containerUID, containerGID); err != nil {
 			d.log.Warn().Err(err).Str("dir", s.DataDir).Msg("chown data dir failed")
 		}

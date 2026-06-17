@@ -656,6 +656,32 @@ async function syncVoiceEggs() {
 }
 
 /**
+ * Backfill the unified `minecraft` egg's install script + default startup onto an
+ * existing template (the curated egg seed is create-only). This is how install
+ * hardening — e.g. the per-loader launch-artifact verification — reaches a
+ * Minecraft template imported before the change. Template fields only; a server's
+ * per-loader startup command (set when its loader is chosen) is left untouched.
+ */
+async function syncMinecraftEgg() {
+  const existing = await prisma.gameTemplate.findUnique({
+    where: { slug: 'minecraft' },
+    select: { id: true },
+  });
+  if (!existing) return; // a brand-new install is created by seedTemplates
+  const tpl = JSON.parse(
+    readFileSync(join(TEMPLATES_DIR, 'minecraft.json'), 'utf8'),
+  ) as TemplateFile;
+  await prisma.gameTemplate.update({
+    where: { id: existing.id },
+    data: {
+      installScript: tpl.installScript as Prisma.InputJsonValue,
+      startupCommand: tpl.startupCommand,
+    },
+  });
+  console.log('  • Minecraft egg synced');
+}
+
+/**
  * One-time cleanup: the per-server *customer* Steam login was removed in favour
  * of the host game-download account (Workshop mods download via the admin
  * account). Null out any legacy stored credentials so no unused Steam secrets
@@ -911,6 +937,15 @@ async function main() {
     await syncVoiceEggs();
   } catch (e) {
     console.error('  ! voice egg sync failed:', (e as Error).message);
+  }
+
+  // Backfill the hardened unified Minecraft install script (per-loader launch
+  // verification, etc.) onto an existing `minecraft` template. Template-only —
+  // each server's per-loader startup command is managed separately and untouched.
+  try {
+    await syncMinecraftEgg();
+  } catch (e) {
+    console.error('  ! minecraft egg sync failed:', (e as Error).message);
   }
 
   try {
