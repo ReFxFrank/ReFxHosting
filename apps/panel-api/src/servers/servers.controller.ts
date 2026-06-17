@@ -44,8 +44,6 @@ import {
   AddWorkshopDto,
   ToggleWorkshopDto,
   ReorderWorkshopDto,
-  SetSteamLoginDto,
-  ApplyWorkshopDto,
 } from './dto/server.dto';
 
 @ApiTags('servers')
@@ -285,29 +283,8 @@ export class ServersController {
   @Post(':id/workshop/apply')
   @RequirePermissions('control.reinstall')
   @Audit({ action: 'server.workshop.apply', targetType: 'Server', targetParam: 'id' })
-  workshopApply(@Param('id') id: string, @Body() dto: ApplyWorkshopDto) {
-    return this.workshop.apply(id, { steamGuardCode: dto.steamGuardCode });
-  }
-
-  // Per-server Steam login (the customer's own account, for Workshop downloads).
-  @Get(':id/workshop/steam')
-  @RequirePermissions('files.read')
-  workshopSteamStatus(@Param('id') id: string) {
-    return this.workshop.steamStatus(id);
-  }
-
-  @Put(':id/workshop/steam')
-  @RequirePermissions('files.write')
-  @Audit({ action: 'server.workshop.steam.set', targetType: 'Server', targetParam: 'id' })
-  workshopSetSteam(@Param('id') id: string, @Body() dto: SetSteamLoginDto) {
-    return this.workshop.setSteamLogin(id, dto);
-  }
-
-  @Delete(':id/workshop/steam')
-  @RequirePermissions('files.write')
-  @Audit({ action: 'server.workshop.steam.clear', targetType: 'Server', targetParam: 'id' })
-  workshopClearSteam(@Param('id') id: string) {
-    return this.workshop.clearSteamLogin(id);
+  workshopApply(@Param('id') id: string) {
+    return this.workshop.apply(id);
   }
 
   // ---- voice (TeamSpeak admin credentials + slot info) -------------------

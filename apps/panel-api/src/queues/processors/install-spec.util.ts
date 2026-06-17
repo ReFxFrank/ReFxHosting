@@ -30,12 +30,9 @@ export function buildInstallSpec(
   opts: {
     wipe?: boolean;
     sftpPassword?: string;
-    /** Customer's own Steam login — used ONLY for Workshop **mod** downloads
-     *  (steamcmd +workshop_download_item). `guardCode` is a one-time Steam Guard
-     *  code. Never set for non-Workshop games. */
-    steam?: { username: string; password: string; guardCode?: string };
-    /** Host's Steam login — used ONLY to download the **game** server files
-     *  (steamcmd +app_update) for games that aren't anonymous (e.g. Arma 3). */
+    /** Host's Steam login — downloads the **game** server files (steamcmd
+     *  +app_update) AND Workshop mods for games that aren't anonymous (e.g.
+     *  Arma 3, DayZ). `guardCode` is a one-time Steam Guard code. */
     gameSteam?: { username: string; password: string; guardCode?: string };
     /** Extra (non-persisted) env injected for this job only, e.g. a one-time
      *  REFX_WORKSHOP_SYNC flag for a mods-only reinstall. Takes precedence. */
@@ -60,23 +57,17 @@ export function buildInstallSpec(
     env[k] = v;
   }
 
-  // Steam Workshop appid + central login for Workshop-enabled games (the egg's
-  // install script reads these to run `steamcmd +login … +workshop_download_item`).
+  // Steam Workshop appid + host game-download login for Workshop-enabled games.
+  // The egg's install script uses these for both +app_update and Workshop
+  // +workshop_download_item (one account, the host's — never a customer's).
   if (template.supportsWorkshop) {
     if (template.workshopAppId != null) {
       env.WORKSHOP_APP_ID = String(template.workshopAppId);
     }
-    // Host game-download account → base server files (app_update).
     if (opts.gameSteam?.username && opts.gameSteam.password) {
       env.STEAM_GAME_USERNAME = opts.gameSteam.username;
       env.STEAM_GAME_PASSWORD = opts.gameSteam.password;
       if (opts.gameSteam.guardCode) env.STEAM_GAME_GUARD = opts.gameSteam.guardCode;
-    }
-    // Customer account → Workshop mod downloads only.
-    if (opts.steam?.username && opts.steam.password) {
-      env.STEAM_USERNAME = opts.steam.username;
-      env.STEAM_PASSWORD = opts.steam.password;
-      if (opts.steam.guardCode) env.STEAM_GUARD_CODE = opts.steam.guardCode;
     }
   }
 

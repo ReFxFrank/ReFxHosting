@@ -655,6 +655,28 @@ async function syncVoiceEggs() {
   console.log(`  • Voice eggs synced: ${count}`);
 }
 
+/**
+ * One-time cleanup: the per-server *customer* Steam login was removed in favour
+ * of the host game-download account (Workshop mods download via the admin
+ * account). Null out any legacy stored credentials so no unused Steam secrets
+ * linger at rest. Idempotent — only touches rows that still have them.
+ */
+async function clearLegacySteamLogins() {
+  const res = await prisma.server.updateMany({
+    where: {
+      OR: [
+        { steamUsername: { not: null } },
+        { steamPasswordEnc: { not: null } },
+        { steamGuardCode: { not: null } },
+      ],
+    },
+    data: { steamUsername: null, steamPasswordEnc: null, steamGuardCode: null },
+  });
+  if (res.count) {
+    console.log(`  • Cleared legacy per-server Steam logins: ${res.count}`);
+  }
+}
+
 /** Read existing game categories into a { slug: id } map (no writes). */
 async function loadGameCategoryMap(): Promise<Record<string, string>> {
   const cats = await prisma.gameCategory.findMany({
@@ -889,6 +911,12 @@ async function main() {
     await syncVoiceEggs();
   } catch (e) {
     console.error('  ! voice egg sync failed:', (e as Error).message);
+  }
+
+  try {
+    await clearLegacySteamLogins();
+  } catch (e) {
+    console.error('  ! legacy steam-login cleanup failed:', (e as Error).message);
   }
 
   console.log('Seed complete.');

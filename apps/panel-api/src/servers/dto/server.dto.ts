@@ -305,28 +305,3 @@ export class ReorderWorkshopDto {
   @IsString({ each: true })
   ids!: string[];
 }
-
-export class SetSteamLoginDto {
-  @ApiProperty({ description: 'Your Steam account username.' })
-  @IsString()
-  username!: string;
-
-  @ApiProperty({ description: 'Your Steam account password (stored encrypted).' })
-  @IsString()
-  password!: string;
-
-  @ApiPropertyOptional({
-    description:
-      'One-time Steam Guard code, used on the next install/Apply for this server.',
-  })
-  @IsOptional()
-  @IsString()
-  steamGuardCode?: string;
-}
-
-export class ApplyWorkshopDto {
-  @ApiPropertyOptional({ description: 'One-time Steam Guard code for this install (if your account uses Steam Guard).' })
-  @IsOptional()
-  @IsString()
-  steamGuardCode?: string;
-}

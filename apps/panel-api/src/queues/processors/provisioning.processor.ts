@@ -48,31 +48,16 @@ export class ProvisioningProcessor extends WorkerHost {
     const sftpPassword = server.sftpPasswordEnc
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
-    // Host account downloads the game; the customer's account downloads mods.
+    // The HOST game-download account downloads the game AND any Workshop mods.
     const ws = server.template.supportsWorkshop;
     const steamCfg = ws ? await this.settings.steamConfig() : undefined;
     const gameSteam = steamCfg ? steamLogin(steamCfg) : undefined;
     if (gameSteam && steamCfg?.guardCode) gameSteam.guardCode = steamCfg.guardCode;
-    const steam =
-      ws && server.steamUsername && server.steamPasswordEnc
-        ? {
-            username: server.steamUsername,
-            password: this.crypto.decrypt(server.steamPasswordEnc),
-            guardCode: server.steamGuardCode ?? undefined,
-          }
-        : undefined;
     const spec: InstallSpec = buildInstallSpec(server, {
       wipe: true,
       sftpPassword,
-      steam,
       gameSteam,
     });
-    if (server.steamGuardCode) {
-      await this.prisma.server.update({
-        where: { id: serverId },
-        data: { steamGuardCode: null },
-      });
-    }
     if (gameSteam?.guardCode) await this.settings.consumeSteamGuardCode();
 
     try {

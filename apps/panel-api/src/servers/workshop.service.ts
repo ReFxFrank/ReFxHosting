@@ -7,7 +7,6 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { WorkshopKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CryptoService } from '../common/crypto/crypto.service';
 import { uuidv7 } from '../common/util/uuid';
 import { JOB, QUEUE, ReinstallJob } from '../queues/queue.constants';
 
@@ -17,60 +16,16 @@ import { JOB, QUEUE, ReinstallJob } from '../queues/queue.constants';
  * variables (consumed by the egg's startup/install) and reinstalls so steamcmd
  * fetches downloaded content and the new startup args take effect.
  *
- * Collection/item metadata (name + whether an id is a collection) is resolved
- * best-effort from Steam's public Web API; lookups never block adding an id.
+ * Mods are downloaded by the host game-download account (Admin → Settings →
+ * Steam); customers never supply Steam credentials. Collection/item metadata is
+ * resolved best-effort from Steam's public Web API; lookups never block adding.
  */
 @Injectable()
 export class WorkshopService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService,
     @InjectQueue(QUEUE.REINSTALL) private readonly reinstallQueue: Queue<ReinstallJob>,
   ) {}
-
-  // ---- Per-server Steam login (customer-owned) ---------------------------
-
-  /** Masked Steam-login status for the Workshop tab — never returns the password. */
-  async steamStatus(serverId: string): Promise<{ username: string; hasLogin: boolean }> {
-    const server = await this.loadServer(serverId);
-    return {
-      username: server.steamUsername ?? '',
-      hasLogin: !!(server.steamUsername && server.steamPasswordEnc),
-    };
-  }
-
-  /** Set the customer's own Steam login for this server (password encrypted). */
-  async setSteamLogin(
-    serverId: string,
-    dto: { username: string; password: string; steamGuardCode?: string },
-  ): Promise<{ username: string; hasLogin: boolean }> {
-    await this.loadServer(serverId);
-    const username = dto.username.trim();
-    if (!username || !dto.password) {
-      throw new BadRequestException('Enter your Steam username and password');
-    }
-    const guardCode = dto.steamGuardCode?.trim();
-    await this.prisma.server.update({
-      where: { id: serverId },
-      data: {
-        steamUsername: username,
-        steamPasswordEnc: this.crypto.encrypt(dto.password),
-        // A Guard code supplied here is staged for the next install/Apply (it's
-        // one-time and cleared once steamcmd has used it).
-        ...(guardCode ? { steamGuardCode: guardCode } : {}),
-      },
-    });
-    return { username, hasLogin: true };
-  }
-
-  /** Remove the customer's stored Steam login for this server. */
-  async clearSteamLogin(serverId: string): Promise<void> {
-    await this.loadServer(serverId);
-    await this.prisma.server.update({
-      where: { id: serverId },
-      data: { steamUsername: null, steamPasswordEnc: null },
-    });
-  }
 
   private async loadServer(serverId: string) {
     const server = await this.prisma.server.findFirst({
@@ -213,21 +168,9 @@ export class WorkshopService {
    * egg consumes, then reinstall (preserving data) so steamcmd downloads run and
    * the new startup args take effect.
    */
-  async apply(
-    serverId: string,
-    opts: { steamGuardCode?: string } = {},
-  ): Promise<{ accepted: true }> {
-    const server = await this.loadServer(serverId);
+  async apply(serverId: string): Promise<{ accepted: true }> {
+    await this.loadServer(serverId);
 
-    // Stash a one-time Steam Guard code for this install (consumed + cleared by
-    // the reinstall job). Only meaningful with a per-server login set.
-    const guardCode = opts.steamGuardCode?.trim();
-    if (guardCode) {
-      await this.prisma.server.update({
-        where: { id: serverId },
-        data: { steamGuardCode: guardCode },
-      });
-    }
     const mods = await this.prisma.workshopMod.findMany({
       where: { serverId, enabled: true },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],

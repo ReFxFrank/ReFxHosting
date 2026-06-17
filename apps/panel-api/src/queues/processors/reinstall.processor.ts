@@ -52,37 +52,21 @@ export class ReinstallProcessor extends WorkerHost {
     const sftpPassword = server.sftpPasswordEnc
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
-    // Two Steam logins for Workshop games: the HOST's account downloads the game
-    // (admin → Settings → Steam), the CUSTOMER's own account downloads mods.
+    // The HOST game-download account (admin → Settings → Steam) downloads both
+    // the game and any Workshop mods — customers never supply Steam credentials.
     const ws = server.template.supportsWorkshop;
     const steamCfg = ws ? await this.settings.steamConfig() : undefined;
     const gameSteam = steamCfg ? steamLogin(steamCfg) : undefined;
     if (gameSteam && steamCfg?.guardCode) gameSteam.guardCode = steamCfg.guardCode;
-    const steam =
-      ws && server.steamUsername && server.steamPasswordEnc
-        ? {
-            username: server.steamUsername,
-            password: this.crypto.decrypt(server.steamPasswordEnc),
-            guardCode: server.steamGuardCode ?? undefined,
-          }
-        : undefined;
     const spec = buildInstallSpec(server, {
       wipe: !preserveData,
       sftpPassword,
-      steam,
       gameSteam,
       // Mods-only Workshop sync: the egg skips re-validating the base game.
       extraEnv: workshopSync ? { REFX_WORKSHOP_SYNC: '1' } : undefined,
     });
-    // One-time codes: clear them now they're baked into this install spec — the
-    // per-server (mods) code on the server row and the central (game) code in
-    // settings. Steam remembers the machine via its sentry file after first use.
-    if (server.steamGuardCode) {
-      await this.prisma.server.update({
-        where: { id: serverId },
-        data: { steamGuardCode: null },
-      });
-    }
+    // One-time game-download Guard code: clear it now it's baked into the spec
+    // (Steam remembers the node via its sentry file after first use).
     if (gameSteam?.guardCode) await this.settings.consumeSteamGuardCode();
 
     try {

@@ -477,26 +477,8 @@ export const api = {
       http.patch<WorkshopMod[]>(`/servers/${id}/workshop/reorder`, { ids }),
     workshopRemove: (id: string, modId: string) =>
       http.delete<void>(`/servers/${id}/workshop/${modId}`),
-    workshopApply: (id: string, steamGuardCode?: string) =>
-      http.post<{ accepted: true }>(`/servers/${id}/workshop/apply`, {
-        ...(steamGuardCode ? { steamGuardCode } : {}),
-      }),
-    // The customer's own Steam login for this server's Workshop downloads.
-    workshopSteam: (id: string) =>
-      http.get<{ username: string; hasLogin: boolean }>(`/servers/${id}/workshop/steam`),
-    workshopSetSteam: (
-      id: string,
-      username: string,
-      password: string,
-      steamGuardCode?: string,
-    ) =>
-      http.put<{ username: string; hasLogin: boolean }>(`/servers/${id}/workshop/steam`, {
-        username,
-        password,
-        ...(steamGuardCode ? { steamGuardCode } : {}),
-      }),
-    workshopClearSteam: (id: string) =>
-      http.delete<void>(`/servers/${id}/workshop/steam`),
+    workshopApply: (id: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/workshop/apply`, {}),
 
     // Voice (TeamSpeak) — connection details + first-boot ServerQuery admin creds.
     voice: (id: string) => http.get<VoiceInfo>(`/servers/${id}/voice`),
