@@ -7,10 +7,30 @@ import {
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { JOB, ModpackInstallJob, QUEUE } from '../queues/queue.constants';
+import {
+  JOB,
+  ModpackInstallJob,
+  ModpackUninstallJob,
+  QUEUE,
+} from '../queues/queue.constants';
 import { ModrinthService } from './modrinth.service';
+import { NodeAgentClient } from '../agent/agent.client';
 
 const STOPPED = ['OFFLINE', 'CRASHED', 'STOPPED', 'INSTALLED', 'CREATED'];
+const MODPACK_MARKER = '.refx-modpack.json';
+
+/** What the Modpacks tab shows for the currently-installed pack (marker file). */
+export interface InstalledModpack {
+  projectId?: string;
+  versionId?: string;
+  title?: string;
+  versionNumber?: string;
+  mcVersion?: string;
+  loader?: string;
+  loaderVersion?: string;
+  filesInstalled?: number;
+  installedAt?: string;
+}
 
 /**
  * Modrinth modpack browser + installer. Search/version listing are synchronous
@@ -22,6 +42,7 @@ export class ModpackService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly modrinth: ModrinthService,
+    private readonly agent: NodeAgentClient,
     @InjectQueue(QUEUE.MODPACK) private readonly modpackQueue: Queue,
   ) {}
 
@@ -29,7 +50,7 @@ export class ModpackService {
   private async loadServer(serverId: string) {
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
-      include: { template: true },
+      include: { template: true, node: true },
     });
     if (!server) throw new NotFoundException('Server not found');
     const slug = server.template?.slug ?? '';
@@ -82,6 +103,46 @@ export class ModpackService {
     await this.modpackQueue.add(
       JOB.INSTALL_MODPACK,
       { serverId, versionId, title } satisfies ModpackInstallJob,
+      { attempts: 1, removeOnComplete: 50, removeOnFail: 50 },
+    );
+    return { accepted: true };
+  }
+
+  /**
+   * The modpack currently installed on this server (read from the marker the
+   * installer writes to the data dir), or null if none. Never throws on a missing
+   * marker / unreachable node — the tab just shows "no modpack installed".
+   */
+  async installed(serverId: string): Promise<{ installed: InstalledModpack | null }> {
+    const server = await this.loadServer(serverId);
+    try {
+      const { content } = await this.agent.readFile(
+        server.node,
+        server.id,
+        MODPACK_MARKER,
+      );
+      return { installed: JSON.parse(content) as InstalledModpack };
+    } catch {
+      return { installed: null };
+    }
+  }
+
+  /** Queue a modpack uninstall (clears mods + the marker) in the background. */
+  async uninstall(serverId: string): Promise<{ accepted: true }> {
+    const server = await this.loadServer(serverId);
+    if (!STOPPED.includes(server.state) && server.state !== 'RUNNING') {
+      throw new ConflictException(
+        `Cannot uninstall a modpack while the server is ${server.state}`,
+      );
+    }
+    const { installed } = await this.installed(serverId);
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { state: 'REINSTALLING' },
+    });
+    await this.modpackQueue.add(
+      JOB.UNINSTALL_MODPACK,
+      { serverId, title: installed?.title } satisfies ModpackUninstallJob,
       { attempts: 1, removeOnComplete: 50, removeOnFail: 50 },
     );
     return { accepted: true };

@@ -235,11 +235,24 @@ export class ServersController {
     return this.modpacks.versions(id, projectId);
   }
 
+  @Get(':id/modpacks/installed')
+  @RequirePermissions('files.read')
+  modpacksInstalled(@Param('id') id: string) {
+    return this.modpacks.installed(id);
+  }
+
   @Post(':id/modpacks/install')
   @RequirePermissions('control.reinstall')
   @Audit({ action: 'server.modpack.install', targetType: 'Server', targetParam: 'id' })
   modpacksInstall(@Param('id') id: string, @Body() dto: ModpackInstallDto) {
     return this.modpacks.install(id, dto.versionId);
+  }
+
+  @Post(':id/modpacks/uninstall')
+  @RequirePermissions('control.reinstall')
+  @Audit({ action: 'server.modpack.uninstall', targetType: 'Server', targetParam: 'id' })
+  modpacksUninstall(@Param('id') id: string) {
+    return this.modpacks.uninstall(id);
   }
 
   // ---- Steam Workshop ----------------------------------------------------

@@ -34,6 +34,7 @@ export interface ModrinthFile {
 
 export interface ModrinthVersion {
   id: string;
+  projectId: string;
   name: string;
   versionNumber: string;
   gameVersions: string[];
@@ -148,6 +149,7 @@ export class ModrinthService {
   private mapVersion(v: any): ModrinthVersion {
     return {
       id: v.id,
+      projectId: v.project_id,
       name: v.name,
       versionNumber: v.version_number,
       gameVersions: v.game_versions ?? [],

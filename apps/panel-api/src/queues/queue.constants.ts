@@ -56,6 +56,12 @@ export interface ModpackInstallJob {
   title?: string;
 }
 
+export interface ModpackUninstallJob {
+  serverId: string;
+  /** Display title for notifications. */
+  title?: string;
+}
+
 export const JOB = {
   PROVISION: 'provision',
   REINSTALL: 'reinstall',
@@ -64,4 +70,5 @@ export const JOB = {
   DUNNING: 'dunning',
   SUSPEND: 'suspend',
   INSTALL_MODPACK: 'install-modpack',
+  UNINSTALL_MODPACK: 'uninstall-modpack',
 } as const;

@@ -49,6 +49,7 @@ import type {
   HomepageAlert,
   ModrinthProject,
   ModrinthVersion,
+  InstalledModpack,
   AdminUserDetail,
   AdminCustomer,
   AdminInvoice,
@@ -412,6 +413,12 @@ export const api = {
         }),
       install: (id: string, versionId: string) =>
         http.post<{ accepted: true }>(`/servers/${id}/modpacks/install`, { versionId }),
+      installed: (id: string) =>
+        http.get<{ installed: InstalledModpack | null }>(
+          `/servers/${id}/modpacks/installed`,
+        ),
+      uninstall: (id: string) =>
+        http.post<{ accepted: true }>(`/servers/${id}/modpacks/uninstall`),
     },
     sftp: (id: string) =>
       http.get<{ host: string; port: number; username: string }>(`/servers/${id}/sftp`),

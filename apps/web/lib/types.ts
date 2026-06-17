@@ -521,6 +521,7 @@ export interface ModrinthProject {
 
 export interface ModrinthVersion {
   id: string;
+  projectId: string;
   name: string;
   versionNumber: string;
   gameVersions: string[];
@@ -528,6 +529,19 @@ export interface ModrinthVersion {
   datePublished: string;
   downloads: number;
   files: { url: string; filename: string; size: number; primary: boolean }[];
+}
+
+/** The modpack currently installed on a server (from its marker file). */
+export interface InstalledModpack {
+  projectId?: string;
+  versionId?: string;
+  title?: string;
+  versionNumber?: string;
+  mcVersion?: string;
+  loader?: string;
+  loaderVersion?: string;
+  filesInstalled?: number;
+  installedAt?: string;
 }
 
 export type HomepageAlertType = "INFO" | "SUCCESS" | "WARNING" | "DANGER" | "PROMO";

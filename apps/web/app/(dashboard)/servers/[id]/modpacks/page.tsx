@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   Download,
-  Boxes,
   ArrowDownToLine,
   ExternalLink,
   AlertTriangle,
+  Package,
+  Trash2,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
@@ -22,12 +23,13 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import { formatDate } from "@/lib/utils";
-import type { ModrinthProject } from "@/lib/types";
+import type { ModrinthProject, InstalledModpack } from "@/lib/types";
 
 function formatCount(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -44,6 +46,15 @@ export default function ModpacksPage() {
   const search = useQuery({
     queryKey: ["server", id, "modpacks", "search", query],
     queryFn: () => api.servers.modpacks.search(id, query),
+    retry: false,
+  });
+
+  // What's currently installed (null when none). Only meaningful once the server
+  // is a unified Minecraft egg, so skip it if the search endpoint rejected it.
+  const installed = useQuery({
+    queryKey: ["server", id, "modpacks", "installed"],
+    queryFn: () => api.servers.modpacks.installed(id),
+    enabled: !search.isError,
     retry: false,
   });
 
@@ -79,6 +90,10 @@ export default function ModpacksPage() {
           get a notification when it&apos;s done.
         </p>
       </div>
+
+      {installed.data?.installed && (
+        <InstalledCard serverId={id} pack={installed.data.installed} />
+      )}
 
       <form
         onSubmit={(e) => {
@@ -155,6 +170,105 @@ export default function ModpacksPage() {
   );
 }
 
+function InstalledCard({
+  serverId,
+  pack,
+}: {
+  serverId: string;
+  pack: InstalledModpack;
+}) {
+  const queryClient = useQueryClient();
+  const [confirm, setConfirm] = useState(false);
+
+  const uninstall = useMutation({
+    mutationFn: () => api.servers.modpacks.uninstall(serverId),
+    onSuccess: () => {
+      toast.success("Uninstalling modpack — watch your notifications.");
+      setConfirm(false);
+      queryClient.invalidateQueries({
+        queryKey: ["server", serverId, "modpacks", "installed"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["server", serverId] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Uninstall failed"),
+  });
+
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <CardContent className="flex flex-wrap items-center gap-4 p-4">
+        <Package className="size-8 shrink-0 text-primary" />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="font-semibold">Installed: {pack.title ?? "Modpack"}</p>
+            {pack.projectId && (
+              <a
+                href={`https://modrinth.com/modpack/${pack.projectId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLink className="size-3" /> Modrinth
+              </a>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+            {pack.versionNumber && (
+              <Badge variant="muted" className="text-[10px]">{pack.versionNumber}</Badge>
+            )}
+            {pack.mcVersion && (
+              <Badge variant="muted" className="text-[10px]">MC {pack.mcVersion}</Badge>
+            )}
+            {pack.loader && (
+              <Badge variant="secondary" className="text-[10px] capitalize">{pack.loader}</Badge>
+            )}
+            {typeof pack.filesInstalled === "number" && (
+              <span className="ml-1">{pack.filesInstalled} files</span>
+            )}
+            {pack.installedAt && (
+              <span className="ml-1">· installed {formatDate(pack.installedAt)}</span>
+            )}
+          </div>
+        </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => setConfirm(true)}
+          disabled={uninstall.isPending}
+        >
+          <Trash2 className="size-4" /> Uninstall
+        </Button>
+      </CardContent>
+
+      <Dialog open={confirm} onOpenChange={setConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Uninstall {pack.title ?? "modpack"}?</DialogTitle>
+            <DialogDescription>
+              This clears the pack&apos;s mods from the server. Your world is kept, and
+              the current loader/version stay as-is — switch to vanilla from the
+              Minecraft tab if you want a clean server. Config files the pack added
+              may remain.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={uninstall.isPending}
+              onClick={() => uninstall.mutate()}
+            >
+              Uninstall
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </Card>
+  );
+}
+
 function VersionPicker({
   serverId,
   project,
@@ -171,11 +285,22 @@ function VersionPicker({
     enabled: open,
   });
 
+  const queryClient = useQueryClient();
   const install = useMutation({
     mutationFn: (versionId: string) => api.servers.modpacks.install(serverId, versionId),
     onSuccess: () => {
       toast.success("Modpack install started — watch your notifications.");
       onClose();
+      // The install runs in the background; refresh once it's likely done so the
+      // "installed" card and server state reflect it without a manual reload.
+      queryClient.invalidateQueries({ queryKey: ["server", serverId] });
+      setTimeout(
+        () =>
+          queryClient.invalidateQueries({
+            queryKey: ["server", serverId, "modpacks", "installed"],
+          }),
+        8000,
+      );
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Install failed"),
   });
