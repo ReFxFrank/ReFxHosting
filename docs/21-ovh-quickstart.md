@@ -274,10 +274,46 @@ On a 2×NVMe box choose **RAID-1** at OVH install time for customer-data safety
 cd ~/refxhosting && bash infra/scripts/update-panel.sh
 ```
 
-**Update a node agent**:
+### Node operations
+
+The node fleet (each is a separate OVH box you SSH into by name):
+
+| Node hostname | Region | Role |
+|---------------|--------|------|
+| `refx-ca-east-bhs` | Canada East — OVH Beauharnois (BHS) | game + voice |
+| `refx-us-east-va`  | US East — OVH Vint Hill, VA (VIN)   | game + voice |
+
+The agent runs as the **`refx-agent`** systemd service on every node, so the
+commands below are identical on each — you just SSH into the box you want first.
+Run them as your admin user (`ubuntu`); they use `sudo` where needed.
+
+**On `refx-ca-east-bhs`:**
 ```bash
-cd ~/refxhosting && bash infra/scripts/update-agent.sh   # on the node
+ssh ubuntu@refx-ca-east-bhs            # or its IP
+sudo systemctl restart refx-agent      # restart the agent (running servers re-attach)
+sudo systemctl status refx-agent       # is it active?
+sudo journalctl -u refx-agent -f       # live logs (Ctrl-C to exit)
+cd /opt/refxhosting && bash infra/scripts/update-agent.sh   # update: rebuild + restart
+sudo reboot                            # full box reboot (rarely needed)
 ```
+
+**On `refx-us-east-va`:**
+```bash
+ssh ubuntu@refx-us-east-va             # or its IP
+sudo systemctl restart refx-agent
+sudo systemctl status refx-agent
+sudo journalctl -u refx-agent -f
+cd /opt/refxhosting && bash infra/scripts/update-agent.sh
+sudo reboot
+```
+
+No-SSH option: **Admin → Nodes → (node) → Restart agent** does the agent restart
+from the panel, and **Clear Steam cache** wipes that node's cached steamcmd
+sessions. Restarting the agent never stops running game servers — they keep
+running and re-attach automatically.
+
+Other service controls (same on any node): `sudo systemctl stop refx-agent`,
+`start`, `sudo systemctl is-enabled refx-agent` (confirms auto-start on boot).
 
 **Backups (do this before you have real customers):**
 - DB: `docker compose -f infra/docker/docker-compose.yml exec postgres pg_dump -U refx refx | gzip > refx-$(date +%F).sql.gz` on a cron, shipped off-box.
