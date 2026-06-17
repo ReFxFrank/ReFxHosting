@@ -43,6 +43,11 @@ type DockerRuntime struct {
 	log     zerolog.Logger
 	cli     *client.Client
 	network string
+	// steamHome is a node-level directory bind-mounted into install containers at
+	// /mnt/steamhome. The host game-download Steam account writes its machine-auth
+	// (sentry) here, so a Steam Guard code is only needed once per node rather than
+	// once per server. Empty disables the mount.
+	steamHome string
 }
 
 // containerLabel marks containers managed by this agent.
@@ -53,7 +58,7 @@ const (
 
 // NewDockerRuntime constructs a DockerRuntime. host may be empty to honour the
 // DOCKER_HOST environment / default socket.
-func NewDockerRuntime(log zerolog.Logger, host, dockerNetwork string) (*DockerRuntime, error) {
+func NewDockerRuntime(log zerolog.Logger, host, dockerNetwork, steamHome string) (*DockerRuntime, error) {
 	opts := []client.Opt{client.FromEnv, client.WithAPIVersionNegotiation()}
 	if host != "" {
 		opts = append(opts, client.WithHost(host))
@@ -66,11 +71,16 @@ func NewDockerRuntime(log zerolog.Logger, host, dockerNetwork string) (*DockerRu
 		dockerNetwork = "refx0"
 	}
 	return &DockerRuntime{
-		log:     log.With().Str("runtime", "docker").Logger(),
-		cli:     cli,
-		network: dockerNetwork,
+		log:       log.With().Str("runtime", "docker").Logger(),
+		cli:       cli,
+		network:   dockerNetwork,
+		steamHome: steamHome,
 	}, nil
 }
+
+// containerSteamHome is where the node-level Steam home is mounted inside install
+// containers; eggs read REFX_NODE_STEAM_HOME to find it.
+const containerSteamHome = "/mnt/steamhome"
 
 // Name implements Runtime.
 func (d *DockerRuntime) Name() string { return "docker" }
@@ -164,11 +174,19 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 	if entry == "" {
 		entry = "/bin/sh"
 	}
+	env := envSlice(s.Spec.Env)
+	mounts := []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/mnt/server"}}
+	// Node-level Steam home: lets the host game-download account's Steam Guard
+	// machine-auth persist across servers (once per node, not once per server).
+	if steamHome := d.ensureSteamHome(); steamHome != "" {
+		mounts = append(mounts, mount.Mount{Type: mount.TypeBind, Source: steamHome, Target: containerSteamHome})
+		env = append(env, "REFX_NODE_STEAM_HOME="+containerSteamHome)
+	}
 	cfg := &container.Config{
 		Image:      image,
 		Entrypoint: strings.Fields(entry),
 		Cmd:        []string{"-c", s.Spec.Install.Script},
-		Env:        envSlice(s.Spec.Env),
+		Env:        env,
 		WorkingDir: "/mnt/server",
 		Labels:     map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
@@ -176,7 +194,7 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 	// runs, so `cd /mnt/server` / writes succeed without running as root.
 	d.prepareDataDir(ctx, s, image)
 	host := &container.HostConfig{
-		Mounts: []mount.Mount{{Type: mount.TypeBind, Source: s.DataDir, Target: "/mnt/server"}},
+		Mounts: mounts,
 		// NOTE: deliberately NOT AutoRemove. With auto-remove the daemon deletes
 		// the container the instant it exits, which races ContainerWait and yields
 		// "No such container" — spuriously failing a successful install. We remove
@@ -258,6 +276,26 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 		NetworkMode:   container.NetworkMode(d.network),
 	}
 	return host, ports, bindings
+}
+
+// ensureSteamHome creates the node-level Steam home directory (owned by the
+// non-root container user so steamcmd can write its sentry) and returns its host
+// path, or "" when not configured / not creatable. Best-effort.
+func (d *DockerRuntime) ensureSteamHome() string {
+	if d.steamHome == "" {
+		return ""
+	}
+	if err := os.MkdirAll(d.steamHome, 0o750); err != nil {
+		d.log.Warn().Err(err).Str("dir", d.steamHome).Msg("create steam home failed")
+		return ""
+	}
+	// On Linux the agent (root) can chown so the non-root install user can write.
+	if goruntime.GOOS != "windows" {
+		if err := chownTree(d.steamHome, containerUID, containerGID); err != nil {
+			d.log.Warn().Err(err).Str("dir", d.steamHome).Msg("chown steam home failed")
+		}
+	}
+	return d.steamHome
 }
 
 // prepareDataDir makes a server's data dir owned by the non-root container user

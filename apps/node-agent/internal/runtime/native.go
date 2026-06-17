@@ -30,6 +30,10 @@ import (
 // Both satisfy the limiter interface defined in limits.go.
 type NativeRuntime struct {
 	log zerolog.Logger
+	// steamHome is a node-level directory exported to install scripts as
+	// REFX_NODE_STEAM_HOME so the host game-download account's Steam Guard
+	// machine-auth persists across servers (once per node). Empty disables it.
+	steamHome string
 
 	mu        sync.Mutex
 	processes map[string]*nativeProcess // keyed by server id
@@ -50,9 +54,10 @@ type nativeProcess struct {
 }
 
 // NewNativeRuntime constructs the native backend.
-func NewNativeRuntime(log zerolog.Logger) *NativeRuntime {
+func NewNativeRuntime(log zerolog.Logger, steamHome string) *NativeRuntime {
 	return &NativeRuntime{
 		log:       log.With().Str("runtime", "native").Logger(),
+		steamHome: steamHome,
 		processes: make(map[string]*nativeProcess),
 	}
 }
@@ -119,7 +124,20 @@ func (n *NativeRuntime) runSteamCMD(ctx context.Context, s *server.Server, ch ch
 // runInstallScript executes the template install script via the platform shell.
 func (n *NativeRuntime) runInstallScript(ctx context.Context, s *server.Server, script string, ch chan<- InstallProgress) error {
 	shell, flag := osabstraction.Shell()
-	return n.runCommand(ctx, shell, []string{flag, script}, s.DataDir, s.Spec.Env, ch)
+	env := s.Spec.Env
+	// Node-level Steam home for the host game-download account (once per node).
+	if n.steamHome != "" {
+		if err := os.MkdirAll(n.steamHome, 0o750); err != nil {
+			n.log.Warn().Err(err).Str("dir", n.steamHome).Msg("create steam home failed")
+		} else {
+			env = make(map[string]string, len(s.Spec.Env)+1)
+			for k, v := range s.Spec.Env {
+				env[k] = v
+			}
+			env["REFX_NODE_STEAM_HOME"] = n.steamHome
+		}
+	}
+	return n.runCommand(ctx, shell, []string{flag, script}, s.DataDir, env, ch)
 }
 
 // runCommand runs a one-shot command, streaming combined output to ch.

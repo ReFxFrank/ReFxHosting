@@ -247,16 +247,20 @@ func applyAssignedServers(log zerolog.Logger, mgr *runtime.Manager, auth *sftp.M
 // host. Docker is wired only when an engine is reachable; native is always
 // available; the Windows container backend is a skeleton.
 func buildManager(log zerolog.Logger, cfg *config.Config, caps osabstraction.Capabilities) (*runtime.Manager, *runtime.DockerRuntime) {
+	// Node-level Steam home: shared across servers so the host game-download
+	// account's Steam Guard machine-auth (sentry) only needs a code once per node.
+	steamHome := filepath.Join(cfg.DataDir, "steam-home")
+
 	var dockerRT *runtime.DockerRuntime
 	if caps.DockerAvailable || cfg.Runtime.Docker.Host != "" {
-		if d, err := runtime.NewDockerRuntime(log, cfg.Runtime.Docker.Host, cfg.Runtime.Docker.Network); err == nil {
+		if d, err := runtime.NewDockerRuntime(log, cfg.Runtime.Docker.Host, cfg.Runtime.Docker.Network, steamHome); err == nil {
 			dockerRT = d
 		} else {
 			log.Warn().Err(err).Msg("docker runtime unavailable")
 		}
 	}
 
-	native := runtime.NewNativeRuntime(log)
+	native := runtime.NewNativeRuntime(log, steamHome)
 	winc := runtime.NewWindowsContainerRuntime(log)
 
 	opts := runtime.Options{
