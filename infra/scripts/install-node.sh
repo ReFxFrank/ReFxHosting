@@ -129,7 +129,11 @@ if curl -fsSL "${DL_URL}.sha256" -o "${TMP}.sha256" 2>/dev/null; then
     || die "Checksum verification failed."
   log "Checksum verified."
 fi
-install -m 0755 "$TMP" "${INSTALL_DIR}/refx-agent"
+# Install the binary into the data dir (owned by the non-root run user) so the
+# agent can self-update in place (download → swap → re-exec) without root. Also
+# symlink it onto PATH for convenience.
+install -o "$RUN_USER" -g "$RUN_USER" -m 0755 "$TMP" "${DATA_DIR}/refx-agent"
+ln -sfn "${DATA_DIR}/refx-agent" "${INSTALL_DIR}/refx-agent"
 rm -f "$TMP" "${TMP}.sha256"
 
 # ---- write config -----------------------------------------------------------
