@@ -130,7 +130,23 @@ func (s *Server) handleAgentUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "chmod: "+err.Error())
 		return
 	}
-	if err := os.Rename(tmp, self); err != nil {
+	if goruntime.GOOS == "windows" {
+		// A running .exe is locked on Windows: you can't overwrite it, but you can
+		// rename it. Move the live binary aside, then drop the new one in its place;
+		// the old file is freed once this process exits on re-exec.
+		old := self + ".old"
+		_ = os.Remove(old) // clear a leftover from a previous update (now unlocked)
+		if err := os.Rename(self, old); err != nil {
+			_ = os.Remove(tmp)
+			writeError(w, http.StatusInternalServerError, "move running binary: "+err.Error())
+			return
+		}
+		if err := os.Rename(tmp, self); err != nil {
+			_ = os.Rename(old, self) // roll back
+			writeError(w, http.StatusInternalServerError, "swap binary: "+err.Error())
+			return
+		}
+	} else if err := os.Rename(tmp, self); err != nil {
 		_ = os.Remove(tmp)
 		writeError(w, http.StatusInternalServerError, "swap binary: "+err.Error())
 		return

@@ -46,6 +46,11 @@ func main() {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Launched by the Windows SCM? Run under the service control
+			// dispatcher (handles Start/Stop) instead of the console path.
+			if isWindowsService() {
+				return runWindowsService(cfgPath)
+			}
 			return run(cmd.Context(), cfgPath)
 		},
 	}
