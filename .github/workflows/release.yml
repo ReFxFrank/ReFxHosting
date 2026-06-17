@@ -115,6 +115,10 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           path: artifacts
+          # Only the agent binaries. docker/build-push-action also uploads
+          # "*.dockerbuild" build-record artifacts; downloading those is flaky
+          # (it fails the whole step) and they don't belong on the release.
+          pattern: agent-*
           merge-multiple: true
       - uses: softprops/action-gh-release@v3
         with:
