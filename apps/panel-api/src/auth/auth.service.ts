@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -19,6 +20,9 @@ import { LoginDto, RegisterDto, TokenResponseDto } from './dto/auth.dto';
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+// Total distinct passwords blocked from reuse (current + recent history). Small
+// and fixed so storage AND the per-change argon2-verify loop stay bounded.
+const PASSWORD_HISTORY_DEPTH = 5;
 // Grace window in which a just-rotated refresh token may be presented again
 // (e.g. a second browser tab refreshing concurrently) without tripping
 // reuse-detection. Long enough for slow tabs/networks, short enough to bound a
@@ -40,6 +44,8 @@ const ARGON_OPTS = {
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
@@ -511,16 +517,16 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired reset token');
     }
 
-    // Don't allow reusing the current password (defence in depth).
+    // Don't allow reusing the current or a recent past password.
     const current = await this.prisma.user.findUnique({
       where: { id: record.userId },
       select: { passwordHash: true },
     });
-    if (current?.passwordHash && (await argon2.verify(current.passwordHash, newPassword))) {
-      throw new BadRequestException(
-        "Please choose a password you haven't used before.",
-      );
-    }
+    await this.assertPasswordNotReused(
+      record.userId,
+      current?.passwordHash,
+      newPassword,
+    );
 
     await this.prisma.$transaction([
       this.prisma.user.update({
@@ -538,6 +544,75 @@ export class AuthService {
         data: { revokedAt: new Date() },
       }),
     ]);
+
+    // Remember the just-replaced password so it can't be reused later.
+    await this.recordPasswordHistory(record.userId, current?.passwordHash);
+  }
+
+  /**
+   * Reject a new password that matches the current one OR any of the recent
+   * history entries (up to PASSWORD_HISTORY_DEPTH total). Only argon2 hashes are
+   * compared — never plaintext — and the candidate set is capped, so the verify
+   * loop is bounded (no DoS). A malformed history row can never break the flow.
+   */
+  private async assertPasswordNotReused(
+    userId: string,
+    currentHash: string | null | undefined,
+    newPassword: string,
+  ): Promise<void> {
+    const history = await this.prisma.passwordHistory.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: PASSWORD_HISTORY_DEPTH - 1,
+      select: { passwordHash: true },
+    });
+    const hashes = [currentHash, ...history.map((h) => h.passwordHash)].filter(
+      (h): h is string => Boolean(h),
+    );
+    for (const hash of hashes) {
+      try {
+        if (await argon2.verify(hash, newPassword)) {
+          throw new BadRequestException(
+            "Please choose a password you haven't used before.",
+          );
+        }
+      } catch (err) {
+        if (err instanceof BadRequestException) throw err;
+        // A non-verify error (e.g. a malformed stored hash) must not block the
+        // user from setting a password — skip that entry.
+      }
+    }
+  }
+
+  /**
+   * Append a now-replaced password hash to the user's history and prune to the
+   * newest PASSWORD_HISTORY_DEPTH - 1 entries (the current password lives on the
+   * User row and counts as the most recent). Best-effort: a failure here never
+   * fails the password change itself.
+   */
+  private async recordPasswordHistory(
+    userId: string,
+    oldHash: string | null | undefined,
+  ): Promise<void> {
+    if (!oldHash) return;
+    try {
+      await this.prisma.passwordHistory.create({
+        data: { id: uuidv7(), userId, passwordHash: oldHash },
+      });
+      const keep = await this.prisma.passwordHistory.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: PASSWORD_HISTORY_DEPTH - 1,
+        select: { id: true },
+      });
+      await this.prisma.passwordHistory.deleteMany({
+        where: { userId, id: { notIn: keep.map((k) => k.id) } },
+      });
+    } catch (err) {
+      this.logger.warn(
+        `password history record failed for ${userId}: ${(err as Error).message}`,
+      );
+    }
   }
 
   /**
@@ -617,17 +692,15 @@ export class AuthService {
     const ok = await argon2.verify(user.passwordHash, currentPassword);
     if (!ok) throw new BadRequestException('Current password is incorrect');
 
-    // New password must differ from the current one.
-    if (await argon2.verify(user.passwordHash, newPassword)) {
-      throw new BadRequestException(
-        'Your new password must be different from your current one.',
-      );
-    }
+    // New password must differ from the current one AND recent past ones.
+    await this.assertPasswordNotReused(userId, user.passwordHash, newPassword);
 
     await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash: await argon2.hash(newPassword, ARGON_OPTS) },
     });
+    // Remember the just-replaced password so it can't be reused later.
+    await this.recordPasswordHistory(userId, user.passwordHash);
 
     // Revoke all other sessions for safety; keep the current one if known.
     await this.prisma.session.updateMany({

@@ -46,6 +46,11 @@ describe('AuthService hardening', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         update: jest.fn().mockResolvedValue({}),
       },
+      passwordHistory: {
+        findMany: jest.fn().mockResolvedValue([]),
+        create: jest.fn().mockResolvedValue({}),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       $transaction: jest.fn(async (arr: Promise<unknown>[]) => Promise.all(arr)),
     };
 
@@ -147,6 +152,24 @@ describe('AuthService hardening', () => {
         where: { userId: USER_ID, revokedAt: null },
         data: { revokedAt: expect.any(Date) },
       });
+    });
+
+    it('rejects reusing a recent password from history', async () => {
+      prisma.passwordResetToken.findUnique.mockResolvedValue({
+        id: 'tok-1',
+        userId: USER_ID,
+        tokenHash: 'hash(RAW-RANDOM-TOKEN)',
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      const oldHash = await argon2.hash('Old-Passw0rd!');
+      prisma.passwordHistory.findMany.mockResolvedValue([{ passwordHash: oldHash }]);
+
+      await expect(
+        service.resetPassword('RAW-RANDOM-TOKEN', 'Old-Passw0rd!'),
+      ).rejects.toThrow(/used before/i);
+      // Password is NOT changed when the candidate matches a past password.
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
 
     it('rejects an expired token', async () => {

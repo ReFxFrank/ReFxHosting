@@ -86,6 +86,7 @@ model User {
   recoveryCodes     RecoveryCode[]
   passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  passwordHistory         PasswordHistory[]
 
   // Relations
   ownedServers      Server[]    @relation("ServerOwner")
@@ -196,6 +197,20 @@ model EmailVerificationToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+// Argon2id hashes of a user's RECENT past passwords, so a reset/change can
+// refuse to reuse one. Only hashes are stored (never plaintext) — same
+// sensitivity as User.passwordHash — and the app prunes to the last few rows
+// per user, which bounds both storage and the (cost-bearing) verify loop.
+model PasswordHistory {
+  id           String   @id @db.Uuid
+  userId       String   @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  passwordHash String // Argon2id PHC string of a previously-used password
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 enum ApiKeyScope {
