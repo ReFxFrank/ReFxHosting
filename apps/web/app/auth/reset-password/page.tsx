@@ -74,10 +74,12 @@ function ResetPassword() {
       setStatus("done");
       setTimeout(() => router.replace("/login"), 3500);
     } catch (e) {
-      // A token consumed/expired between open and submit, or a reused password.
       const msg =
-        e instanceof ApiError ? e.message : "This reset link is invalid or has expired.";
-      if (/expired|invalid|used/i.test(msg)) setStatus("invalid");
+        e instanceof ApiError ? e.message : "Something went wrong — please try again.";
+      // Only treat it as a dead link when the TOKEN is the problem. A rejected
+      // password (reused / too weak) does NOT consume the token, so keep the user
+      // on the form to pick a different one instead of falsely showing "invalid".
+      if (/token/i.test(msg)) setStatus("invalid");
       toast.error(msg);
     } finally {
       setSubmitting(false);
