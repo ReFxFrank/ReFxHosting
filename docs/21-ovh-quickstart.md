@@ -276,6 +276,12 @@ cd ~/refxhosting && bash infra/scripts/update-panel.sh
 
 ### Node operations
 
+> **Game node ≠ panel box — don't mix them up.** A game node runs **only** the
+> `refx-agent` service + game/voice Docker containers. There is **no
+> `docker compose` / panel stack on a node** — you manage it with `systemctl`,
+> not `docker compose`. The panel (web/API/Postgres/Redis) lives on a **separate
+> VPS**; `docker compose …` commands belong there, not on a node.
+
 The node fleet (each is a separate OVH box you SSH into by name):
 
 | Node hostname | Region | Role |
@@ -283,14 +289,25 @@ The node fleet (each is a separate OVH box you SSH into by name):
 | `refx-ca-east-bhs` | Canada East — OVH Beauharnois (BHS) | game + voice |
 | `refx-us-east-va`  | US East — OVH Vint Hill, VA (VIN)   | game + voice |
 
-The agent runs as the **`refx-agent`** systemd service on every node, so the
-commands below are identical on each — you just SSH into the box you want first.
-Run them as your admin user (`ubuntu`); they use `sudo` where needed.
+Per-node conventions (identical on every node):
+
+| Thing | Value |
+|-------|-------|
+| SSH / admin user | `ubuntu` (sudo) — **don't** work as root day-to-day |
+| Agent service | `refx-agent` (systemd), runs as the non-root **`refx`** user |
+| Agent repo (build/update) | `/opt/refxhosting` (owned by `ubuntu`) |
+| Agent config | `/etc/refx/config.yaml` (owned by `refx`, mode 600) |
+| Server data | `/var/lib/refx` |
+
+The commands are the same on each node — you just SSH into the box you want
+first. Run them as `ubuntu`; they use `sudo` where needed.
 
 **On `refx-ca-east-bhs`:**
 ```bash
 ssh ubuntu@refx-ca-east-bhs            # or its IP
-sudo systemctl restart refx-agent      # restart the agent (running servers re-attach)
+sudo systemctl start refx-agent        # start the node
+sudo systemctl stop refx-agent         # stop it (running game servers keep running)
+sudo systemctl restart refx-agent      # restart (servers re-attach in a few seconds)
 sudo systemctl status refx-agent       # is it active?
 sudo journalctl -u refx-agent -f       # live logs (Ctrl-C to exit)
 cd /opt/refxhosting && bash infra/scripts/update-agent.sh   # update: rebuild + restart
@@ -300,6 +317,8 @@ sudo reboot                            # full box reboot (rarely needed)
 **On `refx-us-east-va`:**
 ```bash
 ssh ubuntu@refx-us-east-va             # or its IP
+sudo systemctl start refx-agent
+sudo systemctl stop refx-agent
 sudo systemctl restart refx-agent
 sudo systemctl status refx-agent
 sudo journalctl -u refx-agent -f
@@ -312,8 +331,10 @@ from the panel, and **Clear Steam cache** wipes that node's cached steamcmd
 sessions. Restarting the agent never stops running game servers — they keep
 running and re-attach automatically.
 
-Other service controls (same on any node): `sudo systemctl stop refx-agent`,
-`start`, `sudo systemctl is-enabled refx-agent` (confirms auto-start on boot).
+Other service controls (same on any node): `sudo systemctl enable refx-agent`
+(auto-start on boot), `disable`, `is-active`, `is-enabled`. To fully stop and
+prevent restart: `sudo systemctl stop refx-agent && sudo pkill -f refx-agent`
+then confirm with `pgrep -af refx-agent` (should print nothing).
 
 **Backups (do this before you have real customers):**
 - DB: `docker compose -f infra/docker/docker-compose.yml exec postgres pg_dump -U refx refx | gzip > refx-$(date +%F).sql.gz` on a cron, shipped off-box.
