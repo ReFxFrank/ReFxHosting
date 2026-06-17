@@ -194,7 +194,7 @@ ln -sf /opt/refxhosting/apps/node-agent/refx-agent /usr/local/bin/refx-agent
 useradd --system --home-dir /var/lib/refx --shell /usr/sbin/nologin refx 2>/dev/null || true
 usermod -aG docker refx
 install -d -o refx -g refx -m 0750 /var/lib/refx /var/lib/refx/servers /var/lib/refx/backups
-install -d -m 0750 /etc/refx
+install -d -o refx -g refx -m 0750 /etc/refx
 
 # Config (paste the bootstrap token from 2.1; use the API URL, not the website)
 cat >/etc/refx/config.yaml <<EOF

@@ -111,7 +111,7 @@ if getent group docker >/dev/null 2>&1; then
   usermod -aG docker "$RUN_USER"
 fi
 install -d -o "$RUN_USER" -g "$RUN_USER" -m 0750 "$DATA_DIR" "$DATA_DIR/servers" "$DATA_DIR/backups"
-install -d -m 0750 "$CONFIG_DIR"
+install -d -o "$RUN_USER" -g "$RUN_USER" -m 0750 "$CONFIG_DIR"
 
 # ---- download the agent binary ----------------------------------------------
 BIN_NAME="refx-agent-linux-${GOARCH}"
