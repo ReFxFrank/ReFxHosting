@@ -604,7 +604,7 @@ export class ImporterService {
     // Find an existing imported server by externalRef cache (re-run) — fall
     // back to a name+owner natural key for first-run idempotency.
     let serverId = this.idMap[ref];
-    let existing = serverId
+    const existing = serverId
       ? await this.prisma.server.findUnique({ where: { id: serverId } })
       : await this.prisma.server.findFirst({
           where: { ownerId, name: s.name, deletedAt: null },
