@@ -30,6 +30,7 @@ import {
   Play,
   RotateCw,
   Square,
+  Download,
   Server as ServerIcon,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
@@ -434,6 +435,7 @@ export default function AdminNodesPage() {
   const [editNode, setEditNode] = useState<Node | null>(null);
   const [restartTarget, setRestartTarget] = useState<Node | null>(null);
   const [steamClearTarget, setSteamClearTarget] = useState<Node | null>(null);
+  const [updateTarget, setUpdateTarget] = useState<Node | null>(null);
 
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["admin", "nodes"],
@@ -514,6 +516,16 @@ export default function AdminNodesPage() {
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to clear Steam cache"),
+  });
+
+  const updateAgentMutation = useMutation({
+    mutationFn: (id: string) => api.admin.updateNodeAgent(id),
+    onSuccess: () => {
+      toast.success("Updating — the agent downloads the latest release and reconnects shortly");
+      setUpdateTarget(null);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to update agent"),
   });
 
   return (
@@ -860,7 +872,13 @@ export default function AdminNodesPage() {
           {detailNode && <NodeServersPower nodeId={detailNode.id} />}
           {detailNode && <NodeHeartbeatChart nodeId={detailNode.id} />}
           <DialogFooter className="sm:justify-between">
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => detailNode && setUpdateTarget(detailNode)}
+              >
+                <Download className="size-4" /> Update agent
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => detailNode && setRestartTarget(detailNode)}
@@ -930,6 +948,34 @@ export default function AdminNodesPage() {
               }
             >
               <RotateCw className="size-4" /> Restart agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Update agent confirmation */}
+      <Dialog open={!!updateTarget} onOpenChange={(o) => !o && setUpdateTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update agent on {updateTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              The node downloads the latest released agent binary, verifies it,
+              swaps it in and restarts — no SSH needed. Running game servers are
+              <b> not</b> stopped; they keep running and re-attach in a few
+              seconds. The node must be able to reach GitHub releases.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setUpdateTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              loading={updateAgentMutation.isPending}
+              onClick={() =>
+                updateTarget && updateAgentMutation.mutate(updateTarget.id)
+              }
+            >
+              <Download className="size-4" /> Update agent
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -111,6 +111,7 @@ func (s *Server) routes() chi.Router {
 
 		// Node-level control (not server-scoped).
 		r.Post("/api/v1/system/restart", s.handleAgentRestart)
+		r.Post("/api/v1/system/update", s.handleAgentUpdate)
 		r.Post("/api/v1/system/steam-cache/clear", s.handleSteamCacheClear)
 
 		r.Route("/api/v1/servers", func(r chi.Router) {

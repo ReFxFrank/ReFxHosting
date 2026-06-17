@@ -227,6 +227,15 @@ export class AdminController {
     return this.nodes.clearSteamCache(id);
   }
 
+  /** Self-update the node agent to the latest published release (no SSH). */
+  @Post('nodes/:id/update-agent')
+  @HttpCode(200)
+  @RequirePerm('nodes.manage')
+  @Audit({ action: 'admin.node.update-agent', targetType: 'Node', targetParam: 'id' })
+  updateNodeAgent(@Param('id') id: string) {
+    return this.nodes.updateAgent(id);
+  }
+
   /** Pin (trust-on-first-use) the node agent's current TLS certificate. */
   @Post('nodes/:id/pin-cert')
   @HttpCode(200)

@@ -321,6 +321,20 @@ export class NodesService {
     return { cleared: true };
   }
 
+  /**
+   * Self-update the node agent to the latest published release (downloads the
+   * prebuilt binary, verifies it, swaps it in and re-execs). Running game servers
+   * keep running and re-attach — no SSH needed.
+   */
+  async updateAgent(id: string): Promise<{ updating: true }> {
+    const node = await this.prisma.node.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!node) throw new NotFoundException('Node not found');
+    await this.agent.updateAgent(node);
+    return { updating: true };
+  }
+
   async update(id: string, dto: UpdateNodeDto): Promise<Node> {
     if (
       dto.allocationPortStart != null &&
