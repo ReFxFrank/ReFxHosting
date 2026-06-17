@@ -223,6 +223,89 @@ On a 2×NVMe box choose **RAID-1** at OVH install time for customer-data safety
 
 ---
 
+## Part 2W — Windows node (alternative to the Ubuntu node)
+
+ReFx runs natively on Windows too — the agent installs as a real **Windows
+Service** and can host servers via Docker Desktop (Docker runtime) or directly as
+native processes (native runtime). Use a Windows node for games that only ship a
+Windows server build; otherwise the Ubuntu node above is simpler and cheaper.
+
+> The panel VPS (Part 1) is unchanged — this only replaces *a node*. You can run
+> Ubuntu and Windows nodes side by side in the same panel.
+
+### 2W.1 Prerequisites (on the Windows box)
+- **Windows Server 2022 or 2025** (64-bit), fully updated.
+- Logged in as a user with **Administrator** rights.
+- For the **Docker runtime**: install **Docker Desktop** and confirm "Engine
+  running" before installing the agent. For **native** hosting you can skip Docker.
+- Create the node in the panel exactly as in **2.1** (Admin → Nodes → Add) and
+  copy its **bootstrap token**.
+
+### 2W.2 Install the agent (PowerShell, as Administrator)
+The installer downloads the prebuilt `refx-agent-windows-amd64.exe`, writes its
+config, opens the firewall, and registers the auto-starting `refx-agent` service.
+
+```powershell
+cd $env:TEMP
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+Invoke-WebRequest `
+  -Uri "https://raw.githubusercontent.com/refxfrank/refxhosting/main/infra/scripts/install-node.ps1" `
+  -OutFile install-node.ps1 -UseBasicParsing
+powershell -ExecutionPolicy Bypass -File .\install-node.ps1 `
+  -PanelUrl https://api.refx.gg -Token <NODE_TOKEN> -Version latest
+```
+> Use the **API** URL (`https://api.refx.gg`), not the website — the installer
+> checks and refuses the web UI.
+
+**If the installer fails to parse** (`Unexpected token '}'` or similar), you've
+hit GitHub's raw CDN serving a stale cached copy. Download the file pinned to an
+exact commit instead (replace `<SHA>` with the latest commit hash of the script),
+which bypasses the branch cache:
+```powershell
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/refxfrank/refxhosting/<SHA>/infra/scripts/install-node.ps1" -OutFile install-node.ps1 -UseBasicParsing
+# sanity check: must print 0 (no stray non-ASCII)
+(Select-String -Path .\install-node.ps1 -Pattern ([char]0x2014)).Count
+```
+
+### 2W.3 Verify
+```powershell
+Get-Service refx-agent                        # Status should be Running
+Get-NetTCPConnection -LocalPort 8443,2022 -State Listen |
+  Select-Object LocalAddress,LocalPort,State  # both listening
+Get-EventLog -LogName Application -Source refx-agent -Newest 50   # logs
+```
+The node should flip to **online** in Admin → Nodes within a few seconds.
+
+### 2W.4 Firewall — lock 8443 to the panel
+The installer opens `8443` (control) and `2022` (SFTP) to everyone. Restrict the
+control port to your panel VPS (same rationale as the Ubuntu node — defense in
+depth + log hygiene):
+```powershell
+Set-NetFirewallRule -DisplayName "ReFx Agent 8443" -RemoteAddress <PANEL_VPS_IP>
+```
+Open your game/voice port range as you deploy servers, e.g.:
+```powershell
+New-NetFirewallRule -DisplayName "ReFx Game TCP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 27000-28000
+New-NetFirewallRule -DisplayName "ReFx Game UDP" -Direction Inbound -Action Allow -Protocol UDP -LocalPort 27000-28000
+```
+
+### 2W.5 Operations (Windows)
+| Action | Command (PowerShell, Admin) |
+|--------|------------------------------|
+| Status | `Get-Service refx-agent` |
+| Start / Stop / Restart | `Start-Service refx-agent` / `Stop-Service refx-agent` / `Restart-Service refx-agent` |
+| Live logs | `Get-EventLog -LogName Application -Source refx-agent -Newest 50` (or the data dir) |
+| Config | `C:\ProgramData\ReFx\config\config.yaml` |
+| Binary | `C:\Program Files\ReFx\agent\refx-agent.exe` |
+| Server data | `C:\ProgramData\ReFx\data` |
+
+**Updates are no-SSH**: Admin → Nodes → **Update agent** works on Windows too —
+the service-aware binary swaps itself and the Service Control Manager restarts it
+automatically (running game servers keep running and re-attach). No need to RDP in
+to update.
+
+---
+
 ## Part 3 — Go live (first sellable product)
 
 1. **Region & node**: Admin → ensure your region exists and the node is assigned
@@ -258,12 +341,16 @@ cd ~/refxhosting && bash infra/scripts/update-panel.sh
 
 The node fleet (each is a separate OVH box you SSH into by name):
 
-| Node hostname | Region | Role |
-|---------------|--------|------|
-| `refx-ca-east-bhs` | Canada East — OVH Beauharnois (BHS) | game + voice |
-| `refx-us-east-va`  | US East — OVH Vint Hill, VA (VIN)   | game + voice |
+| Node hostname | Region | OS | Role |
+|---------------|--------|----|------|
+| `refx-ca-east-bhs` | Canada East — OVH Beauharnois (BHS) | Ubuntu | game + voice |
+| `refx-us-east-va`  | US East — OVH Vint Hill, VA (VIN)   | Ubuntu | game + voice |
 
-Per-node conventions (identical on every node):
+> The `systemctl` / `journalctl` commands below are for the **Ubuntu** nodes. For
+> a **Windows** node, manage the `refx-agent` service with PowerShell instead —
+> see **Part 2W.5** for the equivalent commands.
+
+Per-node conventions (identical on every Ubuntu node):
 
 | Thing | Value |
 |-------|-------|
