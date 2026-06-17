@@ -200,7 +200,12 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 		// "No such container" — spuriously failing a successful install. We remove
 		// it ourselves below after reading the exit code.
 	}
-	created, err := d.cli.ContainerCreate(ctx, cfg, host, &network.NetworkingConfig{}, nil, containerName(s)+"-install")
+	installName := containerName(s) + "-install"
+	// Clear any leftover install container with this name first: a crashed or
+	// restarted agent mid-install leaks one, and a remake would otherwise collide
+	// on the name ("Conflict. The container name is already in use").
+	_ = d.cli.ContainerRemove(ctx, installName, container.RemoveOptions{Force: true})
+	created, err := d.cli.ContainerCreate(ctx, cfg, host, &network.NetworkingConfig{}, nil, installName)
 	if err != nil {
 		return fmt.Errorf("docker: create install container: %w", err)
 	}
@@ -583,11 +588,23 @@ func (d *DockerRuntime) Reconfigure(ctx context.Context, s *server.Server, lim s
 	return nil
 }
 
-// Destroy removes the container (data dir is left intact).
+// Destroy removes the server's containers (data dir is left intact) — the
+// runtime container plus any ephemeral install/chown helper containers, so
+// deleting a server in the panel leaves nothing behind in Docker.
 func (d *DockerRuntime) Destroy(ctx context.Context, s *server.Server) error {
-	err := d.cli.ContainerRemove(ctx, containerName(s), container.RemoveOptions{Force: true})
-	if err != nil && !client.IsErrNotFound(err) {
-		return fmt.Errorf("docker: remove: %w", err)
+	var firstErr error
+	for _, name := range []string{
+		containerName(s),
+		containerName(s) + "-install",
+		containerName(s) + "-chown",
+	} {
+		err := d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
+		if err != nil && !client.IsErrNotFound(err) && firstErr == nil {
+			firstErr = err
+		}
+	}
+	if firstErr != nil {
+		return fmt.Errorf("docker: remove: %w", firstErr)
 	}
 	s.SetState(server.StateOffline)
 	return nil
@@ -603,13 +620,38 @@ func (d *DockerRuntime) Reconcile(ctx context.Context, lookup func(serverID stri
 		return fmt.Errorf("docker: list: %w", err)
 	}
 	for _, c := range list {
+		name := ""
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+		running := strings.HasPrefix(c.State, "running")
+
+		// Ephemeral install/chown helpers are never meant to outlive their task. A
+		// crashed/restarted agent leaks them (e.g. a stale "<server>-install"); reap
+		// any that have exited. A running one is an in-progress install — leave it.
+		if strings.HasSuffix(name, "-install") || strings.HasSuffix(name, "-chown") {
+			if !running {
+				_ = d.cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true})
+				d.log.Info().Str("container", name).Msg("reaped leftover install/chown container")
+			}
+			continue
+		}
+
 		id := c.Labels[labelServer]
 		s, ok := lookup(id)
 		if !ok {
+			// Orphan: a runtime container for a server the panel no longer assigns
+			// (e.g. a deleted server). Remove it if it's stopped; never force-kill a
+			// running one (could be a valid server whose registration is in-flight).
+			// The data dir is a separate bind mount and is left untouched.
+			if !running {
+				_ = d.cli.ContainerRemove(ctx, c.ID, container.RemoveOptions{Force: true})
+				d.log.Info().Str("container", name).Msg("reaped orphaned server container")
+			}
 			continue
 		}
 		s.RuntimeRef = c.ID
-		if strings.HasPrefix(c.State, "running") {
+		if running {
 			s.SetState(server.StateRunning)
 		} else {
 			s.SetState(server.StateOffline)
