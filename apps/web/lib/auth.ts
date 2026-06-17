@@ -90,6 +90,15 @@ export function isAuthenticated() {
   return !!getTokens()?.accessToken;
 }
 
+/**
+ * True when the session was "remembered" — tokens persisted to localStorage (the
+ * "Keep me signed in" choice) rather than sessionStorage. Used to opt out of the
+ * inactivity auto-sign-out.
+ */
+export function isRemembered(): boolean {
+  return isBrowser && !!window.localStorage.getItem(TOKENS_KEY);
+}
+
 // Keep tabs in sync: when another tab rotates/clears tokens, drop our cache so
 // the next read picks up the latest value (prevents stale-refresh mass logout).
 if (isBrowser) {

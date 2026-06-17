@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Clock } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
+import { isRemembered } from "@/lib/auth";
 import {
   Dialog,
   DialogContent,
@@ -78,6 +79,20 @@ export function IdleSessionGuard() {
 
   const [warnOpen, setWarnOpen] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(Math.floor(GRACE_MS / 1000));
+  // "Keep me signed in" opts out of the inactivity sign-out. Tracked reactively
+  // so logging in/out (which moves tokens between local/session storage) is
+  // picked up without a reload. A server-side session expiry still signs out.
+  const [remembered, setRemembered] = useState(false);
+  useEffect(() => {
+    const sync = () => setRemembered(isRemembered());
+    sync();
+    window.addEventListener("refx:auth-changed", sync);
+    window.addEventListener("storage", sync);
+    return () => {
+      window.removeEventListener("refx:auth-changed", sync);
+      window.removeEventListener("storage", sync);
+    };
+  }, []);
 
   /** Record activity locally + (throttled) broadcast it to other tabs. */
   const markActivity = useCallback((ts: number = Date.now()) => {
@@ -150,9 +165,12 @@ export function IdleSessionGuard() {
     return () => window.removeEventListener("refx:session-expired", onExpired);
   }, [endSession]);
 
-  // Poll for idleness once per second while authenticated.
+  // Poll for idleness once per second while authenticated — UNLESS the user
+  // chose "Keep me signed in", in which case inactivity never signs them out
+  // (the session lives until they log out or the server-side session expires).
   useEffect(() => {
-    if (status !== "authenticated") return;
+    // Not signed in, or "remembered" → no inactivity timer at all.
+    if (status !== "authenticated" || remembered) return;
     endedRef.current = false;
     markActivity(Date.now()); // fresh baseline when the session starts
     const tick = setInterval(() => {
@@ -180,7 +198,7 @@ export function IdleSessionGuard() {
       }
     }, 1000);
     return () => clearInterval(tick);
-  }, [status, endSession, effectiveLastActivity, markActivity]);
+  }, [status, remembered, endSession, effectiveLastActivity, markActivity]);
 
   if (status !== "authenticated") return null;
 
