@@ -172,6 +172,7 @@ function EmailSettingsCard() {
   const [from, setFrom] = useState<string | null>(null);
   const [password, setPassword] = useState("");
   const [secure, setSecure] = useState<boolean | null>(null);
+  const [theme, setTheme] = useState<"dark" | "light" | null>(null);
   const [testTo, setTestTo] = useState("");
 
   const hostV = host ?? cfg?.host ?? "";
@@ -179,6 +180,7 @@ function EmailSettingsCard() {
   const userV = user ?? cfg?.user ?? "";
   const fromV = from ?? cfg?.from ?? "";
   const secureV = secure ?? cfg?.secure ?? false;
+  const themeV = theme ?? cfg?.theme ?? "dark";
 
   const save = useMutation({
     mutationFn: () => {
@@ -188,6 +190,7 @@ function EmailSettingsCard() {
         user: userV,
         from: fromV,
         secure: secureV,
+        theme: themeV,
       };
       if (password) input.password = password;
       return api.admin.setEmailConfig(input);
@@ -287,6 +290,28 @@ function EmailSettingsCard() {
                 </p>
               </div>
               <Switch checked={secureV} onCheckedChange={(v: boolean) => setSecure(v)} />
+            </div>
+
+            <div className="space-y-2 rounded-lg border p-3">
+              <p className="text-sm font-medium">Email theme</p>
+              <p className="text-xs text-muted-foreground">
+                Style for all transactional emails. <strong>Dark</strong> matches the
+                site; <strong>Light</strong> renders consistently everywhere (some
+                clients, e.g. Gmail, override dark emails).
+              </p>
+              <div className="flex gap-2 pt-1">
+                {(["dark", "light"] as const).map((t) => (
+                  <Button
+                    key={t}
+                    type="button"
+                    size="sm"
+                    variant={themeV === t ? "default" : "outline"}
+                    onClick={() => setTheme(t)}
+                  >
+                    {t === "dark" ? "Dark" : "Light"}
+                  </Button>
+                ))}
+              </div>
             </div>
 
             <div className="flex justify-end">

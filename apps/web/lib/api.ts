@@ -890,6 +890,7 @@ export const api = {
       password?: string;
       from?: string;
       secure?: boolean;
+      theme?: "dark" | "light";
     }) => http.patch<void>("/admin/settings/email", input),
     sendTestEmail: (to: string) =>
       http.post<{ delivered: boolean }>("/admin/settings/email/test", { to }),

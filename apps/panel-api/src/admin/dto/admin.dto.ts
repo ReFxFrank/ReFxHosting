@@ -136,6 +136,14 @@ export class SetEmailConfigDto {
   @IsOptional()
   @IsBoolean()
   secure?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Visual theme for transactional emails.',
+    enum: ['dark', 'light'],
+  })
+  @IsOptional()
+  @IsIn(['dark', 'light'])
+  theme?: 'dark' | 'light';
 }
 
 export class TestEmailDto {

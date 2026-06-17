@@ -14,11 +14,12 @@
  * {@link esc}; body paragraphs are treated as trusted server-built HTML.
  */
 
-// ReFx Glassy palette (kept in sync with the panel's brand).
-const COLOR = {
+// Two brand palettes. The CTA accent (#0072ff) is identical in both so emails
+// stay recognisably ReFx whichever theme is selected. DARK matches the site;
+// LIGHT is the safe choice for clients (e.g. Gmail) that fight dark emails.
+const DARK = {
   bg: '#050814',
   card: '#0a1224',
-  cardAlt: '#07111f',
   border: 'rgba(120, 180, 255, 0.25)',
   primary: '#0072ff',
   secondary: '#00aaff',
@@ -28,6 +29,21 @@ const COLOR = {
   danger: '#ef4444',
   success: '#22c55e',
 } as const;
+
+const LIGHT = {
+  bg: '#eef2f9',
+  card: '#ffffff',
+  border: '#d8e2f0',
+  primary: '#0072ff',
+  secondary: '#0072ff',
+  textPrimary: '#0a1224',
+  textSecondary: '#42526b',
+  muted: '#8a97ad',
+  danger: '#dc2626',
+  success: '#16a34a',
+} as const;
+
+export type EmailTheme = 'dark' | 'light';
 
 const FONT =
   "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
@@ -58,6 +74,8 @@ export interface BrandedEmail {
   preheader?: string;
   /** Absolute URL of the ReFx logo PNG for the header (falls back to a wordmark). */
   logoUrl?: string;
+  /** Visual theme — defaults to dark (the site's scheme). */
+  theme?: EmailTheme;
 }
 
 /** Escape a string for safe interpolation into HTML. */
@@ -84,18 +102,18 @@ function stripTags(s: string): string {
     .trim();
 }
 
-function accentColor(a: EmailAccent | undefined): string {
-  if (a === 'danger') return COLOR.danger;
-  if (a === 'success') return COLOR.success;
-  return COLOR.primary;
-}
-
 /**
  * Render a {@link BrandedEmail} into `{ html, text }`. The subject is owned by
  * the caller (it isn't part of the body).
  */
 export function buildEmail(c: BrandedEmail): { html: string; text: string } {
-  const accent = accentColor(c.accent);
+  const COLOR = c.theme === 'light' ? LIGHT : DARK;
+  const accent =
+    c.accent === 'danger'
+      ? COLOR.danger
+      : c.accent === 'success'
+        ? COLOR.success
+        : COLOR.primary;
   const paras = (arr: string[] | undefined, color: string) =>
     (arr ?? [])
       .map(

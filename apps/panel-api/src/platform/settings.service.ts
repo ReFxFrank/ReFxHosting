@@ -20,6 +20,7 @@ const KEY = {
   smtpPassword: 'email.smtp.password',
   smtpFrom: 'email.smtp.from',
   smtpSecure: 'email.smtp.secure',
+  emailTheme: 'email.theme',
   steamApiKey: 'steam.apiKey',
   steamUsername: 'steam.username',
   steamPassword: 'steam.password',
@@ -38,6 +39,8 @@ export interface GatewayConfigInput {
   paypalWebhookId?: string;
 }
 
+export type EmailTheme = 'dark' | 'light';
+
 export interface EmailConfigInput {
   host?: string;
   port?: number;
@@ -45,6 +48,8 @@ export interface EmailConfigInput {
   password?: string;
   from?: string;
   secure?: boolean;
+  /** Visual theme for all transactional emails. */
+  theme?: EmailTheme;
 }
 
 export interface EffectiveEmailConfig {
@@ -54,6 +59,7 @@ export interface EffectiveEmailConfig {
   password: string;
   from: string;
   secure: boolean;
+  theme: EmailTheme;
 }
 
 export interface SteamConfigInput {
@@ -185,6 +191,7 @@ export class SettingsService {
       password: (await this.get(KEY.smtpPassword)) || env.password || '',
       from: (await this.get(KEY.smtpFrom)) || env.from || '',
       secure: secureStr ? secureStr === 'true' : !!env.secure,
+      theme: (await this.get(KEY.emailTheme)) === 'light' ? 'light' : 'dark',
     };
   }
 
@@ -198,6 +205,7 @@ export class SettingsService {
       user: cfg.user,
       from: cfg.from,
       secure: cfg.secure,
+      theme: cfg.theme,
       passwordSet: !!cfg.password,
     };
   }
@@ -213,6 +221,8 @@ export class SettingsService {
     if (dto.from !== undefined) await this.set(KEY.smtpFrom, dto.from.trim(), false);
     if (dto.secure !== undefined)
       await this.set(KEY.smtpSecure, dto.secure ? 'true' : 'false', false);
+    if (dto.theme !== undefined)
+      await this.set(KEY.emailTheme, dto.theme === 'light' ? 'light' : 'dark', false);
   }
 
   /** Apply owner edits; only provided fields are changed. Secrets are encrypted. */

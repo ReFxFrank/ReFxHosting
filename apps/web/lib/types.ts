@@ -217,6 +217,7 @@ export interface EmailConfigDetail {
   user: string;
   from: string;
   secure: boolean;
+  theme: "dark" | "light";
   passwordSet: boolean;
 }
 

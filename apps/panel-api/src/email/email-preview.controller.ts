@@ -128,7 +128,7 @@ export class EmailPreviewController {
     const links = Object.keys(SAMPLES)
       .map(
         (n) =>
-          `<li style="margin:6px 0;"><a style="color:#00aaff;" href="/api/v1/dev/emails/${n}">${n}</a> · <a style="color:#6f7d95;" href="/api/v1/dev/emails/${n}?format=text">text</a></li>`,
+          `<li style="margin:6px 0;">${n} · <a style="color:#00aaff;" href="/api/v1/dev/emails/${n}?theme=dark">dark</a> · <a style="color:#00aaff;" href="/api/v1/dev/emails/${n}?theme=light">light</a> · <a style="color:#6f7d95;" href="/api/v1/dev/emails/${n}?format=text">text</a></li>`,
       )
       .join('');
     res
@@ -143,6 +143,7 @@ export class EmailPreviewController {
   show(
     @Param('name') name: string,
     @Query('format') format: string | undefined,
+    @Query('theme') theme: string | undefined,
     @Res() res: Response,
   ): void {
     this.assertDev();
@@ -151,6 +152,7 @@ export class EmailPreviewController {
     const panelUrl = (this.config.get<string>('panelUrl') ?? '').replace(/\/+$/, '');
     const { html, text } = buildEmail({
       ...sample.email,
+      theme: theme === 'light' ? 'light' : 'dark',
       logoUrl: panelUrl ? `${panelUrl}/brand/refx-wordmark.png` : undefined,
     });
     if (format === 'text') {
