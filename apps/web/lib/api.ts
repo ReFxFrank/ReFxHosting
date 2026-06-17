@@ -310,6 +310,8 @@ export const api = {
     me: () => http.get<User>("/auth/me"),
     forgotPassword: (email: string) =>
       http.post<void>("/auth/forgot-password", { email }, { anonymous: true }),
+    resetPassword: (token: string, newPassword: string) =>
+      http.post<void>("/auth/reset-password", { token, newPassword }, { anonymous: true }),
     verifyEmail: (token: string) =>
       http.post<void>("/auth/verify-email", { token }, { anonymous: true }),
     resendVerification: (email: string) =>
