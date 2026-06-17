@@ -26,6 +26,8 @@ export interface ReinstallJob {
   /** When set, this is a game switch; carries the switch-log id for tracing. */
   gameSwitchLogId?: string;
   preserveData?: boolean;
+  /** Mods-only sync (Workshop Apply): skip the base game re-validation. */
+  workshopSync?: boolean;
 }
 
 export interface BackupJob {

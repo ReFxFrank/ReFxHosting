@@ -29,7 +29,7 @@ export class ReinstallProcessor extends WorkerHost {
 
   async process(job: Job<ReinstallJob>): Promise<void> {
     if (job.name !== JOB.REINSTALL) return;
-    const { serverId, preserveData, gameSwitchLogId } = job.data;
+    const { serverId, preserveData, gameSwitchLogId, workshopSync } = job.data;
     this.logger.log(
       `reinstall ${serverId}` +
         (gameSwitchLogId ? ` (game switch ${gameSwitchLogId})` : ''),
@@ -71,6 +71,8 @@ export class ReinstallProcessor extends WorkerHost {
       sftpPassword,
       steam,
       gameSteam,
+      // Mods-only Workshop sync: the egg skips re-validating the base game.
+      extraEnv: workshopSync ? { REFX_WORKSHOP_SYNC: '1' } : undefined,
     });
     // One-time codes: clear them now they're baked into this install spec — the
     // per-server (mods) code on the server row and the central (game) code in

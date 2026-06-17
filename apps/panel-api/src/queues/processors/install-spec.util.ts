@@ -37,6 +37,9 @@ export function buildInstallSpec(
     /** Host's Steam login — used ONLY to download the **game** server files
      *  (steamcmd +app_update) for games that aren't anonymous (e.g. Arma 3). */
     gameSteam?: { username: string; password: string; guardCode?: string };
+    /** Extra (non-persisted) env injected for this job only, e.g. a one-time
+     *  REFX_WORKSHOP_SYNC flag for a mods-only reinstall. Takes precedence. */
+    extraEnv?: Record<string, string>;
   } = {},
 ): InstallSpec {
   const template = server.template!;
@@ -51,6 +54,10 @@ export function buildInstallSpec(
   }
   for (const ov of server.variables) {
     env[ov.envName] = ov.value;
+  }
+  // Per-job overrides (not persisted on the server) win over everything.
+  for (const [k, v] of Object.entries(opts.extraEnv ?? {})) {
+    env[k] = v;
   }
 
   // Steam Workshop appid + central login for Workshop-enabled games (the egg's

@@ -261,6 +261,8 @@ export class WorkshopService {
     await this.reinstallQueue.add(JOB.REINSTALL, {
       serverId,
       preserveData: true,
+      // Fetch only the Workshop content — don't re-validate the whole base game.
+      workshopSync: true,
     } satisfies ReinstallJob);
     return { accepted: true };
   }
