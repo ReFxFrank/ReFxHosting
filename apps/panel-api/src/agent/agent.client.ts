@@ -229,6 +229,11 @@ export class NodeAgentClient {
     return this.request(node, 'POST', `/api/v1/system/restart`);
   }
 
+  /** Wipe the node's cached steamcmd sessions (per-account home). */
+  clearSteamCache(node: Node) {
+    return this.request(node, 'POST', `/api/v1/system/steam-cache/clear`);
+  }
+
   /** Push a server's SFTP credential to the agent so a rotation takes effect live. */
   setSftpCredential(
     node: Node,

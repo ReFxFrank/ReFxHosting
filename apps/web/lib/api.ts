@@ -745,6 +745,8 @@ export const api = {
     nodePing: (id: string) => http.get<NodePing>(`/admin/nodes/${id}/ping`),
     restartNodeAgent: (id: string) =>
       http.post<{ restarting: true }>(`/admin/nodes/${id}/restart-agent`),
+    clearNodeSteamCache: (id: string) =>
+      http.post<{ cleared: true }>(`/admin/nodes/${id}/steam-cache/clear`),
     pinNodeCert: (id: string) =>
       http.post<{ sha256: string }>(`/admin/nodes/${id}/pin-cert`),
     unpinNodeCert: (id: string) => http.delete<void>(`/admin/nodes/${id}/pin-cert`),

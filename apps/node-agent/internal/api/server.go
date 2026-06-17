@@ -50,6 +50,9 @@ type Deps struct {
 	// SFTPAuth is the live SFTP credential store; handlers update it on install
 	// and password rotation so creds work without an agent restart. May be nil.
 	SFTPAuth *sftp.MemoryAuthenticator
+	// SteamHomeDir is the node-level steamcmd home (per-account cached sessions).
+	// Emptied by the panel's "clear Steam cache" admin action.
+	SteamHomeDir string
 }
 
 // Server wraps the HTTP server and its router.
@@ -108,6 +111,7 @@ func (s *Server) routes() chi.Router {
 
 		// Node-level control (not server-scoped).
 		r.Post("/api/v1/system/restart", s.handleAgentRestart)
+		r.Post("/api/v1/system/steam-cache/clear", s.handleSteamCacheClear)
 
 		r.Route("/api/v1/servers", func(r chi.Router) {
 			r.Post("/", s.handleInstall) // create + install

@@ -307,6 +307,20 @@ export class NodesService {
     return { restarting: true };
   }
 
+  /**
+   * Wipe the node's cached steamcmd sessions (all per-account homes). Use after
+   * changing/deauthorising a Steam game-download account so no stale session
+   * lingers on the node. The next install re-authenticates the current account.
+   */
+  async clearSteamCache(id: string): Promise<{ cleared: true }> {
+    const node = await this.prisma.node.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!node) throw new NotFoundException('Node not found');
+    await this.agent.clearSteamCache(node);
+    return { cleared: true };
+  }
+
   async update(id: string, dto: UpdateNodeDto): Promise<Node> {
     if (
       dto.allocationPortStart != null &&

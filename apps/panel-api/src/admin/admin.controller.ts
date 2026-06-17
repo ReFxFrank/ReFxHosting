@@ -218,6 +218,15 @@ export class AdminController {
     return this.nodes.restartAgent(id);
   }
 
+  /** Wipe the node's cached steamcmd sessions (after changing a Steam account). */
+  @Post('nodes/:id/steam-cache/clear')
+  @HttpCode(200)
+  @RequirePerm('nodes.manage')
+  @Audit({ action: 'admin.node.steam-cache.clear', targetType: 'Node', targetParam: 'id' })
+  clearNodeSteamCache(@Param('id') id: string) {
+    return this.nodes.clearSteamCache(id);
+  }
+
   /** Pin (trust-on-first-use) the node agent's current TLS certificate. */
   @Post('nodes/:id/pin-cert')
   @HttpCode(200)

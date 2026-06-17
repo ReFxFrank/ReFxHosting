@@ -433,6 +433,7 @@ export default function AdminNodesPage() {
   const [deleteTarget, setDeleteTarget] = useState<Node | null>(null);
   const [editNode, setEditNode] = useState<Node | null>(null);
   const [restartTarget, setRestartTarget] = useState<Node | null>(null);
+  const [steamClearTarget, setSteamClearTarget] = useState<Node | null>(null);
 
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["admin", "nodes"],
@@ -503,6 +504,16 @@ export default function AdminNodesPage() {
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to restart agent"),
+  });
+
+  const clearSteamCacheMutation = useMutation({
+    mutationFn: (id: string) => api.admin.clearNodeSteamCache(id),
+    onSuccess: () => {
+      toast.success("Steam cache cleared — the next install re-authenticates the account");
+      setSteamClearTarget(null);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to clear Steam cache"),
   });
 
   return (
@@ -849,12 +860,20 @@ export default function AdminNodesPage() {
           {detailNode && <NodeServersPower nodeId={detailNode.id} />}
           {detailNode && <NodeHeartbeatChart nodeId={detailNode.id} />}
           <DialogFooter className="sm:justify-between">
-            <Button
-              variant="outline"
-              onClick={() => detailNode && setRestartTarget(detailNode)}
-            >
-              <RotateCw className="size-4" /> Restart agent
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => detailNode && setRestartTarget(detailNode)}
+              >
+                <RotateCw className="size-4" /> Restart agent
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => detailNode && setSteamClearTarget(detailNode)}
+              >
+                <Boxes className="size-4" /> Clear Steam cache
+              </Button>
+            </div>
             <Button variant="ghost" onClick={() => setDetailNode(null)}>
               Close
             </Button>
@@ -911,6 +930,35 @@ export default function AdminNodesPage() {
               }
             >
               <RotateCw className="size-4" /> Restart agent
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clear Steam cache confirmation */}
+      <Dialog open={!!steamClearTarget} onOpenChange={(o) => !o && setSteamClearTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clear Steam cache on {steamClearTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              Wipes every cached steamcmd session on this node — use after changing
+              or deauthorising a Steam game-download account so no old account&apos;s
+              session lingers. Running servers are <b>not</b> affected. The next
+              install re-authenticates the current account, which may ask for a
+              one-time Steam Guard code again.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSteamClearTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              loading={clearSteamCacheMutation.isPending}
+              onClick={() =>
+                steamClearTarget && clearSteamCacheMutation.mutate(steamClearTarget.id)
+              }
+            >
+              <Boxes className="size-4" /> Clear Steam cache
             </Button>
           </DialogFooter>
         </DialogContent>

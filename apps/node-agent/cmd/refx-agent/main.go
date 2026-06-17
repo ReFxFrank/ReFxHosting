@@ -197,6 +197,7 @@ func run(ctx context.Context, cfgPath string) error {
 		SigningKey:     cfg.SigningKey,
 		MetricsHandler: promhttp.Handler(),
 		SFTPAuth:       sftpAuth,
+		SteamHomeDir:   filepath.Join(cfg.DataDir, "steam-home"),
 	})
 
 	// --- stats collector ---------------------------------------------------
