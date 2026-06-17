@@ -15,16 +15,28 @@ type ServerWithRelations = Prisma.ServerGetPayload<{
   };
 }>;
 
+/** Central Steam config → a login pair, or undefined when not fully set. */
+export function steamLogin(cfg: {
+  username: string;
+  password: string;
+}): { username: string; password: string } | undefined {
+  return cfg.username && cfg.password
+    ? { username: cfg.username, password: cfg.password }
+    : undefined;
+}
+
 export function buildInstallSpec(
   server: ServerWithRelations,
   opts: {
     wipe?: boolean;
     sftpPassword?: string;
-    /** Steam login, injected for Workshop-enabled templates so the egg's steamcmd
-     *  install can authenticate (anonymous can't fetch many Workshop items).
-     *  `guardCode` is a one-time Steam Guard code for the login. Never set for
-     *  non-Workshop games. */
+    /** Customer's own Steam login — used ONLY for Workshop **mod** downloads
+     *  (steamcmd +workshop_download_item). `guardCode` is a one-time Steam Guard
+     *  code. Never set for non-Workshop games. */
     steam?: { username: string; password: string; guardCode?: string };
+    /** Host's Steam login — used ONLY to download the **game** server files
+     *  (steamcmd +app_update) for games that aren't anonymous (e.g. Arma 3). */
+    gameSteam?: { username: string; password: string; guardCode?: string };
   } = {},
 ): InstallSpec {
   const template = server.template!;
@@ -47,6 +59,13 @@ export function buildInstallSpec(
     if (template.workshopAppId != null) {
       env.WORKSHOP_APP_ID = String(template.workshopAppId);
     }
+    // Host game-download account → base server files (app_update).
+    if (opts.gameSteam?.username && opts.gameSteam.password) {
+      env.STEAM_GAME_USERNAME = opts.gameSteam.username;
+      env.STEAM_GAME_PASSWORD = opts.gameSteam.password;
+      if (opts.gameSteam.guardCode) env.STEAM_GAME_GUARD = opts.gameSteam.guardCode;
+    }
+    // Customer account → Workshop mod downloads only.
     if (opts.steam?.username && opts.steam.password) {
       env.STEAM_USERNAME = opts.steam.username;
       env.STEAM_PASSWORD = opts.steam.password;

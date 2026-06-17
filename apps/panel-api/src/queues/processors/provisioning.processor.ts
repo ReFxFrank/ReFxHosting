@@ -6,7 +6,7 @@ import { NodeAgentClient, InstallSpec } from '../../agent/agent.client';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { SettingsService } from '../../platform/settings.service';
 import { JOB, ProvisionJob, QUEUE } from '../queue.constants';
-import { buildInstallSpec } from './install-spec.util';
+import { buildInstallSpec, steamLogin } from './install-spec.util';
 
 /**
  * Provisions a freshly-created server: instructs the node agent to pull the
@@ -48,21 +48,22 @@ export class ProvisioningProcessor extends WorkerHost {
     const sftpPassword = server.sftpPasswordEnc
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
-    // Prefer the customer's own Steam login for this server; fall back to the
-    // optional central admin login. A one-time Steam Guard code rides along.
-    const steam = server.template.supportsWorkshop
-      ? server.steamUsername && server.steamPasswordEnc
+    // Host account downloads the game; the customer's account downloads mods.
+    const ws = server.template.supportsWorkshop;
+    const gameSteam = ws ? steamLogin(await this.settings.steamConfig()) : undefined;
+    const steam =
+      ws && server.steamUsername && server.steamPasswordEnc
         ? {
             username: server.steamUsername,
             password: this.crypto.decrypt(server.steamPasswordEnc),
             guardCode: server.steamGuardCode ?? undefined,
           }
-        : await this.settings.steamConfig()
-      : undefined;
+        : undefined;
     const spec: InstallSpec = buildInstallSpec(server, {
       wipe: true,
       sftpPassword,
       steam,
+      gameSteam,
     });
     if (server.steamGuardCode) {
       await this.prisma.server.update({

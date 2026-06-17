@@ -231,7 +231,6 @@ export default function AdminInvoicesPage() {
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               destructive
-                              disabled={inv.state === "PAID"}
                               onSelect={() => setDeleteTarget(inv)}
                             >
                               <Trash2 /> Delete
@@ -259,8 +258,14 @@ export default function AdminInvoicesPage() {
           <DialogHeader>
             <DialogTitle>Delete invoice {deleteTarget?.number}?</DialogTitle>
             <DialogDescription>
-              This permanently removes the invoice and its line items/payments. To keep history,
-              use Void instead. This can&apos;t be undone.
+              This permanently removes the invoice and its line items/payments. This can&apos;t
+              be undone.
+              {deleteTarget?.state === "PAID" && (
+                <span className="mt-2 block font-medium text-warning">
+                  This invoice is <strong>paid</strong> — deleting it erases that revenue
+                  record. Consider keeping it for your books.
+                </span>
+              )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -286,7 +291,14 @@ export default function AdminInvoicesPage() {
             </DialogTitle>
             <DialogDescription>
               This permanently removes the selected invoices and their line
-              items/payments. To keep history, use Void instead. This can&apos;t be undone.
+              items/payments. This can&apos;t be undone.
+              {selected.size > 0 &&
+                invoices.some((i) => selected.has(i.id) && i.state === "PAID") && (
+                  <span className="mt-2 block font-medium text-warning">
+                    Some selected invoices are <strong>paid</strong> — deleting them erases
+                    those revenue records.
+                  </span>
+                )}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

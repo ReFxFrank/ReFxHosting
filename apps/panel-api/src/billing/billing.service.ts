@@ -871,14 +871,10 @@ export class BillingService {
   async deleteInvoice(id: string): Promise<void> {
     const invoice = await this.prisma.invoice.findUnique({ where: { id } });
     if (!invoice) throw new NotFoundException('Invoice not found');
-    // Never wipe a settled invoice — it's a revenue record. Void/refund instead.
-    if (invoice.state === InvoiceState.PAID) {
-      throw new BadRequestException(
-        'A paid invoice can’t be deleted — void or refund it instead to keep revenue history.',
-      );
-    }
-    // Not paid (guarded above) → release any server it was reserving.
-    if (invoice.subscriptionId) {
+    // Deleting a PAID invoice removes a revenue record — allowed (the UI
+    // confirms it), but we must NOT release/soft-delete the server it paid for.
+    // Only an unpaid invoice releases its pending reservation.
+    if (invoice.state !== InvoiceState.PAID && invoice.subscriptionId) {
       await this.releaseUnpaidReservation(invoice.subscriptionId);
     }
     await this.prisma.invoice.delete({ where: { id } });

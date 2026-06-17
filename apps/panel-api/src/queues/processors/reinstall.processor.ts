@@ -6,7 +6,7 @@ import { NodeAgentClient } from '../../agent/agent.client';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { SettingsService } from '../../platform/settings.service';
 import { JOB, QUEUE, ReinstallJob } from '../queue.constants';
-import { buildInstallSpec } from './install-spec.util';
+import { buildInstallSpec, steamLogin } from './install-spec.util';
 
 /**
  * Handles both plain reinstalls and game switches (the latter carry a
@@ -52,22 +52,23 @@ export class ReinstallProcessor extends WorkerHost {
     const sftpPassword = server.sftpPasswordEnc
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
-    // Prefer the customer's own Steam login for this server; fall back to the
-    // optional central admin login. A one-time Steam Guard code (if supplied for
-    // this install) rides along and is cleared once consumed below.
-    const steam = server.template.supportsWorkshop
-      ? server.steamUsername && server.steamPasswordEnc
+    // Two Steam logins for Workshop games: the HOST's account downloads the game
+    // (admin → Settings → Steam), the CUSTOMER's own account downloads mods.
+    const ws = server.template.supportsWorkshop;
+    const gameSteam = ws ? steamLogin(await this.settings.steamConfig()) : undefined;
+    const steam =
+      ws && server.steamUsername && server.steamPasswordEnc
         ? {
             username: server.steamUsername,
             password: this.crypto.decrypt(server.steamPasswordEnc),
             guardCode: server.steamGuardCode ?? undefined,
           }
-        : await this.settings.steamConfig()
-      : undefined;
+        : undefined;
     const spec = buildInstallSpec(server, {
       wipe: !preserveData,
       sftpPassword,
       steam,
+      gameSteam,
     });
     // One-time code: clear it now that it's baked into this install spec.
     if (server.steamGuardCode) {

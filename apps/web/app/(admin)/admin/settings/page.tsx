@@ -58,12 +58,14 @@ function SteamSettingsCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Boxes className="size-4" /> Steam / Workshop
+          <Boxes className="size-4" /> Steam — game downloads
         </CardTitle>
         <CardDescription>
-          A central Steam login lets nodes download Workshop content that requires an
-          account (e.g. Arma 3). Anonymous still works for many free items. Secrets are
-          encrypted at rest and never returned.
+          The host account used to download <strong>game server files</strong> for games
+          that aren&apos;t anonymous (e.g. Arma 3, DayZ). This account should <strong>own
+          those games</strong>. It is <strong>not</strong> used for Workshop mods —
+          customers connect their own account on each server&apos;s Workshop tab for that.
+          Secrets are encrypted at rest and never returned.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -73,7 +75,7 @@ function SteamSettingsCard() {
           <>
             <div className="flex flex-wrap items-center gap-2 text-sm">
               <Badge variant={cfg?.loginConfigured ? "success" : "secondary"}>
-                {cfg?.loginConfigured ? "Login configured" : "No login (anonymous)"}
+                {cfg?.loginConfigured ? "Game account configured" : "No game account (anonymous)"}
               </Badge>
               <Badge variant={cfg?.apiKeySet ? "success" : "secondary"}>
                 {cfg?.apiKeySet ? "API key set" : "No API key"}

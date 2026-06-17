@@ -568,6 +568,39 @@ async function seedVoiceProducts() {
   console.log('  • Voice products: TeamSpeak 3 (per-slot)');
 }
 
+/**
+ * Backfill Workshop fields + the Workshop-aware install/startup onto EXISTING
+ * templates (the create-only egg sync skips them, so eggs imported before the
+ * Workshop feature never got these). Scoped to the workshop fields + install
+ * script + startup of templates whose JSON declares `supportsWorkshop`, so it
+ * makes the feature work without clobbering unrelated admin tuning (art, publish
+ * state, variables). Runs every deploy; idempotent.
+ */
+async function syncWorkshopEggs() {
+  const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.json'));
+  let count = 0;
+  for (const file of files) {
+    const tpl = JSON.parse(readFileSync(join(TEMPLATES_DIR, file), 'utf8')) as TemplateFile;
+    if (!tpl.supportsWorkshop) continue;
+    const existing = await prisma.gameTemplate.findUnique({
+      where: { slug: tpl.slug },
+      select: { id: true },
+    });
+    if (!existing) continue; // brand-new eggs are created by seedTemplates
+    await prisma.gameTemplate.update({
+      where: { id: existing.id },
+      data: {
+        supportsWorkshop: true,
+        workshopAppId: tpl.workshopAppId ?? null,
+        installScript: tpl.installScript as Prisma.InputJsonValue,
+        startupCommand: tpl.startupCommand,
+      },
+    });
+    count += 1;
+  }
+  console.log(`  • Workshop eggs synced: ${count}`);
+}
+
 /** Read existing game categories into a { slug: id } map (no writes). */
 async function loadGameCategoryMap(): Promise<Record<string, string>> {
   const cats = await prisma.gameCategory.findMany({
@@ -784,6 +817,16 @@ async function main() {
     await seedVoiceProducts();
   } catch (e) {
     console.error('  ! voice products failed:', (e as Error).message);
+  }
+
+  // Curated egg sync is create-only (to preserve admin tuning), so Workshop
+  // flags + the Workshop-aware install scripts wouldn't reach eggs imported
+  // before this feature. Backfill those specific fields for Workshop eggs every
+  // deploy so the Workshop tab + steamcmd download work on existing templates.
+  try {
+    await syncWorkshopEggs();
+  } catch (e) {
+    console.error('  ! workshop egg sync failed:', (e as Error).message);
   }
 
   console.log('Seed complete.');
