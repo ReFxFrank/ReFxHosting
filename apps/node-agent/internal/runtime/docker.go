@@ -31,9 +31,8 @@ import (
 // is chowned to match on start), so servers never run as root — avoiding the
 // "running as root is not advised" warnings and the associated risk.
 const (
-	containerUID  = 1000
-	containerGID  = 1000
-	containerUser = "1000:1000"
+	containerUID = 1000
+	containerGID = 1000
 )
 
 // DockerRuntime hosts servers as Docker containers. It is the preferred backend
@@ -314,35 +313,55 @@ func (d *DockerRuntime) ensureSteamHome() string {
 //     game server itself still runs strictly non-root.
 // Both are best-effort; failures are logged, not fatal.
 func (d *DockerRuntime) prepareDataDir(ctx context.Context, s *server.Server, image string) {
+	uid, gid := d.runtimeIDs()
 	// A ROOT agent can chown the host tree directly. A NON-root agent (the default
 	// systemd install runs as the unprivileged `refx` user) cannot: chown(2) to a
-	// different uid needs CAP_CHOWN, so files written by a root install image stay
-	// root-owned and the non-root runtime user (uid 1000) can't read them — the
-	// classic "Unable to access jarfile server.jar" on Minecraft. In that case fall
-	// back to the same trick used on Windows: a throwaway root container chowns the
-	// mount to 1000:1000. (chownTree silently ignores per-file errors, so we gate on
-	// the agent's own euid rather than trusting its return value.)
+	// different uid needs CAP_CHOWN. So files written by a root install image stay
+	// root-owned (the container can't read them — "Unable to access jarfile") and
+	// files the AGENT writes (mod uploads, SFTP, config) would be unreadable by a
+	// differently-owned container. We solve both by running the container as the
+	// agent's own uid (see runtimeIDs) and chowning the tree to it via a throwaway
+	// root container when the agent itself can't.
 	if goruntime.GOOS != "windows" && os.Geteuid() == 0 {
-		if err := chownTree(s.DataDir, containerUID, containerGID); err != nil {
+		if err := chownTree(s.DataDir, uid, gid); err != nil {
 			d.log.Warn().Err(err).Str("dir", s.DataDir).Msg("chown data dir failed")
 		}
 		return
 	}
-	d.chownViaContainer(ctx, s, image)
+	d.chownViaContainer(ctx, s, image, uid, gid)
+}
+
+// runtimeIDs returns the uid/gid the game container runs as — and that the data
+// dir is chowned to. A root agent uses the unprivileged 1000 (never run the game
+// as root). A NON-root agent uses ITS OWN uid/gid so the agent and the container
+// share a file owner: otherwise files the agent writes (mod/modpack uploads,
+// SFTP, config) end up unreadable by the container, or vice-versa. On Windows
+// uids don't map this way, so keep 1000 (Docker Desktop bridges host access).
+func (d *DockerRuntime) runtimeIDs() (int, int) {
+	if goruntime.GOOS != "windows" && os.Geteuid() != 0 {
+		return os.Getuid(), os.Getgid()
+	}
+	return containerUID, containerGID
+}
+
+// runtimeUser is runtimeIDs formatted for container.Config.User ("uid:gid").
+func (d *DockerRuntime) runtimeUser() string {
+	uid, gid := d.runtimeIDs()
+	return fmt.Sprintf("%d:%d", uid, gid)
 }
 
 // chownViaContainer runs a short-lived root container that chowns the server's
-// data dir to the non-root runtime user. Used on Windows where the agent can't
-// chown the bind mount itself. The image is reused from the install/runtime step
-// (it's already present and has coreutils `chown`).
-func (d *DockerRuntime) chownViaContainer(ctx context.Context, s *server.Server, image string) {
+// data dir to uid:gid. Used when the agent itself can't chown the bind mount
+// (Windows, or a non-root Linux agent). The image is reused from the install/
+// runtime step (already present, has coreutils `chown`).
+func (d *DockerRuntime) chownViaContainer(ctx context.Context, s *server.Server, image string, uid, gid int) {
 	name := containerName(s) + "-chown"
 	_ = d.cli.ContainerRemove(ctx, name, container.RemoveOptions{Force: true})
 	cfg := &container.Config{
 		Image:      image,
 		User:       "0:0",
 		Entrypoint: []string{"chown"},
-		Cmd:        []string{"-R", "1000:1000", "/data"},
+		Cmd:        []string{"-R", fmt.Sprintf("%d:%d", uid, gid), "/data"},
 		Labels:     map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
 	host := &container.HostConfig{
@@ -398,8 +417,10 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 		Env:          append(envSlice(s.Spec.Env), "HOME=/home/container"),
 		ExposedPorts: ports,
 		WorkingDir:   "/home/container",
-		// Always run the game as a non-root user — never as root, on any OS.
-		User:         containerUser,
+		// Always run the game as a non-root user — never as root, on any OS. On a
+		// non-root Linux agent this is the agent's own uid so the agent and the
+		// container can both read/write the data dir (see runtimeIDs).
+		User:         d.runtimeUser(),
 		Tty:          false,
 		OpenStdin:    true,
 		AttachStdin:  true,
