@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "The Source-engine sandbox. SteamCMD-installed srcds server with Workshop collection and gamemode support.",
   "category": "sandbox",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -19,10 +22,14 @@
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 4020 validate +quit\necho \"Garry's Mod install complete.\"\n"
+    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\n# Locate or bootstrap steamcmd (the parkervcp/steamcmd image does NOT ship it\n# on PATH; eggs are expected to fetch it themselves).\nif command -v steamcmd >/dev/null 2>&1; then\n  STEAMCMD=steamcmd\nelse\n  echo \"[steam] bootstrapping steamcmd\"\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  STEAMCMD=/mnt/server/steamcmd/steamcmd.sh\nfi\n\"$STEAMCMD\" +force_install_dir /mnt/server +login anonymous +app_update 4020 validate +quit\necho \"Garry's Mod install complete.\"\n"
   },
   "configFiles": [
-    { "path": "garrysmod/cfg/server.cfg", "parser": "file", "find": {} }
+    {
+      "path": "garrysmod/cfg/server.cfg",
+      "parser": "file",
+      "find": {}
+    }
   ],
   "recCpuCores": 2,
   "recMemoryMb": 4096,
@@ -34,7 +41,10 @@
       "description": "Map the server loads on start.",
       "type": "STRING",
       "defaultValue": "gm_construct",
-      "rules": { "required": true, "maxLength": 64 },
+      "rules": {
+        "required": true,
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -45,7 +55,10 @@
       "description": "Active gamemode (e.g. sandbox, darkrp, terrortown).",
       "type": "STRING",
       "defaultValue": "sandbox",
-      "rules": { "required": true, "maxLength": 64 },
+      "rules": {
+        "required": true,
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -56,7 +69,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "16",
-      "rules": { "required": true, "min": 1, "max": 128 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -67,7 +84,9 @@
       "description": "Steam Workshop collection to auto-download (0 disables).",
       "type": "NUMBER",
       "defaultValue": "0",
-      "rules": { "min": 0 },
+      "rules": {
+        "min": 0
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 3
@@ -78,12 +97,19 @@
       "description": "Steam GSLT for app 4020 (required for public listing).",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "maxLength": 64 },
+      "rules": {
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 4
     }
   ],
-  "tags": ["sandbox", "moddable", "workshop", "multiplayer"],
-  "longDescription": "Run any gamemode — sandbox, DarkRP, TTT and more — with full Steam Workshop support on your Garry's Mod server."
+  "tags": [
+    "sandbox",
+    "moddable",
+    "workshop",
+    "multiplayer"
+  ],
+  "longDescription": "Run any gamemode \u2014 sandbox, DarkRP, TTT and more \u2014 with full Steam Workshop support on your Garry's Mod server."
 }

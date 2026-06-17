@@ -23,7 +23,7 @@
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 380870 validate +quit\nmkdir -p /mnt/server/Zomboid/Server\nchmod +x start-server.sh || true\necho 'Project Zomboid install complete.'\n"
+    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\n# Locate or bootstrap steamcmd (the parkervcp/steamcmd image does NOT ship it\n# on PATH; eggs are expected to fetch it themselves).\nif command -v steamcmd >/dev/null 2>&1; then\n  STEAMCMD=steamcmd\nelse\n  echo \"[steam] bootstrapping steamcmd\"\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  STEAMCMD=/mnt/server/steamcmd/steamcmd.sh\nfi\n\"$STEAMCMD\" +force_install_dir /mnt/server +login anonymous +app_update 380870 validate +quit\nmkdir -p /mnt/server/Zomboid/Server\nchmod +x start-server.sh || true\necho 'Project Zomboid install complete.'\n"
   },
   "configFiles": [
     {

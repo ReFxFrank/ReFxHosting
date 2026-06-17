@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Bohemia's military sandbox. SteamCMD-installed dedicated server with mod and mission support.",
   "category": "shooter",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -19,10 +22,14 @@
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\nset -uo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\n# Persist steamcmd's machine auth (sentry) so a Steam Guard code is only needed once.\nexport HOME=/mnt/server/.steamhome\nmkdir -p \"$HOME\"\n# BASE GAME download uses the HOST's game-download account (Admin → Settings →\n# Steam). Arma 3's dedicated server (233780) is NOT anonymous.\nif [ -n \"${STEAM_GAME_USERNAME:-}\" ] && [ -n \"${STEAM_GAME_PASSWORD:-}\" ]; then\n  GLOGIN=(+login \"$STEAM_GAME_USERNAME\" \"$STEAM_GAME_PASSWORD\")\n  [ -n \"${STEAM_GAME_GUARD:-}\" ] && GLOGIN+=(\"$STEAM_GAME_GUARD\")\nelse\n  GLOGIN=(+login anonymous)\n  echo \"[steam] No game-download account configured (Admin → Settings → Steam). Arma 3 requires one that owns the game.\"\nfi\nsteamcmd +force_install_dir /mnt/server \"${GLOGIN[@]}\" +app_update 233780 validate +quit || echo \"[steam] base install reported an error (login / ownership / Steam Guard?)\"\n# WORKSHOP MODS use the CUSTOMER's own Steam account (server's Workshop tab).\nWS_APP=\"${WORKSHOP_APP_ID:-107410}\"\nif [ -n \"${WORKSHOP_ITEMS:-}\" ]; then\n  if [ -n \"${STEAM_USERNAME:-}\" ] && [ -n \"${STEAM_PASSWORD:-}\" ]; then\n    WLOGIN=(+login \"$STEAM_USERNAME\" \"$STEAM_PASSWORD\")\n    [ -n \"${STEAM_GUARD_CODE:-}\" ] && WLOGIN+=(\"$STEAM_GUARD_CODE\")\n    for id in $WORKSHOP_ITEMS; do\n      echo \"[workshop] downloading $id\"\n      steamcmd +force_install_dir /mnt/server \"${WLOGIN[@]}\" +workshop_download_item \"$WS_APP\" \"$id\" validate +quit || echo \"[workshop] $id failed (Steam Guard? re-Apply with a fresh code)\"\n      src=\"/mnt/server/steamapps/workshop/content/$WS_APP/$id\"\n      [ -d \"$src\" ] && ln -sfn \"$src\" \"/mnt/server/@ws_$id\" || true\n    done\n  else\n    echo \"[workshop] WORKSHOP_ITEMS set but no customer Steam login — connect your account on the Workshop tab.\"\n  fi\nfi\nif [ ! -f /mnt/server/arma3server_x64 ] && [ ! -f /mnt/server/arma3server ]; then\n  echo \"ERROR: Arma 3 server files are missing — set a game-download Steam account (Admin → Settings → Steam) that owns Arma 3, then reinstall.\"\n  exit 1\nfi\necho 'Arma 3 install complete.'\n"
+    "script": "#!/bin/bash\nset -uo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\n# Locate or bootstrap steamcmd (the parkervcp/steamcmd image does NOT ship it\n# on PATH; eggs are expected to fetch it themselves).\nif command -v steamcmd >/dev/null 2>&1; then\n  STEAMCMD=steamcmd\nelse\n  echo \"[steam] bootstrapping steamcmd\"\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  STEAMCMD=/mnt/server/steamcmd/steamcmd.sh\nfi\n# Persist steamcmd's machine auth (sentry) so a Steam Guard code is only needed once.\nexport HOME=/mnt/server/.steamhome\nmkdir -p \"$HOME\"\n# BASE GAME download uses the HOST's game-download account (Admin \u2192 Settings \u2192\n# Steam). Arma 3's dedicated server (233780) is NOT anonymous.\nif [ -n \"${STEAM_GAME_USERNAME:-}\" ] && [ -n \"${STEAM_GAME_PASSWORD:-}\" ]; then\n  GLOGIN=(+login \"$STEAM_GAME_USERNAME\" \"$STEAM_GAME_PASSWORD\")\n  [ -n \"${STEAM_GAME_GUARD:-}\" ] && GLOGIN+=(\"$STEAM_GAME_GUARD\")\nelse\n  GLOGIN=(+login anonymous)\n  echo \"[steam] No game-download account configured (Admin \u2192 Settings \u2192 Steam). Arma 3 requires one that owns the game.\"\nfi\n\"$STEAMCMD\" +force_install_dir /mnt/server \"${GLOGIN[@]}\" +app_update 233780 validate +quit || echo \"[steam] base install reported an error (login / ownership / Steam Guard?)\"\n# WORKSHOP MODS use the CUSTOMER's own Steam account (server's Workshop tab).\nWS_APP=\"${WORKSHOP_APP_ID:-107410}\"\nif [ -n \"${WORKSHOP_ITEMS:-}\" ]; then\n  if [ -n \"${STEAM_USERNAME:-}\" ] && [ -n \"${STEAM_PASSWORD:-}\" ]; then\n    WLOGIN=(+login \"$STEAM_USERNAME\" \"$STEAM_PASSWORD\")\n    [ -n \"${STEAM_GUARD_CODE:-}\" ] && WLOGIN+=(\"$STEAM_GUARD_CODE\")\n    for id in $WORKSHOP_ITEMS; do\n      echo \"[workshop] downloading $id\"\n      \"$STEAMCMD\" +force_install_dir /mnt/server \"${WLOGIN[@]}\" +workshop_download_item \"$WS_APP\" \"$id\" validate +quit || echo \"[workshop] $id failed (Steam Guard? re-Apply with a fresh code)\"\n      src=\"/mnt/server/steamapps/workshop/content/$WS_APP/$id\"\n      [ -d \"$src\" ] && ln -sfn \"$src\" \"/mnt/server/@ws_$id\" || true\n    done\n  else\n    echo \"[workshop] WORKSHOP_ITEMS set but no customer Steam login \u2014 connect your account on the Workshop tab.\"\n  fi\nfi\nif [ ! -f /mnt/server/arma3server_x64 ] && [ ! -f /mnt/server/arma3server ]; then\n  echo \"ERROR: Arma 3 server files are missing \u2014 set a game-download Steam account (Admin \u2192 Settings \u2192 Steam) that owns Arma 3, then reinstall.\"\n  exit 1\nfi\necho 'Arma 3 install complete.'\n"
   },
   "configFiles": [
-    { "path": "server.cfg", "parser": "file", "find": {} }
+    {
+      "path": "server.cfg",
+      "parser": "file",
+      "find": {}
+    }
   ],
   "recCpuCores": 4,
   "recMemoryMb": 6144,
@@ -34,7 +41,10 @@
       "description": "Name shown in the in-game server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Arma 3 Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -45,7 +55,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "32",
-      "rules": { "required": true, "min": 2, "max": 200 },
+      "rules": {
+        "required": true,
+        "min": 2,
+        "max": 200
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -56,7 +70,9 @@
       "description": "Leave blank for a public server.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "maxLength": 64 },
+      "rules": {
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 2
@@ -67,12 +83,20 @@
       "description": "Semicolon-separated mod folder list (e.g. @cba_a3;@ace).",
       "type": "STRING",
       "defaultValue": "",
-      "rules": { "maxLength": 1024 },
+      "rules": {
+        "maxLength": 1024
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 3
     }
   ],
-  "tags": ["fps", "milsim", "tactical", "moddable", "multiplayer"],
+  "tags": [
+    "fps",
+    "milsim",
+    "tactical",
+    "moddable",
+    "multiplayer"
+  ],
   "longDescription": "Run large-scale milsim operations with full mod support on a dedicated Arma 3 server."
 }
