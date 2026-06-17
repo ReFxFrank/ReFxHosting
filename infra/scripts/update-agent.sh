@@ -25,6 +25,14 @@ echo "==> Pulling latest (git)"
 git -C "$REPO_ROOT" pull origin main
 
 echo "==> Building agent"
+# Go is commonly installed to /usr/local/go/bin, which a non-login shell (like
+# `bash update-agent.sh`) doesn't have on PATH. Add it if `go` isn't found.
+command -v go >/dev/null 2>&1 || export PATH="$PATH:/usr/local/go/bin"
+command -v go >/dev/null 2>&1 || {
+  echo "ERROR: 'go' not found. Install Go 1.25+ (https://go.dev/dl/) or, better," >&2
+  echo "       use the panel's 'Update agent' button once a release is published." >&2
+  exit 1
+}
 ( cd "$AGENT_DIR" && go build -o ./refx-agent.new ./cmd/refx-agent )
 
 if systemctl list-unit-files 2>/dev/null | grep -q '^refx-agent\.service'; then
