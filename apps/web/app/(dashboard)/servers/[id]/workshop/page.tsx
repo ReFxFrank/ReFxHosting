@@ -229,6 +229,7 @@ function SteamLoginCard({ serverId }: { serverId: string }) {
   const qc = useQueryClient();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [guardCode, setGuardCode] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["server", serverId, "workshop-steam"],
@@ -238,11 +239,18 @@ function SteamLoginCard({ serverId }: { serverId: string }) {
     qc.invalidateQueries({ queryKey: ["server", serverId, "workshop-steam"] });
 
   const save = useMutation({
-    mutationFn: () => api.servers.workshopSetSteam(serverId, username.trim(), password),
+    mutationFn: () =>
+      api.servers.workshopSetSteam(
+        serverId,
+        username.trim(),
+        password,
+        guardCode.trim() || undefined,
+      ),
     onSuccess: () => {
       toast.success("Steam login saved — it's used on the next Apply/reinstall.");
       setUsername("");
       setPassword("");
+      setGuardCode("");
       invalidate();
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to save"),
@@ -302,15 +310,23 @@ function SteamLoginCard({ serverId }: { serverId: string }) {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
+            <div className="space-y-1.5">
+              <Input
+                autoComplete="off"
+                placeholder="Steam Guard code (if your account uses Steam Guard)"
+                value={guardCode}
+                onChange={(e) => setGuardCode(e.target.value)}
+                aria-label="Steam Guard code"
+              />
+            </div>
             <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/5 p-2.5 text-xs text-muted-foreground">
               <ShieldAlert className="mt-0.5 size-4 shrink-0 text-warning" />
               <span>
-                Using <strong>Steam Guard</strong>? Enter your current code in the
-                <strong> Steam Guard code</strong> box next to <strong>Apply</strong> — it&apos;s
-                passed to Steam for that download and this machine is then remembered, so
-                you usually only need it once. <strong>Email</strong> codes work best;
-                mobile-authenticator codes can expire before the install runs. We never
-                share your password.
+                Using <strong>Steam Guard</strong>? Enter your current code above (or in the
+                box next to <strong>Apply</strong>) — it&apos;s passed to Steam for the next
+                download and this machine is then remembered, so you usually only need it
+                once. <strong>Email</strong> codes work best; mobile-authenticator codes can
+                expire before the install runs. We never share your password.
               </span>
             </div>
             <div className="flex justify-end">

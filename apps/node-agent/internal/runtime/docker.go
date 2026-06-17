@@ -475,6 +475,12 @@ func (d *DockerRuntime) Restart(ctx context.Context, s *server.Server, timeout t
 }
 
 // AttachConsole attaches to the container's stdio, demultiplexing stdout/stderr.
+//
+// Docker's attach stream only carries output produced AFTER the attach, so on its
+// own a console opened after a server has started (and gone quiet) shows nothing —
+// e.g. Arma 3, which prints its banner once at boot and is then largely silent.
+// We therefore prime the stream with the container's recent log history (tail)
+// before switching to the live attach, mirroring the native runtime's scrollback.
 func (d *DockerRuntime) AttachConsole(ctx context.Context, s *server.Server) (*Console, error) {
 	resp, err := d.cli.ContainerAttach(ctx, containerName(s), container.AttachOptions{
 		Stream: true, Stdin: true, Stdout: true, Stderr: true,
@@ -484,16 +490,25 @@ func (d *DockerRuntime) AttachConsole(ctx context.Context, s *server.Server) (*C
 	}
 
 	out := make(chan []byte, 256)
+	emit := func(line []byte) {
+		cp := make([]byte, len(line))
+		copy(cp, line)
+		select {
+		case out <- cp:
+		case <-ctx.Done():
+		}
+	}
 	go func() {
 		defer close(out)
-		streamDockerLogs(resp.Reader, func(line []byte) {
-			cp := make([]byte, len(line))
-			copy(cp, line)
-			select {
-			case out <- cp:
-			case <-ctx.Done():
-			}
-		})
+		// Replay recent history first (best-effort) so the console isn't blank.
+		if logs, lerr := d.cli.ContainerLogs(ctx, containerName(s), container.LogsOptions{
+			ShowStdout: true, ShowStderr: true, Tail: "250",
+		}); lerr == nil {
+			streamDockerLogs(logs, emit)
+			_ = logs.Close()
+		}
+		// Then stream live output (and accept stdin via resp.Conn).
+		streamDockerLogs(resp.Reader, emit)
 	}()
 
 	write := func(p []byte) (int, error) { return resp.Conn.Write(p) }

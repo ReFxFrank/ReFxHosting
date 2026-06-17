@@ -483,10 +483,16 @@ export const api = {
     // The customer's own Steam login for this server's Workshop downloads.
     workshopSteam: (id: string) =>
       http.get<{ username: string; hasLogin: boolean }>(`/servers/${id}/workshop/steam`),
-    workshopSetSteam: (id: string, username: string, password: string) =>
+    workshopSetSteam: (
+      id: string,
+      username: string,
+      password: string,
+      steamGuardCode?: string,
+    ) =>
       http.put<{ username: string; hasLogin: boolean }>(`/servers/${id}/workshop/steam`, {
         username,
         password,
+        ...(steamGuardCode ? { steamGuardCode } : {}),
       }),
     workshopClearSteam: (id: string) =>
       http.delete<void>(`/servers/${id}/workshop/steam`),

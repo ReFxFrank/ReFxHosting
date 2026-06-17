@@ -42,18 +42,22 @@ export class WorkshopService {
   /** Set the customer's own Steam login for this server (password encrypted). */
   async setSteamLogin(
     serverId: string,
-    dto: { username: string; password: string },
+    dto: { username: string; password: string; steamGuardCode?: string },
   ): Promise<{ username: string; hasLogin: boolean }> {
     await this.loadServer(serverId);
     const username = dto.username.trim();
     if (!username || !dto.password) {
       throw new BadRequestException('Enter your Steam username and password');
     }
+    const guardCode = dto.steamGuardCode?.trim();
     await this.prisma.server.update({
       where: { id: serverId },
       data: {
         steamUsername: username,
         steamPasswordEnc: this.crypto.encrypt(dto.password),
+        // A Guard code supplied here is staged for the next install/Apply (it's
+        // one-time and cleared once steamcmd has used it).
+        ...(guardCode ? { steamGuardCode: guardCode } : {}),
       },
     });
     return { username, hasLogin: true };
