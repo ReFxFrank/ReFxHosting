@@ -56,6 +56,8 @@ export interface BrandedEmail {
   accent?: EmailAccent;
   /** Hidden inbox-preview text. */
   preheader?: string;
+  /** Absolute URL of the ReFx logo PNG for the header (falls back to a wordmark). */
+  logoUrl?: string;
 }
 
 /** Escape a string for safe interpolation into HTML. */
@@ -141,31 +143,36 @@ export function buildEmail(c: BrandedEmail): { html: string; text: string } {
 
   const year = new Date().getFullYear();
 
+  const header = c.logoUrl
+    ? `<img src="${esc(c.logoUrl)}" alt="ReFx Hosting" height="30" style="height:30px;width:auto;border:0;outline:none;text-decoration:none;display:inline-block;" />`
+    : `<span style="font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:-0.02em;color:${COLOR.textPrimary};">
+         <span style="color:${COLOR.secondary};">ReFx</span>&nbsp;Hosting
+       </span>`;
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="color-scheme" content="dark" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="supported-color-schemes" content="dark light" />
   <title>${esc(c.title)}</title>
 </head>
-<body style="margin:0;padding:0;background-color:${COLOR.bg};">
+<body bgcolor="${COLOR.bg}" style="margin:0;padding:0;background-color:${COLOR.bg};">
   ${preheader}
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:${COLOR.bg};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${COLOR.bg}" style="background-color:${COLOR.bg};">
     <tr>
       <td align="center" style="padding:32px 16px;">
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">
           <!-- Brand header -->
           <tr>
             <td align="center" style="padding:8px 0 22px;">
-              <span style="font-family:${FONT};font-size:22px;font-weight:700;letter-spacing:-0.02em;color:${COLOR.textPrimary};">
-                <span style="color:${COLOR.secondary};">ReFx</span>&nbsp;Hosting
-              </span>
+              ${header}
             </td>
           </tr>
           <!-- Glass card -->
           <tr>
-            <td style="background-color:${COLOR.card};border:1px solid ${COLOR.border};border-radius:16px;overflow:hidden;">
+            <td bgcolor="${COLOR.card}" style="background-color:${COLOR.card};border:1px solid ${COLOR.border};border-radius:16px;overflow:hidden;">
               <!-- accent glow bar -->
               <div style="height:3px;background-color:${accent};line-height:3px;font-size:3px;">&nbsp;</div>
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">

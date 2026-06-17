@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -13,43 +13,69 @@ import { toast } from "@/components/ui/sonner";
 import { LogoWordmark } from "@/components/brand/logo";
 import { api, ApiError } from "@/lib/api";
 
+// Mirrors the backend strong-password policy (authoritative server-side).
+const strongPassword = z
+  .string()
+  .min(10, "At least 10 characters")
+  .max(128, "At most 128 characters")
+  .regex(/[a-z]/, "Add a lowercase letter")
+  .regex(/[A-Z]/, "Add an uppercase letter")
+  .regex(/[0-9]/, "Add a number")
+  .regex(/[^A-Za-z0-9]/, "Add a symbol");
+
 const schema = z
-  .object({
-    newPassword: z.string().min(10, "Use at least 10 characters"),
-    confirm: z.string(),
-  })
+  .object({ newPassword: strongPassword, confirm: z.string() })
   .refine((v) => v.newPassword === v.confirm, {
     message: "Passwords don't match",
     path: ["confirm"],
   });
 type FormValues = z.infer<typeof schema>;
 
+type Status = "checking" | "form" | "invalid" | "done";
+
 function ResetPassword() {
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token");
 
-  const [done, setDone] = useState(false);
+  const [status, setStatus] = useState<Status>(token ? "checking" : "invalid");
   const [submitting, setSubmitting] = useState(false);
+  const checked = useRef(false);
+
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  } = useForm<FormValues>({ resolver: zodResolver(schema), mode: "onChange" });
+
+  // Validate the link on open so an already-used / expired token shows the
+  // "request a new link" state immediately, rather than only after submitting.
+  useEffect(() => {
+    if (!token || checked.current) return;
+    checked.current = true;
+    (async () => {
+      try {
+        const { valid } = await api.auth.resetTokenValid(token);
+        setStatus(valid ? "form" : "invalid");
+      } catch {
+        setStatus("invalid");
+      }
+    })();
+  }, [token]);
 
   async function onSubmit(values: FormValues) {
     if (!token) return;
     setSubmitting(true);
     try {
       await api.auth.resetPassword(token, values.newPassword);
-      setDone(true);
+      setStatus("done");
       setTimeout(() => router.replace("/login"), 3500);
     } catch (e) {
-      toast.error(
-        e instanceof ApiError
-          ? e.message
-          : "This reset link is invalid or has expired.",
-      );
+      // A token consumed/expired between open and submit, or a reused password.
+      const msg =
+        e instanceof ApiError ? e.message : "This reset link is invalid or has expired.";
+      if (/expired|invalid|used/i.test(msg)) setStatus("invalid");
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -65,14 +91,21 @@ function ResetPassword() {
           <LogoWordmark height={28} />
         </div>
 
-        {!token ? (
+        {status === "checking" && (
+          <div className="space-y-4 text-center">
+            <Loader2 className="mx-auto size-10 animate-spin text-[#00aaff]" />
+            <h1 className="text-xl font-semibold text-white">Checking your link…</h1>
+          </div>
+        )}
+
+        {status === "invalid" && (
           <div className="space-y-5 text-center">
             <MailQuestion className="mx-auto size-12 text-[#00aaff]" />
             <div className="space-y-1.5">
-              <h1 className="text-xl font-semibold text-white">Invalid reset link</h1>
+              <h1 className="text-xl font-semibold text-white">Link no longer valid</h1>
               <p className="text-sm text-[#a9b8d0]">
-                This link is missing its reset token. Request a fresh password reset
-                email to continue.
+                This password reset link is invalid, has expired, or has already been
+                used. For your security, request a fresh one.
               </p>
             </div>
             <Button className="w-full" onClick={() => router.replace("/forgot-password")}>
@@ -84,7 +117,9 @@ function ResetPassword() {
               </Link>
             </p>
           </div>
-        ) : done ? (
+        )}
+
+        {status === "done" && (
           <div className="space-y-5 text-center">
             <CheckCircle2 className="mx-auto size-12 text-[#22c55e]" />
             <div className="space-y-1.5">
@@ -99,12 +134,15 @@ function ResetPassword() {
             </Button>
             <p className="text-xs text-[#6f7d95]">Redirecting you automatically…</p>
           </div>
-        ) : (
+        )}
+
+        {status === "form" && (
           <div className="space-y-5">
             <div className="space-y-1.5 text-center">
               <h1 className="text-xl font-semibold text-white">Choose a new password</h1>
               <p className="text-sm text-[#a9b8d0]">
-                Pick a strong password you don&apos;t use anywhere else.
+                Pick a strong password you don&apos;t already use — and not one you&apos;ve
+                used here before.
               </p>
             </div>
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -116,8 +154,12 @@ function ResetPassword() {
                   autoComplete="new-password"
                   {...register("newPassword")}
                 />
-                {errors.newPassword && (
+                {errors.newPassword ? (
                   <p className="text-xs text-[#ef4444]">{errors.newPassword.message}</p>
+                ) : (
+                  <p className="text-xs text-[#6f7d95]">
+                    10+ characters with an uppercase, lowercase, number and symbol.
+                  </p>
                 )}
               </div>
               <div className="space-y-2">

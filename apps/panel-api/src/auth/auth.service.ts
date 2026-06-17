@@ -511,6 +511,17 @@ export class AuthService {
       throw new BadRequestException('Invalid or expired reset token');
     }
 
+    // Don't allow reusing the current password (defence in depth).
+    const current = await this.prisma.user.findUnique({
+      where: { id: record.userId },
+      select: { passwordHash: true },
+    });
+    if (current?.passwordHash && (await argon2.verify(current.passwordHash, newPassword))) {
+      throw new BadRequestException(
+        "Please choose a password you haven't used before.",
+      );
+    }
+
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: record.userId },
@@ -527,6 +538,20 @@ export class AuthService {
         data: { revokedAt: new Date() },
       }),
     ]);
+  }
+
+  /**
+   * Whether a password-reset token is still usable, WITHOUT consuming it. Lets
+   * the reset page show an "expired link" state on open instead of only after
+   * the user fills in a new password. Reveals nothing but validity (the token is
+   * high-entropy and unguessable), so there's no enumeration risk.
+   */
+  async resetTokenValid(token: string): Promise<boolean> {
+    if (!token) return false;
+    const record = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash: this.crypto.hash(token) },
+    });
+    return Boolean(record && !record.usedAt && record.expiresAt >= new Date());
   }
 
   // ---- Email verification ------------------------------------------------
@@ -591,6 +616,13 @@ export class AuthService {
     }
     const ok = await argon2.verify(user.passwordHash, currentPassword);
     if (!ok) throw new BadRequestException('Current password is incorrect');
+
+    // New password must differ from the current one.
+    if (await argon2.verify(user.passwordHash, newPassword)) {
+      throw new BadRequestException(
+        'Your new password must be different from your current one.',
+      );
+    }
 
     await this.prisma.user.update({
       where: { id: userId },

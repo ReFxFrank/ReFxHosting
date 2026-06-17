@@ -13,15 +13,18 @@ import {
   MinLength,
 } from 'class-validator';
 import { ApiKeyScope } from '@prisma/client';
+import { IsStrongPassword } from '../password.validator';
 
 export class RegisterDto {
   @ApiProperty()
   @IsEmail()
   email!: string;
 
-  @ApiProperty({ minLength: 10 })
-  @IsString()
-  @MinLength(10)
+  @ApiProperty({
+    minLength: 10,
+    description: '10–128 chars with a lowercase, uppercase, number and symbol',
+  })
+  @IsStrongPassword()
   password!: string;
 
   @ApiPropertyOptional()
@@ -104,9 +107,11 @@ export class ResetPasswordDto {
   @IsString()
   token!: string;
 
-  @ApiProperty({ minLength: 10 })
-  @IsString()
-  @MinLength(10)
+  @ApiProperty({
+    minLength: 10,
+    description: '10–128 chars with a lowercase, uppercase, number and symbol',
+  })
+  @IsStrongPassword()
   newPassword!: string;
 }
 

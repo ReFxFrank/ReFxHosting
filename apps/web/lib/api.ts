@@ -312,6 +312,11 @@ export const api = {
       http.post<void>("/auth/forgot-password", { email }, { anonymous: true }),
     resetPassword: (token: string, newPassword: string) =>
       http.post<void>("/auth/reset-password", { token, newPassword }, { anonymous: true }),
+    resetTokenValid: (token: string) =>
+      http.get<{ valid: boolean }>("/auth/reset-password/valid", {
+        anonymous: true,
+        query: { token },
+      }),
     verifyEmail: (token: string) =>
       http.post<void>("/auth/verify-email", { token }, { anonymous: true }),
     resendVerification: (email: string) =>

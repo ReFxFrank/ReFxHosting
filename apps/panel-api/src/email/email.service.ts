@@ -8,7 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import type { Transporter, SendMailOptions } from 'nodemailer';
 import { SettingsService } from '../platform/settings.service';
-import { buildEmail } from './email-templates';
+import { buildEmail, BrandedEmail } from './email-templates';
 
 export interface MailRecipient {
   email: string;
@@ -104,7 +104,7 @@ export class EmailService {
         'Email is not configured yet — set an SMTP host (e.g. smtp.resend.com) and save before sending a test.',
       );
     }
-    const { html, text } = buildEmail({
+    const { html, text } = this.compose({
       title: 'SMTP test successful',
       accent: 'success',
       preheader: 'Your ReFx Hosting SMTP settings are working.',
@@ -131,11 +131,22 @@ export class EmailService {
     return { delivered: configured };
   }
 
+  /**
+   * Render branded email content, injecting the ReFx logo (served by the web
+   * panel) into the header so every transactional email is logo-branded.
+   */
+  private compose(email: BrandedEmail): { html: string; text: string } {
+    return buildEmail({
+      ...email,
+      logoUrl: `${this.panelUrl}/brand/refx-wordmark.png`,
+    });
+  }
+
   // ---- public helpers ----------------------------------------------------
 
   async sendPasswordReset(user: MailRecipient, token: string): Promise<void> {
     const link = `${this.panelUrl}/auth/reset-password?token=${encodeURIComponent(token)}`;
-    const { html, text } = buildEmail({
+    const { html, text } = this.compose({
       title: 'Reset your password',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
       preheader: 'Reset your ReFx Hosting password — this link expires in 1 hour.',
@@ -161,7 +172,7 @@ export class EmailService {
     token: string,
   ): Promise<void> {
     const link = `${this.panelUrl}/auth/verify-email?token=${encodeURIComponent(token)}`;
-    const { html, text } = buildEmail({
+    const { html, text } = this.compose({
       title: 'Verify your email',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Welcome to ReFx Hosting,',
       preheader: 'Confirm your email to activate your ReFx Hosting account.',
@@ -184,7 +195,7 @@ export class EmailService {
 
   /** Welcome email after a customer verifies their address. */
   async sendWelcome(user: MailRecipient): Promise<void> {
-    const { html, text } = buildEmail({
+    const { html, text } = this.compose({
       title: 'Welcome to ReFx Hosting',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Welcome,',
       accent: 'success',
@@ -209,7 +220,7 @@ export class EmailService {
     invoice: { number: number | string; amountMinor: number; currency: string },
   ): Promise<void> {
     const amount = this.money(invoice.amountMinor, invoice.currency);
-    const { html, text } = buildEmail({
+    const { html, text } = this.compose({
       title: 'Payment received',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
       accent: 'success',
@@ -239,7 +250,7 @@ export class EmailService {
   ): Promise<void> {
     const amount = this.money(invoice.amountMinor, invoice.currency);
     const reason = invoice.reason ? ` (${invoice.reason})` : '';
-    const { html, text } = buildEmail({
+    const { html, text } = this.compose({
       title: 'Payment failed',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
       accent: 'danger',
@@ -274,7 +285,7 @@ export class EmailService {
     const action = sub.hasPaymentMethod
       ? `We'll automatically charge your saved payment method on that date.`
       : `You don't have a saved payment method — please add one so your service isn't interrupted.`;
-    const { html, text } = buildEmail({
+    const { html, text } = this.compose({
       title: 'Upcoming renewal',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
       preheader: `Your ${sub.productName} renews on ${date}.`,
@@ -298,7 +309,7 @@ export class EmailService {
   ): Promise<void> {
     const label = `${card.brand ?? 'card'} ending ${card.last4 ?? '••••'}`;
     const exp = `${String(card.expMonth).padStart(2, '0')}/${card.expYear}`;
-    const { html, text } = buildEmail({
+    const { html, text } = this.compose({
       title: 'Your card is expiring soon',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
       preheader: `Your ${label} expires ${exp}.`,

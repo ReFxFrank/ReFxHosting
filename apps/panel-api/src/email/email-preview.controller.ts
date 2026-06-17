@@ -152,7 +152,11 @@ export class EmailPreviewController {
     this.assertDev();
     const sample = SAMPLES[name];
     if (!sample) throw new NotFoundException(`Unknown template: ${name}`);
-    const { html, text } = buildEmail(sample.email);
+    const panelUrl = (this.config.get<string>('panelUrl') ?? '').replace(/\/+$/, '');
+    const { html, text } = buildEmail({
+      ...sample.email,
+      logoUrl: panelUrl ? `${panelUrl}/brand/refx-wordmark.png` : undefined,
+    });
     if (format === 'text') {
       res.type('text/plain').send(`Subject: ${sample.subject}\n\n${text}`);
       return;

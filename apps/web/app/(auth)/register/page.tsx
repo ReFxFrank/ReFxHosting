@@ -25,7 +25,14 @@ const schema = z
     firstName: z.string().min(1, "Required"),
     lastName: z.string().optional(),
     email: z.string().email("Enter a valid email"),
-    password: z.string().min(10, "Use at least 10 characters"),
+    password: z
+      .string()
+      .min(10, "At least 10 characters")
+      .max(128, "At most 128 characters")
+      .regex(/[a-z]/, "Add a lowercase letter")
+      .regex(/[A-Z]/, "Add an uppercase letter")
+      .regex(/[0-9]/, "Add a number")
+      .regex(/[^A-Za-z0-9]/, "Add a symbol"),
     confirm: z.string(),
     addressLine1: z.string().min(2, "Required"),
     addressLine2: z.string().optional(),
@@ -122,7 +129,13 @@ export default function RegisterPage() {
         <div className="space-y-2">
           <Label htmlFor="password">Password</Label>
           <Input id="password" type="password" autoComplete="new-password" {...register("password")} />
-          {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+          {errors.password ? (
+            <p className="text-xs text-destructive">{errors.password.message}</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              10+ characters with an uppercase, lowercase, number and symbol.
+            </p>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="confirm">Confirm password</Label>

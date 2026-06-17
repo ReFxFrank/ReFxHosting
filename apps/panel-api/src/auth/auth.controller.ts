@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -80,6 +81,16 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.auth.resetPassword(dto.token, dto.newPassword);
     return { ok: true };
+  }
+
+  /**
+   * Check (without consuming) whether a reset link is still valid, so the reset
+   * page can show an "expired/used link" state on open. Returns only validity.
+   */
+  @Public()
+  @Get('reset-password/valid')
+  async resetPasswordValid(@Query('token') token = '') {
+    return { valid: await this.auth.resetTokenValid(token) };
   }
 
   @Public()
