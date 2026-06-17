@@ -470,7 +470,7 @@ export const api = {
     // Steam Workshop
     workshop: (id: string) => getList<WorkshopMod>(`/servers/${id}/workshop`),
     workshopAdd: (id: string, input: string) =>
-      http.post<WorkshopMod>(`/servers/${id}/workshop`, { input }),
+      http.post<{ added: number }>(`/servers/${id}/workshop`, { input }),
     workshopToggle: (id: string, modId: string, enabled: boolean) =>
       http.patch<WorkshopMod>(`/servers/${id}/workshop/${modId}`, { enabled }),
     workshopReorder: (id: string, ids: string[]) =>

@@ -46,9 +46,11 @@ export default function WorkshopPage() {
 
   const add = useMutation({
     mutationFn: () => api.servers.workshopAdd(id, input.trim()),
-    onSuccess: () => {
+    onSuccess: (res) => {
       setInput("");
-      toast.success("Added");
+      if (res.added === 0) toast.info("Already added");
+      else if (res.added === 1) toast.success("Added");
+      else toast.success(`Added ${res.added} mods from collection`);
       invalidate();
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't add that item"),

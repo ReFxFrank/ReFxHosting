@@ -101,21 +101,46 @@ export class WorkshopService {
     return m ? m[1] : null;
   }
 
-  async add(serverId: string, input: string) {
-    await this.loadServer(serverId);
+  /**
+   * Whether the egg loads a Workshop *collection* at runtime (e.g. Garry's Mod's
+   * `+host_workshop_collection {{WORKSHOP_ID}}`) vs. downloading individual items
+   * with steamcmd (Arma 3, DayZ). For the former we keep a single COLLECTION row;
+   * for the latter we expand collections into their member items.
+   */
+  private static usesRuntimeCollection(tpl: {
+    startupCommand?: string | null;
+    installScript?: unknown;
+  }): boolean {
+    const hay =
+      (tpl.startupCommand ?? '') + JSON.stringify(tpl.installScript ?? '');
+    return /host_workshop_collection|WORKSHOP_ID/i.test(hay);
+  }
+
+  async add(serverId: string, input: string): Promise<{ added: number }> {
+    const server = await this.loadServer(serverId);
     const workshopId = WorkshopService.parseId(input);
     if (!workshopId) {
       throw new BadRequestException('Enter a Workshop ID or URL');
     }
 
+    // Item-download games (Arma 3, DayZ): expand a collection into its member
+    // items so each mod is downloaded + loaded individually. Plain items and
+    // runtime-collection games (GMod) fall through to the single-row path.
+    if (!WorkshopService.usesRuntimeCollection(server.template!)) {
+      const itemIds = await this.expandCollection(workshopId);
+      if (itemIds.length) {
+        return { added: await this.addItems(serverId, itemIds) };
+      }
+    }
+
     const existing = await this.prisma.workshopMod.findUnique({
       where: { serverId_workshopId: { serverId, workshopId } },
     });
-    if (existing) return existing;
+    if (existing) return { added: 0 };
 
     const meta = await this.resolve(workshopId);
     const count = await this.prisma.workshopMod.count({ where: { serverId } });
-    return this.prisma.workshopMod.create({
+    await this.prisma.workshopMod.create({
       data: {
         id: uuidv7(),
         serverId,
@@ -126,6 +151,34 @@ export class WorkshopService {
         sortOrder: count,
       },
     });
+    return { added: 1 };
+  }
+
+  /** Create ITEM rows for the given ids (skipping ones already present). */
+  private async addItems(serverId: string, ids: string[]): Promise<number> {
+    const existing = await this.prisma.workshopMod.findMany({
+      where: { serverId },
+      select: { workshopId: true },
+    });
+    const have = new Set(existing.map((e) => e.workshopId));
+    const toAdd = ids.filter((id) => !have.has(id));
+    if (!toAdd.length) return 0;
+
+    const titles = await this.itemTitles(toAdd);
+    let sortOrder = await this.prisma.workshopMod.count({ where: { serverId } });
+    await this.prisma.workshopMod.createMany({
+      data: toAdd.map((id) => ({
+        id: uuidv7(),
+        serverId,
+        workshopId: id,
+        name: titles[id] ?? null,
+        kind: 'ITEM' as WorkshopKind,
+        enabled: true,
+        sortOrder: sortOrder++,
+      })),
+      skipDuplicates: true,
+    });
+    return toAdd.length;
   }
 
   async remove(serverId: string, id: string) {
@@ -220,7 +273,17 @@ export class WorkshopService {
   private async resolve(
     workshopId: string,
   ): Promise<{ name: string | null; kind: WorkshopKind }> {
-    // A collection returns child items from GetCollectionDetails.
+    const children = await this.collectionChildren(workshopId);
+    return {
+      name: await this.itemTitle(workshopId),
+      kind: children.length ? 'COLLECTION' : 'ITEM',
+    };
+  }
+
+  /** A collection's direct children (id + filetype). Empty if not a collection. */
+  private async collectionChildren(
+    workshopId: string,
+  ): Promise<Array<{ id: string; filetype: number }>> {
     try {
       const res = await fetch(
         `${WorkshopService.STEAM_API}/ISteamRemoteStorage/GetCollectionDetails/v1/`,
@@ -234,19 +297,78 @@ export class WorkshopService {
           signal: AbortSignal.timeout(6000),
         },
       );
-      if (res.ok) {
-        const data = (await res.json()) as {
-          response?: { collectiondetails?: Array<{ result?: number; children?: unknown[] }> };
+      if (!res.ok) return [];
+      const data = (await res.json()) as {
+        response?: {
+          collectiondetails?: Array<{
+            result?: number;
+            children?: Array<{ publishedfileid?: string; filetype?: number }>;
+          }>;
         };
-        const det = data.response?.collectiondetails?.[0];
-        if (det?.result === 1 && Array.isArray(det.children) && det.children.length) {
-          return { name: await this.itemTitle(workshopId), kind: 'COLLECTION' };
+      };
+      const det = data.response?.collectiondetails?.[0];
+      if (det?.result !== 1 || !Array.isArray(det.children)) return [];
+      return det.children
+        .map((c) => ({ id: String(c.publishedfileid ?? ''), filetype: Number(c.filetype ?? 0) }))
+        .filter((c) => /^\d+$/.test(c.id));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Expand a collection into the flat set of member item ids, descending into
+   * nested sub-collections (filetype 2). Returns [] for a plain item. Bounded by
+   * a lookup budget so a pathological/cyclic collection can't run away.
+   */
+  private async expandCollection(rootId: string): Promise<string[]> {
+    const items = new Set<string>();
+    const visited = new Set<string>();
+    const stack = [rootId];
+    let budget = 25; // max collection lookups (root + nested)
+    while (stack.length && budget-- > 0) {
+      const id = stack.pop()!;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      const children = await this.collectionChildren(id);
+      for (const c of children) {
+        if (c.filetype === 2) {
+          if (!visited.has(c.id)) stack.push(c.id); // nested collection
+        } else {
+          items.add(c.id);
         }
       }
-    } catch {
-      /* network/timeouts — fall through to ITEM */
     }
-    return { name: await this.itemTitle(workshopId), kind: 'ITEM' };
+    return [...items];
+  }
+
+  /** Best-effort published-file titles for many ids in one call ({} on failure). */
+  private async itemTitles(ids: string[]): Promise<Record<string, string>> {
+    if (!ids.length) return {};
+    try {
+      const body = new URLSearchParams({ itemcount: String(ids.length) });
+      ids.forEach((id, i) => body.set(`publishedfileids[${i}]`, id));
+      const res = await fetch(
+        `${WorkshopService.STEAM_API}/ISteamRemoteStorage/GetPublishedFileDetails/v1/`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body,
+          signal: AbortSignal.timeout(8000),
+        },
+      );
+      if (!res.ok) return {};
+      const data = (await res.json()) as {
+        response?: { publishedfiledetails?: Array<{ publishedfileid?: string; title?: string }> };
+      };
+      const out: Record<string, string> = {};
+      for (const d of data.response?.publishedfiledetails ?? []) {
+        if (d.publishedfileid && d.title) out[String(d.publishedfileid)] = d.title;
+      }
+      return out;
+    } catch {
+      return {};
+    }
   }
 
   /** Best-effort published-file title (null if unavailable). */
