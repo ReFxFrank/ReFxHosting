@@ -576,6 +576,28 @@ async function seedVoiceProducts() {
  * makes the feature work without clobbering unrelated admin tuning (art, publish
  * state, variables). Runs every deploy; idempotent.
  */
+/**
+ * Servers snapshot their template's startupCommand onto the Server row at
+ * creation (and the install spec uses `server.startupCommand ?? template`). So
+ * when an egg switches to a ReFx **launcher** (`bash refx-*.sh` — Arma 3, DayZ,
+ * TeamSpeak), existing servers keep their old direct command and never run it.
+ * For launcher eggs ONLY (marked by the `bash refx-` startup), migrate existing
+ * server rows to the launcher. Scoped to launcher eggs so we never clobber a
+ * user's custom startup on a normal egg. Idempotent (the NOT clause skips rows
+ * already on the launcher).
+ */
+async function migrateLauncherStartup(templateId: string, startupCommand: string) {
+  if (!startupCommand.startsWith('bash refx-')) return;
+  await prisma.server.updateMany({
+    where: {
+      templateId,
+      deletedAt: null,
+      NOT: { startupCommand },
+    },
+    data: { startupCommand },
+  });
+}
+
 async function syncWorkshopEggs() {
   const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.json'));
   let count = 0;
@@ -596,6 +618,7 @@ async function syncWorkshopEggs() {
         startupCommand: tpl.startupCommand,
       },
     });
+    await migrateLauncherStartup(existing.id, tpl.startupCommand);
     count += 1;
   }
   console.log(`  • Workshop eggs synced: ${count}`);
@@ -626,6 +649,7 @@ async function syncVoiceEggs() {
         startupCommand: tpl.startupCommand,
       },
     });
+    await migrateLauncherStartup(existing.id, tpl.startupCommand);
     count += 1;
   }
   console.log(`  • Voice eggs synced: ${count}`);
