@@ -13,8 +13,10 @@ import {
   Mic,
   Users,
   Check,
+  Mail,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { useAuthStore } from "@/store/auth";
 import { PageHeader, EmptyState } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -348,7 +350,19 @@ export default function OrderPage() {
 
   const stripeOn = !!payCfg.data?.stripe.configured;
   const paypalOn = !!payCfg.data?.paypal.configured;
+  // Email must be verified before a server can be ordered (backend enforces it
+  // too; this gates the UI + explains why).
+  const user = useAuthStore((s) => s.user);
+  const emailVerified = !!user?.emailVerifiedAt;
+  const resend = useMutation({
+    mutationFn: () => api.auth.resendVerification(user?.email ?? ""),
+    onSuccess: () =>
+      toast.success("Verification email sent — check your inbox (and spam)."),
+    onError: () => toast.error("Couldn't send the email right now. Try again shortly."),
+  });
+
   const canOrder =
+    emailVerified &&
     !!product &&
     !!price &&
     !!name.trim() &&
@@ -382,6 +396,30 @@ export default function OrderPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Order a server" description="Choose a product, configure it, and you're live in minutes." />
+
+      {user && !emailVerified && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-3">
+            <Mail className="mt-0.5 size-5 shrink-0 text-amber-400" />
+            <div>
+              <p className="text-sm font-medium text-amber-100">Verify your email to order</p>
+              <p className="text-sm text-amber-100/80">
+                We sent a verification link to{" "}
+                <span className="font-medium">{user.email}</span>. Confirm it to
+                activate your account and place an order.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            loading={resend.isPending}
+            onClick={() => resend.mutate()}
+          >
+            Resend email
+          </Button>
+        </div>
+      )}
 
       {/* Step 1 — choose an offering (game or voice) */}
       <section className="space-y-3">

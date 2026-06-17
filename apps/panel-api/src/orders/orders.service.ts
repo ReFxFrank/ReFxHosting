@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BillingService } from '../billing/billing.service';
 import { CouponsService } from '../billing/coupons.service';
@@ -55,8 +55,21 @@ export class OrdersService {
     // also covers accounts created before the field was mandatory.
     const buyer = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { addressLine1: true, city: true, postalCode: true, country: true, region: true },
+      select: {
+        emailVerifiedAt: true,
+        addressLine1: true,
+        city: true,
+        postalCode: true,
+        country: true,
+        region: true,
+      },
     });
+    // Email must be verified before any server can be ordered/provisioned.
+    if (!buyer?.emailVerifiedAt) {
+      throw new ForbiddenException(
+        'Please verify your email address before ordering a server. Check your inbox for the verification link.',
+      );
+    }
     if (!buyer?.addressLine1 || !buyer.city || !buyer.postalCode || !buyer.country) {
       throw new BadRequestException(
         'Add your billing address in Account settings before placing an order.',
