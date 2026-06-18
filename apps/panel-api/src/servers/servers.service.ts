@@ -1198,9 +1198,12 @@ export class ServersService {
    * Concurrency-safe enough: on a unique-constraint clash it retries the next
    * free port a few times.
    *
-   * TODO(impl): multi-IP nodes (currently binds the single node.fqdn).
-   * TODO(impl): resolve a hostname fqdn to a concrete bind IP (works today
-   *   because our node fqdn is an IP).
+   * The allocation `ip` is the *advertised* address (node.fqdn) shown to players
+   * and injected as SERVER_IP; the agent binds the published port to all host
+   * interfaces (0.0.0.0) regardless, so it stays reachable on NAT'd cloud nodes.
+   *
+   * TODO(impl): multi-IP nodes (a per-allocation BindIP override exists in the
+   *   agent spec but the panel doesn't populate it yet).
    */
   private async assignPrimaryAllocation(
     nodeId: string,

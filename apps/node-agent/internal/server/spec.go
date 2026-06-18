@@ -37,8 +37,16 @@ const (
 )
 
 // Allocation is a single ip:port binding a server may use.
+//
+// IP is the *advertised* address (the node FQDN/public IP) surfaced to players
+// and injected as SERVER_IP. BindIP is the host interface the published port is
+// actually bound to; when empty the agent binds all interfaces (0.0.0.0). These
+// are deliberately separate: on NAT'd hosts (most cloud VPS) binding to the
+// specific public IP makes the port unreachable because inbound packets arrive
+// with the private destination IP, so the bind never matches.
 type Allocation struct {
 	IP        string `json:"ip"`
+	BindIP    string `json:"bindIp,omitempty"`
 	Port      int    `json:"port"`
 	IsPrimary bool   `json:"isPrimary"`
 }

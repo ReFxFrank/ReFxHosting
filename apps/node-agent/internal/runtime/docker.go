@@ -265,10 +265,20 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 	ports := nat.PortSet{}
 	bindings := nat.PortMap{}
 	for _, a := range s.Spec.Allocations {
+		// Bind the published port to all interfaces (0.0.0.0) by default, NOT to
+		// the advertised IP. On NAT'd hosts (most cloud VPS) the node's public IP
+		// isn't a local interface — inbound packets arrive with the private dest
+		// IP, so a port bound to the public IP never matches and the server is
+		// unreachable (esp. UDP, e.g. TeamSpeak voice) even though it's running.
+		// A non-empty BindIP (future multi-IP nodes) overrides this.
+		hostIP := a.BindIP
+		if hostIP == "" {
+			hostIP = "0.0.0.0"
+		}
 		for _, proto := range []string{"tcp", "udp"} {
 			p, _ := nat.NewPort(proto, fmt.Sprintf("%d", a.Port))
 			ports[p] = struct{}{}
-			bindings[p] = []nat.PortBinding{{HostIP: a.IP, HostPort: fmt.Sprintf("%d", a.Port)}}
+			bindings[p] = []nat.PortBinding{{HostIP: hostIP, HostPort: fmt.Sprintf("%d", a.Port)}}
 		}
 	}
 
