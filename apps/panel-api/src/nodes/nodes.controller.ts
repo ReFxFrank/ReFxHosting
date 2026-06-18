@@ -15,6 +15,7 @@ import { NodesService } from './nodes.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
+import { ApiPermissions } from '../common/decorators/api-permissions.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -40,16 +41,19 @@ export class NodesController {
   }
 
   @Get()
+  @ApiPermissions('nodes.read')
   list(@Query() pagination: PaginationDto) {
     return this.nodes.list(pagination);
   }
 
   @Get(':id')
+  @ApiPermissions('nodes.read')
   get(@Param('id') id: string) {
     return this.nodes.get(id);
   }
 
   @Get(':id/capacity')
+  @ApiPermissions('nodes.read')
   capacity(@Param('id') id: string) {
     return this.nodes.capacity(id);
   }

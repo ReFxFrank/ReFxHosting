@@ -11,6 +11,7 @@ import { PERMISSIONS_KEY } from '../../common/decorators/permissions.decorator';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 import { hasPermission } from '../../common/permissions';
 import { PrismaService } from '../../prisma/prisma.service';
+import { apiKeyAllows } from './api-key-permission.util';
 
 /**
  * Per-server authorization. Resolves the target server from the `:serverId`
@@ -47,6 +48,13 @@ export class PermissionGuard implements CanActivate {
         : context.switchToHttp().getRequest();
     const user: AuthUser | undefined = req?.user;
     if (!user) throw new ForbiddenException('Not authenticated');
+
+    // Additive API-key path: a bot key carrying the route's @ApiPermissions
+    // passes server READ routes that declare them, BEFORE the scope ceiling /
+    // ownership checks. Routes without @ApiPermissions (e.g. power, files,
+    // write actions) fall through and remain blocked for the bot (not owner,
+    // not sub-user, scope ceiling). Humans have no apiKeyId → unchanged.
+    if (apiKeyAllows(this.reflector, context, user)) return true;
 
     const serverId =
       req?.params?.serverId ?? req?.params?.id ?? req?.body?.serverId;

@@ -227,6 +227,10 @@ model ApiKey {
   prefix       String       @unique   // first 8 chars, shown in UI
   keyHash      String                  // SHA-256 of full key
   scopes       ApiKeyScope[]
+  // Fine-grained permission strings carried by the KEY ITSELF (least-privilege
+  // for external bots). Checked by the guards' API-key path via @ApiPermissions;
+  // independent of the user's GlobalRole. See apps/panel-api/src/common/permissions.ts.
+  permissions  String[]     @default([])
   // Optional per-key IP allowlist (CIDR).
   allowedIps   String[]
   lastUsedAt   DateTime?
