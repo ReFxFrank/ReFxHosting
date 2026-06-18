@@ -329,4 +329,32 @@ export class VoiceModerateDto {
   @IsInt()
   @Min(0)
   seconds?: number;
+
+  @ApiPropertyOptional({ description: 'Display label for the audit log only.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  label?: string;
+}
+
+export class VoiceMoveDto {
+  @ApiProperty({ description: 'Client id (clid) from the monitoring list.' })
+  @IsString()
+  clid!: string;
+
+  @ApiProperty({ description: 'Target channel id (cid).' })
+  @IsString()
+  cid!: string;
+
+  @ApiPropertyOptional({ description: 'Display label for the audit log only.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  label?: string;
+}
+
+export class VoiceUnbanDto {
+  @ApiProperty({ description: 'Ban id (banid) from the ban list.' })
+  @IsString()
+  banid!: string;
 }

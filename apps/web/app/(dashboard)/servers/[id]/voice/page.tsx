@@ -17,6 +17,9 @@ import {
   UserX,
   Ban,
   Pencil,
+  ArrowRightLeft,
+  History,
+  ShieldX,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -24,6 +27,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -68,17 +77,47 @@ export default function VoicePage() {
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't rename"),
   });
   const kick = useMutation({
-    mutationFn: (clid: string) => api.servers.voiceKick(id, clid),
-    onSuccess: () => toast.success("User kicked"),
+    mutationFn: (t: { clid: string; label: string }) =>
+      api.servers.voiceKick(id, t.clid, undefined, t.label),
+    onSuccess: () => {
+      toast.success("User kicked");
+      qc.invalidateQueries({ queryKey: ["server", id, "voice-status"] });
+    },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't kick"),
   });
   const ban = useMutation({
-    mutationFn: (clid: string) => api.servers.voiceBan(id, clid),
+    mutationFn: (t: { clid: string; label: string }) =>
+      api.servers.voiceBan(id, t.clid, undefined, undefined, t.label),
     onSuccess: () => {
       toast.success("User banned");
       setBanTarget(null);
+      qc.invalidateQueries({ queryKey: ["server", id, "voice-status"] });
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't ban"),
+  });
+  const move = useMutation({
+    mutationFn: (v: { clid: string; cid: string; label: string }) =>
+      api.servers.voiceMove(id, v.clid, v.cid, v.label),
+    onSuccess: () => {
+      toast.success("User moved");
+      qc.invalidateQueries({ queryKey: ["server", id, "voice-status"] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't move"),
+  });
+  const unban = useMutation({
+    mutationFn: (banid: string) => api.servers.voiceUnban(id, banid),
+    onSuccess: () => {
+      toast.success("Ban removed");
+      qc.invalidateQueries({ queryKey: ["server", id, "voice-status"] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't unban"),
+  });
+
+  // Recent admin actions (audit), shown to anyone who can view the tab.
+  const { data: audit } = useQuery({
+    queryKey: ["server", id, "voice-audit"],
+    queryFn: () => api.servers.voiceAudit(id),
+    refetchInterval: 30000,
   });
 
   const copy = (label: string, value?: string | null) => {
@@ -227,13 +266,38 @@ export default function VoicePage() {
                               <span className="truncate text-sm">{u.name}</span>
                               {canManage && (
                                 <div className="flex shrink-0 items-center gap-1">
+                                  {status.channels.length > 1 && (
+                                    <Select
+                                      value=""
+                                      onValueChange={(cid) =>
+                                        move.mutate({ clid: u.clid, cid, label: u.name })
+                                      }
+                                    >
+                                      <SelectTrigger
+                                        className="h-7 w-auto gap-1 px-2 text-xs"
+                                        aria-label={`Move ${u.name}`}
+                                        title="Move to channel"
+                                      >
+                                        <ArrowRightLeft className="size-3.5" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {status.channels
+                                          .filter((c) => c.id !== ch.id)
+                                          .map((c) => (
+                                            <SelectItem key={c.id} value={c.id}>
+                                              {c.name}
+                                            </SelectItem>
+                                          ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
                                   <Button
                                     variant="ghost"
                                     size="icon-sm"
                                     aria-label={`Kick ${u.name}`}
                                     title="Kick"
                                     disabled={kick.isPending}
-                                    onClick={() => kick.mutate(u.clid)}
+                                    onClick={() => kick.mutate({ clid: u.clid, label: u.name })}
                                   >
                                     <UserX className="size-4" />
                                   </Button>
@@ -267,6 +331,77 @@ export default function VoicePage() {
           )}
         </CardContent>
       </Card>
+
+      {status?.ready && status.bans.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ShieldX className="size-4" /> Ban list
+            </CardTitle>
+            <CardDescription>Currently banned identities on this server.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {status.bans.map((b) => (
+              <div
+                key={b.banid}
+                className="flex items-center justify-between gap-2 rounded-lg border p-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {b.name || b.ip || `Ban #${b.banid}`}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {b.ip ? `${b.ip} · ` : ""}
+                    {b.durationSeconds ? `${b.durationSeconds}s` : "permanent"}
+                    {b.reason ? ` · ${b.reason}` : ""}
+                  </p>
+                </div>
+                {canManage && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={unban.isPending}
+                    onClick={() => unban.mutate(b.banid)}
+                  >
+                    Unban
+                  </Button>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {audit && audit.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <History className="size-4" /> Recent admin actions
+            </CardTitle>
+            <CardDescription>
+              Rename, kick, ban, move and unban actions on this voice server.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y text-sm">
+              {audit.map((a) => (
+                <li key={a.id} className="flex items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <span className="font-medium capitalize">{a.action}</span>
+                    {a.detail && (
+                      <span className="text-muted-foreground"> · {a.detail}</span>
+                    )}
+                    <span className="block text-xs text-muted-foreground">by {a.actor}</span>
+                  </div>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {new Date(a.at).toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -385,7 +520,9 @@ export default function VoicePage() {
             <Button
               variant="destructive"
               loading={ban.isPending}
-              onClick={() => banTarget && ban.mutate(banTarget.clid)}
+              onClick={() =>
+                banTarget && ban.mutate({ clid: banTarget.clid, label: banTarget.name })
+              }
             >
               Ban user
             </Button>

@@ -37,6 +37,23 @@ export interface VoiceChannel {
   users: { clid: string; name: string }[];
 }
 
+export interface VoiceBan {
+  banid: string;
+  name: string | null;
+  ip: string | null;
+  reason: string | null;
+  /** 0 = permanent. */
+  durationSeconds: number;
+}
+
+export interface VoiceAuditEntry {
+  id: string;
+  action: string;
+  actor: string;
+  at: string;
+  detail: string | null;
+}
+
 export interface VoiceStatus {
   /** Live monitoring data is available and fresh (server up + recently polled). */
   ready: boolean;
@@ -53,6 +70,7 @@ export interface VoiceStatus {
   /** Seconds since the snapshot was written (null when never). */
   updatedSecondsAgo: number | null;
   channels: VoiceChannel[];
+  bans: VoiceBan[];
 }
 
 const STATUS_FILE = 'refx-voice-status.txt';
@@ -167,6 +185,7 @@ export class VoiceService {
       avgPingMs: 0,
       updatedSecondsAgo: null,
       channels: [],
+      bans: [],
     };
     if (server.state !== 'RUNNING') return empty;
 
@@ -182,6 +201,7 @@ export class VoiceService {
     let info: Record<string, string> = {};
     const clients: Record<string, string>[] = [];
     const channels: Record<string, string>[] = [];
+    const bans: Record<string, string>[] = [];
     let snapshotEpoch = 0;
     for (const raw of text.split('\n')) {
       const line = raw.trim();
@@ -194,6 +214,11 @@ export class VoiceService {
         for (const e of line.split('|')) {
           const p = parsePairs(e);
           if (p.clid) clients.push(p);
+        }
+      } else if (/(^|\|)banid=/.test(line)) {
+        for (const e of line.split('|')) {
+          const p = parsePairs(e);
+          if (p.banid) bans.push(p);
         }
       } else if (line.includes('channel_name=')) {
         for (const e of line.split('|')) {
@@ -231,7 +256,54 @@ export class VoiceService {
       avgPingMs: Math.round(Number(info.virtualserver_total_ping) || 0),
       updatedSecondsAgo,
       channels: channelOut,
+      bans: bans.map((b) => ({
+        banid: b.banid,
+        name: b.lastnickname || b.name || null,
+        ip: b.ip || null,
+        reason: b.reason || null,
+        durationSeconds: Number(b.duration) || 0,
+      })),
     };
+  }
+
+  /**
+   * Recent voice admin actions for this server (rename/kick/ban/move/unban),
+   * newest first, from the audit log so customers can see what staff/sub-users
+   * did. Read-only; details come from the recorded request metadata.
+   */
+  async auditLog(serverId: string): Promise<VoiceAuditEntry[]> {
+    await this.loadVoice(serverId);
+    const rows = await this.prisma.auditLog.findMany({
+      where: {
+        targetType: 'Server',
+        targetId: serverId,
+        action: { startsWith: 'server.voice.' },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 25,
+      include: {
+        actor: { select: { firstName: true, lastName: true, email: true } },
+      },
+    });
+    return rows.map((r) => {
+      const body = ((r.metadata as { body?: Record<string, unknown> })?.body ??
+        {}) as Record<string, unknown>;
+      const actor = r.actor
+        ? `${r.actor.firstName ?? ''} ${r.actor.lastName ?? ''}`.trim() ||
+          r.actor.email
+        : 'System';
+      let detail: string | null = null;
+      if (r.action.endsWith('.rename') && body.name) detail = `→ ${String(body.name)}`;
+      else if (body.label) detail = String(body.label);
+      else if (body.reason) detail = String(body.reason);
+      return {
+        id: r.id,
+        action: r.action.replace('server.voice.', ''),
+        actor,
+        at: r.createdAt.toISOString(),
+        detail,
+      };
+    });
   }
 
   // ---- admin actions (queued to the launcher via a command file) ----------
@@ -307,6 +379,27 @@ export class VoiceService {
     const time = Math.max(0, Math.min(Number(seconds) || 0, 365 * 24 * 3600));
     const msg = escapeTs3((reason || 'Banned by an admin').slice(0, 80));
     await this.queueCommand(server, `banclient clid=${clid} time=${time} banreason=${msg}`);
+    return { accepted: true };
+  }
+
+  /** Move a connected client into another channel. */
+  async move(serverId: string, clid: string, cid: string): Promise<{ accepted: true }> {
+    if (!/^\d+$/.test(String(clid)) || !/^\d+$/.test(String(cid))) {
+      throw new BadRequestException('Invalid client or channel id.');
+    }
+    const server = await this.loadVoice(serverId);
+    if (server.state !== 'RUNNING') {
+      throw new BadRequestException('The server must be running to move a user.');
+    }
+    await this.queueCommand(server, `clientmove clid=${clid} cid=${cid}`);
+    return { accepted: true };
+  }
+
+  /** Remove a ban by its banid (from the ban list). */
+  async unban(serverId: string, banid: string): Promise<{ accepted: true }> {
+    if (!/^\d+$/.test(String(banid))) throw new BadRequestException('Invalid ban id.');
+    const server = await this.loadVoice(serverId);
+    await this.queueCommand(server, `bandel banid=${banid}`);
     return { accepted: true };
   }
 }

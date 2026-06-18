@@ -47,6 +47,7 @@ import type {
   SteamConfigMasked,
   VoiceInfo,
   VoiceStatus,
+  VoiceAuditEntry,
   HomepageAlert,
   ModrinthProject,
   ModrinthVersion,
@@ -505,10 +506,27 @@ export const api = {
       http.get<VoiceStatus>(`/servers/${id}/voice/status`),
     voiceRename: (id: string, name: string) =>
       http.post<{ accepted: true }>(`/servers/${id}/voice/rename`, { name }),
-    voiceKick: (id: string, clid: string, reason?: string) =>
-      http.post<{ accepted: true }>(`/servers/${id}/voice/kick`, { clid, reason }),
-    voiceBan: (id: string, clid: string, reason?: string, seconds?: number) =>
-      http.post<{ accepted: true }>(`/servers/${id}/voice/ban`, { clid, reason, seconds }),
+    voiceKick: (id: string, clid: string, reason?: string, label?: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/kick`, { clid, reason, label }),
+    voiceBan: (
+      id: string,
+      clid: string,
+      reason?: string,
+      seconds?: number,
+      label?: string,
+    ) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/ban`, {
+        clid,
+        reason,
+        seconds,
+        label,
+      }),
+    voiceMove: (id: string, clid: string, cid: string, label?: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/move`, { clid, cid, label }),
+    voiceUnban: (id: string, banid: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/unban`, { banid }),
+    voiceAudit: (id: string) =>
+      http.get<VoiceAuditEntry[]>(`/servers/${id}/voice/audit`),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),

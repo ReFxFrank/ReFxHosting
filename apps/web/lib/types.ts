@@ -432,6 +432,22 @@ export interface VoiceChannel {
   users: { clid: string; name: string }[];
 }
 
+export interface VoiceBan {
+  banid: string;
+  name: string | null;
+  ip: string | null;
+  reason: string | null;
+  durationSeconds: number;
+}
+
+export interface VoiceAuditEntry {
+  id: string;
+  action: string;
+  actor: string;
+  at: string;
+  detail: string | null;
+}
+
 export interface VoiceStatus {
   ready: boolean;
   online: number;
@@ -444,6 +460,7 @@ export interface VoiceStatus {
   avgPingMs: number;
   updatedSecondsAgo: number | null;
   channels: VoiceChannel[];
+  bans: VoiceBan[];
 }
 
 /** An admin-curated team member for the public "Meet the team" page. */
