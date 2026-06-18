@@ -217,7 +217,38 @@ sudo ufw reload
 The panel→agent channel is HMAC-signed (a scanner can't do anything even if it
 connects), so this is defense-in-depth + log hygiene, not a fix for a breach.
 
-### 2.4 RAID & data
+### 2.4 Networking: game/voice traffic must reach the node DIRECTLY
+This is the most common "it installs fine but players can't connect" trap. There
+are two independent network planes, and **only the control plane may go through a
+reverse proxy**:
+
+| Plane | Traffic | Through Caddy / Cloudflare? |
+|---|---|---|
+| Control | panel ↔ agent (`8443`), web/API | ✅ yes — that's what Caddy fronts |
+| Data | player's game/voice client → node `IP:port` (TCP **and** UDP) | ❌ never |
+
+An HTTP reverse proxy (Caddy/nginx) and Cloudflare's "orange-cloud" proxy only
+forward HTTP/HTTPS — they **cannot** carry arbitrary game ports or voice **UDP**
+(e.g. TeamSpeak). So:
+
+- The node's **hostname/IP in Admin → Nodes must resolve straight to the node's
+  own public IP** — not to your panel, a reverse proxy, or a Cloudflare-proxied
+  record.
+- Using Cloudflare for the node's DNS? Set that record to **DNS only (grey
+  cloud)**, or just enter the **raw IP** as the node address.
+- Players connect to `node-ip:port` directly; the panel shows the exact address
+  on each server's overview / Voice tab.
+
+Quick check from your laptop — this must return the node's own IP, not a
+Cloudflare (`104.x` / `172.6x`) or panel IP:
+```bash
+dig +short <node-hostname>
+```
+On OVH specifically, also confirm the **Edge Network Firewall** in the OVH
+manager isn't silently dropping UDP (it's separate from `ufw` and invisible to
+it); either disable it or allow your UDP allocation range.
+
+### 2.5 RAID & data
 On a 2×NVMe box choose **RAID-1** at OVH install time for customer-data safety
 (or RAID-0 + rely on off-site backups). Server data lives under `/var/lib/refx`.
 

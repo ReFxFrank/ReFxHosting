@@ -74,6 +74,14 @@ unique; never commit `.env`.
 > built-in dev defaults — including the Postgres password the data volume was
 > initialised with.
 
+> ⚠️ **The reverse proxy is for the panel only — never for nodes.** A game/voice
+> node's hostname in **Admin → Nodes** must resolve **directly to that node's
+> public IP**, not through Caddy/nginx or a Cloudflare-proxied ("orange-cloud")
+> record. HTTP proxies forward only HTTP/HTTPS and cannot carry game ports or
+> voice **UDP** (e.g. TeamSpeak), so the panel works but players silently can't
+> connect. Use the raw IP or a **DNS-only (grey-cloud)** record for nodes. See
+> [21 — OVH quickstart §2.4](21-ovh-quickstart.md) for the full explanation.
+
 ### Create the first admin
 
 After seeding, create an `OWNER` account (or use the seeded admin credentials
