@@ -88,14 +88,20 @@ function LoginForm() {
           <Input id="password" type="password" autoComplete="current-password" {...register("password")} />
           {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
         </div>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-muted-foreground">
           <input
             type="checkbox"
-            className="size-4 accent-[hsl(var(--primary))]"
+            className="mt-0.5 size-4 accent-[hsl(var(--primary))]"
             checked={remember}
             onChange={(e) => setRemember(e.target.checked)}
           />
-          Keep me signed in
+          <span>
+            Keep me signed in
+            <span className="block text-xs text-muted-foreground/80">
+              Stay logged in across restarts and skip the inactivity sign-out. Leave
+              off on shared devices.
+            </span>
+          </span>
         </label>
         <Button type="submit" className="w-full" loading={submitting}>
           Sign in
