@@ -50,6 +50,7 @@ consistent with the canonical data model in
 - [19 — Production Deployment](19-production-deployment.md) — Kubernetes via Helm, secrets, scaling, observability, backups, upgrades.
 - [20 — Upgrade & Data Migration](20-upgrade-migration.md) — Prisma migrations, zero-downtime rollouts, agent compatibility, rollback.
 - [21 — OVH Small-Scale Runbook](21-ovh-quickstart.md) — copy-paste path from two fresh OVH boxes (one VPS panel + one dedicated node) to selling servers: Caddy TLS, secrets, node registration, go-live + ops.
+- [23 — API Keys & the Agent Ops Bot](23-api-keys-and-bot.md) — scoped API keys carrying fine-grained per-key permissions, the @ApiPermissions guard path, the two hard support-bot safety boundaries, and how an operator issues the bot's key.
 
 ### Project & governance (repo root)
 - [CLAUDE.md](../CLAUDE.md) — fast orientation for assistants/humans: architecture, build/test commands, conventions, gotchas.

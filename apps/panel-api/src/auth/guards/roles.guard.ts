@@ -9,6 +9,7 @@ import { GqlExecutionContext } from '@nestjs/graphql';
 import { GlobalRole } from '@prisma/client';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
+import { apiKeyAllows } from './api-key-permission.util';
 
 /** Role hierarchy: OWNER > ADMIN > SUPPORT > CUSTOMER. */
 const RANK: Record<GlobalRole, number> = {
@@ -35,6 +36,10 @@ export class RolesGuard implements CanActivate {
         : context.switchToHttp().getRequest();
     const user: AuthUser | undefined = req?.user;
     if (!user) throw new ForbiddenException('Not authenticated');
+
+    // Additive API-key path: a bot key carrying the route's @ApiPermissions
+    // passes WITHOUT a broad GlobalRole. Humans have no apiKeyId → unchanged.
+    if (apiKeyAllows(this.reflector, context, user)) return true;
 
     const minRequired = Math.min(...required.map((r) => RANK[r]));
     if (RANK[user.globalRole as GlobalRole] >= minRequired) return true;

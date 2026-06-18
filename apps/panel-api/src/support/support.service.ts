@@ -43,9 +43,18 @@ const STAFF_ROLES = new Set(['SUPPORT', 'ADMIN', 'OWNER']);
 export class SupportService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Whether a principal is support staff (SUPPORT / ADMIN / OWNER). */
+  /**
+   * Whether a principal should be treated as staff for READ scoping (see all
+   * tickets, see internal notes). True for human staff (SUPPORT/ADMIN/OWNER) OR
+   * an API-key (bot) principal whose key carries `support.ticket.read`. A normal
+   * (non-bot) customer key is unaffected — it sees only its own tickets.
+   */
   private isStaff(user: AuthUser): boolean {
-    return STAFF_ROLES.has(user.globalRole);
+    if (STAFF_ROLES.has(user.globalRole)) return true;
+    return (
+      !!user.apiKeyId &&
+      (user.apiKeyPermissions ?? []).includes('support.ticket.read')
+    );
   }
 
   // ---- Tickets -----------------------------------------------------------
@@ -202,13 +211,29 @@ export class SupportService {
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
+    // HARD SAFETY BOUNDARY (API-key bot): a bot/API-key caller may ONLY post
+    // internal notes, and only if its key carries 'support.ticket.note.create'.
+    // It must NEVER be able to post a customer-facing reply, so isInternal is
+    // FORCED to true here regardless of the request body.
+    const isBot = !!user.apiKeyId;
+    if (isBot) {
+      if (
+        !(user.apiKeyPermissions ?? []).includes('support.ticket.note.create')
+      ) {
+        throw new ForbiddenException(
+          'API key lacks support.ticket.note.create',
+        );
+      }
+    }
+
     const staff = this.isStaff(user);
     if (!staff && ticket.requesterId !== user.id) {
       throw new ForbiddenException('You cannot post on this ticket');
     }
 
-    // Only staff may flag a message as an internal note.
-    const isInternal = staff ? dto.isInternal ?? false : false;
+    // Only staff may flag a message as an internal note; a bot is ALWAYS forced
+    // to an internal note (never a customer-facing reply).
+    const isInternal = isBot ? true : staff ? dto.isInternal ?? false : false;
 
     const now = new Date();
 
@@ -271,7 +296,24 @@ export class SupportService {
     id: string,
     dto: UpdateTicketDto,
   ): Promise<Ticket> {
-    if (!this.isStaff(user)) {
+    // HARD SAFETY BOUNDARY (API-key bot): a bot/API-key caller may ONLY adjust
+    // `categoryId` / `priority`, and only if its key carries
+    // 'support.ticket.update'. It must NEVER change state, assignee, or any
+    // other workflow field.
+    if (user.apiKeyId) {
+      if (!(user.apiKeyPermissions ?? []).includes('support.ticket.update')) {
+        throw new ForbiddenException('API key lacks support.ticket.update');
+      }
+      const allowed = new Set(['categoryId', 'priority']);
+      const offending = Object.keys(dto).filter(
+        (k) => !allowed.has(k) && (dto as Record<string, unknown>)[k] !== undefined,
+      );
+      if (offending.length) {
+        throw new ForbiddenException(
+          `API key may only set categoryId/priority (got: ${offending.join(', ')})`,
+        );
+      }
+    } else if (!this.isStaff(user)) {
       throw new ForbiddenException('Only support staff can update tickets');
     }
 

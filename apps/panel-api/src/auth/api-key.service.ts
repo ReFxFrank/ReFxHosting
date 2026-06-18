@@ -28,6 +28,7 @@ export class ApiKeyService {
     scopes: ApiKeyScope[],
     allowedIps: string[] = [],
     expiresAt?: Date,
+    permissions: string[] = [],
   ): Promise<{ plaintext: string; record: ApiKey }> {
     const prefix = this.crypto.token(6).slice(0, 8);
     const secret = this.crypto.token(24);
@@ -43,6 +44,7 @@ export class ApiKeyService {
         scopes,
         allowedIps,
         expiresAt: expiresAt ?? null,
+        permissions,
       },
     });
     return { plaintext, record };
@@ -58,6 +60,7 @@ export class ApiKeyService {
         name: true,
         prefix: true,
         scopes: true,
+        permissions: true,
         allowedIps: true,
         lastUsedAt: true,
         expiresAt: true,
@@ -113,6 +116,8 @@ export class ApiKeyService {
       permissions: permissionsForGlobalRole(key.user.globalRole),
       apiKeyId: key.id,
       apiKeyScopes: key.scopes,
+      // Fine-grained grants carried by the key itself (least-privilege bot path).
+      apiKeyPermissions: key.permissions,
     };
   }
 

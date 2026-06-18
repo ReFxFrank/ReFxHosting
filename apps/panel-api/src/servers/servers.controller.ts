@@ -21,6 +21,7 @@ import { VoiceService } from './voice.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { ApiPermissions } from '../common/decorators/api-permissions.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
@@ -82,6 +83,7 @@ export class ServersController {
 
   @Get(':serverId')
   @RequirePermissions('server.read')
+  @ApiPermissions('servers.read')
   get(@Param('serverId') id: string) {
     return this.servers.get(id);
   }
@@ -116,6 +118,7 @@ export class ServersController {
 
   @Get(':serverId/game-history')
   @RequirePermissions('server.read')
+  @ApiPermissions('servers.read')
   gameHistory(@Param('serverId') id: string) {
     return this.servers.gameHistory(id);
   }

@@ -20,6 +20,7 @@ import {
   CurrentUser,
 } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { ApiPermissions } from '../common/decorators/api-permissions.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -47,6 +48,7 @@ export class SupportController {
   // ---- Tickets -----------------------------------------------------------
 
   @Get('tickets')
+  @ApiPermissions('support.ticket.read')
   listTickets(
     @CurrentUser() user: AuthUser,
     @Query() pagination: PaginationDto,
@@ -74,6 +76,7 @@ export class SupportController {
   }
 
   @Get('tickets/:id')
+  @ApiPermissions('support.ticket.read')
   getTicket(@CurrentUser() user: AuthUser, @Param('id') id: string) {
     return this.support.getTicket(user, id);
   }
@@ -81,6 +84,7 @@ export class SupportController {
   @Patch('tickets/:id')
   @UseGuards(RolesGuard)
   @Roles(GlobalRole.SUPPORT)
+  @ApiPermissions('support.ticket.update')
   @Audit({
     action: 'support.ticket.update',
     targetType: 'Ticket',
@@ -95,6 +99,7 @@ export class SupportController {
   }
 
   @Post('tickets/:id/messages')
+  @ApiPermissions('support.ticket.note.create')
   @Audit({
     action: 'support.ticket.message',
     targetType: 'Ticket',
@@ -201,6 +206,7 @@ export class SupportController {
   // ---- Knowledge base ----------------------------------------------------
 
   @Get('kb-articles')
+  @ApiPermissions('support.kb.read')
   listArticles(@CurrentUser() user: AuthUser) {
     return this.support.listArticles(user);
   }
@@ -247,6 +253,7 @@ export class SupportController {
   // ---- Categories --------------------------------------------------------
 
   @Get('categories')
+  @ApiPermissions('support.category.read')
   listCategories() {
     return this.support.listCategories();
   }

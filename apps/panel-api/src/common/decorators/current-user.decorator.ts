@@ -15,6 +15,12 @@ export interface AuthUser {
   /** Present when the request authenticated via an API key. */
   apiKeyId?: string;
   apiKeyScopes?: string[];
+  /**
+   * Fine-grained permission strings carried by the API KEY itself (NOT derived
+   * from the user's GlobalRole). The guards' API-key path (@ApiPermissions)
+   * checks these, giving a bot key a narrow least-privilege grant.
+   */
+  apiKeyPermissions?: string[];
 }
 
 function extractRequest(ctx: ExecutionContext): any {
