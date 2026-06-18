@@ -43,6 +43,7 @@ consistent with the canonical data model in
 - [09 — Infrastructure & Scaling](09-infrastructure.md) — horizontal scaling, HA, queues, observability, Compose vs Kubernetes, multi-DC, backup/DR.
 - [11 — Migration Tooling](11-migration.md) — importing from Pterodactyl, AMP, TCAdmin; mapping tables.
 - [12 — CI/CD](12-cicd.md) — GitHub Actions pipelines, image publishing, agent cross-compilation, promotion.
+- [22 — Outbound Webhooks](22-outbound-webhooks.md) — Agent Ops integration: envelope, HMAC signature scheme, event `data` shapes, retry/idempotency semantics, admin/env configuration.
 
 ### Status & runbooks
 - [16 — Implementation Status](16-status.md) — honest implemented-vs-scaffolded matrix.

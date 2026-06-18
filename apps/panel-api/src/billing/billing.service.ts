@@ -37,6 +37,7 @@ import {
 import { StripeGateway } from './gateways/stripe.gateway';
 import { PayPalGateway } from './gateways/paypal.gateway';
 import { EmailService } from '../email/email.service';
+import { WebhookService } from '../webhooks/webhook.service';
 import { addInterval } from './interval.util';
 import { generateInvoiceNumber } from './invoice-number.util';
 import { calculateTax } from './tax.util';
@@ -73,6 +74,7 @@ export class BillingService {
     private readonly paypal: PayPalGateway,
     private readonly settings: SettingsService,
     private readonly email: EmailService,
+    private readonly webhooks: WebhookService,
     @InjectQueue(QUEUE.BILLING_RENEWAL) private readonly renewalQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
     @InjectQueue(QUEUE.PROVISIONING) private readonly provisionQueue: Queue,
@@ -1692,6 +1694,26 @@ export class BillingService {
         currency: invoice.currency,
         reason,
       });
+    }
+
+    // Outbound webhook (post-commit, enqueue-only). A failure here must NEVER
+    // propagate into billing, so it's wrapped and swallowed.
+    try {
+      const attemptCount = await this.prisma.payment.count({
+        where: { invoiceId, state: PaymentState.FAILED },
+      });
+      await this.webhooks.emit('invoice.payment_failed', {
+        invoiceId: invoice.id,
+        status: invoice.state,
+        amountDueCents: invoice.totalMinor - invoice.amountPaidMinor,
+        currency: invoice.currency,
+        attemptCount,
+        customerEmail: recipient?.email,
+      });
+    } catch (err) {
+      this.logger.error(
+        `invoice.payment_failed webhook emit failed for ${invoiceId}: ${(err as Error).message}`,
+      );
     }
 
     const subscription = invoice.subscription;

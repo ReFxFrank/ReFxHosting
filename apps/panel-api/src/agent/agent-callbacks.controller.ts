@@ -18,6 +18,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { RawResponse } from '../common/decorators/raw-response.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodesService } from '../nodes/nodes.service';
+import { WebhookService } from '../webhooks/webhook.service';
 import { ConsoleGateway } from './console.gateway';
 import { AgentSignatureGuard } from './agent-signature.guard';
 import { uuidv7 } from '../common/util/uuid';
@@ -94,7 +95,25 @@ export class AgentCallbacksController {
     private readonly prisma: PrismaService,
     private readonly nodes: NodesService,
     private readonly console: ConsoleGateway,
+    private readonly webhooks: WebhookService,
   ) {}
+
+  /**
+   * Apply a server state from an agent callback, emitting `server.state.changed`
+   * only on an actual transition. Mirrors the existing best-effort semantics
+   * (DB-update errors are swallowed; the webhook emit only enqueues).
+   */
+  private async applyServerState(
+    serverId: string,
+    state: ServerState,
+  ): Promise<void> {
+    const updated = await this.prisma.server
+      .updateMany({ where: { id: serverId, state: { not: state } }, data: { state } })
+      .catch(() => ({ count: 0 }));
+    if (updated.count > 0) {
+      await this.webhooks.emit('server.state.changed', { serverId, state });
+    }
+  }
 
   // ---- registration (token-only, unsigned) --------------------------------
 
@@ -130,27 +149,20 @@ export class AgentCallbacksController {
     @Body() body: HeartbeatBody,
   ): Promise<{ ok: true }> {
     const nodeId = req.refxNodeId!;
-    await this.prisma.$transaction([
-      this.prisma.nodeHeartbeat.create({
-        data: {
-          id: uuidv7(),
-          nodeId,
-          cpuPct: body.cpuPct ?? 0,
-          memUsedMb: Math.round(body.memUsedMb ?? 0),
-          diskUsedMb: Math.round(body.diskUsedMb ?? 0),
-          netRxBytes: BigInt(Math.round(body.netRxBytes ?? 0)),
-          netTxBytes: BigInt(Math.round(body.netTxBytes ?? 0)),
-          containers: body.containers ?? 0,
-        },
-      }),
-      this.prisma.node.update({
-        where: { id: nodeId },
-        data: {
-          state: 'ONLINE',
-          agentVersion: body.agentVersion ?? undefined,
-        },
-      }),
-    ]);
+    await this.prisma.nodeHeartbeat.create({
+      data: {
+        id: uuidv7(),
+        nodeId,
+        cpuPct: body.cpuPct ?? 0,
+        memUsedMb: Math.round(body.memUsedMb ?? 0),
+        diskUsedMb: Math.round(body.diskUsedMb ?? 0),
+        netRxBytes: BigInt(Math.round(body.netRxBytes ?? 0)),
+        netTxBytes: BigInt(Math.round(body.netTxBytes ?? 0)),
+        containers: body.containers ?? 0,
+      },
+    });
+    // Marks ONLINE + emits node.state.changed only on an actual transition.
+    await this.nodes.markNodeOnline(nodeId, body.agentVersion);
     return { ok: true };
   }
 
@@ -181,9 +193,7 @@ export class AgentCallbacksController {
       this.console.emitStats(s.serverId, s);
       const state = this.toServerState(s.state);
       if (state) {
-        await this.prisma.server
-          .update({ where: { id: s.serverId }, data: { state } })
-          .catch(() => undefined);
+        await this.applyServerState(s.serverId, state);
       }
     }
     return { ok: true };
@@ -210,9 +220,7 @@ export class AgentCallbacksController {
   async powerEvent(@Body() body: PowerEventBody): Promise<{ ok: true }> {
     const state = this.toServerState(body.state);
     if (state) {
-      await this.prisma.server
-        .update({ where: { id: body.serverId }, data: { state } })
-        .catch(() => undefined);
+      await this.applyServerState(body.serverId, state);
     }
     this.console.emitPower(body.serverId, {
       type: 'power',

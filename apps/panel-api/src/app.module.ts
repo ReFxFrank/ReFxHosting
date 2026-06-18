@@ -33,6 +33,7 @@ import { CatalogModule } from './catalog/catalog.module';
 import { OrdersModule } from './orders/orders.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { QueuesModule } from './queues/queues.module';
+import { WebhookModule } from './webhooks/webhook.module';
 import { MetricsInterceptor } from './platform/metrics.interceptor';
 
 @Module({
@@ -94,6 +95,7 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     CryptoModule,
     AgentModule,
     EmailModule,
+    WebhookModule,
 
     // Features
     AuthModule,
