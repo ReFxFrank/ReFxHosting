@@ -58,6 +58,8 @@ const emptyForm = {
   cpuCores: 2,
   memoryMb: 2048,
   diskMb: 10240,
+  // Slot count for voice/slot-based templates (e.g. TeamSpeak max clients).
+  slots: 32,
   // Minecraft version selection (only sent for minecraft-* templates).
   minecraftVersion: "latest",
 };
@@ -94,6 +96,11 @@ export default function AdminServersPage() {
     (t) => t.id === form.templateId,
   );
   const isMinecraft = !!selectedTemplate?.slug?.startsWith("minecraft-");
+  // Voice / slot-based templates (e.g. TeamSpeak) are provisioned by slot count;
+  // resources auto-size from the egg's recommended specs on the server side.
+  const isVoice =
+    selectedTemplate?.category?.slug === "voice" ||
+    !!selectedTemplate?.slug?.startsWith("teamspeak");
 
   // Minecraft version list (only fetched once a Minecraft egg is selected).
   const { data: mcVersions } = useQuery({
@@ -126,9 +133,15 @@ export default function AdminServersPage() {
         ownerId: form.ownerId,
         nodeId: form.nodeId,
         templateId: form.templateId,
-        cpuCores: form.cpuCores,
-        memoryMb: form.memoryMb,
-        diskMb: form.diskMb,
+        // Voice servers size from the egg's recommended specs; send only slots.
+        // Game servers send explicit (prefilled-from-recommended) resources.
+        ...(isVoice
+          ? { slots: form.slots }
+          : {
+              cpuCores: form.cpuCores,
+              memoryMb: form.memoryMb,
+              diskMb: form.diskMb,
+            }),
         // For Minecraft eggs, pin the chosen version via the install env.
         ...(isMinecraft
           ? { environment: { MINECRAFT_VERSION: form.minecraftVersion } }
@@ -171,9 +184,9 @@ export default function AdminServersPage() {
     form.ownerId &&
     form.nodeId &&
     form.templateId &&
-    form.cpuCores > 0 &&
-    form.memoryMb >= 256 &&
-    form.diskMb >= 1024;
+    (isVoice
+      ? form.slots > 0
+      : form.cpuCores > 0 && form.memoryMb >= 256 && form.diskMb >= 1024);
 
   return (
     <div className="space-y-6">
@@ -300,8 +313,9 @@ export default function AdminServersPage() {
           <DialogHeader>
             <DialogTitle>Create server</DialogTitle>
             <DialogDescription>
-              Provision a server from an egg. Resources prefill from the template&apos;s
-              recommended values and can be overridden.
+              Provision a server from an egg. Game servers prefill resources from the
+              template&apos;s recommended values (overridable); voice servers are
+              slot-based and auto-size from the recommended specs.
             </DialogDescription>
           </DialogHeader>
 
@@ -396,45 +410,68 @@ export default function AdminServersPage() {
               </div>
             )}
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            {isVoice ? (
               <div className="space-y-1.5">
-                <Label htmlFor="srv-cpu">CPU cores</Label>
+                <Label htmlFor="srv-slots">Slots (max simultaneous users)</Label>
                 <Input
-                  id="srv-cpu"
+                  id="srv-slots"
                   type="number"
-                  min={0.1}
-                  step={0.1}
-                  value={form.cpuCores}
+                  min={1}
+                  step={1}
+                  value={form.slots}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, cpuCores: Number(e.target.value) }))
+                    setForm((f) => ({ ...f, slots: Number(e.target.value) }))
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  Voice servers are sized by slots. CPU, memory and disk are set
+                  automatically from this template&apos;s recommended specs
+                  {selectedTemplate
+                    ? ` (${selectedTemplate.recCpuCores} vCPU · ${selectedTemplate.recMemoryMb} MB RAM · ${selectedTemplate.recDiskMb} MB disk).`
+                    : "."}
+                </p>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="srv-mem">Memory (MB)</Label>
-                <Input
-                  id="srv-mem"
-                  type="number"
-                  min={256}
-                  value={form.memoryMb}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, memoryMb: Number(e.target.value) }))
-                  }
-                />
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="srv-cpu">CPU cores</Label>
+                  <Input
+                    id="srv-cpu"
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    value={form.cpuCores}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, cpuCores: Number(e.target.value) }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="srv-mem">Memory (MB)</Label>
+                  <Input
+                    id="srv-mem"
+                    type="number"
+                    min={256}
+                    value={form.memoryMb}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, memoryMb: Number(e.target.value) }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="srv-disk">Disk (MB)</Label>
+                  <Input
+                    id="srv-disk"
+                    type="number"
+                    min={1024}
+                    value={form.diskMb}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, diskMb: Number(e.target.value) }))
+                    }
+                  />
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="srv-disk">Disk (MB)</Label>
-                <Input
-                  id="srv-disk"
-                  type="number"
-                  min={1024}
-                  value={form.diskMb}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, diskMb: Number(e.target.value) }))
-                  }
-                />
-              </div>
-            </div>
+            )}
           </div>
 
           <DialogFooter>

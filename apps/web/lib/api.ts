@@ -989,9 +989,12 @@ export const api = {
       ownerId: string;
       nodeId: string;
       templateId: string;
-      cpuCores: number;
-      memoryMb: number;
-      diskMb: number;
+      // Optional — omitted for voice/slot-based templates, which size from the
+      // egg's recommended specs on the server side.
+      cpuCores?: number;
+      memoryMb?: number;
+      diskMb?: number;
+      slots?: number;
       swapMb?: number;
       environment?: Record<string, string>;
     }) => http.post<Server>("/admin/servers", input),

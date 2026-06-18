@@ -254,6 +254,7 @@ export class ServersService {
 
     const template = await this.prisma.gameTemplate.findUnique({
       where: { id: dto.templateId },
+      include: { category: { select: { slug: true } } },
     });
     if (!template) throw new NotFoundException('Template not found');
 
@@ -262,6 +263,29 @@ export class ServersService {
       dto.environment,
     );
     const dockerImage = this.resolveDockerImage(template.dockerImages, environment);
+
+    // Voice / slot-based templates (e.g. TeamSpeak) are sized from the egg's
+    // recommended specs and provisioned by slot count rather than raw specs.
+    const isVoice =
+      template.category?.slug === 'voice' || template.slug.startsWith('teamspeak');
+    const slots = dto.slots && dto.slots > 0 ? Math.floor(dto.slots) : null;
+
+    // Resources fall back to the template's recommended specs when not supplied
+    // (always the case for voice servers, which the staff form sizes by slots).
+    const cpuCores = dto.cpuCores ?? template.recCpuCores;
+    const memoryMb = dto.memoryMb ?? template.recMemoryMb;
+    const diskMb = dto.diskMb ?? template.recDiskMb;
+
+    // Inject the slot cap into the container environment so the runtime (and
+    // TeamSpeak's ServerQuery, via the egg launcher) can enforce it. SLOTS is
+    // generic; TS3SERVER_MAX_CLIENTS is the TeamSpeak-specific knob.
+    if (isVoice && slots) {
+      const env = environment as Record<string, string>;
+      env.SLOTS = String(slots);
+      if (template.slug.startsWith('teamspeak')) {
+        env.TS3SERVER_MAX_CLIENTS = String(slots);
+      }
+    }
 
     const server = await this.prisma.server.create({
       data: {
@@ -274,9 +298,10 @@ export class ServersService {
         templateVersion: template.version,
         state: 'INSTALLING',
         deployMethod: (template.deployMethods[0] as any) ?? 'DOCKER',
-        cpuCores: dto.cpuCores,
-        memoryMb: dto.memoryMb,
-        diskMb: dto.diskMb,
+        cpuCores,
+        memoryMb,
+        diskMb,
+        slots: isVoice ? slots : null,
         swapMb: dto.swapMb ?? 0,
         startupCommand: this.minecraftStartupFor(template, environment),
         dockerImage,

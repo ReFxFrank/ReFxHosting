@@ -277,20 +277,38 @@ export class AdminCreateServerDto {
   @IsString()
   templateId!: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({
+    description:
+      'CPU cores. Optional — defaults to the template\'s recommended spec ' +
+      '(used for voice/slot-based servers that size from recommended specs).',
+  })
+  @IsOptional()
   @IsNumber()
   @Min(0.1)
-  cpuCores!: number;
+  cpuCores?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Memory (MiB). Optional — defaults to the template recommended spec.' })
+  @IsOptional()
   @IsInt()
   @Min(256)
-  memoryMb!: number;
+  memoryMb?: number;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Disk (MiB). Optional — defaults to the template recommended spec.' })
+  @IsOptional()
   @IsInt()
   @Min(1024)
-  diskMb!: number;
+  diskMb?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Slot count for voice/slot-based templates (e.g. TeamSpeak max clients). ' +
+      'When set, resources default to the template recommended specs and the ' +
+      'slot cap is injected into the container environment.',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  slots?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
