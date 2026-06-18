@@ -39,6 +39,8 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
     if (t.href.endsWith("/modpacks")) return isMinecraft;
     if (t.href.endsWith("/workshop")) return supportsWorkshop;
     if (t.href.endsWith("/voice")) return isVoice;
+    // Voice servers keep their identity for life — no game switching.
+    if (t.href.endsWith("/switch-game")) return !isVoice;
     return true;
   });
 

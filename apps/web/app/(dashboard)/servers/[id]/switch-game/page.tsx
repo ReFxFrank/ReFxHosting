@@ -77,6 +77,25 @@ export default function SwitchGamePage() {
   );
 
   const currentId = server?.templateId;
+  const isVoice = (server?.template?.slug ?? "").startsWith("teamspeak");
+
+  // Voice servers (TeamSpeak) keep their identity for life — game switching
+  // doesn't apply. Show a clear message rather than an empty catalog.
+  if (isVoice) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Switch game"
+          description="Change the installed game while keeping your server, IP, plan and backups."
+        />
+        <EmptyState
+          icon={Gamepad2}
+          title="Not available for voice servers"
+          description="This is a TeamSpeak voice server. Voice servers keep their identity for the life of the server and can't be switched to a game. Manage it from the Voice tab."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

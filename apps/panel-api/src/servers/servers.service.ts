@@ -414,9 +414,18 @@ export class ServersService {
   ): Promise<{ accepted: true; gameSwitchLogId: string }> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
-      include: { template: true, subscription: { include: { product: true } } },
+      include: {
+        template: { include: { category: { select: { slug: true } } } },
+        subscription: { include: { product: true } },
+      },
     });
     if (!server) throw new NotFoundException('Server not found');
+
+    // Voice servers (TeamSpeak) can't be switched to a game — they keep their
+    // identity for life. Reject here too, not just in the UI.
+    if (this.isVoiceServer(server.template)) {
+      throw new BadRequestException('Voice servers cannot be switched to a game.');
+    }
 
     // (1) Must be stopped.
     if (!STOPPED_STATES.includes(server.state)) {
@@ -1100,15 +1109,32 @@ export class ServersService {
   async switchableTemplates(id: string) {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
-      include: { subscription: { include: { product: true } } },
+      include: {
+        subscription: { include: { product: true } },
+        template: { include: { category: { select: { slug: true } } } },
+      },
     });
     if (!server) throw new NotFoundException('Server not found');
+
+    // Voice servers (TeamSpeak) keep their identity for the life of the server —
+    // game switching doesn't apply, so there's nothing to switch to.
+    if (this.isVoiceServer(server.template)) return [];
 
     const allowed = server.subscription?.product.allowedTemplateIds ?? [];
     return this.prisma.gameTemplate.findMany({
       where: allowed.length > 0 ? { id: { in: allowed } } : {},
       orderBy: { name: 'asc' },
     });
+  }
+
+  /** True for voice templates (TeamSpeak / the "voice" category). */
+  private isVoiceServer(
+    template: { slug: string; category?: { slug: string } | null } | null,
+  ): boolean {
+    if (!template) return false;
+    return (
+      template.slug.startsWith('teamspeak') || template.category?.slug === 'voice'
+    );
   }
 
   // ---- schedule run-now ---------------------------------------------------
