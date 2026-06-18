@@ -465,7 +465,35 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 	}
 	s.SetState(server.StateRunning)
 	d.log.Info().Str("server", s.ID()).Msg("container started")
+	go d.watchExit(s, created.ID)
 	return nil
+}
+
+// watchExit flips a server's state when its container exits, so a process that
+// dies on boot (e.g. a misconfigured game/voice server) shows as CRASHED/OFFLINE
+// instead of a stale "running". Skips if the container has since been replaced.
+func (d *DockerRuntime) watchExit(s *server.Server, id string) {
+	waitCh, errCh := d.cli.ContainerWait(
+		context.Background(),
+		id,
+		container.WaitConditionNotRunning,
+	)
+	var code int64 = -1
+	select {
+	case st := <-waitCh:
+		code = st.StatusCode
+	case <-errCh:
+	}
+	// A restart created a new container; don't clobber its state.
+	if s.RuntimeRef != id {
+		return
+	}
+	if code == 0 {
+		s.SetState(server.StateOffline)
+	} else {
+		s.SetState(server.StateCrashed)
+		d.log.Warn().Str("server", s.ID()).Int64("exit", code).Msg("container exited")
+	}
 }
 
 // Stop sends the configured stop command (a console command) or SIGTERM, waiting
