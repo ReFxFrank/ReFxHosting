@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -83,6 +83,44 @@ export default function VoicePage() {
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Couldn't record acceptance"),
   });
+  // Commercial license key (licensekey.dat) upload — lifts the free 32-slot cap.
+  const licenseInputRef = useRef<HTMLInputElement>(null);
+  const uploadLicense = useMutation({
+    mutationFn: (dataB64: string) => api.servers.voiceUploadLicense(id, dataB64),
+    onSuccess: () => {
+      toast.success("License key uploaded — restart the server to apply it.");
+      qc.invalidateQueries({ queryKey: ["server", id, "voice"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Couldn't upload license key"),
+  });
+  const removeLicense = useMutation({
+    mutationFn: () => api.servers.voiceRemoveLicense(id),
+    onSuccess: () => {
+      toast.success("License key removed — restart to revert to the free license.");
+      qc.invalidateQueries({ queryKey: ["server", id, "voice"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Couldn't remove license key"),
+  });
+  const onLicenseFile = (file: File | null) => {
+    if (!file) return;
+    if (file.size > 512 * 1024) {
+      toast.error("That file is too large to be a license key.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result ?? "");
+      // FileReader.readAsDataURL → "data:...;base64,XXXX"; send just the payload.
+      const b64 = result.includes(",") ? result.split(",")[1] : result;
+      if (b64) uploadLicense.mutate(b64);
+      else toast.error("That file appears to be empty.");
+    };
+    reader.onerror = () => toast.error("Couldn't read that file.");
+    reader.readAsDataURL(file);
+  };
+
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [banTarget, setBanTarget] = useState<{ clid: string; name: string } | null>(null);
 
@@ -246,6 +284,78 @@ export default function VoicePage() {
                   </Badge>
                 </Field>
               </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <KeyRound className="size-4" /> License key
+          </CardTitle>
+          <CardDescription>
+            The free TeamSpeak license caps a server at <strong>32 slots</strong> and a
+            single virtual server. Upload a commercial{" "}
+            <code className="rounded bg-muted px-1 font-mono text-xs">licensekey.dat</code>{" "}
+            to lift that — it applies on the next restart.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {isLoading ? (
+            <Skeleton className="h-10 w-full" />
+          ) : (
+            <>
+              <div className="text-sm">
+                {data?.licenseKeyInstalled ? (
+                  <Badge variant="secondary" className="gap-1">
+                    <KeyRound className="size-3" /> License key installed
+                  </Badge>
+                ) : data?.licenseKeyInstalled === false ? (
+                  <span className="text-muted-foreground">
+                    No license key — running on the free 32-slot license.
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">
+                    License status unavailable until the server is provisioned.
+                  </span>
+                )}
+              </div>
+              {canManage ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    ref={licenseInputRef}
+                    type="file"
+                    accept=".dat,application/octet-stream"
+                    className="hidden"
+                    onChange={(e) => {
+                      onLicenseFile(e.target.files?.[0] ?? null);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    loading={uploadLicense.isPending}
+                    onClick={() => licenseInputRef.current?.click()}
+                  >
+                    <KeyRound className="size-4" /> Upload licensekey.dat
+                  </Button>
+                  {data?.licenseKeyInstalled && (
+                    <Button
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      loading={removeLicense.isPending}
+                      onClick={() => removeLicense.mutate()}
+                    >
+                      <ShieldX className="size-4" /> Remove
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Ask the server owner to manage the license key.
+                </p>
+              )}
             </>
           )}
         </CardContent>

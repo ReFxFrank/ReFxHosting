@@ -370,3 +370,15 @@ export class VoiceChannelLimitDto {
   @Min(0)
   max?: number;
 }
+
+export class VoiceLicenseDto {
+  @ApiProperty({
+    description:
+      "TeamSpeak licensekey.dat contents, base64-encoded. Unlocks more than " +
+      '32 slots / multiple virtual servers (the free license cap). Takes effect ' +
+      'on the next server restart.',
+  })
+  @IsString()
+  @MaxLength(700_000) // ~512 KiB of binary; real keys are only a few KB
+  data!: string;
+}

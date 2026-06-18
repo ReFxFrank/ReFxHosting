@@ -425,6 +425,11 @@ export interface VoiceInfo {
   queryPort: number;
   privilegeKey: string | null;
   licenseAccepted: boolean;
+  /**
+   * Whether a commercial licensekey.dat is installed (needed for >32 slots).
+   * Null when the node is unreachable / not provisioned yet.
+   */
+  licenseKeyInstalled: boolean | null;
 }
 
 export interface VoiceChannel {

@@ -66,7 +66,9 @@ export class AuditInterceptor implements NestInterceptor {
 
   private safeMeta(req: any): Record<string, unknown> {
     const body = { ...(req?.body ?? {}) };
-    for (const k of ['password', 'token', 'secret', 'refreshToken']) {
+    // Redact secrets and large base64 blobs (license keys, avatar data URLs) so
+    // the audit metadata stays small and free of sensitive payloads.
+    for (const k of ['password', 'token', 'secret', 'refreshToken', 'data', 'dataUrl']) {
       if (k in body) body[k] = '[redacted]';
     }
     return { method: req?.method, params: req?.params, body };

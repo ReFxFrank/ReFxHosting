@@ -49,6 +49,7 @@ import {
   VoiceMoveDto,
   VoiceUnbanDto,
   VoiceChannelLimitDto,
+  VoiceLicenseDto,
 } from './dto/server.dto';
 
 @ApiTags('servers')
@@ -380,6 +381,20 @@ export class ServersController {
   @Audit({ action: 'server.voice.channel-limit', targetType: 'Server', targetParam: 'id' })
   voiceChannelLimit(@Param('id') id: string, @Body() dto: VoiceChannelLimitDto) {
     return this.voice.setChannelLimit(id, dto.cid, dto.max ?? null);
+  }
+
+  @Post(':id/voice/license')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.voice.license-upload', targetType: 'Server', targetParam: 'id' })
+  voiceUploadLicense(@Param('id') id: string, @Body() dto: VoiceLicenseDto) {
+    return this.voice.uploadLicense(id, dto.data);
+  }
+
+  @Delete(':id/voice/license')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.voice.license-remove', targetType: 'Server', targetParam: 'id' })
+  voiceRemoveLicense(@Param('id') id: string) {
+    return this.voice.removeLicense(id);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

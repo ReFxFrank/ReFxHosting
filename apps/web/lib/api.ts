@@ -537,6 +537,10 @@ export const api = {
         cid,
         max: max ?? undefined,
       }),
+    voiceUploadLicense: (id: string, data: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/license`, { data }),
+    voiceRemoveLicense: (id: string) =>
+      http.delete<{ removed: true }>(`/servers/${id}/voice/license`),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),

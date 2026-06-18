@@ -31,6 +31,12 @@ export interface VoiceInfo {
   privilegeKey: string | null;
   /** Whether the TeamSpeak license has been accepted (required to start). */
   licenseAccepted: boolean;
+  /**
+   * Whether a commercial TeamSpeak license key (licensekey.dat) is installed on
+   * the volume — required for >32 slots / multiple virtual servers. Null when the
+   * node is unreachable / not yet provisioned (can't tell).
+   */
+  licenseKeyInstalled: boolean | null;
 }
 
 /** Server-env key recording the customer's TeamSpeak license acceptance. */
@@ -91,6 +97,8 @@ export interface VoiceStatus {
 
 const STATUS_FILE = 'refx-voice-status.txt';
 const CMD_FILE = 'refx-voice-cmd.txt';
+/** TeamSpeak commercial license file (read from the server's working dir). */
+const LICENSE_KEY_FILE = 'licensekey.dat';
 
 /** TeamSpeak ServerQuery escaping → plain text. */
 function unescapeTs3(v: string): string {
@@ -163,6 +171,18 @@ export class VoiceService {
     const env = (server.environment ?? {}) as Record<string, unknown>;
     const licenseAccepted = String(env[LICENSE_ENV_KEY] ?? '') === '1';
 
+    // Is a commercial license key on the volume? List the data dir and look for a
+    // non-empty licensekey.dat (lighter than reading the binary). Null = unknown.
+    let licenseKeyInstalled: boolean | null = null;
+    try {
+      const entries = await this.agent.listFiles(server.node, serverId, '.');
+      licenseKeyInstalled = entries.some(
+        (e) => !e.isDir && e.name === LICENSE_KEY_FILE && e.size > 0,
+      );
+    } catch {
+      licenseKeyInstalled = null; // node unreachable / not provisioned yet
+    }
+
     return {
       address,
       voicePort: primary?.port ?? null,
@@ -173,7 +193,39 @@ export class VoiceService {
       queryPort: creds?.queryPort ?? 10011,
       privilegeKey: creds?.privilegeKey ?? null,
       licenseAccepted,
+      licenseKeyInstalled,
     };
+  }
+
+  /**
+   * Install a commercial TeamSpeak license key (licensekey.dat) onto the volume.
+   * The free license caps a virtual server at 32 slots / 1 virtual server; a paid
+   * key lifts that. ts3server reads licensekey.dat from its working dir
+   * (/home/container) on boot, so the change takes effect on the next restart.
+   */
+  async uploadLicense(serverId: string, base64: string): Promise<{ accepted: true }> {
+    const server = await this.loadVoice(serverId);
+    let bytes: Buffer;
+    try {
+      bytes = Buffer.from((base64 ?? '').replace(/^data:[^,]*,/, ''), 'base64');
+    } catch {
+      throw new BadRequestException('License key must be base64-encoded.');
+    }
+    if (bytes.length === 0) {
+      throw new BadRequestException('License key file is empty.');
+    }
+    if (bytes.length > 512 * 1024) {
+      throw new BadRequestException('That file is too large to be a license key.');
+    }
+    await this.agent.uploadFileBytes(server.node, serverId, LICENSE_KEY_FILE, bytes);
+    return { accepted: true };
+  }
+
+  /** Remove the installed license key (reverts to the free 32-slot license). */
+  async removeLicense(serverId: string): Promise<{ removed: true }> {
+    const server = await this.loadVoice(serverId);
+    await this.agent.deleteFiles(server.node, serverId, [LICENSE_KEY_FILE]);
+    return { removed: true };
   }
 
   /**

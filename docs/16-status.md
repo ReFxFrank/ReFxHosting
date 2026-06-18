@@ -114,8 +114,12 @@ beyond a single build session, and are called out so expectations are clear:
   + privilege key, persists them to `refx-voice.json` on the volume, and the panel's
   per-server **Voice tab** (`GET /servers/:id/voice`, read on demand via the agent's
   jailed file manager — not stored in the panel DB) surfaces the connection address,
-  slot count, privilege key, and ServerQuery admin login. Beyond 32 slots still needs
-  a TeamSpeak license.
+  slot count, privilege key, and ServerQuery admin login. The Voice tab also offers
+  **live monitoring** (users/channels/uptime/bandwidth, kick/ban/move/rename), and a
+  **license-key uploader** — a commercial `licensekey.dat` can be uploaded to the
+  volume (`POST /servers/:id/voice/license`) to lift the free 32-slot / single
+  virtual-server cap; it applies on the next restart. File transfers (avatars/icons)
+  use the voice port's published TCP side.
 - **Load/scale validation** to the "tens of thousands of servers" target —
   the architecture (docs 01/09) supports it; it has not been benchmarked.
 - **OpenSearch indexing, migration importers** (Pterodactyl/AMP/TCAdmin) —
