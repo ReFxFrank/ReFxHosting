@@ -16,6 +16,7 @@ import {
   TicketState,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { WebhookService } from '../webhooks/webhook.service';
 import {
   Paginated,
   PaginationDto,
@@ -41,7 +42,10 @@ const STAFF_ROLES = new Set(['SUPPORT', 'ADMIN', 'OWNER']);
 
 @Injectable()
 export class SupportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webhooks: WebhookService,
+  ) {}
 
   /** Whether a principal is support staff (SUPPORT / ADMIN / OWNER). */
   private isStaff(user: AuthUser): boolean {
@@ -64,7 +68,7 @@ export class SupportService {
 
     const ticketId = uuidv7();
 
-    return this.prisma.ticket.create({
+    const ticket = await this.prisma.ticket.create({
       data: {
         id: ticketId,
         subject: dto.subject,
@@ -83,6 +87,11 @@ export class SupportService {
       },
       include: { messages: { orderBy: { createdAt: 'asc' } } },
     });
+
+    // Outbound webhook (enqueue-only; never breaks ticket creation).
+    await this.webhooks.emit('ticket.created', { ticketId: ticket.id });
+
+    return ticket;
   }
 
   /**
@@ -316,7 +325,12 @@ export class SupportService {
     const sla = computeSlaStatus({ ...ticket, resolvedAt }, category, now);
     data.slaBreached = sla.firstResponseBreached || sla.resolutionBreached;
 
-    return this.prisma.ticket.update({ where: { id }, data });
+    const updated = await this.prisma.ticket.update({ where: { id }, data });
+
+    // Outbound webhook (enqueue-only; never breaks the update).
+    await this.webhooks.emit('ticket.updated', { ticketId: updated.id });
+
+    return updated;
   }
 
   /** Staff convenience: assign a ticket to a staff member. */

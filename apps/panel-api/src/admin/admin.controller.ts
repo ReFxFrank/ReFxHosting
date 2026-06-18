@@ -82,6 +82,7 @@ import {
   SetGatewayConfigDto,
   SetSteamConfigDto,
   SetUserRoleDto,
+  SetWebhookConfigDto,
   TestEmailDto,
   UpdateAlertDto,
   UpdateProductDto,
@@ -587,6 +588,22 @@ export class AdminController {
   @Audit({ action: 'admin.steam.update', targetType: 'PlatformSetting' })
   setSteamConfig(@Body() dto: SetSteamConfigDto) {
     return this.settings.setSteamConfig(dto);
+  }
+
+  // ---- Outbound webhooks (Agent Ops integration) -------------------------
+
+  /** Masked webhook config for the owner editor (secret never returned). */
+  @Get('settings/webhook')
+  @RequirePerm('settings.manage')
+  webhookConfig() {
+    return this.settings.webhookConfigMasked();
+  }
+
+  @Patch('settings/webhook')
+  @RequirePerm('settings.manage')
+  @Audit({ action: 'admin.webhook.update', targetType: 'PlatformSetting' })
+  setWebhookConfig(@Body() dto: SetWebhookConfigDto) {
+    return this.settings.setWebhookConfig(dto);
   }
 
   // ---- Products ----------------------------------------------------------
