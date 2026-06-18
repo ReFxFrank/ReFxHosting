@@ -587,7 +587,9 @@ async function seedVoiceProducts() {
  * already on the launcher).
  */
 async function migrateLauncherStartup(templateId: string, startupCommand: string) {
-  if (!startupCommand.startsWith('bash refx-')) return;
+  // Launcher startups are "bash refx-…" or "sh refx-…" (the TS3 egg moved to sh
+  // because the Alpine image has no bash). Only migrate launcher commands.
+  if (!/^(bash|sh) refx-/.test(startupCommand)) return;
   await prisma.server.updateMany({
     where: {
       templateId,
