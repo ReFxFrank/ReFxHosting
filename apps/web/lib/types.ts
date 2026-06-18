@@ -424,6 +424,7 @@ export interface VoiceInfo {
   queryPassword: string | null;
   queryPort: number;
   privilegeKey: string | null;
+  licenseAccepted: boolean;
 }
 
 export interface VoiceChannel {

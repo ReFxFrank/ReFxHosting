@@ -73,6 +73,16 @@ export default function VoicePage() {
   });
 
   const canManage = useAuthStore((s) => s.hasPermission("settings.update"));
+  const canStart = useAuthStore((s) => s.hasPermission("control.start"));
+  const acceptLicense = useMutation({
+    mutationFn: () => api.servers.voiceAcceptLicense(id),
+    onSuccess: () => {
+      toast.success("License accepted — you can start your server now.");
+      qc.invalidateQueries({ queryKey: ["server", id, "voice"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Couldn't record acceptance"),
+  });
   const [nameDraft, setNameDraft] = useState<string | null>(null);
   const [banTarget, setBanTarget] = useState<{ clid: string; name: string } | null>(null);
 
@@ -161,6 +171,43 @@ export default function VoicePage() {
 
   return (
     <div className="space-y-6">
+      {data && !data.licenseAccepted && (
+        <Card className="border-warning/40 bg-warning/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <KeyRound className="size-4 text-warning" /> Accept the TeamSpeak license
+            </CardTitle>
+            <CardDescription>
+              TeamSpeak requires you to accept its license before the server can
+              start. Your voice server won&apos;t boot until this is accepted.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              By continuing you agree to the{" "}
+              <a
+                href="https://www.teamspeak.com/en/privacy-and-terms/"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline"
+              >
+                TeamSpeak license &amp; terms
+              </a>
+              .
+            </p>
+            {canStart ? (
+              <Button loading={acceptLicense.isPending} onClick={() => acceptLicense.mutate()}>
+                I accept the TeamSpeak license
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Ask the server owner to accept the license.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">

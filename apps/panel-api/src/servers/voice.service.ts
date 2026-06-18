@@ -28,7 +28,11 @@ export interface VoiceInfo {
   queryPort: number;
   /** First-boot ServerQuery admin privilege key (single-use in the TS client). */
   privilegeKey: string | null;
+  /** Whether the TeamSpeak license has been accepted (required to start). */
+  licenseAccepted: boolean;
 }
+
+const LICENSE_MARKER = 'refx-ts3-license.accepted';
 
 export interface VoiceChannel {
   id: string;
@@ -154,6 +158,18 @@ export class VoiceService {
       creds = null; // not provisioned/booted yet, node unreachable, or no file
     }
 
+    // Accepted via the panel (marker file) or legacy env (TS3SERVER_LICENSE=accept).
+    const env = (server.environment ?? {}) as Record<string, unknown>;
+    let licenseAccepted = String(env.TS3SERVER_LICENSE ?? '') === 'accept';
+    if (!licenseAccepted) {
+      try {
+        await this.agent.readFile(server.node, serverId, LICENSE_MARKER);
+        licenseAccepted = true;
+      } catch {
+        licenseAccepted = false;
+      }
+    }
+
     return {
       address,
       voicePort: primary?.port ?? null,
@@ -163,7 +179,23 @@ export class VoiceService {
       queryPassword: creds?.queryPassword ?? null,
       queryPort: creds?.queryPort ?? 10011,
       privilegeKey: creds?.privilegeKey ?? null,
+      licenseAccepted,
     };
+  }
+
+  /**
+   * Record the customer's acceptance of the TeamSpeak license by writing a marker
+   * file the launcher checks before starting. Idempotent.
+   */
+  async acceptLicense(serverId: string): Promise<{ accepted: true }> {
+    const server = await this.loadVoice(serverId);
+    await this.agent.writeFile(
+      server.node,
+      serverId,
+      LICENSE_MARKER,
+      JSON.stringify({ acceptedAt: new Date().toISOString() }),
+    );
+    return { accepted: true };
   }
 
   /**

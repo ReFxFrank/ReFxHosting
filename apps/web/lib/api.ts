@@ -503,6 +503,8 @@ export const api = {
 
     // Voice (TeamSpeak) — connection details + first-boot ServerQuery admin creds.
     voice: (id: string) => http.get<VoiceInfo>(`/servers/${id}/voice`),
+    voiceAcceptLicense: (id: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/accept-license`),
     voiceStatus: (id: string) =>
       http.get<VoiceStatus>(`/servers/${id}/voice/status`),
     voiceRename: (id: string, name: string) =>

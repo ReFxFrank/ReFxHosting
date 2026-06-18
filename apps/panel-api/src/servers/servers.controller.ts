@@ -321,6 +321,13 @@ export class ServersController {
     return this.voice.status(id);
   }
 
+  @Post(':id/voice/accept-license')
+  @RequirePermissions('control.start')
+  @Audit({ action: 'server.voice.accept-license', targetType: 'Server', targetParam: 'id' })
+  voiceAcceptLicense(@Param('id') id: string) {
+    return this.voice.acceptLicense(id);
+  }
+
   @Post(':id/voice/rename')
   @RequirePermissions('settings.update')
   @Audit({ action: 'server.voice.rename', targetType: 'Server', targetParam: 'id' })
