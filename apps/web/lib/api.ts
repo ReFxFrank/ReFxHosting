@@ -46,6 +46,7 @@ import type {
   WorkshopMod,
   SteamConfigMasked,
   VoiceInfo,
+  VoiceStatus,
   HomepageAlert,
   ModrinthProject,
   ModrinthVersion,
@@ -500,6 +501,8 @@ export const api = {
 
     // Voice (TeamSpeak) — connection details + first-boot ServerQuery admin creds.
     voice: (id: string) => http.get<VoiceInfo>(`/servers/${id}/voice`),
+    voiceStatus: (id: string) =>
+      http.get<VoiceStatus>(`/servers/${id}/voice/status`),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),

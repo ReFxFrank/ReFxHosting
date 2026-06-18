@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mic, Copy, KeyRound, Eye, EyeOff, RefreshCw, Users } from "lucide-react";
+import { Mic, Copy, KeyRound, Eye, EyeOff, RefreshCw, Users, Activity, Hash } from "lucide-react";
 import { api } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,13 @@ export default function VoicePage() {
     queryFn: () => api.servers.voice(id),
     // Poll while we wait for the server's first boot to write its credentials.
     refetchInterval: (q) => (q.state.data?.ready ? false : 5000),
+  });
+
+  // Live monitoring: active users + channels, refreshed every 15s.
+  const { data: status } = useQuery({
+    queryKey: ["server", id, "voice-status"],
+    queryFn: () => api.servers.voiceStatus(id),
+    refetchInterval: 15000,
   });
 
   const copy = (label: string, value?: string | null) => {
@@ -71,6 +78,83 @@ export default function VoicePage() {
                   </Badge>
                 </Field>
               </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="size-4" /> Live monitoring
+          </CardTitle>
+          <CardDescription>
+            Who&apos;s connected right now, by channel. Refreshes automatically while the
+            server is running.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!status ? (
+            <Skeleton className="h-24 w-full" />
+          ) : !status.ready ? (
+            <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning/5 p-3 text-sm text-muted-foreground">
+              <RefreshCw className="size-4 shrink-0 text-warning" />
+              <span>
+                Live stats appear here while the server is <strong>running</strong>.
+                {status.updatedSecondsAgo != null &&
+                  ` Last update ${status.updatedSecondsAgo}s ago.`}
+              </span>
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Field label="Users online">
+                  <Badge variant="secondary" className="gap-1">
+                    <Users className="size-3" /> {status.online}
+                    {status.maxClients ? ` / ${status.maxClients}` : ""}
+                  </Badge>
+                </Field>
+                <Field label="Channels">
+                  <Badge variant="secondary" className="gap-1">
+                    <Hash className="size-3" /> {status.channelCount}
+                  </Badge>
+                </Field>
+                <Field label="Uptime">
+                  <span className="text-sm">{formatUptime(status.uptimeSeconds)}</span>
+                </Field>
+              </div>
+
+              <div className="space-y-2">
+                {status.channels.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No channels yet.</p>
+                ) : (
+                  status.channels.map((ch) => (
+                    <div key={ch.id} className="rounded-lg border p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-medium">{ch.name}</span>
+                        <Badge variant="muted" className="gap-1 shrink-0">
+                          <Users className="size-3" /> {ch.users.length}
+                        </Badge>
+                      </div>
+                      {ch.users.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {ch.users.map((u, i) => (
+                            <Badge key={i} variant="secondary" className="font-normal">
+                              {u}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {status.updatedSecondsAgo != null && (
+                <p className="text-xs text-muted-foreground">
+                  Updated {status.updatedSecondsAgo}s ago · refreshes every 15s
+                </p>
+              )}
             </>
           )}
         </CardContent>
@@ -177,6 +261,15 @@ export default function VoicePage() {
       </Card>
     </div>
   );
+}
+
+function formatUptime(seconds: number): string {
+  if (!seconds || seconds < 0) return "—";
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const parts = [d && `${d}d`, h && `${h}h`, `${m}m`].filter(Boolean);
+  return parts.join(" ");
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

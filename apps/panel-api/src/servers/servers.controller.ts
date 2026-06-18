@@ -310,6 +310,12 @@ export class ServersController {
     return this.voice.info(id);
   }
 
+  @Get(':id/voice/status')
+  @RequirePermissions('files.read')
+  voiceStatus(@Param('id') id: string) {
+    return this.voice.status(id);
+  }
+
   // ---- upgrade (resize alias + price preview) ----------------------------
 
   @Get(':id/upgrade/options')

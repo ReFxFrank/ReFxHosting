@@ -426,6 +426,23 @@ export interface VoiceInfo {
   privilegeKey: string | null;
 }
 
+export interface VoiceChannel {
+  id: string;
+  name: string;
+  users: string[];
+}
+
+export interface VoiceStatus {
+  ready: boolean;
+  online: number;
+  maxClients: number | null;
+  channelCount: number;
+  uptimeSeconds: number;
+  serverName: string | null;
+  updatedSecondsAgo: number | null;
+  channels: VoiceChannel[];
+}
+
 /** An admin-curated team member for the public "Meet the team" page. */
 export interface TeamMember {
   id: string;
