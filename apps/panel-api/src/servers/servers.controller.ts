@@ -48,6 +48,7 @@ import {
   VoiceModerateDto,
   VoiceMoveDto,
   VoiceUnbanDto,
+  VoiceChannelLimitDto,
 } from './dto/server.dto';
 
 @ApiTags('servers')
@@ -359,6 +360,19 @@ export class ServersController {
   @RequirePermissions('files.read')
   voiceAudit(@Param('id') id: string) {
     return this.voice.auditLog(id);
+  }
+
+  @Get(':id/voice/bandwidth')
+  @RequirePermissions('files.read')
+  voiceBandwidth(@Param('id') id: string) {
+    return this.voice.bandwidthHistory(id);
+  }
+
+  @Post(':id/voice/channel-limit')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.voice.channel-limit', targetType: 'Server', targetParam: 'id' })
+  voiceChannelLimit(@Param('id') id: string, @Body() dto: VoiceChannelLimitDto) {
+    return this.voice.setChannelLimit(id, dto.cid, dto.max ?? null);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

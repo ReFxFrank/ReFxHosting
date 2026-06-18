@@ -48,6 +48,7 @@ import type {
   VoiceInfo,
   VoiceStatus,
   VoiceAuditEntry,
+  VoiceBandwidthPoint,
   HomepageAlert,
   ModrinthProject,
   ModrinthVersion,
@@ -527,6 +528,13 @@ export const api = {
       http.post<{ accepted: true }>(`/servers/${id}/voice/unban`, { banid }),
     voiceAudit: (id: string) =>
       http.get<VoiceAuditEntry[]>(`/servers/${id}/voice/audit`),
+    voiceBandwidth: (id: string) =>
+      http.get<VoiceBandwidthPoint[]>(`/servers/${id}/voice/bandwidth`),
+    voiceChannelLimit: (id: string, cid: string, max: number | null) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/channel-limit`, {
+        cid,
+        max: max ?? undefined,
+      }),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),

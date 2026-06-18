@@ -358,3 +358,15 @@ export class VoiceUnbanDto {
   @IsString()
   banid!: string;
 }
+
+export class VoiceChannelLimitDto {
+  @ApiProperty({ description: 'Channel id (cid).' })
+  @IsString()
+  cid!: string;
+
+  @ApiPropertyOptional({ description: 'Max clients; 0/omitted = unlimited.' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  max?: number;
+}

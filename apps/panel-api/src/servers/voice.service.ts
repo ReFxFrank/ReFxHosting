@@ -35,6 +35,16 @@ export interface VoiceChannel {
   name: string;
   /** Voice clients currently in this channel (clid for kick/ban targeting). */
   users: { clid: string; name: string }[];
+  /** Per-channel client cap, or null when unlimited. */
+  maxClients: number | null;
+}
+
+export interface VoiceBandwidthPoint {
+  /** Unix epoch seconds. */
+  t: number;
+  /** Bytes/sec received (down) and sent (up). */
+  down: number;
+  up: number;
 }
 
 export interface VoiceBan {
@@ -236,6 +246,10 @@ export class VoiceService {
       users: voice
         .filter((c) => c.cid === ch.cid && c.client_nickname)
         .map((c) => ({ clid: c.clid, name: c.client_nickname })),
+      maxClients:
+        ch.channel_flag_maxclients_unlimited === '0' && ch.channel_maxclients
+          ? Number(ch.channel_maxclients) || null
+          : null,
     }));
 
     const updatedSecondsAgo = snapshotEpoch
@@ -401,5 +415,48 @@ export class VoiceService {
     const server = await this.loadVoice(serverId);
     await this.queueCommand(server, `bandel banid=${banid}`);
     return { accepted: true };
+  }
+
+  /** Set a channel's client cap. max <= 0 / null removes the limit (unlimited). */
+  async setChannelLimit(
+    serverId: string,
+    cid: string,
+    max: number | null,
+  ): Promise<{ accepted: true }> {
+    if (!/^\d+$/.test(String(cid))) throw new BadRequestException('Invalid channel id.');
+    const server = await this.loadVoice(serverId);
+    if (server.state !== 'RUNNING') {
+      throw new BadRequestException('The server must be running to change a channel.');
+    }
+    const n = Number(max) || 0;
+    const cmd =
+      n > 0
+        ? `channeledit cid=${cid} channel_flag_maxclients_unlimited=0 channel_maxclients=${Math.min(
+            n,
+            10000,
+          )}`
+        : `channeledit cid=${cid} channel_flag_maxclients_unlimited=1 channel_maxclients=0`;
+    await this.queueCommand(server, cmd);
+    return { accepted: true };
+  }
+
+  /** Rolling bandwidth history (down/up bytes/sec) the launcher samples ~15s. */
+  async bandwidthHistory(serverId: string): Promise<VoiceBandwidthPoint[]> {
+    const server = await this.loadVoice(serverId);
+    let text = '';
+    try {
+      const res = await this.agent.readFile(server.node, serverId, 'refx-voice-bw.csv');
+      text = typeof res === 'string' ? res : ((res as { content?: string })?.content ?? '');
+    } catch {
+      return [];
+    }
+    const points: VoiceBandwidthPoint[] = [];
+    for (const line of text.split('\n')) {
+      const [t, down, up] = line.trim().split(',');
+      const ts = Number(t);
+      if (!ts) continue;
+      points.push({ t: ts, down: Number(down) || 0, up: Number(up) || 0 });
+    }
+    return points;
   }
 }

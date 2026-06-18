@@ -41,6 +41,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip as ReTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { toast } from "@/components/ui/sonner";
 import { useAuthStore } from "@/store/auth";
 
@@ -118,6 +127,28 @@ export default function VoicePage() {
     queryKey: ["server", id, "voice-audit"],
     queryFn: () => api.servers.voiceAudit(id),
     refetchInterval: 30000,
+  });
+
+  // Bandwidth history for the chart.
+  const { data: bw } = useQuery({
+    queryKey: ["server", id, "voice-bw"],
+    queryFn: () => api.servers.voiceBandwidth(id),
+    refetchInterval: 15000,
+  });
+
+  const [limitTarget, setLimitTarget] = useState<
+    { cid: string; name: string; current: number | null } | null
+  >(null);
+  const [limitDraft, setLimitDraft] = useState("");
+  const channelLimit = useMutation({
+    mutationFn: (v: { cid: string; max: number | null }) =>
+      api.servers.voiceChannelLimit(id, v.cid, v.max),
+    onSuccess: () => {
+      toast.success("Channel limit updated");
+      setLimitTarget(null);
+      qc.invalidateQueries({ queryKey: ["server", id, "voice-status"] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't update"),
   });
 
   const copy = (label: string, value?: string | null) => {
@@ -252,9 +283,30 @@ export default function VoicePage() {
                     <div key={ch.id} className="rounded-lg border p-3">
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-sm font-medium">{ch.name}</span>
-                        <Badge variant="muted" className="gap-1 shrink-0">
-                          <Users className="size-3" /> {ch.users.length}
-                        </Badge>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <Badge variant="muted" className="gap-1">
+                            <Users className="size-3" /> {ch.users.length}
+                            {ch.maxClients != null ? ` / ${ch.maxClients}` : ""}
+                          </Badge>
+                          {canManage && (
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              aria-label={`Set limit for ${ch.name}`}
+                              title="Set channel limit"
+                              onClick={() => {
+                                setLimitTarget({
+                                  cid: ch.id,
+                                  name: ch.name,
+                                  current: ch.maxClients,
+                                });
+                                setLimitDraft(ch.maxClients != null ? String(ch.maxClients) : "");
+                              }}
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       {ch.users.length > 0 && (
                         <div className="mt-2 space-y-1">
@@ -331,6 +383,90 @@ export default function VoicePage() {
           )}
         </CardContent>
       </Card>
+
+      {bw && bw.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Gauge className="size-4" /> Bandwidth history
+            </CardTitle>
+            <CardDescription>
+              Voice traffic over the last ~30 minutes (download / upload).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart
+                  data={bw}
+                  margin={{ top: 8, right: 8, bottom: 0, left: -8 }}
+                >
+                  <defs>
+                    <linearGradient id="bwDown" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.5} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="bwUp" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#00aaff" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="#00aaff" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis
+                    dataKey="t"
+                    tickFormatter={(t) =>
+                      new Date(t * 1000).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+                    }
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    tickLine={false}
+                    axisLine={false}
+                    minTickGap={40}
+                  />
+                  <YAxis
+                    tickFormatter={(v) => formatBps(Number(v))}
+                    tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={64}
+                  />
+                  <ReTooltip
+                    contentStyle={{
+                      background: "hsl(var(--popover))",
+                      border: "1px solid hsl(var(--border))",
+                      borderRadius: 8,
+                      fontSize: 12,
+                    }}
+                    labelFormatter={(t) => new Date(Number(t) * 1000).toLocaleTimeString()}
+                    formatter={(v, name) =>
+                      [formatBps(Number(v)), name === "down" ? "Download" : "Upload"] as [
+                        string,
+                        string,
+                      ]
+                    }
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="down"
+                    stroke="hsl(var(--primary))"
+                    fill="url(#bwDown)"
+                    strokeWidth={2}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="up"
+                    stroke="#00aaff"
+                    fill="url(#bwUp)"
+                    strokeWidth={2}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {status?.ready && status.bans.length > 0 && (
         <Card>
@@ -502,6 +638,42 @@ export default function VoicePage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!limitTarget} onOpenChange={(o) => !o && setLimitTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Channel limit — {limitTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Maximum simultaneous users for this channel. Leave blank (or 0) for
+              unlimited.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            type="number"
+            min={0}
+            placeholder="Unlimited"
+            value={limitDraft}
+            onChange={(e) => setLimitDraft(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setLimitTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              loading={channelLimit.isPending}
+              onClick={() =>
+                limitTarget &&
+                channelLimit.mutate({
+                  cid: limitTarget.cid,
+                  max: limitDraft.trim() ? Number(limitDraft) : null,
+                })
+              }
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!banTarget} onOpenChange={(o) => !o && setBanTarget(null)}>
         <DialogContent>

@@ -430,6 +430,13 @@ export interface VoiceChannel {
   id: string;
   name: string;
   users: { clid: string; name: string }[];
+  maxClients: number | null;
+}
+
+export interface VoiceBandwidthPoint {
+  t: number;
+  down: number;
+  up: number;
 }
 
 export interface VoiceBan {
