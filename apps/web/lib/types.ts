@@ -429,7 +429,7 @@ export interface VoiceInfo {
 export interface VoiceChannel {
   id: string;
   name: string;
-  users: string[];
+  users: { clid: string; name: string }[];
 }
 
 export interface VoiceStatus {
@@ -439,6 +439,9 @@ export interface VoiceStatus {
   channelCount: number;
   uptimeSeconds: number;
   serverName: string | null;
+  bandwidthDownBps: number;
+  bandwidthUpBps: number;
+  avgPingMs: number;
   updatedSecondsAgo: number | null;
   channels: VoiceChannel[];
 }

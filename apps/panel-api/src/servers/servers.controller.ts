@@ -44,6 +44,8 @@ import {
   AddWorkshopDto,
   ToggleWorkshopDto,
   ReorderWorkshopDto,
+  VoiceRenameDto,
+  VoiceModerateDto,
 } from './dto/server.dto';
 
 @ApiTags('servers')
@@ -314,6 +316,27 @@ export class ServersController {
   @RequirePermissions('files.read')
   voiceStatus(@Param('id') id: string) {
     return this.voice.status(id);
+  }
+
+  @Post(':id/voice/rename')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.voice.rename', targetType: 'Server', targetParam: 'id' })
+  voiceRename(@Param('id') id: string, @Body() dto: VoiceRenameDto) {
+    return this.voice.rename(id, dto.name);
+  }
+
+  @Post(':id/voice/kick')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.voice.kick', targetType: 'Server', targetParam: 'id' })
+  voiceKick(@Param('id') id: string, @Body() dto: VoiceModerateDto) {
+    return this.voice.kick(id, dto.clid, dto.reason);
+  }
+
+  @Post(':id/voice/ban')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.voice.ban', targetType: 'Server', targetParam: 'id' })
+  voiceBan(@Param('id') id: string, @Body() dto: VoiceModerateDto) {
+    return this.voice.ban(id, dto.clid, dto.reason, dto.seconds);
   }
 
   // ---- upgrade (resize alias + price preview) ----------------------------

@@ -503,6 +503,12 @@ export const api = {
     voice: (id: string) => http.get<VoiceInfo>(`/servers/${id}/voice`),
     voiceStatus: (id: string) =>
       http.get<VoiceStatus>(`/servers/${id}/voice/status`),
+    voiceRename: (id: string, name: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/rename`, { name }),
+    voiceKick: (id: string, clid: string, reason?: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/kick`, { clid, reason }),
+    voiceBan: (id: string, clid: string, reason?: string, seconds?: number) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/ban`, { clid, reason, seconds }),
 
     // Sub-users
     subUsers: (id: string) => getList<SubUser>(`/servers/${id}/sub-users`),

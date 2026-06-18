@@ -2,14 +2,38 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mic, Copy, KeyRound, Eye, EyeOff, RefreshCw, Users, Activity, Hash } from "lucide-react";
-import { api } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Mic,
+  Copy,
+  KeyRound,
+  Eye,
+  EyeOff,
+  RefreshCw,
+  Users,
+  Activity,
+  Hash,
+  Gauge,
+  UserX,
+  Ban,
+  Pencil,
+} from "lucide-react";
+import { api, ApiError } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
+import { useAuthStore } from "@/store/auth";
 
 export default function VoicePage() {
   const { id } = useParams<{ id: string }>();
@@ -28,6 +52,33 @@ export default function VoicePage() {
     queryKey: ["server", id, "voice-status"],
     queryFn: () => api.servers.voiceStatus(id),
     refetchInterval: 15000,
+  });
+
+  const canManage = useAuthStore((s) => s.hasPermission("settings.update"));
+  const [nameDraft, setNameDraft] = useState<string | null>(null);
+  const [banTarget, setBanTarget] = useState<{ clid: string; name: string } | null>(null);
+
+  const rename = useMutation({
+    mutationFn: (name: string) => api.servers.voiceRename(id, name),
+    onSuccess: () => {
+      toast.success("Server name updated — applies within a few seconds.");
+      setNameDraft(null);
+      qc.invalidateQueries({ queryKey: ["server", id, "voice-status"] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't rename"),
+  });
+  const kick = useMutation({
+    mutationFn: (clid: string) => api.servers.voiceKick(id, clid),
+    onSuccess: () => toast.success("User kicked"),
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't kick"),
+  });
+  const ban = useMutation({
+    mutationFn: (clid: string) => api.servers.voiceBan(id, clid),
+    onSuccess: () => {
+      toast.success("User banned");
+      setBanTarget(null);
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't ban"),
   });
 
   const copy = (label: string, value?: string | null) => {
@@ -107,7 +158,31 @@ export default function VoicePage() {
             </div>
           ) : (
             <>
-              <div className="grid gap-3 sm:grid-cols-3">
+              {canManage && (
+                <Field label="Server name">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={nameDraft ?? status.serverName ?? ""}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      className="max-w-xs"
+                    />
+                    <Button
+                      size="sm"
+                      loading={rename.isPending}
+                      disabled={
+                        nameDraft === null ||
+                        !nameDraft.trim() ||
+                        nameDraft.trim() === (status.serverName ?? "")
+                      }
+                      onClick={() => rename.mutate(nameDraft!.trim())}
+                    >
+                      <Pencil className="size-4" /> Rename
+                    </Button>
+                  </div>
+                </Field>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Field label="Users online">
                   <Badge variant="secondary" className="gap-1">
                     <Users className="size-3" /> {status.online}
@@ -121,6 +196,12 @@ export default function VoicePage() {
                 </Field>
                 <Field label="Uptime">
                   <span className="text-sm">{formatUptime(status.uptimeSeconds)}</span>
+                </Field>
+                <Field label="Bandwidth">
+                  <span className="flex items-center gap-1 text-sm">
+                    <Gauge className="size-3.5 text-muted-foreground" />
+                    ↓ {formatBps(status.bandwidthDownBps)} · ↑ {formatBps(status.bandwidthUpBps)}
+                  </span>
                 </Field>
               </div>
 
@@ -137,11 +218,38 @@ export default function VoicePage() {
                         </Badge>
                       </div>
                       {ch.users.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {ch.users.map((u, i) => (
-                            <Badge key={i} variant="secondary" className="font-normal">
-                              {u}
-                            </Badge>
+                        <div className="mt-2 space-y-1">
+                          {ch.users.map((u) => (
+                            <div
+                              key={u.clid}
+                              className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-2 py-1"
+                            >
+                              <span className="truncate text-sm">{u.name}</span>
+                              {canManage && (
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Kick ${u.name}`}
+                                    title="Kick"
+                                    disabled={kick.isPending}
+                                    onClick={() => kick.mutate(u.clid)}
+                                  >
+                                    <UserX className="size-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Ban ${u.name}`}
+                                    title="Ban"
+                                    className="text-destructive hover:text-destructive"
+                                    onClick={() => setBanTarget({ clid: u.clid, name: u.name })}
+                                  >
+                                    <Ban className="size-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           ))}
                         </div>
                       )}
@@ -259,8 +367,45 @@ export default function VoicePage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!banTarget} onOpenChange={(o) => !o && setBanTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Ban {banTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              This permanently bans the user from the voice server and disconnects
+              them. You can remove bans later from the TeamSpeak client (Permissions
+              → Ban List).
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setBanTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={ban.isPending}
+              onClick={() => banTarget && ban.mutate(banTarget.clid)}
+            >
+              Ban user
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function formatBps(bytesPerSec: number): string {
+  if (!bytesPerSec || bytesPerSec < 1) return "0 B/s";
+  const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+  let v = bytesPerSec;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v < 10 && i > 0 ? v.toFixed(1) : Math.round(v)} ${units[i]}`;
 }
 
 function formatUptime(seconds: number): string {

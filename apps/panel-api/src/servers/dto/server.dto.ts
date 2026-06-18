@@ -305,3 +305,28 @@ export class ReorderWorkshopDto {
   @IsString({ each: true })
   ids!: string[];
 }
+
+export class VoiceRenameDto {
+  @ApiProperty({ description: 'New TeamSpeak virtual server name (1–64 chars).' })
+  @IsString()
+  @MaxLength(64)
+  name!: string;
+}
+
+export class VoiceModerateDto {
+  @ApiProperty({ description: 'Client id (clid) from the live monitoring list.' })
+  @IsString()
+  clid!: string;
+
+  @ApiPropertyOptional({ description: 'Reason shown to the user.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  reason?: string;
+
+  @ApiPropertyOptional({ description: 'Ban duration in seconds (0 = permanent).' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  seconds?: number;
+}
