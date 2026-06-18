@@ -178,7 +178,10 @@ describe('Agent Ops bot — PermissionGuard API-key path', () => {
 
 describe('Agent Ops bot — SupportService hard boundaries', () => {
   function makeService(prisma: any): SupportService {
-    return new SupportService(prisma);
+    // WebhookService (added by the outbound-webhook change) is enqueue-only and
+    // irrelevant to these authz boundaries; stub it.
+    const webhooks = { emit: jest.fn() } as any;
+    return new SupportService(prisma, webhooks);
   }
 
   describe('listTickets read scoping', () => {
