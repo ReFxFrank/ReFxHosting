@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodeAgentClient } from '../agent/agent.client';
 
@@ -32,7 +33,8 @@ export interface VoiceInfo {
   licenseAccepted: boolean;
 }
 
-const LICENSE_MARKER = 'refx-ts3-license.accepted';
+/** Server-env key recording the customer's TeamSpeak license acceptance. */
+const LICENSE_ENV_KEY = 'REFX_TS3_LICENSE_ACCEPTED';
 
 export interface VoiceChannel {
   id: string;
@@ -158,17 +160,8 @@ export class VoiceService {
       creds = null; // not provisioned/booted yet, node unreachable, or no file
     }
 
-    // Accepted via the panel (marker file) or legacy env (TS3SERVER_LICENSE=accept).
     const env = (server.environment ?? {}) as Record<string, unknown>;
-    let licenseAccepted = String(env.TS3SERVER_LICENSE ?? '') === 'accept';
-    if (!licenseAccepted) {
-      try {
-        await this.agent.readFile(server.node, serverId, LICENSE_MARKER);
-        licenseAccepted = true;
-      } catch {
-        licenseAccepted = false;
-      }
-    }
+    const licenseAccepted = String(env[LICENSE_ENV_KEY] ?? '') === '1';
 
     return {
       address,
@@ -184,17 +177,19 @@ export class VoiceService {
   }
 
   /**
-   * Record the customer's acceptance of the TeamSpeak license by writing a marker
-   * file the launcher checks before starting. Idempotent.
+   * Record the customer's acceptance of the TeamSpeak license on the server
+   * (a panel-side flag the power gate checks before starting). Idempotent.
    */
   async acceptLicense(serverId: string): Promise<{ accepted: true }> {
     const server = await this.loadVoice(serverId);
-    await this.agent.writeFile(
-      server.node,
-      serverId,
-      LICENSE_MARKER,
-      JSON.stringify({ acceptedAt: new Date().toISOString() }),
-    );
+    const environment = {
+      ...((server.environment as Record<string, unknown>) ?? {}),
+      [LICENSE_ENV_KEY]: '1',
+    } as Prisma.InputJsonObject;
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { environment },
+    });
     return { accepted: true };
   }
 

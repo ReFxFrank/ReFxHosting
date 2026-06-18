@@ -327,7 +327,7 @@ export class ServersService {
   async power(id: string, signal: PowerSignal): Promise<{ accepted: true }> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
-      include: { node: true },
+      include: { node: true, template: true },
     });
     if (!server) throw new NotFoundException('Server not found');
     if (server.state === 'SUSPENDED') {
@@ -335,6 +335,22 @@ export class ServersService {
     }
     if (server.state === 'INSTALLING' || server.state === 'REINSTALLING') {
       throw new ConflictException(`Cannot ${signal} while ${server.state}`);
+    }
+
+    // TeamSpeak: the customer must accept TeamSpeak's license before the voice
+    // server may run. Enforced here so we never start a server that would block.
+    if (
+      (signal === 'start' || signal === 'restart') &&
+      (server.template?.slug ?? '').startsWith('teamspeak') &&
+      String(
+        (server.environment as Record<string, unknown> | null)?.[
+          'REFX_TS3_LICENSE_ACCEPTED'
+        ] ?? '',
+      ) !== '1'
+    ) {
+      throw new BadRequestException(
+        'Accept the TeamSpeak license on the Voice tab before starting this server.',
+      );
     }
 
     await this.agent.power(server.node, server.id, signal);

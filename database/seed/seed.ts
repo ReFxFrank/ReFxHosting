@@ -658,6 +658,38 @@ async function syncVoiceEggs() {
 }
 
 /**
+ * The TeamSpeak image entrypoint refuses to run unless TS3SERVER_LICENSE=accept.
+ * Backfill it onto existing teamspeak servers (a brief window defaulted it to "")
+ * so they boot again; the customer's actual license acceptance is gated
+ * separately by the panel (REFX_TS3_LICENSE_ACCEPTED). Takes effect on the
+ * server's next (re)install, which re-pushes the env to the agent.
+ */
+async function fixTeamspeakLicenseEnv() {
+  const tpl = await prisma.gameTemplate.findUnique({
+    where: { slug: 'teamspeak3' },
+    select: { id: true },
+  });
+  if (!tpl) return;
+  const servers = await prisma.server.findMany({
+    where: { templateId: tpl.id, deletedAt: null },
+    select: { id: true, environment: true },
+  });
+  let fixed = 0;
+  for (const s of servers) {
+    const env = (s.environment ?? {}) as Record<string, unknown>;
+    if (env.TS3SERVER_LICENSE === 'accept') continue;
+    await prisma.server.update({
+      where: { id: s.id },
+      data: {
+        environment: { ...env, TS3SERVER_LICENSE: 'accept' } as Prisma.InputJsonObject,
+      },
+    });
+    fixed += 1;
+  }
+  if (fixed) console.log(`  • TeamSpeak license env fixed on ${fixed} server(s)`);
+}
+
+/**
  * Backfill the unified `minecraft` egg's install script + default startup onto an
  * existing template (the curated egg seed is create-only). This is how install
  * hardening — e.g. the per-loader launch-artifact verification — reaches a
@@ -939,6 +971,14 @@ async function main() {
     await syncVoiceEggs();
   } catch (e) {
     console.error('  ! voice egg sync failed:', (e as Error).message);
+  }
+
+  // Ensure existing TeamSpeak servers keep TS3SERVER_LICENSE=accept so the image
+  // entrypoint runs (a brief egg change defaulted it to "" and broke booting).
+  try {
+    await fixTeamspeakLicenseEnv();
+  } catch (e) {
+    console.error('  ! teamspeak license env fix failed:', (e as Error).message);
   }
 
   // Backfill the hardened unified Minecraft install script (per-loader launch
