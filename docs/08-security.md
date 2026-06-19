@@ -130,6 +130,14 @@ default). `SubUserState = REVOKED` instantly removes access.
 - `scopes` (`ApiKeyScope`): **`READ`**, **`WRITE`**, **`ADMIN`** — the action's
   required scope is checked per request.
 - `allowedIps` — optional CIDR allowlist; requests from other IPs are rejected.
+  Bare IPs are treated as `/32`, real CIDR ranges are matched, and IPv4-mapped
+  IPv6 (`::ffff:1.2.3.4`) is normalized first. The client IP is resolved from
+  `req.ip` (so `TRUST_PROXY` must match your reverse-proxy hop count); when the
+  panel sits behind a proxy that overwrites `X-Forwarded-For` (e.g. **Cloudflare**),
+  set `CLIENT_IP_HEADER=cf-connecting-ip` so the allowlist compares the real
+  client IP rather than an edge IP. Only enable that header when the origin is
+  reachable **only** through that proxy (lock the firewall to its ranges),
+  otherwise the header can be spoofed.
 - `expiresAt` / `revokedAt` — lifecycle controls; `lastUsedAt` aids review.
 
 ```mermaid
