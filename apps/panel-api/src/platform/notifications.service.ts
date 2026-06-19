@@ -105,4 +105,40 @@ export class NotificationsService {
     });
     return { unread };
   }
+
+  /** Delete a single notification owned by the user. Idempotent. */
+  async deleteNotification(
+    userId: string,
+    id: string,
+  ): Promise<{ deleted: number }> {
+    const result = await this.prisma.notification.deleteMany({
+      where: { id, userId },
+    });
+    return { deleted: result.count };
+  }
+
+  /** Clear (delete) all of a user's notifications. Returns the count removed. */
+  async clearAll(userId: string): Promise<{ deleted: number }> {
+    const result = await this.prisma.notification.deleteMany({
+      where: { userId },
+    });
+    return { deleted: result.count };
+  }
+
+  /**
+   * Best-effort fan-out: create the same notification for several users. Used for
+   * events with multiple recipients (e.g. an unassigned ticket reply -> all
+   * staff). Never throws — notification delivery must not break the caller.
+   */
+  async notifyMany(
+    userIds: string[],
+    dto: CreateNotificationDto,
+  ): Promise<void> {
+    const unique = [...new Set(userIds)].filter(Boolean);
+    await Promise.all(
+      unique.map((userId) =>
+        this.createNotification(userId, dto).catch(() => undefined),
+      ),
+    );
+  }
 }

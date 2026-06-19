@@ -18,9 +18,18 @@ import { Public } from '../common/decorators/public.decorator';
 import { RawResponse } from '../common/decorators/raw-response.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodesService } from '../nodes/nodes.service';
+import { NotificationsService } from '../platform/notifications.service';
 import { ConsoleGateway } from './console.gateway';
 import { AgentSignatureGuard } from './agent-signature.guard';
 import { uuidv7 } from '../common/util/uuid';
+
+/** Server-state transitions worth notifying the owner about (others are noise). */
+const SERVER_STATE_NOTICES: Partial<Record<ServerState, string>> = {
+  [ServerState.RUNNING]: 'is now online',
+  [ServerState.OFFLINE]: 'went offline',
+  [ServerState.CRASHED]: 'has crashed',
+  [ServerState.SUSPENDED]: 'was suspended',
+};
 
 /** Body shapes the node-agent posts back to the panel. */
 interface RegisterBody {
@@ -93,6 +102,7 @@ export class AgentCallbacksController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly nodes: NodesService,
+    private readonly notifications: NotificationsService,
     private readonly console: ConsoleGateway,
   ) {}
 
@@ -180,11 +190,7 @@ export class AgentCallbacksController {
     for (const s of samples) {
       this.console.emitStats(s.serverId, s);
       const state = this.toServerState(s.state);
-      if (state) {
-        await this.prisma.server
-          .update({ where: { id: s.serverId }, data: { state } })
-          .catch(() => undefined);
-      }
+      if (state) await this.applyServerState(s.serverId, state);
     }
     return { ok: true };
   }
@@ -209,11 +215,7 @@ export class AgentCallbacksController {
   @Post('power-event')
   async powerEvent(@Body() body: PowerEventBody): Promise<{ ok: true }> {
     const state = this.toServerState(body.state);
-    if (state) {
-      await this.prisma.server
-        .update({ where: { id: body.serverId }, data: { state } })
-        .catch(() => undefined);
-    }
+    if (state) await this.applyServerState(body.serverId, state);
     this.console.emitPower(body.serverId, {
       type: 'power',
       state: body.state,
@@ -245,6 +247,38 @@ export class AgentCallbacksController {
   }
 
   // ---- mapping helpers ----------------------------------------------------
+
+  /**
+   * Persist a server's state; on a notable transition (online / offline /
+   * crashed / suspended) notify the owner. Unchanged state or a missing server
+   * is a no-op. Best-effort — agent callbacks must not fail on notify errors.
+   */
+  private async applyServerState(
+    serverId: string,
+    state: ServerState,
+  ): Promise<void> {
+    const server = await this.prisma.server
+      .findUnique({
+        where: { id: serverId },
+        select: { ownerId: true, name: true, state: true },
+      })
+      .catch(() => null);
+    if (!server || server.state === state) return;
+
+    await this.prisma.server
+      .update({ where: { id: serverId }, data: { state } })
+      .catch(() => undefined);
+
+    const phrase = SERVER_STATE_NOTICES[state];
+    if (phrase) {
+      await this.notifications
+        .createNotification(server.ownerId, {
+          title: 'Server status changed',
+          body: `Your server "${server.name}" ${phrase}.`,
+        })
+        .catch(() => undefined);
+    }
+  }
 
   /** Map an agent state string onto the Prisma ServerState enum, if valid. */
   private toServerState(state?: string): ServerState | undefined {

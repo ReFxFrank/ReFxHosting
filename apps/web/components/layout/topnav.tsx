@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NotificationsBell } from "./notifications-bell";
 import { useAuthStore } from "@/store/auth";
 import { useUiStore } from "@/store/ui";
 import { initials } from "@/lib/utils";
@@ -49,6 +50,7 @@ export function TopNav() {
       </Link>
 
       <div className="ml-auto flex items-center gap-2">
+        <NotificationsBell />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring">

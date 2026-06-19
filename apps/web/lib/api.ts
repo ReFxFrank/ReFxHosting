@@ -354,8 +354,16 @@ export const api = {
       http.post<{ verified: boolean }>("/auth/mfa/webauthn/register/verify", { response, label }),
     deletePasskey: (id: string) => http.delete<void>(`/auth/mfa/webauthn/credentials/${id}`),
     notifications: () => getList<Notification>("/account/notifications"),
+    notificationsUnreadCount: () =>
+      http.get<{ unread: number }>("/account/notifications/unread-count"),
     markNotificationRead: (id: string) =>
       http.post<void>(`/account/notifications/${id}/read`),
+    markAllNotificationsRead: () =>
+      http.post<{ updated: number }>("/account/notifications/read-all"),
+    clearNotification: (id: string) =>
+      http.delete<{ deleted: number }>(`/account/notifications/${id}`),
+    clearAllNotifications: () =>
+      http.delete<{ deleted: number }>("/account/notifications"),
   },
 
   servers: {

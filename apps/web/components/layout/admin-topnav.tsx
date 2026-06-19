@@ -14,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NotificationsBell } from "./notifications-bell";
 import { useAuthStore } from "@/store/auth";
 import { useUiStore } from "@/store/ui";
 import { initials } from "@/lib/utils";
@@ -60,6 +61,8 @@ export function AdminTopNav() {
             <ArrowLeft className="size-4" /> Client area
           </Link>
         </Button>
+
+        <NotificationsBell />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -37,6 +37,7 @@ import {
 import { StripeGateway } from './gateways/stripe.gateway';
 import { PayPalGateway } from './gateways/paypal.gateway';
 import { EmailService } from '../email/email.service';
+import { NotificationsService } from '../platform/notifications.service';
 import { addInterval } from './interval.util';
 import { generateInvoiceNumber } from './invoice-number.util';
 import { calculateTax } from './tax.util';
@@ -73,6 +74,7 @@ export class BillingService {
     private readonly paypal: PayPalGateway,
     private readonly settings: SettingsService,
     private readonly email: EmailService,
+    private readonly notifications: NotificationsService,
     @InjectQueue(QUEUE.BILLING_RENEWAL) private readonly renewalQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
     @InjectQueue(QUEUE.PROVISIONING) private readonly provisionQueue: Queue,
@@ -1435,7 +1437,7 @@ export class BillingService {
     );
 
     const invoiceId = uuidv7();
-    return this.prisma.invoice.create({
+    const invoice = await this.prisma.invoice.create({
       data: {
         id: invoiceId,
         number,
@@ -1470,6 +1472,23 @@ export class BillingService {
       },
       include: { lineItems: true },
     });
+
+    // Notify the customer that a new invoice is available to pay (best-effort;
+    // must never break invoice generation).
+    try {
+      const amount = `${(totalMinor / 100).toFixed(2)} ${currency.toUpperCase()}`;
+      const due = invoice.dueAt
+        ? `, due ${invoice.dueAt.toISOString().slice(0, 10)}`
+        : '';
+      await this.notifications.createNotification(subscription.userId, {
+        title: 'New invoice available',
+        body: `Invoice ${number} for ${amount} is ready to pay${due}.`,
+      });
+    } catch {
+      // best-effort
+    }
+
+    return invoice;
   }
 
   /** Human invoice line for a subscription: includes tier / slot count. */

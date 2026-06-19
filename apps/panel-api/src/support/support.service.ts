@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   CannedResponse,
+  GlobalRole,
   KbArticle,
   Prisma,
   Ticket,
@@ -14,8 +15,10 @@ import {
   TicketMessage,
   TicketPriority,
   TicketState,
+  UserState,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../platform/notifications.service';
 import {
   Paginated,
   PaginationDto,
@@ -41,7 +44,10 @@ const STAFF_ROLES = new Set(['SUPPORT', 'ADMIN', 'OWNER']);
 
 @Injectable()
 export class SupportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   /** Whether a principal is support staff (SUPPORT / ADMIN / OWNER). */
   private isStaff(user: AuthUser): boolean {
@@ -219,7 +225,7 @@ export class SupportService {
 
     const now = new Date();
 
-    return this.prisma.$transaction(async (tx) => {
+    const message = await this.prisma.$transaction(async (tx) => {
       const message = await tx.ticketMessage.create({
         data: {
           id: uuidv7(),
@@ -267,6 +273,61 @@ export class SupportService {
 
       return message;
     });
+
+    // Post-commit notifications for public replies (best-effort).
+    if (!isInternal) {
+      await this.notifyTicketReply(ticket, user, staff).catch(() => undefined);
+    }
+
+    return message;
+  }
+
+  /**
+   * Fan out a notification for a public ticket reply (best-effort, never throws):
+   *  - a staff reply notifies the requester (customer);
+   *  - a customer reply notifies the assigned agent, or every active staff
+   *    member when the ticket is unassigned.
+   */
+  private async notifyTicketReply(
+    ticket: Ticket,
+    author: AuthUser,
+    authorIsStaff: boolean,
+  ): Promise<void> {
+    const ref = `#${ticket.number} "${ticket.subject}"`;
+    if (authorIsStaff) {
+      if (ticket.requesterId && ticket.requesterId !== author.id) {
+        await this.notifications.createNotification(ticket.requesterId, {
+          title: 'Support replied to your ticket',
+          body: `A staff member replied to your ticket ${ref}.`,
+        });
+      }
+      return;
+    }
+
+    // Customer reply -> staff: the assignee, or all active staff if unassigned.
+    if (ticket.assigneeId) {
+      if (ticket.assigneeId !== author.id) {
+        await this.notifications.createNotification(ticket.assigneeId, {
+          title: 'New ticket reply',
+          body: `The customer replied to ticket ${ref}.`,
+        });
+      }
+      return;
+    }
+    const staff = await this.prisma.user.findMany({
+      where: {
+        globalRole: { in: [GlobalRole.SUPPORT, GlobalRole.ADMIN, GlobalRole.OWNER] },
+        state: UserState.ACTIVE,
+      },
+      select: { id: true },
+    });
+    await this.notifications.notifyMany(
+      staff.map((s) => s.id),
+      {
+        title: 'New ticket reply',
+        body: `${author.email} replied to unassigned ticket ${ref}.`,
+      },
+    );
   }
 
   /**

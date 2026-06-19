@@ -182,6 +182,11 @@ export class AccountController {
     return result.data;
   }
 
+  @Get('notifications/unread-count')
+  notificationsUnread(@CurrentUser('id') userId: string) {
+    return this.notifications.unreadCount(userId);
+  }
+
   @Post('notifications/:id/read')
   @HttpCode(200)
   markNotificationRead(
@@ -189,5 +194,26 @@ export class AccountController {
     @Param('id') id: string,
   ) {
     return this.notifications.markRead(userId, id);
+  }
+
+  @Post('notifications/read-all')
+  @HttpCode(200)
+  markAllNotificationsRead(@CurrentUser('id') userId: string) {
+    return this.notifications.markAllRead(userId);
+  }
+
+  @Delete('notifications/:id')
+  @HttpCode(200)
+  clearNotification(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ) {
+    return this.notifications.deleteNotification(userId, id);
+  }
+
+  @Delete('notifications')
+  @HttpCode(200)
+  clearAllNotifications(@CurrentUser('id') userId: string) {
+    return this.notifications.clearAll(userId);
   }
 }
