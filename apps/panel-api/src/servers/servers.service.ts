@@ -440,8 +440,17 @@ export class ServersService {
 
     const target = await this.prisma.gameTemplate.findUnique({
       where: { id: dto.templateId },
+      include: { category: { select: { slug: true } } },
     });
     if (!target) throw new NotFoundException('Target template not found');
+
+    // Voice and game servers are separate worlds: a game server can't be
+    // switched *into* a voice server (the reverse is rejected above).
+    if (this.isVoiceServer(target)) {
+      throw new BadRequestException(
+        'Game servers cannot be switched into a voice server.',
+      );
+    }
 
     // (2) Whitelist check against the product the subscription pays for.
     const allowed = server.subscription?.product.allowedTemplateIds ?? [];
@@ -1121,10 +1130,14 @@ export class ServersService {
     if (this.isVoiceServer(server.template)) return [];
 
     const allowed = server.subscription?.product.allowedTemplateIds ?? [];
-    return this.prisma.gameTemplate.findMany({
+    const templates = await this.prisma.gameTemplate.findMany({
       where: allowed.length > 0 ? { id: { in: allowed } } : {},
+      include: { category: { select: { slug: true } } },
       orderBy: { name: 'asc' },
     });
+    // Never offer voice templates as switch targets — voice servers are a
+    // separate product line and can't be swapped with game servers.
+    return templates.filter((t) => !this.isVoiceServer(t));
   }
 
   /** True for voice templates (TeamSpeak / the "voice" category). */

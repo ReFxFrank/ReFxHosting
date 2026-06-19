@@ -152,6 +152,18 @@ describe('ServersService.switchGame', () => {
     expect(res.accepted).toBe(true);
   });
 
+  it('rejects switching a game server into a voice (TeamSpeak) template', async () => {
+    prisma.server.findFirst.mockResolvedValue(makeServer());
+    prisma.gameTemplate.findUnique.mockResolvedValue(
+      makeTarget({ slug: 'teamspeak3' }),
+    );
+    await expect(
+      service.switchGame(SERVER_ID, ACTOR_ID, dto()),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(reinstallQueue.add).not.toHaveBeenCalled();
+  });
+
   it('on success writes an audit log, repoints the server, clears variables and queues a reinstall', async () => {
     prisma.server.findFirst.mockResolvedValue(makeServer());
     prisma.gameTemplate.findUnique.mockResolvedValue(makeTarget());

@@ -20,12 +20,16 @@ import {
   ArrowRightLeft,
   History,
   ShieldX,
+  Power,
+  Play,
+  RotateCw,
+  Square,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Badge, ServerStateBadge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -74,6 +78,30 @@ export default function VoicePage() {
 
   const canManage = useAuthStore((s) => s.hasPermission("settings.update"));
   const canStart = useAuthStore((s) => s.hasPermission("control.start"));
+  const canStop = useAuthStore((s) => s.hasPermission("control.stop"));
+
+  // The server record drives the power controls (state + start/stop). It's
+  // already cached by the server layout, so this resolves immediately.
+  const { data: server } = useQuery({
+    queryKey: ["server", id],
+    queryFn: () => api.servers.get(id),
+    refetchInterval: 15000,
+  });
+  const power = useMutation({
+    mutationFn: (signal: "start" | "stop" | "restart") =>
+      api.servers.power(id, signal),
+    onSuccess: (_d, signal) => {
+      toast.success(`Power: ${signal} sent`);
+      qc.invalidateQueries({ queryKey: ["server", id] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Power action failed"),
+  });
+  const state = server?.state;
+  const isRunning = state === "RUNNING";
+  const isTransitioning =
+    state === "STARTING" || state === "STOPPING" || state === "INSTALLING";
+
   const acceptLicense = useMutation({
     mutationFn: () => api.servers.voiceAcceptLicense(id),
     onSuccess: () => {
@@ -209,6 +237,57 @@ export default function VoicePage() {
 
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Power className="size-4" /> Power
+          </CardTitle>
+          <CardDescription>
+            Start or stop your TeamSpeak voice server.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          {server ? (
+            <ServerStateBadge state={server.state} />
+          ) : (
+            <Skeleton className="h-6 w-24" />
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={!canStart || isRunning || isTransitioning || power.isPending}
+              onClick={() => power.mutate("start")}
+            >
+              <Play className="size-4" /> Start
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!canStop || !isRunning || power.isPending}
+              onClick={() => power.mutate("restart")}
+            >
+              <RotateCw className="size-4" /> Restart
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              disabled={
+                !canStop || (!isRunning && state !== "STARTING") || power.isPending
+              }
+              onClick={() => power.mutate("stop")}
+            >
+              <Square className="size-4" /> Stop
+            </Button>
+          </div>
+          {!canStart && !canStop && (
+            <p className="text-sm text-muted-foreground">
+              You don&apos;t have permission to control this server.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       {data && !data.licenseAccepted && (
         <Card className="border-warning/40 bg-warning/5">
           <CardHeader>

@@ -33,16 +33,29 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
   const isVoice = slug.startsWith("teamspeak");
   // Minecraft/Mods/Modpacks tabs are Minecraft-only; Workshop is Steam-only;
   // Voice is TeamSpeak-only.
-  const tabs = serverTabs(id).filter((t) => {
+  const filtered = serverTabs(id).filter((t) => {
     if (t.href.endsWith("/minecraft")) return isMinecraft;
     if (t.href.endsWith("/mods")) return supportsMods;
     if (t.href.endsWith("/modpacks")) return isMinecraft;
     if (t.href.endsWith("/workshop")) return supportsWorkshop;
     if (t.href.endsWith("/voice")) return isVoice;
+    // Voice servers have no game console / live computing usage.
+    if (t.href.endsWith("/console")) return !isVoice;
     // Voice servers keep their identity for life — no game switching.
     if (t.href.endsWith("/switch-game")) return !isVoice;
     return true;
   });
+
+  // For a voice server the Voice page *is* the overview: Console (the usual
+  // landing tab) is hidden above, so surface Voice first and label it "Overview".
+  const tabs =
+    isVoice
+      ? (() => {
+          const voice = filtered.find((t) => t.href.endsWith("/voice"));
+          const rest = filtered.filter((t) => !t.href.endsWith("/voice"));
+          return voice ? [{ ...voice, label: "Overview" }, ...rest] : filtered;
+        })()
+      : filtered;
 
   return (
     <div className="space-y-6">
