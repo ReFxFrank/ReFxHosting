@@ -8,6 +8,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { AuthUser } from '../common/decorators/current-user.decorator';
 import { permissionsForGlobalRole } from '../common/permissions';
+import { ipAllowed } from './ip-allow.util';
 
 /**
  * API-key authentication. Keys are formatted `refx_<prefix><secret>`; we look up
@@ -99,7 +100,7 @@ export class ApiKeyService {
     if (key.user.state !== 'ACTIVE') {
       throw new UnauthorizedException('Account not active');
     }
-    if (key.allowedIps.length && ip && !this.ipAllowed(ip, key.allowedIps)) {
+    if (key.allowedIps.length && ip && !ipAllowed(ip, key.allowedIps)) {
       throw new UnauthorizedException('Source IP not allowed for this key');
     }
 
@@ -119,22 +120,5 @@ export class ApiKeyService {
       // Fine-grained grants carried by the key itself (least-privilege bot path).
       apiKeyPermissions: key.permissions,
     };
-  }
-
-  /** Minimal CIDR / exact match. IPv4 CIDR supported; exact match otherwise. */
-  private ipAllowed(ip: string, allow: string[]): boolean {
-    return allow.some((entry) => {
-      if (!entry.includes('/')) return entry === ip;
-      const [range, bitsStr] = entry.split('/');
-      const bits = Number.parseInt(bitsStr, 10);
-      const toInt = (a: string) =>
-        a.split('.').reduce((acc, oct) => (acc << 8) + Number(oct), 0) >>> 0;
-      const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
-      try {
-        return (toInt(ip) & mask) === (toInt(range) & mask);
-      } catch {
-        return false;
-      }
-    });
   }
 }
