@@ -93,6 +93,22 @@ npx prisma validate --schema database/prisma/schema.prisma
 - The node agent is NOT deployed by Kubernetes — it's installed on bare nodes via
   `infra/scripts/install-node.{sh,ps1}`.
 
+## Releases
+
+Releases are how nodes update: the panel's **"update node"** button calls the
+agent's `/api/v1/system/update`, which self-updates to the **latest GitHub
+release** binary (`refx-agent-<os>-<arch>` + `.sha256`).
+
+- **Cut a release by pushing a semver tag** `vX.Y.Z` to `origin` (or run the
+  `Release` workflow via `workflow_dispatch`). `.github/workflows/release.yml`
+  cross-compiles the agent binaries, publishes the GitHub Release with those
+  assets, and pushes the Docker images to ghcr. Don't hand-build/upload assets —
+  the asset names must match exactly what `resolveAgentAsset` expects.
+- **Standing policy:** whenever a change to the node/agent system lands on `main`
+  (anything under `apps/node-agent`, or panel↔agent protocol/behavior nodes pull
+  via self-update), **cut a new release** so operators can update from the panel.
+  Bump the patch for fixes, the minor for features; tag `main` HEAD.
+
 ## Don't
 
 - Don't hand-edit `database/prisma/migrations/*/migration.sql` — generate via Prisma.
