@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -24,7 +23,6 @@ import {
   AuthUser,
 } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
-import { unknownApiKeyPermissions } from '../common/permissions';
 import {
   CreateApiKeyDto,
   ForgotPasswordDto,
@@ -272,26 +270,17 @@ export class AuthController {
     @CurrentUser('id') userId: string,
     @Body() dto: CreateApiKeyDto,
   ) {
-    const permissions = dto.permissions ?? [];
-    const unknown = unknownApiKeyPermissions(permissions);
-    if (unknown.length) {
-      throw new BadRequestException(
-        `Unknown API-key permissions: ${unknown.join(', ')}`,
-      );
-    }
     const { plaintext, record } = await this.apiKeys.issue(
       userId,
       dto.name,
       dto.scopes,
       dto.allowedIps,
       dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-      permissions,
     );
     return {
       key: plaintext,
       prefix: record.prefix,
       id: record.id,
-      permissions: record.permissions,
       expiresAt: record.expiresAt,
     };
   }

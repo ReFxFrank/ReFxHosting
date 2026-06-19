@@ -15,7 +15,7 @@ describe('SupportService.listTickets scoping', () => {
         count: jest.fn().mockReturnValue('count'),
       },
     };
-    return { prisma, svc: new SupportService(prisma as any, { emit: jest.fn() } as any) };
+    return { prisma, svc: new SupportService(prisma as any) };
   }
 
   const staff = { id: 'staff-1', email: 's@x', globalRole: 'ADMIN', state: 'ACTIVE' } as AuthUser;

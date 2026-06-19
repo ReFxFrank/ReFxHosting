@@ -29,36 +29,6 @@ export const ADMIN_PERMISSIONS = [
 
 export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
 
-/**
- * Fine-grained permission strings intended for SCOPED API KEYS (e.g. an external
- * "Agent Ops" bot), carried on `ApiKey.permissions` and checked by the guards'
- * API-key path (@ApiPermissions). These are deliberately NOT granted to any
- * seeded system role — they exist to give a bot a narrow least-privilege grant
- * WITHOUT a broad GlobalRole. `nodes.read` / `servers.read` are reused from
- * ADMIN_PERMISSIONS above.
- */
-export const API_KEY_PERMISSIONS = [
-  'support.ticket.read',
-  'support.category.read',
-  'support.kb.read',
-  'support.ticket.note.create',
-  'support.ticket.update',
-  'nodes.read',
-  'servers.read',
-] as const;
-
-export type ApiKeyPermission = (typeof API_KEY_PERMISSIONS)[number];
-
-/** Every permission string an API key may legitimately carry. */
-export const KNOWN_API_KEY_PERMISSIONS: ReadonlySet<string> = new Set(
-  API_KEY_PERMISSIONS,
-);
-
-/** Permission strings on a key that are not in the known catalog. */
-export function unknownApiKeyPermissions(perms: string[]): string[] {
-  return perms.filter((p) => !KNOWN_API_KEY_PERMISSIONS.has(p));
-}
-
 /** Permission sets for the seeded system roles (mirror the GlobalRole hierarchy). */
 export const SYSTEM_ROLE_PERMISSIONS: Record<string, string[]> = {
   owner: [WILDCARD],

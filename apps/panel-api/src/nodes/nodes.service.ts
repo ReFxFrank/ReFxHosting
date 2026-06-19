@@ -4,11 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Node, NodeState, Prisma } from '@prisma/client';
+import { Node, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { NodeAgentClient } from '../agent/agent.client';
-import { WebhookService } from '../webhooks/webhook.service';
 import { deriveSigningKey } from '../agent/agent.signing';
 import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
 import { uuidv7 } from '../common/util/uuid';
@@ -39,44 +38,9 @@ export class NodesService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly agent: NodeAgentClient,
-    private readonly webhooks: WebhookService,
     config: ConfigService,
   ) {
     this.secretsEncKey = config.get<string>('secretsEncKey')!;
-  }
-
-  /**
-   * Update a node's state and emit `node.state.changed` only on an actual
-   * transition. The update is scoped with `state: { not }` so the row is touched
-   * (and the webhook fired) exactly once per real change. `extra` carries any
-   * additional fields written alongside the state in the same update.
-   */
-  /**
-   * Mark a node ONLINE (e.g. on a signed heartbeat), persisting agentVersion and
-   * emitting node.state.changed only on an actual transition. Public so the
-   * agent-callbacks controller can reuse the transition + emit logic.
-   */
-  async markNodeOnline(nodeId: string, agentVersion?: string): Promise<void> {
-    await this.transitionNodeState(nodeId, 'ONLINE', {
-      agentVersion: agentVersion ?? undefined,
-    });
-  }
-
-  private async transitionNodeState(
-    nodeId: string,
-    state: NodeState,
-    extra: Prisma.NodeUpdateManyMutationInput = {},
-  ): Promise<void> {
-    const res = await this.prisma.node.updateMany({
-      where: { id: nodeId, state: { not: state } },
-      data: { state, ...extra },
-    });
-    if (res.count > 0) {
-      await this.webhooks.emit('node.state.changed', { nodeId, state });
-    } else if (Object.keys(extra).length > 0) {
-      // No state change, but still persist the side fields (e.g. agentVersion).
-      await this.prisma.node.update({ where: { id: nodeId }, data: extra });
-    }
   }
 
   private readonly regionSelect = {
@@ -473,23 +437,11 @@ export class NodesService {
     }
   }
 
-  async setMaintenance(id: string, on: boolean): Promise<Node> {
-    const nextState: NodeState = on ? 'MAINTENANCE' : 'ONLINE';
-    const prev = await this.prisma.node.findUnique({
+  setMaintenance(id: string, on: boolean): Promise<Node> {
+    return this.prisma.node.update({
       where: { id },
-      select: { state: true },
+      data: { maintenance: on, state: on ? 'MAINTENANCE' : 'ONLINE' },
     });
-    const updated = await this.prisma.node.update({
-      where: { id },
-      data: { maintenance: on, state: nextState },
-    });
-    if (prev && prev.state !== nextState) {
-      await this.webhooks.emit('node.state.changed', {
-        nodeId: id,
-        state: nextState,
-      });
-    }
-    return updated;
   }
 
   async delete(id: string): Promise<void> {
@@ -515,12 +467,6 @@ export class NodesService {
         fqdn: `${node.fqdn}#deleted-${Date.now()}`,
       },
     });
-    if (node.state !== 'OFFLINE') {
-      await this.webhooks.emit('node.state.changed', {
-        nodeId: id,
-        state: 'OFFLINE' as NodeState,
-      });
-    }
   }
 
   /** Re-issue a bootstrap token for an existing node (rotation). */
@@ -789,8 +735,12 @@ export class NodesService {
     });
     if (!node) throw new BadRequestException('Invalid bootstrap token');
 
-    await this.transitionNodeState(node.id, 'ONLINE', {
-      agentVersion: dto.agentVersion ?? node.agentVersion,
+    await this.prisma.node.update({
+      where: { id: node.id },
+      data: {
+        state: 'ONLINE',
+        agentVersion: dto.agentVersion ?? node.agentVersion,
+      },
     });
 
     const servers = await this.buildServerInstallSpecs(node.id);
@@ -902,15 +852,19 @@ export class NodesService {
     if (!node || node.tokenHash !== this.crypto.hash(dto.bootstrapToken)) {
       throw new BadRequestException('Invalid bootstrap token');
     }
-    await this.transitionNodeState(nodeId, 'ONLINE', {
-      agentVersion: dto.agentVersion ?? node.agentVersion,
+    const updated = await this.prisma.node.update({
+      where: { id: nodeId },
+      data: {
+        state: 'ONLINE',
+        agentVersion: dto.agentVersion ?? node.agentVersion,
+      },
     });
     return {
-      nodeId: node.id,
-      name: node.name,
-      os: node.os,
-      sftpPort: node.sftpPort,
-      daemonPort: node.daemonPort,
+      nodeId: updated.id,
+      name: updated.name,
+      os: updated.os,
+      sftpPort: updated.sftpPort,
+      daemonPort: updated.daemonPort,
       // Scoped, denormalized config the agent needs. Full server manifests are
       // delivered per-install via the agent install endpoint.
       // TODO(impl): include S3 backup creds, network config, log shipping URL.
@@ -918,22 +872,26 @@ export class NodesService {
   }
 
   async ingestHeartbeat(nodeId: string, dto: HeartbeatDto): Promise<void> {
-    await this.prisma.nodeHeartbeat.create({
-      data: {
-        id: uuidv7(),
-        nodeId,
-        cpuPct: dto.cpuPct,
-        memUsedMb: dto.memUsedMb,
-        diskUsedMb: dto.diskUsedMb,
-        netRxBytes: BigInt(dto.netRxBytes),
-        netTxBytes: BigInt(dto.netTxBytes),
-        containers: dto.containers,
-      },
-    });
-    // ONLINE on every heartbeat; emits node.state.changed only on an actual
-    // transition (e.g. OFFLINE/DEGRADED → ONLINE), agentVersion always persisted.
-    await this.transitionNodeState(nodeId, 'ONLINE', {
-      agentVersion: dto.agentVersion ?? undefined,
-    });
+    await this.prisma.$transaction([
+      this.prisma.nodeHeartbeat.create({
+        data: {
+          id: uuidv7(),
+          nodeId,
+          cpuPct: dto.cpuPct,
+          memUsedMb: dto.memUsedMb,
+          diskUsedMb: dto.diskUsedMb,
+          netRxBytes: BigInt(dto.netRxBytes),
+          netTxBytes: BigInt(dto.netTxBytes),
+          containers: dto.containers,
+        },
+      }),
+      this.prisma.node.update({
+        where: { id: nodeId },
+        data: {
+          state: 'ONLINE',
+          agentVersion: dto.agentVersion ?? undefined,
+        },
+      }),
+    ]);
   }
 }

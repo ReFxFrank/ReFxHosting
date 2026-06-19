@@ -11,7 +11,6 @@ export const QUEUE = {
   BILLING_RENEWAL: 'billing-renewal',
   SUSPENSION: 'suspension',
   MODPACK: 'modpack',
-  WEBHOOKS: 'webhooks',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
@@ -63,21 +62,6 @@ export interface ModpackUninstallJob {
   title?: string;
 }
 
-/**
- * A single outbound webhook delivery. The envelope (`payload`) is built once by
- * the producer and stored verbatim so every retry signs and sends identical
- * bytes; `deliveryId` is the stable idempotency key across retries.
- */
-export interface WebhookDeliveryJob {
-  event: string;
-  deliveryId: string;
-  payload: {
-    event: string;
-    occurredAt: string;
-    data: Record<string, unknown>;
-  };
-}
-
 export const JOB = {
   PROVISION: 'provision',
   REINSTALL: 'reinstall',
@@ -87,5 +71,4 @@ export const JOB = {
   SUSPEND: 'suspend',
   INSTALL_MODPACK: 'install-modpack',
   UNINSTALL_MODPACK: 'uninstall-modpack',
-  DELIVER_WEBHOOK: 'deliver-webhook',
 } as const;

@@ -152,29 +152,6 @@ export class TestEmailDto {
   to!: string;
 }
 
-/** Owner-editable outbound-webhook (Agent Ops) settings. */
-export class SetWebhookConfigDto {
-  @ApiPropertyOptional({ description: 'Delivery target URL (blank disables delivery).' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(2048)
-  url?: string;
-
-  @ApiPropertyOptional({ description: 'Shared HMAC secret (write-only; stored encrypted).' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(512)
-  secret?: string;
-
-  @ApiPropertyOptional({
-    description: 'Allowlisted event names, comma-separated (e.g. "ticket.created,invoice.payment_failed").',
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(2048)
-  events?: string;
-}
-
 export class SetSteamConfigDto {
   @ApiPropertyOptional({ description: 'Steam Web API key (write-only; stored encrypted).' })
   @IsOptional()
