@@ -116,12 +116,19 @@ export class ModpackService {
   async installed(serverId: string): Promise<{ installed: InstalledModpack | null }> {
     const server = await this.loadServer(serverId);
     try {
-      const { content } = await this.agent.readFile(
+      const res = await this.agent.readFile(
         server.node,
         server.id,
         MODPACK_MARKER,
       );
-      return { installed: JSON.parse(content) as InstalledModpack };
+      // readFile returns the raw text for octet-stream responses; tolerate both
+      // shapes (string or { content }), same as voice.service does.
+      const raw =
+        typeof res === 'string'
+          ? res
+          : ((res as { content?: string })?.content ?? '');
+      if (!raw.trim()) return { installed: null };
+      return { installed: JSON.parse(raw) as InstalledModpack };
     } catch {
       return { installed: null };
     }
