@@ -110,10 +110,15 @@ export class SupportService {
   async listTickets(
     user: AuthUser,
     pagination: PaginationDto,
-    filter?: { state?: TicketState; priority?: TicketPriority },
+    filter?: { state?: TicketState; priority?: TicketPriority; mine?: boolean },
   ): Promise<Paginated<Ticket>> {
+    // The CLIENT AREA is always self-scoped: a staff member who is also a
+    // customer sees only their OWN tickets there. The full queue is staff-only
+    // and lives in the admin panel. `mine` lets the client area request the
+    // self-scoped view from this shared endpoint (mirrors ServersService.list).
+    const ownOnly = !this.isStaff(user) || !!filter?.mine;
     const where: Prisma.TicketWhereInput = {};
-    if (!this.isStaff(user)) {
+    if (ownOnly) {
       where.requesterId = user.id;
     }
     // ARCHIVED tickets are "stored away" — excluded from the default queue, only
@@ -125,9 +130,11 @@ export class SupportService {
       where.subject = { contains: pagination.q, mode: 'insensitive' };
     }
 
-    // Staff get the requester/assignee/category resolved for the queue view.
-    const include: Prisma.TicketInclude | undefined = this.isStaff(user)
-      ? {
+    // The staff queue view resolves requester/assignee/category; the self-scoped
+    // (client area / customer) view does not.
+    const include: Prisma.TicketInclude | undefined = ownOnly
+      ? undefined
+      : {
           requester: {
             select: { id: true, email: true, firstName: true, lastName: true },
           },
@@ -135,8 +142,8 @@ export class SupportService {
             select: { id: true, email: true, firstName: true, lastName: true },
           },
           _count: { select: { messages: true } },
-        }
-      : undefined;
+        };
+
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.ticket.findMany({

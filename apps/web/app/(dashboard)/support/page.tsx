@@ -109,8 +109,10 @@ export default function SupportPage() {
 
 function TicketsTab({ onNew }: { onNew: () => void }) {
   const { data: tickets, isLoading } = useQuery({
-    queryKey: ["support", "tickets"],
-    queryFn: () => api.support.tickets().then((r) => r.data),
+    queryKey: ["support", "tickets", "mine"],
+    // Client area is self-scoped: even staff see only their OWN tickets here
+    // (the full queue lives in the admin panel).
+    queryFn: () => api.support.tickets({ mine: true }).then((r) => r.data),
   });
 
   if (isLoading) return <ListSkeleton rows={4} />;

@@ -54,8 +54,13 @@ export class SupportController {
     @Query() pagination: PaginationDto,
     @Query('state') state?: TicketState,
     @Query('priority') priority?: TicketPriority,
+    @Query('mine') mine?: string,
   ) {
-    return this.support.listTickets(user, pagination, { state, priority });
+    return this.support.listTickets(user, pagination, {
+      state,
+      priority,
+      mine: mine === 'true',
+    });
   }
 
   /** Staff directory for the assignee picker. */

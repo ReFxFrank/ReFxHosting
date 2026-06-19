@@ -738,7 +738,7 @@ export const api = {
   },
 
   support: {
-    tickets: (query?: { state?: string; priority?: string; q?: string; page?: number }) =>
+    tickets: (query?: { state?: string; priority?: string; q?: string; page?: number; mine?: boolean }) =>
       http.get<Paginated<Ticket>>("/support/tickets", { query }),
     ticket: (id: string) =>
       http.get<Ticket & { messages: TicketMessage[] }>(`/support/tickets/${id}`),
