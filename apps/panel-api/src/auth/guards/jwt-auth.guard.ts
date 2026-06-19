@@ -8,6 +8,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { ApiKeyService } from '../api-key.service';
+import { resolveClientIp } from '../client-ip.util';
 
 /**
  * Primary auth guard. Honors @Public(), accepts an `X-Api-Key` header
@@ -42,7 +43,7 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
     if (apiKey) {
       req.user = await this.apiKeys.authenticate(
         Array.isArray(apiKey) ? apiKey[0] : apiKey,
-        req.ip,
+        resolveClientIp(req),
       );
       return true;
     }
