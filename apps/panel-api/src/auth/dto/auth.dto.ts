@@ -197,17 +197,6 @@ export class CreateApiKeyDto {
   allowedIps?: string[];
 
   @ApiPropertyOptional({
-    type: [String],
-    description:
-      'Fine-grained permission strings to carry ON THE KEY itself ' +
-      '(least-privilege for external bots). See API_KEY_PERMISSIONS.',
-  })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  permissions?: string[];
-
-  @ApiPropertyOptional({
     description: 'ISO-8601 expiry timestamp. Omit for a non-expiring key.',
   })
   @IsOptional()

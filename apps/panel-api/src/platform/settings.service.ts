@@ -25,9 +25,6 @@ const KEY = {
   steamUsername: 'steam.username',
   steamPassword: 'steam.password',
   steamGuardCode: 'steam.guardCode',
-  webhookUrl: 'webhook.url',
-  webhookSecret: 'webhook.secret',
-  webhookEvents: 'webhook.events',
 } as const;
 
 export interface GatewayConfigInput {
@@ -71,22 +68,6 @@ export interface SteamConfigInput {
   password?: string;
   /** One-time Steam Guard code for the next game-download install (transient). */
   guardCode?: string;
-}
-
-export interface WebhookConfigInput {
-  /** Outbound delivery target URL (blank disables delivery). */
-  url?: string;
-  /** Shared HMAC secret (write-only; stored encrypted). */
-  secret?: string;
-  /** Allowlisted event names as a comma-separated string. */
-  events?: string;
-}
-
-export interface EffectiveWebhookConfig {
-  url: string;
-  secret: string;
-  /** Parsed allowlist; empty array means "no events allowed". */
-  events: string[];
 }
 
 export interface EffectiveSteamConfig {
@@ -271,44 +252,6 @@ export class SettingsService {
       );
     if (dto.paypalWebhookId !== undefined)
       await this.set(KEY.paypalWebhookId, dto.paypalWebhookId.trim(), false);
-  }
-
-  // ---- Outbound webhooks (Agent Ops integration) -------------------------
-
-  /**
-   * Effective outbound-webhook config (DB override → env fallback). The secret
-   * is decrypted; the allowlist CSV is parsed into trimmed, non-empty names.
-   */
-  async getWebhookConfig(): Promise<EffectiveWebhookConfig> {
-    const url = (await this.get(KEY.webhookUrl)) || process.env.AGENTOPS_WEBHOOK_URL || '';
-    const secret =
-      (await this.get(KEY.webhookSecret)) || process.env.AGENTOPS_WEBHOOK_SECRET || '';
-    const eventsCsv =
-      (await this.get(KEY.webhookEvents)) || process.env.AGENTOPS_WEBHOOK_EVENTS || '';
-    const events = eventsCsv
-      .split(',')
-      .map((e) => e.trim())
-      .filter((e) => e.length > 0);
-    return { url, secret, events };
-  }
-
-  /** Masked webhook config for the owner UI — never returns the raw secret. */
-  async webhookConfigMasked() {
-    const cfg = await this.getWebhookConfig();
-    return {
-      url: cfg.url,
-      events: cfg.events,
-      webhookSecretSet: !!cfg.secret,
-    };
-  }
-
-  /** Apply owner webhook edits; only provided fields change. Secret encrypted. */
-  async setWebhookConfig(dto: WebhookConfigInput): Promise<void> {
-    if (dto.url !== undefined) await this.set(KEY.webhookUrl, dto.url.trim(), false);
-    if (dto.secret !== undefined)
-      await this.set(KEY.webhookSecret, dto.secret.trim(), true);
-    if (dto.events !== undefined)
-      await this.set(KEY.webhookEvents, dto.events.trim(), false);
   }
 
   // ---- Steam (central SteamCMD login + Web API key) ----------------------

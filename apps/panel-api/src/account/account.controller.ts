@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -18,7 +17,6 @@ import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../platform/notifications.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { unknownApiKeyPermissions } from '../common/permissions';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateApiKeyDto, TotpVerifyDto } from '../auth/dto/auth.dto';
@@ -93,27 +91,18 @@ export class AccountController {
     @CurrentUser('id') userId: string,
     @Body() dto: CreateApiKeyDto,
   ) {
-    const permissions = dto.permissions ?? [];
-    const unknown = unknownApiKeyPermissions(permissions);
-    if (unknown.length) {
-      throw new BadRequestException(
-        `Unknown API-key permissions: ${unknown.join(', ')}`,
-      );
-    }
     const { plaintext, record } = await this.apiKeys.issue(
       userId,
       dto.name,
       dto.scopes,
       dto.allowedIps,
       dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-      permissions,
     );
     return {
       id: record.id,
       name: record.name,
       prefix: record.prefix,
       scopes: record.scopes,
-      permissions: record.permissions,
       expiresAt: record.expiresAt,
       // Plaintext is shown ONCE here; it is never stored or retrievable again.
       key: plaintext,

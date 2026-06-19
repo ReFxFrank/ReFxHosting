@@ -43,7 +43,6 @@ consistent with the canonical data model in
 - [09 — Infrastructure & Scaling](09-infrastructure.md) — horizontal scaling, HA, queues, observability, Compose vs Kubernetes, multi-DC, backup/DR.
 - [11 — Migration Tooling](11-migration.md) — importing from Pterodactyl, AMP, TCAdmin; mapping tables.
 - [12 — CI/CD](12-cicd.md) — GitHub Actions pipelines, image publishing, agent cross-compilation, promotion.
-- [22 — Outbound Webhooks](22-outbound-webhooks.md) — Agent Ops integration: envelope, HMAC signature scheme, event `data` shapes, retry/idempotency semantics, admin/env configuration.
 
 ### Status & runbooks
 - [16 — Implementation Status](16-status.md) — honest implemented-vs-scaffolded matrix.
@@ -51,7 +50,6 @@ consistent with the canonical data model in
 - [19 — Production Deployment](19-production-deployment.md) — Kubernetes via Helm, secrets, scaling, observability, backups, upgrades.
 - [20 — Upgrade & Data Migration](20-upgrade-migration.md) — Prisma migrations, zero-downtime rollouts, agent compatibility, rollback.
 - [21 — OVH Small-Scale Runbook](21-ovh-quickstart.md) — copy-paste path from two fresh OVH boxes (one VPS panel + one dedicated node) to selling servers: Caddy TLS, secrets, node registration, go-live + ops.
-- [23 — API Keys & the Agent Ops Bot](23-api-keys-and-bot.md) — scoped API keys carrying fine-grained per-key permissions, the @ApiPermissions guard path, the two hard support-bot safety boundaries, and how an operator issues the bot's key.
 
 ### Project & governance (repo root)
 - [CLAUDE.md](../CLAUDE.md) — fast orientation for assistants/humans: architecture, build/test commands, conventions, gotchas.
