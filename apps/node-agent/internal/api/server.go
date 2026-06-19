@@ -131,6 +131,7 @@ func (s *Server) routes() chi.Router {
 					r.Get("/list", s.handleFileList)
 					r.Get("/read", s.handleFileRead)
 					r.Post("/write", s.handleFileWrite)
+					r.Post("/pull", s.handleFilePull)
 					r.Delete("/", s.handleFileDelete)
 					r.Post("/rename", s.handleFileRename)
 					r.Post("/mkdir", s.handleFileMkdir)

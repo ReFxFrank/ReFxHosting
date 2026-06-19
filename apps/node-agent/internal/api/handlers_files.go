@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/files"
 	"github.com/refxfrank/refxhosting/node-agent/internal/sftp"
@@ -93,6 +96,80 @@ func (s *Server) handleFileWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "written"})
+}
+
+// pullHTTP downloads files for the modpack installer. Large game mods (e.g.
+// Cobblemon's ~130 MiB jar) exceed the 32 MiB signed-body cap on /files/write,
+// so the panel hands the agent a URL to fetch directly and stream to disk.
+var pullHTTP = &http.Client{Timeout: 15 * time.Minute}
+
+// isModrinthURL reports whether raw is an https URL on a Modrinth host. The
+// agent only pulls from Modrinth (mirrors the panel's allowlist) so it can't be
+// turned into a general SSRF proxy.
+func isModrinthURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "modrinth.com" || strings.HasSuffix(host, ".modrinth.com") ||
+		host == "modrinth.dev" || strings.HasSuffix(host, ".modrinth.dev")
+}
+
+// pullRequest asks the agent to download URL into the jailed Path.
+type pullRequest struct {
+	Path string `json:"path"`
+	URL  string `json:"url"`
+}
+
+// handleFilePull streams a remote (Modrinth) file straight into the server's
+// data dir, bypassing the signed-body size cap on /files/write. Used by the
+// modpack installer for files too large to upload through the panel.
+func (s *Server) handleFilePull(w http.ResponseWriter, r *http.Request) {
+	var req pullRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if req.Path == "" || req.URL == "" {
+		writeError(w, http.StatusBadRequest, "path and url required")
+		return
+	}
+	if !isModrinthURL(req.URL) {
+		writeError(w, http.StatusBadRequest, "url host not allowed")
+		return
+	}
+	fm, err := s.fileManagerFor(r)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	hreq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, req.URL, nil)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "bad url")
+		return
+	}
+	hreq.Header.Set("User-Agent", "refx-agent")
+	resp, err := pullHTTP.Do(hreq)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "download failed: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		writeError(w, http.StatusBadGateway, "download failed: "+resp.Status)
+		return
+	}
+	// Stream the response body straight to the jailed path (low memory).
+	if err := fm.Write(req.Path, resp.Body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "pulled",
+		"bytes":  resp.ContentLength,
+	})
 }
 
 // handleFileDelete removes a file or directory (?path=).

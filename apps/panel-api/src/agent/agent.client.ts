@@ -381,6 +381,28 @@ export class NodeAgentClient {
     );
   }
 
+  /**
+   * Have the agent download a (Modrinth) URL directly into the server's data
+   * dir, streamed to disk. This bypasses the 32 MiB signed-body cap on
+   * /files/write, so large mods (e.g. Cobblemon's ~130 MiB jar) can be
+   * installed. The agent re-validates the Modrinth host allowlist server-side.
+   */
+  downloadToPath(
+    node: Node,
+    serverId: string,
+    relPath: string,
+    url: string,
+  ): Promise<{ status: string; bytes?: number }> {
+    return this.request(
+      node,
+      'POST',
+      `/api/v1/servers/${serverId}/files/pull`,
+      { path: relPath, url },
+      // Large files stream synchronously through the agent — allow plenty of time.
+      { timeoutMs: 10 * 60_000 },
+    );
+  }
+
   chmod(node: Node, serverId: string, path: string, mode: string) {
     return this.request(
       node,

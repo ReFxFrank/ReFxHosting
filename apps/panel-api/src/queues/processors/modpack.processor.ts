@@ -20,9 +20,15 @@ import {
 import { buildInstallSpec } from './install-spec.util';
 
 const USER_AGENT = 'ReFxHosting/1.0 (game-server-panel)';
-// The .mrpack is just an index + config overrides (mods download separately), so
-// it stays small; cap generously to avoid pulling something pathological.
-const MRPACK_MAX_BYTES = 64 * 1024 * 1024;
+// The .mrpack is an index + bundled config/overrides (mods download separately).
+// Most packs are small, but big ones (e.g. COBBLEVERSE bundles a large resource
+// pack/datapacks) can be a few hundred MiB. The panel downloads + unzips it in
+// memory, so cap it high enough for real packs but still bounded.
+const MRPACK_MAX_BYTES = 512 * 1024 * 1024;
+// Upper bound for a single mod the agent will pull directly from Modrinth, to
+// avoid a pathological entry filling the node's disk. The agent streams these to
+// disk, so this is far larger than the signed-upload cap used for overrides.
+const MAX_MOD_BYTES = 1024 * 1024 * 1024;
 // Marker file written to the server's data dir recording the installed pack, so
 // the Modpacks tab can show what's installed and offer an uninstall. Read back
 // via the agent's file manager (same pattern as TeamSpeak's refx-voice.json).
@@ -135,7 +141,15 @@ export class ModpackProcessor extends WorkerHost {
     if (!file) throw new Error('Modpack version has no downloadable file');
 
     const packBytes = await this.download(file.url, MRPACK_MAX_BYTES);
-    const entries = unzipSync(packBytes);
+    // Only decompress what we actually apply server-side: the index and the
+    // shared/server overrides. Skipping client-overrides/ (often a large resource
+    // pack) keeps memory down for big packs.
+    const entries = unzipSync(packBytes, {
+      filter: (f) =>
+        f.name === 'modrinth.index.json' ||
+        f.name.startsWith('overrides/') ||
+        f.name.startsWith('server-overrides/'),
+    });
     const indexRaw = entries['modrinth.index.json'];
     if (!indexRaw) throw new Error('Invalid .mrpack: missing modrinth.index.json');
     const index = JSON.parse(
@@ -177,7 +191,9 @@ export class ModpackProcessor extends WorkerHost {
     // 5. Clear stale mods so a previous loader's jars don't conflict.
     await this.clearMods(server.node, server.id);
 
-    // 6. Download every server-side mod listed in the index.
+    // 6. Download every server-side mod listed in the index. Mods are pulled by
+    //    the agent directly from Modrinth and streamed to disk, so large jars
+    //    (e.g. Cobblemon's ~130 MiB) aren't limited by the signed-upload cap.
     const createdDirs = new Set<string>();
     let installed = 0;
     let skipped = 0;
@@ -188,14 +204,15 @@ export class ModpackProcessor extends WorkerHost {
         skipped++;
         continue;
       }
-      if (f.fileSize && f.fileSize > AGENT_MAX_UPLOAD_BYTES) {
-        this.logger.warn(`skipping oversized pack file ${f.path}`);
+      if (f.fileSize && f.fileSize > MAX_MOD_BYTES) {
+        this.logger.warn(
+          `skipping oversized pack file ${f.path} (${f.fileSize} bytes)`,
+        );
         skipped++;
         continue;
       }
       try {
-        const bytes = await this.download(url, AGENT_MAX_UPLOAD_BYTES);
-        await this.writeFile(server.node, server.id, f.path, bytes, createdDirs);
+        await this.agent.downloadToPath(server.node, server.id, f.path, url);
         installed++;
       } catch (e) {
         this.logger.warn(`failed to install ${f.path}: ${String(e)}`);
@@ -211,7 +228,15 @@ export class ModpackProcessor extends WorkerHost {
       else if (name.startsWith('server-overrides/'))
         rel = name.slice('server-overrides/'.length);
       if (!rel) continue; // skip client-overrides/ and metadata
-      if (bytes.byteLength > AGENT_MAX_UPLOAD_BYTES) continue;
+      // Overrides come from inside the .mrpack (already in memory), so they go
+      // through the signed upload and are bounded by its cap. Server-side
+      // overrides are normally small configs; warn if one is too big to apply.
+      if (bytes.byteLength > AGENT_MAX_UPLOAD_BYTES) {
+        this.logger.warn(
+          `skipping oversized override ${rel} (${bytes.byteLength} bytes)`,
+        );
+        continue;
+      }
       try {
         await this.writeFile(server.node, server.id, rel, bytes, createdDirs);
       } catch (e) {
@@ -328,7 +353,9 @@ export class ModpackProcessor extends WorkerHost {
       throw new Error('Refusing to download from a non-Modrinth host');
     }
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 60_000);
+    // Only the .mrpack itself comes through here now (mods are pulled agent-side),
+    // and it can be a few hundred MiB — allow a generous window.
+    const timer = setTimeout(() => controller.abort(), 5 * 60_000);
     try {
       const res = await fetch(url, {
         headers: { 'User-Agent': USER_AGENT },
