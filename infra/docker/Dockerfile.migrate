@@ -13,7 +13,7 @@
 # Runtime requires DATABASE_URL to be set (pointing at the compose `postgres`
 # service, e.g. postgresql://refx:refx@postgres:5432/refx?schema=public).
 # =============================================================================
-FROM node:20-bookworm-slim
+FROM node:26-bookworm-slim
 
 # Prisma needs OpenSSL at runtime; argon2 (used by the seed) is a prebuilt
 # native module but ca-certificates/openssl keep installs reliable.
