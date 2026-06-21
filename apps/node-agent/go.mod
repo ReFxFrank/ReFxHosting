@@ -13,7 +13,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/gorilla/websocket v1.5.3
-	github.com/pkg/sftp v1.13.6
+	github.com/pkg/sftp v1.13.10
 	github.com/prometheus/client_golang v1.19.1
 	github.com/rs/zerolog v1.35.1
 	github.com/spf13/cobra v1.10.2
