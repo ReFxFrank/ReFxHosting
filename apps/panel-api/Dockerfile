@@ -4,7 +4,7 @@
 # Build context is expected to be the repo root so the Prisma schema under
 # database/prisma is available.
 # ---------------------------------------------------------------------------
-FROM node:20-bookworm-slim AS deps
+FROM node:26-bookworm-slim AS deps
 WORKDIR /repo
 # OpenSSL must be present when @prisma/client's postinstall / prisma generate
 # runs, so Prisma selects the matching (openssl-3.0.x) query engine — otherwise
@@ -16,7 +16,7 @@ COPY database/prisma database/prisma
 WORKDIR /repo/apps/panel-api
 RUN npm install --no-audit --no-fund
 
-FROM node:20-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 WORKDIR /repo
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -26,7 +26,7 @@ COPY apps/panel-api apps/panel-api
 WORKDIR /repo/apps/panel-api
 RUN npm run prisma:generate && npm run build
 
-FROM node:20-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 ENV NODE_ENV=production
 WORKDIR /repo/apps/panel-api
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
