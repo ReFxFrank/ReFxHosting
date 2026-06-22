@@ -10,8 +10,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "@/components/ui/sonner";
 import { useAuthStore } from "@/store/auth";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import type { Notification } from "@/lib/types";
 
 /** Background poll interval for the notifications listener (the "ping"). */
 const POLL_MS = 30_000;
@@ -60,23 +61,69 @@ export function NotificationsBell() {
   }, [items]);
 
   const unread = items.filter((n) => !n.readAt).length;
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["notifications"] });
+
+  // Optimistic cache helpers: apply the change immediately, revert + surface an
+  // error if the request fails (so a silently-failed clear can't masquerade as a
+  // notification "coming back"), then reconcile with the server.
+  const KEY = ["notifications"] as const;
+  const snapshot = () => qc.getQueryData<Notification[]>(KEY);
+  const apply = (fn: (list: Notification[]) => Notification[]) =>
+    qc.setQueryData<Notification[]>(KEY, (old) => fn(old ?? []));
+  const settle = () => qc.invalidateQueries({ queryKey: KEY });
+  const revertWith = (
+    prev: Notification[] | undefined,
+    verb: string,
+    e: unknown,
+  ) => {
+    if (prev) qc.setQueryData(KEY, prev);
+    toast.error(e instanceof ApiError ? e.message : `Couldn't ${verb}`);
+  };
 
   const markRead = useMutation({
     mutationFn: (id: string) => api.account.markNotificationRead(id),
-    onSuccess: invalidate,
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: KEY });
+      const prev = snapshot();
+      const now = new Date().toISOString();
+      apply((l) => l.map((n) => (n.id === id ? { ...n, readAt: now } : n)));
+      return { prev };
+    },
+    onError: (e, _v, ctx) => revertWith(ctx?.prev, "mark read", e),
+    onSettled: settle,
   });
   const markAll = useMutation({
     mutationFn: () => api.account.markAllNotificationsRead(),
-    onSuccess: invalidate,
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: KEY });
+      const prev = snapshot();
+      const now = new Date().toISOString();
+      apply((l) => l.map((n) => (n.readAt ? n : { ...n, readAt: now })));
+      return { prev };
+    },
+    onError: (e, _v, ctx) => revertWith(ctx?.prev, "mark all read", e),
+    onSettled: settle,
   });
   const clearOne = useMutation({
     mutationFn: (id: string) => api.account.clearNotification(id),
-    onSuccess: invalidate,
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: KEY });
+      const prev = snapshot();
+      apply((l) => l.filter((n) => n.id !== id));
+      return { prev };
+    },
+    onError: (e, _v, ctx) => revertWith(ctx?.prev, "dismiss notification", e),
+    onSettled: settle,
   });
   const clearAll = useMutation({
     mutationFn: () => api.account.clearAllNotifications(),
-    onSuccess: invalidate,
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: KEY });
+      const prev = snapshot();
+      apply(() => []);
+      return { prev };
+    },
+    onError: (e, _v, ctx) => revertWith(ctx?.prev, "clear notifications", e),
+    onSettled: settle,
   });
 
   return (

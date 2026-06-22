@@ -23,13 +23,21 @@ import { ConsoleGateway } from './console.gateway';
 import { AgentSignatureGuard } from './agent-signature.guard';
 import { uuidv7 } from '../common/util/uuid';
 
-/** Server-state transitions worth notifying the owner about (others are noise). */
+/**
+ * Server-state transitions worth notifying the owner about. Deliberately limited
+ * to involuntary / important events (crash, suspension) — routine start/stop the
+ * owner performs themselves would just be noise (and would re-appear every time
+ * they cycle the server).
+ */
 const SERVER_STATE_NOTICES: Partial<Record<ServerState, string>> = {
-  [ServerState.RUNNING]: 'is now online',
-  [ServerState.OFFLINE]: 'went offline',
   [ServerState.CRASHED]: 'has crashed',
   [ServerState.SUSPENDED]: 'was suspended',
 };
+
+// Don't re-notify the same server entering the same state more than once within
+// this window — stops a flapping/crash-looping server from re-stacking the same
+// alert (which reads as a cleared notification "coming back").
+const STATE_NOTICE_THROTTLE_MS = 30 * 60 * 1000; // 30 min
 
 /** Body shapes the node-agent posts back to the panel. */
 interface RegisterBody {
@@ -99,6 +107,13 @@ type ReqWithNode = Request & { refxNodeId?: string };
 @RawResponse()
 @Controller('agent')
 export class AgentCallbacksController {
+  // Per-server throttle for owner state-change notifications (in-memory; resets
+  // on panel restart, which is fine — it only suppresses near-duplicate alerts).
+  private readonly recentStateNotices = new Map<
+    string,
+    { state: ServerState; at: number }
+  >();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly nodes: NodesService,
@@ -271,12 +286,19 @@ export class AgentCallbacksController {
 
     const phrase = SERVER_STATE_NOTICES[state];
     if (phrase) {
-      await this.notifications
-        .createNotification(server.ownerId, {
-          title: 'Server status changed',
-          body: `Your server "${server.name}" ${phrase}.`,
-        })
-        .catch(() => undefined);
+      const last = this.recentStateNotices.get(serverId);
+      const now = Date.now();
+      const throttled =
+        last && last.state === state && now - last.at < STATE_NOTICE_THROTTLE_MS;
+      if (!throttled) {
+        this.recentStateNotices.set(serverId, { state, at: now });
+        await this.notifications
+          .createNotification(server.ownerId, {
+            title: 'Server status changed',
+            body: `Your server "${server.name}" ${phrase}.`,
+          })
+          .catch(() => undefined);
+      }
     }
   }
 
