@@ -120,12 +120,13 @@ export class AuthController {
     // Verify + decode the signed, short-lived MFA challenge token issued at
     // login. This rejects expired / tampered / wrong-type tokens; the raw user
     // id is never accepted as a challenge token.
-    const userId = await this.auth.verifyMfaChallenge(dto.mfaToken);
+    const { userId, trusted } = await this.auth.verifyMfaChallenge(dto.mfaToken);
     return this.auth.mfaVerify(
       userId,
       dto.code,
       dto.method === 'recovery' ? 'recovery' : 'totp',
       { ip: req.ip, userAgent: req.headers['user-agent'] },
+      trusted,
     );
   }
 
@@ -244,7 +245,7 @@ export class AuthController {
   @Post('mfa/webauthn/login/options')
   @HttpCode(200)
   async webauthnLoginOptions(@Body() dto: WebAuthnLoginOptionsDto) {
-    const userId = await this.auth.verifyMfaChallenge(dto.mfaToken);
+    const { userId } = await this.auth.verifyMfaChallenge(dto.mfaToken);
     return this.webauthn.authenticationOptions(userId);
   }
 
@@ -253,12 +254,13 @@ export class AuthController {
   @HttpCode(200)
   @Audit({ action: 'auth.mfa.webauthn.login', targetType: 'User' })
   async webauthnLoginVerify(@Body() dto: WebAuthnLoginVerifyDto, @Req() req: any) {
-    const userId = await this.auth.verifyMfaChallenge(dto.mfaToken);
+    const { userId, trusted } = await this.auth.verifyMfaChallenge(dto.mfaToken);
     await this.webauthn.verifyAuthentication(userId, dto.response as any);
-    return this.auth.issueSessionForUser(userId, {
-      ip: req.ip,
-      userAgent: req.headers['user-agent'],
-    });
+    return this.auth.issueSessionForUser(
+      userId,
+      { ip: req.ip, userAgent: req.headers['user-agent'] },
+      trusted,
+    );
   }
 
   // ---- API keys ----------------------------------------------------------

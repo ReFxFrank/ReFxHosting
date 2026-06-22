@@ -278,8 +278,12 @@ async function getList<T>(path: string, opts?: RequestOptions): Promise<T[]> {
 
 export const api = {
   auth: {
-    login: (email: string, password: string) =>
-      http.post<LoginResponse>("/auth/login", { email, password }, { anonymous: true }),
+    login: (email: string, password: string, rememberMe?: boolean) =>
+      http.post<LoginResponse>(
+        "/auth/login",
+        { email, password, rememberMe },
+        { anonymous: true },
+      ),
     register: (input: {
       email: string;
       password: string;

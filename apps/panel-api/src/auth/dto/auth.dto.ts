@@ -89,6 +89,14 @@ export class LoginDto {
   @IsOptional()
   @IsString()
   totp?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Trust this device: issue a long-lived (90-day) session so the user stays signed in.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  rememberMe?: boolean;
 }
 
 export class RefreshDto {

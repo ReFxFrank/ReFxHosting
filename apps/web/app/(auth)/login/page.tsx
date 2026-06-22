@@ -43,7 +43,7 @@ function LoginForm() {
   async function onSubmit(values: FormValues) {
     setSubmitting(true);
     try {
-      const res = await api.auth.login(values.email, values.password);
+      const res = await api.auth.login(values.email, values.password, remember);
       if (res.mfaRequired && res.mfaToken) {
         sessionStorage.setItem("refx.mfa", JSON.stringify({ token: res.mfaToken, methods: res.methods ?? ["totp"], next, remember }));
         router.push("/2fa");
@@ -96,10 +96,11 @@ function LoginForm() {
             onChange={(e) => setRemember(e.target.checked)}
           />
           <span>
-            Keep me signed in
+            Trust this device &amp; keep me signed in
             <span className="block text-xs text-muted-foreground/80">
-              Stay logged in across restarts and skip the inactivity sign-out. Leave
-              off on shared devices.
+              Stay logged in on this device for up to 90 days (skips the inactivity
+              sign-out). Leave off on shared devices. You can revoke devices anytime
+              from Account → Active sessions.
             </span>
           </span>
         </label>

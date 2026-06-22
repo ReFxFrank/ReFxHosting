@@ -29,10 +29,18 @@ const PASSWORD_HISTORY_DEPTH = 5;
 // genuine replay.
 const REFRESH_ROTATION_GRACE_MS = 60 * 1000; // 60s
 
+// "Trust this device": refresh-token lifetime for a remembered device. Sliding
+// (re-extended on every refresh), so an active device effectively never has to
+// log in again; an idle one stays valid this long. Normal sessions use the
+// configured jwt.refreshTtl (default 30d).
+const TRUSTED_REFRESH_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
+
 /** Claims carried by the short-lived MFA login-challenge JWT. */
 interface MfaChallengeClaims {
   sub: string;
   type: 'mfa';
+  /** "Remember this device" choice, carried through the MFA step. */
+  rmb?: boolean;
 }
 
 const ARGON_OPTS = {
@@ -164,7 +172,7 @@ export class AuthService {
         if (!authenticator.check(dto.totp, secret)) {
           throw new UnauthorizedException('Invalid MFA code');
         }
-        return this.issueTokens(user, ctx);
+        return this.issueTokens(user, ctx, { trusted: !!dto.rememberMe });
       }
       // Otherwise hand back a short-lived, signed challenge token bound to this
       // (already password-verified) principal. The raw user id is NEVER returned.
@@ -177,12 +185,12 @@ export class AuthService {
         refreshToken: '',
         expiresIn: 0,
         mfaRequired: true,
-        mfaToken: await this.issueMfaChallenge(user.id),
+        mfaToken: await this.issueMfaChallenge(user.id, !!dto.rememberMe),
         methods,
       };
     }
 
-    return this.issueTokens(user, ctx);
+    return this.issueTokens(user, ctx, { trusted: !!dto.rememberMe });
   }
 
   /**
@@ -193,12 +201,13 @@ export class AuthService {
   async issueSessionForUser(
     userId: string,
     ctx: { ip?: string; userAgent?: string },
+    trusted = false,
   ): Promise<TokenResponseDto> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
     });
     if (!user) throw new UnauthorizedException('Invalid credentials');
-    return this.issueTokens(user, ctx);
+    return this.issueTokens(user, ctx, { trusted });
   }
 
   // ---- MFA login challenge token ----------------------------------------
@@ -209,19 +218,21 @@ export class AuthService {
    * the dedicated MFA secret, so it cannot be confused with access/refresh
    * tokens and cannot be forged by a client.
    */
-  async issueMfaChallenge(userId: string): Promise<string> {
+  async issueMfaChallenge(userId: string, trusted = false): Promise<string> {
     const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
     return this.jwt.signAsync(
-      { sub: userId, type: 'mfa' },
+      { sub: userId, type: 'mfa', rmb: trusted },
       { secret: jwtCfg.mfaSecret, expiresIn: jwtCfg.mfaTtl },
     );
   }
 
   /**
-   * Verify + decode an MFA challenge token, returning the bound userId. Rejects
-   * expired, tampered or wrong-type tokens.
+   * Verify + decode an MFA challenge token, returning the bound userId and the
+   * carried "remember this device" choice. Rejects expired/tampered/wrong-type.
    */
-  async verifyMfaChallenge(challengeToken: string): Promise<string> {
+  async verifyMfaChallenge(
+    challengeToken: string,
+  ): Promise<{ userId: string; trusted: boolean }> {
     const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
     let payload: MfaChallengeClaims;
     try {
@@ -234,7 +245,7 @@ export class AuthService {
     if (payload.type !== 'mfa' || !payload.sub) {
       throw new UnauthorizedException('Invalid MFA challenge');
     }
-    return payload.sub;
+    return { userId: payload.sub, trusted: !!payload.rmb };
   }
 
   // ---- token issuance + refresh rotation --------------------------------
@@ -242,8 +253,13 @@ export class AuthService {
   async issueTokens(
     user: Pick<User, 'id' | 'email' | 'globalRole'>,
     ctx: { ip?: string; userAgent?: string },
+    opts?: { trusted?: boolean },
   ): Promise<TokenResponseDto> {
     const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
+    const trusted = !!opts?.trusted;
+    // Trusted ("remember this device") sessions live longer; the flag rides in
+    // the refresh token so it survives rotation without a schema change.
+    const refreshTtl = trusted ? TRUSTED_REFRESH_TTL_SECONDS : jwtCfg.refreshTtl;
 
     const accessToken = await this.jwt.signAsync(
       { sub: user.id, email: user.email, role: user.globalRole, type: 'access' },
@@ -252,8 +268,8 @@ export class AuthService {
 
     const sessionId = uuidv7();
     const refreshToken = await this.jwt.signAsync(
-      { sub: user.id, sid: sessionId, type: 'refresh' },
-      { secret: jwtCfg.refreshSecret, expiresIn: jwtCfg.refreshTtl },
+      { sub: user.id, sid: sessionId, type: 'refresh', trusted },
+      { secret: jwtCfg.refreshSecret, expiresIn: refreshTtl },
     );
 
     await this.prisma.session.create({
@@ -263,7 +279,7 @@ export class AuthService {
         refreshHash: this.crypto.hash(refreshToken),
         ip: ctx.ip,
         userAgent: ctx.userAgent,
-        expiresAt: new Date(Date.now() + jwtCfg.refreshTtl * 1000),
+        expiresAt: new Date(Date.now() + refreshTtl * 1000),
       },
     });
 
@@ -275,7 +291,7 @@ export class AuthService {
     ctx: { ip?: string; userAgent?: string },
   ): Promise<TokenResponseDto> {
     const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
-    let payload: { sub: string; sid: string; type: string };
+    let payload: { sub: string; sid: string; type: string; trusted?: boolean };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
         secret: jwtCfg.refreshSecret,
@@ -321,7 +337,7 @@ export class AuthService {
       const user = await this.prisma.user.findFirstOrThrow({
         where: { id: payload.sub, deletedAt: null },
       });
-      return this.issueTokens(user, ctx);
+      return this.issueTokens(user, ctx, { trusted: !!payload.trusted });
     }
 
     const user = await this.prisma.user.findFirstOrThrow({
@@ -335,7 +351,7 @@ export class AuthService {
       where: { id: session.id, revokedAt: null },
       data: { revokedAt: now, rotatedAt: now },
     });
-    return this.issueTokens(user, ctx);
+    return this.issueTokens(user, ctx, { trusted: !!payload.trusted });
   }
 
   /** Cached argon2id hash (same cost as real passwords) for login timing parity. */
@@ -443,6 +459,7 @@ export class AuthService {
     code: string,
     method: 'totp' | 'recovery',
     ctx: { ip?: string; userAgent?: string },
+    trusted = false,
   ): Promise<TokenResponseDto> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
@@ -470,7 +487,7 @@ export class AuthService {
       }
     }
 
-    return this.issueTokens(user, ctx);
+    return this.issueTokens(user, ctx, { trusted });
   }
 
   // ---- Password reset / change ------------------------------------------

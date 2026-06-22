@@ -311,7 +311,14 @@ describe('AuthService hardening', () => {
       expect(decoded.sub).toBe(USER_ID);
 
       const resolved = await service.verifyMfaChallenge(token);
-      expect(resolved).toBe(USER_ID);
+      expect(resolved.userId).toBe(USER_ID);
+      expect(resolved.trusted).toBe(false);
+    });
+
+    it('carries the "remember this device" choice through the challenge', async () => {
+      const token = await service.issueMfaChallenge(USER_ID, true);
+      const resolved = await service.verifyMfaChallenge(token);
+      expect(resolved).toEqual({ userId: USER_ID, trusted: true });
     });
 
     it('rejects the raw user id as a challenge token', async () => {
