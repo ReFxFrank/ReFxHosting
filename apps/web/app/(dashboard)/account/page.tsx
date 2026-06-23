@@ -942,9 +942,9 @@ function PasskeysCard() {
     setAdding(true);
     try {
       const options = await api.account.passkeyRegisterOptions();
-      const attestation = await startRegistration(
-        options as Parameters<typeof startRegistration>[0],
-      );
+      const attestation = await startRegistration({
+        optionsJSON: options as Parameters<typeof startRegistration>[0]["optionsJSON"],
+      });
       const label =
         typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
           ? "Apple device"

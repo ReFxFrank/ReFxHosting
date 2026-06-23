@@ -10,7 +10,9 @@ import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
   AuthenticatorTransportFuture,
-} from '@simplewebauthn/types';
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/server';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { RedisService } from '../common/redis/redis.service';
@@ -22,7 +24,7 @@ const CHALLENGE_TTL_SECONDS = 300;
 
 /**
  * WebAuthn (passkey) registration + authentication using
- * @simplewebauthn/server v9. credentialId is stored as a base64url string; the
+ * @simplewebauthn/server v13. credentialId is stored as a base64url string; the
  * per-ceremony challenge is held in Redis (keyed by userId, short TTL) so it
  * survives across multiple API instances.
  */
@@ -42,10 +44,6 @@ export class WebAuthnService {
     this.rpId = config.get<AppConfig['rpId']>('rpId')!;
     this.rpName = config.get<AppConfig['rpName']>('rpName')!;
     this.origin = config.get<AppConfig['panelUrl']>('panelUrl')!;
-  }
-
-  private b64url(buf: Uint8Array): string {
-    return Buffer.from(buf).toString('base64url');
   }
 
   /**
@@ -87,19 +85,21 @@ export class WebAuthnService {
       .catch(() => this.redis.client.get(key)); // fallback for older Redis
   }
 
-  async registrationOptions(userId: string, email: string) {
+  async registrationOptions(
+    userId: string,
+    email: string,
+  ): Promise<PublicKeyCredentialCreationOptionsJSON> {
     const creds = await this.prisma.webAuthnCredential.findMany({
       where: { userId },
     });
     const options = await generateRegistrationOptions({
       rpName: this.rpName,
       rpID: this.rpId,
-      userID: userId,
+      userID: new TextEncoder().encode(userId),
       userName: email,
       attestationType: 'none',
       excludeCredentials: creds.map((c) => ({
-        id: Buffer.from(c.credentialId, 'base64url'),
-        type: 'public-key',
+        id: c.credentialId,
         transports: c.transports as AuthenticatorTransportFuture[],
       })),
       authenticatorSelection: {
@@ -144,16 +144,15 @@ export class WebAuthnService {
       throw new BadRequestException('Registration verification failed');
     }
 
-    const { credentialID, credentialPublicKey, counter, credentialDeviceType } =
-      verification.registrationInfo;
+    const { credential, credentialDeviceType } = verification.registrationInfo;
 
     await this.prisma.webAuthnCredential.create({
       data: {
         id: uuidv7(),
         userId,
-        credentialId: this.b64url(credentialID),
-        publicKey: Buffer.from(credentialPublicKey),
-        counter: BigInt(counter),
+        credentialId: credential.id,
+        publicKey: Buffer.from(credential.publicKey),
+        counter: BigInt(credential.counter),
         transports: response.response.transports ?? [],
         label: label ?? credentialDeviceType,
       },
@@ -182,15 +181,16 @@ export class WebAuthnService {
     return { id };
   }
 
-  async authenticationOptions(userId: string) {
+  async authenticationOptions(
+    userId: string,
+  ): Promise<PublicKeyCredentialRequestOptionsJSON> {
     const creds = await this.prisma.webAuthnCredential.findMany({
       where: { userId },
     });
     const options = await generateAuthenticationOptions({
       rpID: this.rpId,
       allowCredentials: creds.map((c) => ({
-        id: Buffer.from(c.credentialId, 'base64url'),
-        type: 'public-key',
+        id: c.credentialId,
         transports: c.transports as AuthenticatorTransportFuture[],
       })),
       userVerification: 'preferred',
@@ -219,9 +219,9 @@ export class WebAuthnService {
         expectedChallenge,
         expectedOrigin: this.expectedOrigins(),
         expectedRPID: this.rpId,
-        authenticator: {
-          credentialID: Buffer.from(cred.credentialId, 'base64url'),
-          credentialPublicKey: new Uint8Array(cred.publicKey),
+        credential: {
+          id: cred.credentialId,
+          publicKey: new Uint8Array(cred.publicKey),
           counter: Number(cred.counter),
           transports: cred.transports as AuthenticatorTransportFuture[],
         },

@@ -62,7 +62,9 @@ export default function TwoFactorPage() {
     setSubmitting(true);
     try {
       const options = await api.auth.webauthnLoginOptions(mfa.token);
-      const assertion = await startAuthentication(options as Parameters<typeof startAuthentication>[0]);
+      const assertion = await startAuthentication({
+        optionsJSON: options as Parameters<typeof startAuthentication>[0]["optionsJSON"],
+      });
       const res = await api.auth.webauthnLoginVerify(mfa.token, assertion);
       if (res.accessToken && res.refreshToken) {
         sessionStorage.removeItem("refx.mfa");

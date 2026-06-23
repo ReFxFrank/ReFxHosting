@@ -38,6 +38,10 @@ import {
   WebAuthnLoginOptionsDto,
   WebAuthnLoginVerifyDto,
 } from './dto/auth.dto';
+import type {
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
+} from '@simplewebauthn/server';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -194,7 +198,7 @@ export class AuthController {
   webauthnRegOptions(
     @CurrentUser('id') userId: string,
     @CurrentUser('email') email: string,
-  ) {
+  ): Promise<PublicKeyCredentialCreationOptionsJSON> {
     return this.webauthn.registrationOptions(userId, email);
   }
 
@@ -226,7 +230,9 @@ export class AuthController {
 
   @ApiBearerAuth()
   @Post('mfa/webauthn/auth/options')
-  webauthnAuthOptions(@CurrentUser('id') userId: string) {
+  webauthnAuthOptions(
+    @CurrentUser('id') userId: string,
+  ): Promise<PublicKeyCredentialRequestOptionsJSON> {
     return this.webauthn.authenticationOptions(userId);
   }
 
@@ -244,7 +250,9 @@ export class AuthController {
   @Public()
   @Post('mfa/webauthn/login/options')
   @HttpCode(200)
-  async webauthnLoginOptions(@Body() dto: WebAuthnLoginOptionsDto) {
+  async webauthnLoginOptions(
+    @Body() dto: WebAuthnLoginOptionsDto,
+  ): Promise<PublicKeyCredentialRequestOptionsJSON> {
     const { userId } = await this.auth.verifyMfaChallenge(dto.mfaToken);
     return this.webauthn.authenticationOptions(userId);
   }
