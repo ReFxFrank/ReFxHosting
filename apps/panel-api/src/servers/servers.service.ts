@@ -8,7 +8,13 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { Prisma, Server, ServerState, Subscription } from '@prisma/client';
+import {
+  PendingPlanChange,
+  Prisma,
+  Server,
+  ServerState,
+  Subscription,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { uuidv7, shortId } from '../common/util/uuid';
@@ -978,13 +984,11 @@ export class ServersService {
     // Cheaper plan: schedule for the next renewal so the customer keeps the
     // resources they've already paid for until the period rolls.
     if (deltaRecurring < 0) {
-      await this.prisma.pendingPlanChange.create({
-        data: {
-          id: uuidv7(),
-          subscriptionId: sub.id,
-          applyAtPeriodEnd: true,
-          ...target,
-        },
+      await this.createPendingOrConflict({
+        id: uuidv7(),
+        subscriptionId: sub.id,
+        applyAtPeriodEnd: true,
+        ...target,
       });
       return { status: 'scheduled', server, effectiveAt: sub.currentPeriodEnd };
     }
@@ -998,19 +1002,32 @@ export class ServersService {
       return { status: 'applied', server: await this.applyPlanChangeNow(server, target) };
     }
 
-    // Paid upgrade: bill now, hold the new configuration until the invoice clears.
-    const invoice = await this.billing.createUpgradeInvoice(sub.id, {
-      amountMinor: prorated,
-      description: `${description} (prorated)`,
+    // Paid upgrade. Claim the single pending-change slot FIRST — the unique
+    // subscriptionId constraint serialises concurrent requests — so a double
+    // submit can't create two invoices. Only then bill and attach the invoice.
+    const pending = await this.createPendingOrConflict({
+      id: uuidv7(),
+      subscriptionId: sub.id,
+      applyAtPeriodEnd: false,
+      ...target,
     });
-    await this.prisma.pendingPlanChange.create({
-      data: {
-        id: uuidv7(),
-        subscriptionId: sub.id,
-        invoiceId: invoice.id,
-        applyAtPeriodEnd: false,
-        ...target,
-      },
+    let invoice;
+    try {
+      invoice = await this.billing.createUpgradeInvoice(sub.id, {
+        amountMinor: prorated,
+        description: `${description} (prorated)`,
+      });
+    } catch (err) {
+      // Billing failed — release the claimed slot so the customer can retry,
+      // and never leave an orphan staged change behind.
+      await this.prisma.pendingPlanChange
+        .deleteMany({ where: { id: pending.id } })
+        .catch(() => undefined);
+      throw err;
+    }
+    await this.prisma.pendingPlanChange.update({
+      where: { id: pending.id },
+      data: { invoiceId: invoice.id },
     });
     return {
       status: 'invoiced',
@@ -1019,6 +1036,29 @@ export class ServersService {
       amountMinor: invoice.totalMinor,
       currency,
     };
+  }
+
+  /**
+   * Create the single pending plan change for a subscription, translating the
+   * unique-constraint race (concurrent double-submit) into a clean
+   * ConflictException instead of an unhandled 500.
+   */
+  private async createPendingOrConflict(
+    data: Prisma.PendingPlanChangeUncheckedCreateInput,
+  ): Promise<PendingPlanChange> {
+    try {
+      return await this.prisma.pendingPlanChange.create({ data });
+    } catch (err) {
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'A plan change is already in progress for this server — pay or cancel it first.',
+        );
+      }
+      throw err;
+    }
   }
 
   /** Prorate a recurring delta over the time remaining in the current period. */

@@ -1509,12 +1509,21 @@ export class BillingService {
             }),
           ]
         : []),
-      this.prisma.pendingPlanChange.delete({ where: { id: pending.id } }),
+      // deleteMany (not delete) so a concurrent second apply — e.g. two webhook
+      // deliveries racing — is a clean no-op instead of throwing P2025.
+      this.prisma.pendingPlanChange.deleteMany({ where: { id: pending.id } }),
     ]);
-    // Push the new limits to the node agent live (best-effort + retried via the
-    // queue). Only meaningful when a server is attached.
+    // Push the new limits to the node agent live. Best-effort: a failed enqueue
+    // must not roll back the (already-committed) change or 500 the payment
+    // webhook — the limits still take effect on the next restart/resize.
     if (server) {
-      await this.provisionQueue.add(JOB.RECONFIGURE, { serverId: server.id });
+      try {
+        await this.provisionQueue.add(JOB.RECONFIGURE, { serverId: server.id });
+      } catch (err) {
+        this.logger.error(
+          `failed to enqueue RECONFIGURE for server ${server.id}: ${(err as Error).message}`,
+        );
+      }
     }
   }
 
@@ -1738,13 +1747,16 @@ export class BillingService {
       await this.provisionPaidServers(invoice.subscriptionId);
     }
 
-    // Apply a paid plan UPGRADE: the staged change was held until this invoice
-    // cleared, so the server only moves to the new configuration now.
-    const paidUpgrade = await this.prisma.pendingPlanChange.findUnique({
-      where: { invoiceId },
-    });
-    if (paidUpgrade) {
-      await this.applyPendingPlanChange(paidUpgrade);
+    // Apply a paid plan UPGRADE — but ONLY on the real OPEN→PAID transition
+    // (invoice.state is the pre-update snapshot), so a re-delivered webhook for
+    // an already-paid invoice can't re-apply the change.
+    if (invoice.state !== InvoiceState.PAID) {
+      const paidUpgrade = await this.prisma.pendingPlanChange.findUnique({
+        where: { invoiceId },
+      });
+      if (paidUpgrade) {
+        await this.applyPendingPlanChange(paidUpgrade);
+      }
     }
 
     // Email a receipt (best-effort; never blocks settlement).
@@ -2208,24 +2220,30 @@ export class BillingService {
       return { invoiceId: '', paid: false, reason: 'canceled' };
     }
 
-    // Apply any scheduled DOWNGRADE before raising this period's invoice, so the
-    // renewal bills the new (lower) price and the server moves to the new config
-    // exactly at the period boundary.
-    const scheduled = await this.prisma.pendingPlanChange.findUnique({
-      where: { subscriptionId },
-    });
-    if (scheduled?.applyAtPeriodEnd) {
-      await this.applyPendingPlanChange(scheduled);
-    }
-
     // Reuse an existing OPEN invoice for this subscription (the dunning case —
     // a prior renewal already raised the period invoice and the charge failed),
     // so a retry never creates a duplicate invoice. Otherwise raise a fresh one.
+    const open = await this.prisma.invoice.findFirst({
+      where: { subscriptionId, state: InvoiceState.OPEN },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Apply a scheduled DOWNGRADE only when raising a FRESH invoice, so the new
+    // period bills the new (lower) price and the server moves to the new config
+    // at the period boundary. If we're retrying an existing OPEN invoice
+    // (dunning — already raised at the old price), defer the downgrade to the
+    // next clean renewal rather than charging the old price for fewer resources.
+    if (!open) {
+      const scheduled = await this.prisma.pendingPlanChange.findUnique({
+        where: { subscriptionId },
+      });
+      if (scheduled?.applyAtPeriodEnd) {
+        await this.applyPendingPlanChange(scheduled);
+      }
+    }
+
     const invoice =
-      (await this.prisma.invoice.findFirst({
-        where: { subscriptionId, state: InvoiceState.OPEN },
-        orderBy: { createdAt: 'desc' },
-      })) ?? (await this.createInvoiceForSubscription(subscriptionId));
+      open ?? (await this.createInvoiceForSubscription(subscriptionId));
 
     const method = await this.prisma.paymentMethod.findFirst({
       where: { userId: sub.userId, isDefault: true },

@@ -81,8 +81,10 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
       subscription: { update: jest.fn() },
       pendingPlanChange: {
         findUnique: jest.fn().mockResolvedValue(null),
-        create: jest.fn((args: any) => args),
+        create: jest.fn((args: any) => args.data),
+        update: jest.fn((args: any) => args),
         delete: jest.fn().mockResolvedValue(undefined),
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
     nodes = {
@@ -125,16 +127,21 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
     const billArgs = billing.createUpgradeInvoice.mock.calls[0][1];
     expect(billArgs.amountMinor).toBeGreaterThan(450);
     expect(billArgs.amountMinor).toBeLessThan(550);
-    // Pending change recorded against the raised invoice, with the target config.
+    // Slot claimed FIRST (no invoiceId yet), with the target config...
     expect(prisma.pendingPlanChange.create).toHaveBeenCalledTimes(1);
     const pending = prisma.pendingPlanChange.create.mock.calls[0][0].data;
     expect(pending).toMatchObject({
       subscriptionId: SUB_ID,
-      invoiceId: 'inv-1',
       applyAtPeriodEnd: false,
       priceId: NEW_PRICE_ID,
       hardwareTierId: TIER_ID,
       memoryMb: 8192,
+    });
+    expect(pending.invoiceId).toBeUndefined();
+    // ...then the raised invoice is attached to that same staged row.
+    expect(prisma.pendingPlanChange.update).toHaveBeenCalledWith({
+      where: { id: pending.id },
+      data: { invoiceId: 'inv-1' },
     });
     // CRUCIAL: nothing applied to the live server/subscription/agent yet.
     expect(prisma.server.update).not.toHaveBeenCalled();

@@ -38,6 +38,8 @@ const SERVER_STATE_NOTICES: Partial<Record<ServerState, string>> = {
 // this window — stops a flapping/crash-looping server from re-stacking the same
 // alert (which reads as a cleared notification "coming back").
 const STATE_NOTICE_THROTTLE_MS = 30 * 60 * 1000; // 30 min
+// Above this many tracked servers, sweep entries past the throttle window.
+const STATE_NOTICE_MAX_ENTRIES = 1000;
 
 /** Body shapes the node-agent posts back to the panel. */
 interface RegisterBody {
@@ -292,6 +294,15 @@ export class AgentCallbacksController {
         last && last.state === state && now - last.at < STATE_NOTICE_THROTTLE_MS;
       if (!throttled) {
         this.recentStateNotices.set(serverId, { state, at: now });
+        // Bound the map: drop entries past the throttle window (they no longer
+        // suppress anything) so it can't grow without limit on a large fleet.
+        if (this.recentStateNotices.size > STATE_NOTICE_MAX_ENTRIES) {
+          for (const [sid, v] of this.recentStateNotices) {
+            if (now - v.at >= STATE_NOTICE_THROTTLE_MS) {
+              this.recentStateNotices.delete(sid);
+            }
+          }
+        }
         await this.notifications
           .createNotification(server.ownerId, {
             title: 'Server status changed',
