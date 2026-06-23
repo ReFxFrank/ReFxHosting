@@ -1,9 +1,9 @@
-import parser from 'cron-parser';
+import { CronExpressionParser } from 'cron-parser';
 
 /** True if `expr` is a parseable 5-field cron expression. */
 export function isValidCron(expr: string): boolean {
   try {
-    parser.parseExpression(expr, { tz: 'UTC' });
+    CronExpressionParser.parse(expr, { tz: 'UTC' });
     return true;
   } catch {
     return false;
@@ -22,15 +22,13 @@ export function nextCronRun(
   tz = 'UTC',
 ): Date | null {
   try {
-    return parser
-      .parseExpression(expr, { currentDate: from, tz: tz || 'UTC' })
+    return CronExpressionParser.parse(expr, { currentDate: from, tz: tz || 'UTC' })
       .next()
       .toDate();
   } catch {
     // Bad timezone? retry in UTC so a schedule still advances rather than stalls.
     try {
-      return parser
-        .parseExpression(expr, { currentDate: from, tz: 'UTC' })
+      return CronExpressionParser.parse(expr, { currentDate: from, tz: 'UTC' })
         .next()
         .toDate();
     } catch {
