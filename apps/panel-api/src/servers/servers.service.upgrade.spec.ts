@@ -18,7 +18,7 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
   let prisma: any;
   let nodes: { capacity: jest.Mock };
   let agent: { reconfigure: jest.Mock };
-  let billing: { createUpgradeInvoice: jest.Mock };
+  let billing: { createUpgradeInvoice: jest.Mock; voidInvoice: jest.Mock };
   let service: ServersService;
 
   const SERVER_ID = 'srv-1';
@@ -82,6 +82,7 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
       pendingPlanChange: {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn((args: any) => args),
+        delete: jest.fn().mockResolvedValue(undefined),
       },
     };
     nodes = {
@@ -96,6 +97,7 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
       createUpgradeInvoice: jest
         .fn()
         .mockResolvedValue({ id: 'inv-1', totalMinor: 600 }),
+      voidInvoice: jest.fn().mockResolvedValue(undefined),
     };
 
     service = new ServersService(
@@ -168,5 +170,42 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
     ).rejects.toBeInstanceOf(ConflictException);
     expect(billing.createUpgradeInvoice).not.toHaveBeenCalled();
     expect(prisma.pendingPlanChange.create).not.toHaveBeenCalled();
+  });
+
+  it('CANCEL (upgrade): voids the unpaid invoice, which clears the staged change', async () => {
+    prisma.pendingPlanChange.findUnique.mockResolvedValue({
+      id: 'ppc-1',
+      subscriptionId: SUB_ID,
+      invoiceId: 'inv-1',
+    });
+
+    await expect(service.cancelPlanChange(SERVER_ID)).resolves.toEqual({
+      canceled: true,
+    });
+    expect(billing.voidInvoice).toHaveBeenCalledWith('inv-1');
+    // void() is what clears the pending row (deleteMany by invoiceId), so we
+    // don't also delete it directly here.
+    expect(prisma.pendingPlanChange.delete).not.toHaveBeenCalled();
+  });
+
+  it('CANCEL (downgrade): drops the scheduled change directly (no invoice to void)', async () => {
+    prisma.pendingPlanChange.findUnique.mockResolvedValue({
+      id: 'ppc-2',
+      subscriptionId: SUB_ID,
+      invoiceId: null,
+    });
+
+    await expect(service.cancelPlanChange(SERVER_ID)).resolves.toEqual({
+      canceled: true,
+    });
+    expect(prisma.pendingPlanChange.delete).toHaveBeenCalledWith({
+      where: { id: 'ppc-2' },
+    });
+    expect(billing.voidInvoice).not.toHaveBeenCalled();
+  });
+
+  it('CANCEL: errors when there is nothing staged', async () => {
+    prisma.pendingPlanChange.findUnique.mockResolvedValue(null);
+    await expect(service.cancelPlanChange(SERVER_ID)).rejects.toBeTruthy();
   });
 });

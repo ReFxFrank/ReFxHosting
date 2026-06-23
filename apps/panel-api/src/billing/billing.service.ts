@@ -1430,7 +1430,7 @@ export class BillingService {
       sequence,
     );
 
-    return this.prisma.invoice.create({
+    const invoice = await this.prisma.invoice.create({
       data: {
         id: uuidv7(),
         number,
@@ -1462,6 +1462,19 @@ export class BillingService {
       },
       include: { lineItems: true },
     });
+
+    // Tell the customer to pay so the upgrade actually applies (best-effort).
+    try {
+      const amount = `${(totalMinor / 100).toFixed(2)} ${currency.toUpperCase()}`;
+      await this.notifications.createNotification(subscription.userId, {
+        title: 'Pay to complete your upgrade',
+        body: `Invoice ${number} for ${amount} is ready. Your plan upgrade applies once it's paid.`,
+      });
+    } catch {
+      // best-effort
+    }
+
+    return invoice;
   }
 
   /**

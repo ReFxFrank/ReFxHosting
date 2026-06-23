@@ -1071,6 +1071,35 @@ export class ServersService {
     return updated;
   }
 
+  /**
+   * Cancel a staged plan change: void the pending upgrade invoice (which also
+   * clears the staged change) or drop a scheduled downgrade. Lets a customer
+   * back out of a change they no longer want — and unblocks further changes,
+   * since only one is allowed at a time.
+   */
+  async cancelPlanChange(id: string): Promise<{ canceled: true }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      select: { subscriptionId: true },
+    });
+    if (!server?.subscriptionId) {
+      throw new NotFoundException('Server has no subscription');
+    }
+    const pending = await this.prisma.pendingPlanChange.findUnique({
+      where: { subscriptionId: server.subscriptionId },
+    });
+    if (!pending) {
+      throw new NotFoundException('No pending plan change to cancel');
+    }
+    if (pending.invoiceId) {
+      // Upgrade awaiting payment: voiding the invoice also clears the staged change.
+      await this.billing.voidInvoice(pending.invoiceId);
+    } else {
+      await this.prisma.pendingPlanChange.delete({ where: { id: pending.id } });
+    }
+    return { canceled: true };
+  }
+
   /** Upgrade context for the upgrade page: hardware tiers (tiered products) or
    *  per-slot scaling (voice/legacy), plus the server's current resources. */
   async upgradeOptions(id: string): Promise<{
@@ -1081,6 +1110,13 @@ export class ServersService {
      *  multiplies the recurring price increase by this to show the prorated
      *  amount due today for an upgrade. */
     prorationFactor: number;
+    /** A staged plan change awaiting payment (upgrade) or the next renewal
+     *  (downgrade), so the page can offer to pay or cancel it. */
+    pendingChange: {
+      kind: 'upgrade' | 'downgrade';
+      invoiceId: string | null;
+      effectiveAt: string | null;
+    } | null;
     slots: number;
     minSlots: number;
     maxSlots: number;
@@ -1141,6 +1177,23 @@ export class ServersService {
       : 0;
     const prorationFactor = periodFull > 0 ? periodRemaining / periodFull : 1;
 
+    const pending = sub
+      ? await this.prisma.pendingPlanChange.findUnique({
+          where: { subscriptionId: sub.id },
+        })
+      : null;
+    const pendingChange = pending
+      ? {
+          kind: (pending.invoiceId ? 'upgrade' : 'downgrade') as
+            | 'upgrade'
+            | 'downgrade',
+          invoiceId: pending.invoiceId,
+          effectiveAt: pending.applyAtPeriodEnd
+            ? sub!.currentPeriodEnd.toISOString()
+            : null,
+        }
+      : null;
+
     // For tiered products, each tier's price for the subscription's interval +
     // currency (so the page can show the new recurring cost per tier).
     const tiers = (product?.hardwareTiers ?? []).map((t) => ({
@@ -1163,6 +1216,7 @@ export class ServersService {
       currency,
       interval,
       prorationFactor,
+      pendingChange,
       slots: sub?.slots ?? server.slots ?? 1,
       minSlots: product?.minSlots ?? 1,
       maxSlots: product?.maxSlots ?? 64,

@@ -412,6 +412,13 @@ export class ServersController {
     return this.servers.upgrade(id, dto);
   }
 
+  @Delete(':id/upgrade')
+  @RequirePermissions('control.resize')
+  @Audit({ action: 'server.plan-change.cancel', targetType: 'Server', targetParam: 'id' })
+  cancelPlanChange(@Param('id') id: string) {
+    return this.servers.cancelPlanChange(id);
+  }
+
   @Post(':id/upgrade/preview')
   @RequirePermissions('server.read')
   upgradePreviewPost(@Param('id') id: string, @Body() dto: UpgradeServerDto) {

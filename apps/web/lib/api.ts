@@ -464,6 +464,11 @@ export const api = {
         currency: string;
         interval: string;
         prorationFactor: number;
+        pendingChange: {
+          kind: "upgrade" | "downgrade";
+          invoiceId: string | null;
+          effectiveAt: string | null;
+        } | null;
         slots: number;
         minSlots: number;
         maxSlots: number;
@@ -505,6 +510,8 @@ export const api = {
         | { status: "invoiced"; invoiceId: string; amountMinor: number; currency: string }
         | { status: "scheduled"; effectiveAt: string }
       >(`/servers/${id}/upgrade`, input),
+    cancelPlanChange: (id: string) =>
+      http.delete<{ canceled: true }>(`/servers/${id}/upgrade`),
 
     // Steam Workshop
     workshop: (id: string) => getList<WorkshopMod>(`/servers/${id}/workshop`),

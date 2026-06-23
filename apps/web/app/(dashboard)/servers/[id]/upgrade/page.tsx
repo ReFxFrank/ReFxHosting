@@ -69,6 +69,74 @@ function handlePlanChange(
   toast.success("Plan updated — changes applied now.");
 }
 
+/**
+ * Banner shown when a plan change is already staged: an upgrade awaiting payment
+ * (offer Pay / Cancel) or a scheduled downgrade (offer Cancel). Cancelling voids
+ * the upgrade invoice / drops the downgrade and unblocks new changes.
+ */
+function PendingChangeBanner({
+  id,
+  pending,
+}: {
+  id: string;
+  pending: NonNullable<UpgradeOptions["pendingChange"]>;
+}) {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const isUpgrade = pending.kind === "upgrade";
+
+  const cancel = useMutation({
+    mutationFn: () => api.servers.cancelPlanChange(id),
+    onSuccess: () => {
+      toast.success(
+        isUpgrade
+          ? "Upgrade cancelled — the unpaid invoice was voided."
+          : "Scheduled downgrade cancelled.",
+      );
+      queryClient.invalidateQueries({ queryKey: ["upgrade-options", id] });
+      queryClient.invalidateQueries({ queryKey: ["server", id] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to cancel"),
+  });
+
+  return (
+    <div className="rounded-lg border border-warning/40 bg-warning/10 p-4 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="font-medium">
+            {isUpgrade ? "Upgrade awaiting payment" : "Downgrade scheduled"}
+          </p>
+          <p className="text-muted-foreground">
+            {isUpgrade
+              ? "Your server stays on its current plan until the upgrade invoice is paid."
+              : `Takes effect at your next renewal${
+                  pending.effectiveAt
+                    ? ` on ${new Date(pending.effectiveAt).toLocaleDateString()}`
+                    : ""
+                }.`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {isUpgrade && (
+            <Button size="sm" onClick={() => router.push("/billing")}>
+              Pay now
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant="ghost"
+            loading={cancel.isPending}
+            onClick={() => cancel.mutate()}
+          >
+            Cancel {isUpgrade ? "upgrade" : "downgrade"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function UpgradePage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -160,6 +228,10 @@ export default function UpgradePage() {
         description="Scale your plan up or down. Upgrades are billed now (prorated) and apply once paid; downgrades take effect at your next renewal."
       />
 
+      {opts.pendingChange && (
+        <PendingChangeBanner id={id} pending={opts.pendingChange} />
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
         <Card>
           <CardHeader>
@@ -229,7 +301,7 @@ export default function UpgradePage() {
               <ComparisonRow label="Disk" from={formatMb(opts.diskMb)} to={formatMb(derived.diskMb)} changed={derived.diskMb !== opts.diskMb} />
             </div>
 
-            <Button className="w-full" disabled={unchanged} onClick={() => setConfirmOpen(true)}>
+            <Button className="w-full" disabled={unchanged || !!opts.pendingChange} onClick={() => setConfirmOpen(true)}>
               Apply changes
             </Button>
           </CardContent>
@@ -332,6 +404,10 @@ function TierUpgrade({ id, opts }: { id: string; opts: UpgradeOptions }) {
         description="Move to a higher tier for more power, or a lower one to save. Upgrades are billed now (prorated) and apply once paid; downgrades take effect at your next renewal."
       />
 
+      {opts.pendingChange && (
+        <PendingChangeBanner id={id} pending={opts.pendingChange} />
+      )}
+
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {tiers.map((t) => (
@@ -383,7 +459,7 @@ function TierUpgrade({ id, opts }: { id: string; opts: UpgradeOptions }) {
 
             <Button
               className="w-full"
-              disabled={unchanged || selected?.amountMinor == null}
+              disabled={unchanged || selected?.amountMinor == null || !!opts.pendingChange}
               onClick={() => setConfirmOpen(true)}
             >
               Apply changes
