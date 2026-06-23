@@ -264,11 +264,20 @@ export default function UpgradePage() {
                 </span>
               </div>
             )}
+            {delta > 0 && (
+              <div className="mt-2 flex items-center justify-between border-t border-border/50 pt-2">
+                <span className="text-muted-foreground">Due today (prorated)</span>
+                <span className="font-semibold">
+                  {formatMoney(Math.round(delta * opts.prorationFactor), opts.currency)}
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">+ tax</span>
+                </span>
+              </div>
+            )}
             <p className="mt-2 text-xs text-muted-foreground">
               {isDowngrade
                 ? "This is a downgrade: it takes effect at your next renewal, so you keep your current resources until then. No charge now."
                 : delta > 0
-                  ? "This is an upgrade: we'll create a prorated invoice now. Your server stays on its current size until that invoice is paid — then the new size applies automatically."
+                  ? "This is an upgrade: we'll invoice the prorated amount above now. Your server stays on its current size until that invoice is paid — then the new size applies automatically."
                   : "No price change; the new size applies immediately."}
             </p>
           </div>
@@ -408,11 +417,28 @@ function TierUpgrade({ id, opts }: { id: string; opts: UpgradeOptions }) {
                 {intervalLabel(opts.interval)}
               </span>
             </div>
+            {delta !== 0 && (
+              <div className="mt-1 flex items-center justify-between">
+                <span className="text-muted-foreground">{isDowngrade ? "Reduction" : "Increase"}</span>
+                <span className={cn("font-medium", isDowngrade ? "text-success" : "text-primary")}>
+                  {deltaDisplay}
+                </span>
+              </div>
+            )}
+            {delta > 0 && (
+              <div className="mt-2 flex items-center justify-between border-t border-border/50 pt-2">
+                <span className="text-muted-foreground">Due today (prorated)</span>
+                <span className="font-semibold">
+                  {formatMoney(Math.round(delta * opts.prorationFactor), opts.currency)}
+                  <span className="ml-1 text-xs font-normal text-muted-foreground">+ tax</span>
+                </span>
+              </div>
+            )}
             <p className="mt-2 text-xs text-muted-foreground">
               {isDowngrade
                 ? "This is a downgrade: it takes effect at your next renewal, so you keep your current tier until then. No charge now."
                 : delta > 0
-                  ? "This is an upgrade: we'll create a prorated invoice now. Your server stays on its current tier until that invoice is paid — then the new tier applies automatically."
+                  ? "This is an upgrade: we'll invoice the prorated amount above now. Your server stays on its current tier until that invoice is paid — then the new tier applies automatically."
                   : "No price change; the new tier applies immediately."}
             </p>
           </div>

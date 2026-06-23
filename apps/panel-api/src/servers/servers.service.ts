@@ -1077,6 +1077,10 @@ export class ServersService {
     perSlot: boolean;
     currency: string;
     interval: string;
+    /** Fraction of the current billing period still remaining (0..1). The web
+     *  multiplies the recurring price increase by this to show the prorated
+     *  amount due today for an upgrade. */
+    prorationFactor: number;
     slots: number;
     minSlots: number;
     maxSlots: number;
@@ -1127,6 +1131,16 @@ export class ServersService {
     const currency = price?.currency ?? 'USD';
     const interval = sub?.interval ?? 'MONTHLY';
 
+    // Fraction of the current period still to run — the basis for the prorated
+    // upgrade charge the web previews (matches `proratedAmount`).
+    const periodFull = sub
+      ? sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime()
+      : 0;
+    const periodRemaining = sub
+      ? Math.max(0, Math.min(sub.currentPeriodEnd.getTime() - Date.now(), periodFull))
+      : 0;
+    const prorationFactor = periodFull > 0 ? periodRemaining / periodFull : 1;
+
     // For tiered products, each tier's price for the subscription's interval +
     // currency (so the page can show the new recurring cost per tier).
     const tiers = (product?.hardwareTiers ?? []).map((t) => ({
@@ -1148,6 +1162,7 @@ export class ServersService {
       perSlot: !!product?.perSlot,
       currency,
       interval,
+      prorationFactor,
       slots: sub?.slots ?? server.slots ?? 1,
       minSlots: product?.minSlots ?? 1,
       maxSlots: product?.maxSlots ?? 64,

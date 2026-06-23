@@ -463,6 +463,7 @@ export const api = {
         perSlot: boolean;
         currency: string;
         interval: string;
+        prorationFactor: number;
         slots: number;
         minSlots: number;
         maxSlots: number;
