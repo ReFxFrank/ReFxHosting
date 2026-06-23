@@ -1,5 +1,5 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { authenticator } from 'otplib';
+import { generateSecret, generateSync } from 'otplib';
 import { AuthService } from './auth.service';
 
 /**
@@ -72,12 +72,12 @@ describe('AuthService TOTP', () => {
 
   describe('totpVerify', () => {
     it('accepts a freshly generated valid token and issues recovery codes', async () => {
-      const secret = authenticator.generateSecret();
+      const secret = generateSecret();
       prisma.user.findFirstOrThrow.mockResolvedValue({
         id: USER_ID,
         totpSecretEnc: `enc(${secret})`,
       });
-      const code = authenticator.generate(secret);
+      const code = generateSync({ secret });
 
       const result = await service.totpVerify(USER_ID, code);
 
@@ -90,7 +90,7 @@ describe('AuthService TOTP', () => {
     });
 
     it('rejects an invalid code without activating MFA', async () => {
-      const secret = authenticator.generateSecret();
+      const secret = generateSecret();
       prisma.user.findFirstOrThrow.mockResolvedValue({
         id: USER_ID,
         totpSecretEnc: `enc(${secret})`,
@@ -112,12 +112,12 @@ describe('AuthService TOTP', () => {
     });
 
     it('persists hashed (never plaintext) recovery codes', async () => {
-      const secret = authenticator.generateSecret();
+      const secret = generateSecret();
       prisma.user.findFirstOrThrow.mockResolvedValue({
         id: USER_ID,
         totpSecretEnc: `enc(${secret})`,
       });
-      const code = authenticator.generate(secret);
+      const code = generateSync({ secret });
       const { recoveryCodes } = await service.totpVerify(USER_ID, code);
 
       const createCalls = prisma.recoveryCode.create.mock.calls;
@@ -152,7 +152,7 @@ describe('AuthService TOTP', () => {
     };
 
     it('signals mfaRequired (without tokens) when MFA is enabled and no code is supplied', async () => {
-      const secret = authenticator.generateSecret();
+      const secret = generateSecret();
       prisma.user.findFirst.mockResolvedValue({
         id: USER_ID,
         email: 'u@example.com',
@@ -172,7 +172,7 @@ describe('AuthService TOTP', () => {
     });
 
     it('rejects a wrong TOTP code at login', async () => {
-      const secret = authenticator.generateSecret();
+      const secret = generateSecret();
       prisma.user.findFirst.mockResolvedValue({
         id: USER_ID,
         email: 'u@example.com',
@@ -190,7 +190,7 @@ describe('AuthService TOTP', () => {
     });
 
     it('issues tokens when password and TOTP are both valid', async () => {
-      const secret = authenticator.generateSecret();
+      const secret = generateSecret();
       prisma.user.findFirst.mockResolvedValue({
         id: USER_ID,
         email: 'u@example.com',
@@ -205,7 +205,7 @@ describe('AuthService TOTP', () => {
         {
           email: 'u@example.com',
           password: 'correct-horse',
-          totp: authenticator.generate(secret),
+          totp: generateSync({ secret }),
         },
         { ip: '1.2.3.4' },
       );

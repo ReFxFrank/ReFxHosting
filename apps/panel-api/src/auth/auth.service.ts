@@ -9,7 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { authenticator } from 'otplib';
+import { generateSecret, generateURI, verifySync } from 'otplib';
 import { Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
@@ -169,7 +169,7 @@ export class AuthService {
       // Fast path: a valid TOTP code supplied inline clears the challenge.
       if (totpOn && dto.totp) {
         const secret = this.crypto.decrypt(user.totpSecretEnc!);
-        if (!authenticator.check(dto.totp, secret)) {
+        if (!verifySync({ token: dto.totp, secret }).valid) {
           throw new UnauthorizedException('Invalid MFA code');
         }
         return this.issueTokens(user, ctx, { trusted: !!dto.rememberMe });
@@ -395,17 +395,17 @@ export class AuthService {
     const user = await this.prisma.user.findFirstOrThrow({
       where: { id: userId },
     });
-    const secret = authenticator.generateSecret();
+    const secret = generateSecret();
     // Stash the pending secret encrypted; only activate on verify.
     await this.prisma.user.update({
       where: { id: userId },
       data: { totpSecretEnc: this.crypto.encrypt(secret) },
     });
-    const otpauthUrl = authenticator.keyuri(
-      user.email,
-      this.config.get<AppConfig['rpName']>('rpName')!,
+    const otpauthUrl = generateURI({
+      label: user.email,
+      issuer: this.config.get<AppConfig['rpName']>('rpName')!,
       secret,
-    );
+    });
     return { otpauthUrl, secret };
   }
 
@@ -415,7 +415,7 @@ export class AuthService {
     });
     if (!user.totpSecretEnc) throw new BadRequestException('No TOTP enrollment in progress');
     const secret = this.crypto.decrypt(user.totpSecretEnc);
-    if (!authenticator.check(code, secret)) {
+    if (!verifySync({ token: code, secret }).valid) {
       throw new BadRequestException('Invalid TOTP code');
     }
 
@@ -482,7 +482,7 @@ export class AuthService {
         throw new UnauthorizedException('MFA is not configured');
       }
       const secret = this.crypto.decrypt(user.totpSecretEnc);
-      if (!authenticator.check(code, secret)) {
+      if (!verifySync({ token: code, secret }).valid) {
         throw new UnauthorizedException('Invalid MFA code');
       }
     }
