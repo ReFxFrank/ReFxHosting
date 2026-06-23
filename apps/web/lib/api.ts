@@ -498,7 +498,12 @@ export const api = {
     upgrade: (
       id: string,
       input: Partial<{ hardwareTierId: string; slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
-    ) => http.post<void>(`/servers/${id}/upgrade`, input),
+    ) =>
+      http.post<
+        | { status: "applied" }
+        | { status: "invoiced"; invoiceId: string; amountMinor: number; currency: string }
+        | { status: "scheduled"; effectiveAt: string }
+      >(`/servers/${id}/upgrade`, input),
 
     // Steam Workshop
     workshop: (id: string) => getList<WorkshopMod>(`/servers/${id}/workshop`),

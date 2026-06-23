@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NodeAgentClient, InstallSpec } from '../../agent/agent.client';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { SettingsService } from '../../platform/settings.service';
-import { JOB, ProvisionJob, QUEUE } from '../queue.constants';
+import { JOB, ProvisionJob, ReconfigureJob, QUEUE } from '../queue.constants';
 import { buildInstallSpec, steamLogin } from './install-spec.util';
 
 /**
@@ -26,7 +26,11 @@ export class ProvisioningProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<ProvisionJob>): Promise<void> {
+  async process(job: Job<ProvisionJob | ReconfigureJob>): Promise<void> {
+    if (job.name === JOB.RECONFIGURE) {
+      await this.reconfigure(job.data.serverId);
+      return;
+    }
     if (job.name !== JOB.PROVISION) return;
     const { serverId } = job.data;
     this.logger.log(`provisioning ${serverId}`);
@@ -86,5 +90,32 @@ export class ProvisioningProcessor extends WorkerHost {
       data: { state: 'OFFLINE' },
     });
     this.logger.log(`provisioned ${serverId} -> OFFLINE`);
+  }
+
+  /**
+   * Push a server's current DB resource limits to its node agent live (no
+   * reinstall). Used after a paid plan upgrade is applied to the DB, so the new
+   * limits take effect once — and only once — payment has cleared.
+   */
+  private async reconfigure(serverId: string): Promise<void> {
+    const server = await this.prisma.server.findUnique({
+      where: { id: serverId },
+      include: { node: true },
+    });
+    if (!server || !server.node) {
+      this.logger.warn(`reconfigure: server ${serverId} or node missing; skipping`);
+      return;
+    }
+    await this.agent.reconfigure(server.node, {
+      serverId,
+      limits: {
+        cpuCores: server.cpuCores,
+        memoryMb: server.memoryMb,
+        swapMb: server.swapMb,
+        diskMb: server.diskMb,
+        ioWeight: server.ioWeight,
+      },
+    });
+    this.logger.log(`reconfigured ${serverId} to new limits`);
   }
 }

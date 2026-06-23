@@ -13,11 +13,13 @@ import { ServersController } from './servers.controller';
 import { ServersResolver } from './servers.resolver';
 import { ModpackProcessor } from '../queues/processors/modpack.processor';
 import { NodesModule } from '../nodes/nodes.module';
+import { BillingModule } from '../billing/billing.module';
 import { QUEUE } from '../queues/queue.constants';
 
 @Module({
   imports: [
     NodesModule,
+    BillingModule,
     BullModule.registerQueue(
       { name: QUEUE.PROVISIONING },
       { name: QUEUE.REINSTALL },

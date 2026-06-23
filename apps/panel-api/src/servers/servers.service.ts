@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { Prisma, Server, ServerState } from '@prisma/client';
+import { Prisma, Server, ServerState, Subscription } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { uuidv7, shortId } from '../common/util/uuid';
@@ -37,10 +37,39 @@ import {
 } from './allocation-port.util';
 import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
 import { MinecraftResolverService } from './minecraft-resolver.service';
+import { BillingService } from '../billing/billing.service';
 import {
   LOADER_STARTUP,
   isMinecraftLoader,
 } from './minecraft-loader.util';
+
+/**
+ * Outcome of a plan change. An UPGRADE is `invoiced` (server stays on the old
+ * configuration until the returned invoice is paid); a cheaper plan is
+ * `scheduled` to apply at the next renewal; a no-cost change is `applied` now.
+ */
+export type PlanChangeResult =
+  | { status: 'applied'; server: Server }
+  | {
+      status: 'invoiced';
+      server: Server;
+      invoiceId: string;
+      amountMinor: number;
+      currency: string;
+    }
+  | { status: 'scheduled'; server: Server; effectiveAt: Date };
+
+/** Target plan configuration staged by a plan change. */
+interface PlanChangeTarget {
+  priceId: string;
+  hardwareTierId: string | null;
+  slots: number;
+  cpuCores: number;
+  memoryMb: number;
+  diskMb: number;
+}
+
+type ServerWithNode = Prisma.ServerGetPayload<{ include: { node: true } }>;
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
@@ -55,6 +84,7 @@ export class ServersService {
     private readonly nodes: NodesService,
     private readonly agent: NodeAgentClient,
     private readonly mcResolver: MinecraftResolverService,
+    private readonly billing: BillingService,
     @InjectQueue(QUEUE.PROVISIONING) private readonly provisionQueue: Queue,
     @InjectQueue(QUEUE.REINSTALL) private readonly reinstallQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
@@ -797,8 +827,15 @@ export class ServersService {
 
   // ---- upgrade (resize alias + price preview) ----------------------------
 
-  /** Reuses the resize logic; `upgrade` is the web-facing name. */
-  async upgrade(id: string, dto: UpgradeServerDto): Promise<Server> {
+  /**
+   * Customer-initiated plan change. An UPGRADE (more expensive) raises a prorated
+   * invoice immediately and holds the server on its CURRENT configuration until
+   * that invoice is paid — only then are the new limits applied (via
+   * BillingService.applyPendingPlanChange on settlement). A cheaper plan is
+   * scheduled to apply at the next renewal. A no-cost change applies immediately.
+   * Legacy flat-product resizes still apply immediately.
+   */
+  async upgrade(id: string, dto: UpgradeServerDto): Promise<PlanChangeResult> {
     // Tiered game products upgrade by HARDWARE TIER; per-slot products upgrade by
     // SLOT COUNT (resources + price scale together); a legacy flat product
     // resizes raw resources.
@@ -824,7 +861,7 @@ export class ServersService {
 
       const currentPrice = await this.prisma.price.findUnique({
         where: { id: sub.priceId },
-        select: { currency: true },
+        select: { currency: true, amountMinor: true },
       });
       const currency = currentPrice?.currency ?? 'USD';
       const newPrice = tier.prices.find(
@@ -836,40 +873,32 @@ export class ServersService {
         );
       }
 
-      const limits = {
-        cpuCores: tier.cpuCores,
-        memoryMb: tier.memoryMb,
-        diskMb: tier.diskMb,
-      };
       // The node must absorb the delta when growing.
       const cap = await this.nodes.capacity(server.nodeId);
       if (
-        limits.memoryMb - server.memoryMb > cap.memory.free ||
-        limits.cpuCores - server.cpuCores > cap.cpu.free ||
-        limits.diskMb - server.diskMb > cap.disk.free
+        tier.memoryMb - server.memoryMb > cap.memory.free ||
+        tier.cpuCores - server.cpuCores > cap.cpu.free ||
+        tier.diskMb - server.diskMb > cap.disk.free
       ) {
         throw new ConflictException('Node lacks capacity for this upgrade');
       }
 
-      await this.prisma.subscription.update({
-        where: { id: sub.id },
-        data: { hardwareTierId: tier.id, priceId: newPrice.id },
-      });
-      const updated = await this.prisma.server.update({
-        where: { id },
-        data: { ...limits, slots: tier.recommendedPlayers ?? server.slots },
-      });
-      await this.agent.reconfigure(server.node, {
-        serverId: id,
-        limits: {
-          cpuCores: updated.cpuCores,
-          memoryMb: updated.memoryMb,
-          swapMb: updated.swapMb,
-          diskMb: updated.diskMb,
-          ioWeight: updated.ioWeight,
+      return this.stagePlanChange(
+        server,
+        sub,
+        {
+          priceId: newPrice.id,
+          hardwareTierId: tier.id,
+          slots: tier.recommendedPlayers ?? server.slots ?? sub.slots,
+          cpuCores: tier.cpuCores,
+          memoryMb: tier.memoryMb,
+          diskMb: tier.diskMb,
         },
-      });
-      return updated;
+        (currentPrice?.amountMinor ?? 0),
+        newPrice.amountMinor,
+        currency,
+        `Plan change to ${tier.name}`,
+      );
     }
 
     if (product?.perSlot && dto.slots != null) {
@@ -891,28 +920,155 @@ export class ServersService {
       ) {
         throw new ConflictException('Node lacks capacity for this upgrade');
       }
-      await this.prisma.subscription.update({
-        where: { id: server.subscriptionId! },
-        data: { slots },
+      const perSlotPrice = await this.prisma.price.findUnique({
+        where: { id: sub!.priceId },
+        select: { currency: true, amountMinor: true },
       });
-      const updated = await this.prisma.server.update({
-        where: { id },
-        data: { slots, ...limits },
-      });
-      await this.agent.reconfigure(server.node, {
-        serverId: id,
-        limits: {
-          cpuCores: updated.cpuCores,
-          memoryMb: updated.memoryMb,
-          swapMb: updated.swapMb,
-          diskMb: updated.diskMb,
-          ioWeight: updated.ioWeight,
+      const perSlotMinor = perSlotPrice?.amountMinor ?? 0;
+      return this.stagePlanChange(
+        server,
+        sub!,
+        {
+          priceId: sub!.priceId,
+          hardwareTierId: null,
+          slots,
+          cpuCores: limits.cpuCores,
+          memoryMb: limits.memoryMb,
+          diskMb: limits.diskMb,
         },
-      });
-      return updated;
+        perSlotMinor * sub!.slots,
+        perSlotMinor * slots,
+        perSlotPrice?.currency ?? 'USD',
+        `Plan change to ${slots} slots`,
+      );
     }
 
-    return this.resize(id, dto);
+    return { status: 'applied', server: await this.resize(id, dto) };
+  }
+
+  // ---- plan-change staging (invoice-gated upgrades, scheduled downgrades) --
+
+  /**
+   * Decide how a plan change is applied based on the recurring price delta and
+   * raise the appropriate side-effects. See `upgrade` for the policy.
+   */
+  private async stagePlanChange(
+    server: ServerWithNode,
+    sub: Subscription,
+    target: PlanChangeTarget,
+    currentRecurringMinor: number,
+    newRecurringMinor: number,
+    currency: string,
+    description: string,
+  ): Promise<PlanChangeResult> {
+    // One staged change at a time, so a customer can't stack invoices/changes.
+    const existing = await this.prisma.pendingPlanChange.findUnique({
+      where: { subscriptionId: sub.id },
+    });
+    if (existing) {
+      throw new ConflictException(
+        existing.invoiceId
+          ? 'An upgrade invoice is already awaiting payment for this server — pay or cancel it first.'
+          : 'A plan change is already scheduled for this server.',
+      );
+    }
+
+    const deltaRecurring = newRecurringMinor - currentRecurringMinor;
+
+    // Cheaper plan: schedule for the next renewal so the customer keeps the
+    // resources they've already paid for until the period rolls.
+    if (deltaRecurring < 0) {
+      await this.prisma.pendingPlanChange.create({
+        data: {
+          id: uuidv7(),
+          subscriptionId: sub.id,
+          applyAtPeriodEnd: true,
+          ...target,
+        },
+      });
+      return { status: 'scheduled', server, effectiveAt: sub.currentPeriodEnd };
+    }
+
+    const prorated =
+      deltaRecurring > 0 ? this.proratedAmount(deltaRecurring, sub) : 0;
+
+    // No incremental cost (same price, or prorates to ~0 at the period's tail):
+    // apply immediately.
+    if (prorated <= 0) {
+      return { status: 'applied', server: await this.applyPlanChangeNow(server, target) };
+    }
+
+    // Paid upgrade: bill now, hold the new configuration until the invoice clears.
+    const invoice = await this.billing.createUpgradeInvoice(sub.id, {
+      amountMinor: prorated,
+      description: `${description} (prorated)`,
+    });
+    await this.prisma.pendingPlanChange.create({
+      data: {
+        id: uuidv7(),
+        subscriptionId: sub.id,
+        invoiceId: invoice.id,
+        applyAtPeriodEnd: false,
+        ...target,
+      },
+    });
+    return {
+      status: 'invoiced',
+      server,
+      invoiceId: invoice.id,
+      amountMinor: invoice.totalMinor,
+      currency,
+    };
+  }
+
+  /** Prorate a recurring delta over the time remaining in the current period. */
+  private proratedAmount(
+    deltaRecurringMinor: number,
+    sub: { currentPeriodStart: Date; currentPeriodEnd: Date },
+  ): number {
+    const now = Date.now();
+    const full = sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime();
+    if (full <= 0) return deltaRecurringMinor; // safety: bill the full delta
+    const remaining = Math.max(
+      0,
+      Math.min(sub.currentPeriodEnd.getTime() - now, full),
+    );
+    return Math.round((deltaRecurringMinor * remaining) / full);
+  }
+
+  /** Apply a plan change to the subscription + server right now and reconfigure. */
+  private async applyPlanChangeNow(
+    server: ServerWithNode,
+    target: PlanChangeTarget,
+  ): Promise<Server> {
+    await this.prisma.subscription.update({
+      where: { id: server.subscriptionId! },
+      data: {
+        priceId: target.priceId,
+        hardwareTierId: target.hardwareTierId,
+        slots: target.slots,
+      },
+    });
+    const updated = await this.prisma.server.update({
+      where: { id: server.id },
+      data: {
+        cpuCores: target.cpuCores,
+        memoryMb: target.memoryMb,
+        diskMb: target.diskMb,
+        slots: target.slots,
+      },
+    });
+    await this.agent.reconfigure(server.node, {
+      serverId: server.id,
+      limits: {
+        cpuCores: updated.cpuCores,
+        memoryMb: updated.memoryMb,
+        swapMb: updated.swapMb,
+        diskMb: updated.diskMb,
+        ioWeight: updated.ioWeight,
+      },
+    });
+    return updated;
   }
 
   /** Upgrade context for the upgrade page: hardware tiers (tiered products) or

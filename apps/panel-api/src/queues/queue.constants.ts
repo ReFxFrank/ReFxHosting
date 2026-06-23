@@ -21,6 +21,11 @@ export interface ProvisionJob {
   serverId: string;
 }
 
+/** Push a server's current DB resource limits to its node agent (no reinstall). */
+export interface ReconfigureJob {
+  serverId: string;
+}
+
 export interface ReinstallJob {
   serverId: string;
   /** When set, this is a game switch; carries the switch-log id for tracing. */
@@ -64,6 +69,7 @@ export interface ModpackUninstallJob {
 
 export const JOB = {
   PROVISION: 'provision',
+  RECONFIGURE: 'reconfigure',
   REINSTALL: 'reinstall',
   RUN_BACKUP: 'run-backup',
   RENEW: 'renew',

@@ -14,6 +14,7 @@ import {
   InvoiceState,
   PaymentMethod,
   PaymentState,
+  PendingPlanChange,
   Price,
   Prisma,
   Product,
@@ -800,6 +801,9 @@ export class BillingService {
       where: { id },
       data: { state: InvoiceState.VOID },
     });
+    // Voiding an upgrade invoice abandons the staged change (the server stays on
+    // its current plan); the customer can request the upgrade again later.
+    await this.prisma.pendingPlanChange.deleteMany({ where: { invoiceId: id } });
     // Release any server reserved by this unpaid order so it disappears from the
     // customer's dashboard (it was never provisioned).
     if (invoice.subscriptionId) {
@@ -1387,6 +1391,120 @@ export class BillingService {
    * item from the product/price, tax via the tax engine, and a year-scoped
    * invoice number.
    */
+  /**
+   * Raise a one-off OPEN invoice for a plan UPGRADE — typically the prorated
+   * price difference for the remainder of the current period. Taxed from the
+   * customer's billing address like any other invoice. The staged plan change is
+   * applied to the server only once this invoice is PAID (markInvoicePaid →
+   * applyPendingPlanChange), so the customer keeps their old configuration until
+   * payment clears.
+   */
+  async createUpgradeInvoice(
+    subscriptionId: string,
+    args: { amountMinor: number; description: string },
+  ): Promise<Invoice> {
+    const subscription = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+      include: { user: true },
+    });
+    if (!subscription) throw new NotFoundException('Subscription not found');
+    const price = await this.prisma.price.findUnique({
+      where: { id: subscription.priceId },
+      select: { currency: true },
+    });
+    const currency = price?.currency || this.billingCfg.defaultCurrency;
+
+    const subtotalMinor = Math.max(0, Math.round(args.amountMinor));
+    const taxLoc = this.resolveTaxRegion(subscription.user);
+    const tax = calculateTax(subtotalMinor, {
+      region: taxLoc?.region ?? '',
+      country: taxLoc?.country,
+    });
+    const totalMinor = subtotalMinor + tax.taxMinor;
+
+    const year = new Date().getUTCFullYear();
+    const sequence = await this.nextInvoiceSequence(year);
+    const number = generateInvoiceNumber(
+      this.billingCfg.invoiceNumberPrefix,
+      year,
+      sequence,
+    );
+
+    return this.prisma.invoice.create({
+      data: {
+        id: uuidv7(),
+        number,
+        userId: subscription.userId,
+        subscriptionId: subscription.id,
+        state: InvoiceState.OPEN,
+        currency,
+        subtotalMinor,
+        discountMinor: 0,
+        taxMinor: tax.taxMinor,
+        totalMinor,
+        amountPaidMinor: 0,
+        taxType: tax.taxType ?? undefined,
+        taxRatePct: tax.taxRatePct || undefined,
+        taxRegion: taxLoc?.region ?? undefined,
+        gateway: subscription.gateway,
+        dueAt: new Date(),
+        lineItems: {
+          create: [
+            {
+              id: uuidv7(),
+              description: args.description,
+              quantity: 1,
+              unitMinor: subtotalMinor,
+              amountMinor: subtotalMinor,
+            },
+          ],
+        },
+      },
+      include: { lineItems: true },
+    });
+  }
+
+  /**
+   * Apply a staged plan change to the live subscription + server, push the new
+   * limits to the node agent (no reinstall), and clear the pending row. Called
+   * when an upgrade invoice is paid, or at renewal for a scheduled downgrade.
+   */
+  async applyPendingPlanChange(pending: PendingPlanChange): Promise<void> {
+    const server = await this.prisma.server.findFirst({
+      where: { subscriptionId: pending.subscriptionId, deletedAt: null },
+      select: { id: true },
+    });
+    await this.prisma.$transaction([
+      this.prisma.subscription.update({
+        where: { id: pending.subscriptionId },
+        data: {
+          priceId: pending.priceId,
+          hardwareTierId: pending.hardwareTierId,
+          slots: pending.slots,
+        },
+      }),
+      ...(server
+        ? [
+            this.prisma.server.update({
+              where: { id: server.id },
+              data: {
+                cpuCores: pending.cpuCores,
+                memoryMb: pending.memoryMb,
+                diskMb: pending.diskMb,
+                slots: pending.slots,
+              },
+            }),
+          ]
+        : []),
+      this.prisma.pendingPlanChange.delete({ where: { id: pending.id } }),
+    ]);
+    // Push the new limits to the node agent live (best-effort + retried via the
+    // queue). Only meaningful when a server is attached.
+    if (server) {
+      await this.provisionQueue.add(JOB.RECONFIGURE, { serverId: server.id });
+    }
+  }
+
   async createInvoiceForSubscription(
     subscriptionId: string,
     opts: { discountMinor?: number; couponCode?: string; noTax?: boolean } = {},
@@ -1605,6 +1723,15 @@ export class BillingService {
     if (invoice.subscriptionId) {
       await this.reactivateOnPayment(invoice.subscriptionId);
       await this.provisionPaidServers(invoice.subscriptionId);
+    }
+
+    // Apply a paid plan UPGRADE: the staged change was held until this invoice
+    // cleared, so the server only moves to the new configuration now.
+    const paidUpgrade = await this.prisma.pendingPlanChange.findUnique({
+      where: { invoiceId },
+    });
+    if (paidUpgrade) {
+      await this.applyPendingPlanChange(paidUpgrade);
     }
 
     // Email a receipt (best-effort; never blocks settlement).
@@ -2066,6 +2193,16 @@ export class BillingService {
         data: { state: SubscriptionState.EXPIRED },
       });
       return { invoiceId: '', paid: false, reason: 'canceled' };
+    }
+
+    // Apply any scheduled DOWNGRADE before raising this period's invoice, so the
+    // renewal bills the new (lower) price and the server moves to the new config
+    // exactly at the period boundary.
+    const scheduled = await this.prisma.pendingPlanChange.findUnique({
+      where: { subscriptionId },
+    });
+    if (scheduled?.applyAtPeriodEnd) {
+      await this.applyPendingPlanChange(scheduled);
     }
 
     // Reuse an existing OPEN invoice for this subscription (the dunning case —

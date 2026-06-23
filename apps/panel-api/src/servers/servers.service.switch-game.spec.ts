@@ -78,6 +78,7 @@ describe('ServersService.switchGame', () => {
       {} as any, // NodesService — unused on this path
       {} as any, // NodeAgentClient — unused on this path
       { resolve: jest.fn(async (_s: any, v: any) => v ?? 'latest'), resolveByLoader: jest.fn(async (_l: any, v: any) => v ?? 'latest') } as any, // MinecraftResolverService
+      {} as any, // BillingService — unused on this path
       provisionQueue as any,
       reinstallQueue as any,
       suspensionQueue as any,

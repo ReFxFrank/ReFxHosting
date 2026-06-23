@@ -2,7 +2,7 @@
 
 import type { ComponentType } from "react";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Cpu, MemoryStick, HardDrive, ArrowRight, TrendingUp, TrendingDown, Users, Check } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
@@ -43,10 +43,36 @@ function intervalLabel(interval: string) {
 
 type UpgradeOptions = Awaited<ReturnType<typeof api.servers.upgradeOptions>>;
 type UpgradeTier = UpgradeOptions["tiers"][number];
+type PlanChangeResult = Awaited<ReturnType<typeof api.servers.upgrade>>;
+
+/**
+ * Route the outcome of a plan change. An UPGRADE is `invoiced` — the server
+ * stays on its current plan until the customer pays the new invoice, so we send
+ * them to Billing. A cheaper plan is `scheduled` for the next renewal; a no-cost
+ * change `applied` immediately.
+ */
+function handlePlanChange(
+  res: PlanChangeResult,
+  router: ReturnType<typeof useRouter>,
+) {
+  if (res.status === "invoiced") {
+    toast.success(
+      "Upgrade invoice created — pay it to apply your new plan. Your server stays on its current plan until payment clears.",
+    );
+    router.push("/billing");
+    return;
+  }
+  if (res.status === "scheduled") {
+    toast.success("Downgrade scheduled — it takes effect at your next renewal.");
+    return;
+  }
+  toast.success("Plan updated — changes applied now.");
+}
 
 export default function UpgradePage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const { data: opts, isLoading } = useQuery({
     queryKey: ["upgrade-options", id],
@@ -78,8 +104,8 @@ export default function UpgradePage() {
 
   const upgradeMutation = useMutation({
     mutationFn: () => api.servers.upgrade(id, { slots }),
-    onSuccess: () => {
-      toast.success("Plan updated — new size applies now; billing adjusts next cycle.");
+    onSuccess: (res) => {
+      handlePlanChange(res, router);
       queryClient.invalidateQueries({ queryKey: ["server", id] });
       queryClient.invalidateQueries({ queryKey: ["upgrade-options", id] });
       setConfirmOpen(false);
@@ -131,7 +157,7 @@ export default function UpgradePage() {
     <div className="space-y-6">
       <PageHeader
         title="Upgrade resources"
-        description="Scale your plan up or down. The new size applies now; billing adjusts on your next cycle."
+        description="Scale your plan up or down. Upgrades are billed now (prorated) and apply once paid; downgrades take effect at your next renewal."
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
@@ -239,7 +265,11 @@ export default function UpgradePage() {
               </div>
             )}
             <p className="mt-2 text-xs text-muted-foreground">
-              The new size applies immediately; the price difference is reflected on your next invoice.
+              {isDowngrade
+                ? "This is a downgrade: it takes effect at your next renewal, so you keep your current resources until then. No charge now."
+                : delta > 0
+                  ? "This is an upgrade: we'll create a prorated invoice now. Your server stays on its current size until that invoice is paid — then the new size applies automatically."
+                  : "No price change; the new size applies immediately."}
             </p>
           </div>
           <DialogFooter>
@@ -259,6 +289,7 @@ export default function UpgradePage() {
 /** Hardware-tier upgrade: pick a higher (or lower) tier card. */
 function TierUpgrade({ id, opts }: { id: string; opts: UpgradeOptions }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const tiers = opts.tiers;
   const current = tiers.find((t) => t.id === opts.currentTierId) ?? null;
   const [tierId, setTierId] = useState<string | null>(
@@ -269,8 +300,8 @@ function TierUpgrade({ id, opts }: { id: string; opts: UpgradeOptions }) {
 
   const upgradeMutation = useMutation({
     mutationFn: () => api.servers.upgrade(id, { hardwareTierId: tierId! }),
-    onSuccess: () => {
-      toast.success("Plan updated — new tier applies now; billing adjusts next cycle.");
+    onSuccess: (res) => {
+      handlePlanChange(res, router);
       queryClient.invalidateQueries({ queryKey: ["server", id] });
       queryClient.invalidateQueries({ queryKey: ["upgrade-options", id] });
       setConfirmOpen(false);
@@ -289,7 +320,7 @@ function TierUpgrade({ id, opts }: { id: string; opts: UpgradeOptions }) {
     <div className="space-y-6">
       <PageHeader
         title="Upgrade resources"
-        description="Move to a higher tier for more power, or a lower one to save. The new tier applies now; billing adjusts on your next cycle."
+        description="Move to a higher tier for more power, or a lower one to save. Upgrades are billed now (prorated) and apply once paid; downgrades take effect at your next renewal."
       />
 
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem] lg:items-start">
@@ -378,7 +409,11 @@ function TierUpgrade({ id, opts }: { id: string; opts: UpgradeOptions }) {
               </span>
             </div>
             <p className="mt-2 text-xs text-muted-foreground">
-              The new tier applies immediately; the price difference is reflected on your next invoice.
+              {isDowngrade
+                ? "This is a downgrade: it takes effect at your next renewal, so you keep your current tier until then. No charge now."
+                : delta > 0
+                  ? "This is an upgrade: we'll create a prorated invoice now. Your server stays on its current tier until that invoice is paid — then the new tier applies automatically."
+                  : "No price change; the new tier applies immediately."}
             </p>
           </div>
           <DialogFooter>

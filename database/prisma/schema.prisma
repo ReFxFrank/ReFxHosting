@@ -888,12 +888,38 @@ model Subscription {
 
   servers         Server[]
   invoices        Invoice[]
+  pendingPlanChange PendingPlanChange?
 
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
   @@index([userId])
   @@index([state])
+}
+
+/// A plan change (upgrade/downgrade) staged on a subscription but NOT yet applied
+/// to the running server. UPGRADES are gated on payment: `invoice` must be PAID
+/// before the change applies — the server stays on its OLD configuration until
+/// then. DOWNGRADES carry no invoice and apply at the next renewal
+/// (`applyAtPeriodEnd`). At most one pending change per subscription.
+model PendingPlanChange {
+  id               String        @id @db.Uuid
+  subscriptionId   String        @unique @db.Uuid
+  subscription     Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  // The upgrade invoice that must clear before applying. NULL for a downgrade.
+  invoiceId        String?       @unique @db.Uuid
+  invoice          Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  applyAtPeriodEnd Boolean       @default(false)
+
+  // Target configuration to apply once the gating condition is met.
+  priceId          String        @db.Uuid
+  hardwareTierId   String?       @db.Uuid
+  slots            Int
+  cpuCores         Float
+  memoryMb         Int
+  diskMb           Int
+
+  createdAt        DateTime      @default(now())
 }
 
 enum InvoiceState {
@@ -936,6 +962,7 @@ model Invoice {
   paidAt         DateTime?
   lineItems      InvoiceLineItem[]
   payments       Payment[]
+  pendingPlanChange PendingPlanChange?
 
   createdAt      DateTime      @default(now())
 
