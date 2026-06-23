@@ -31,6 +31,11 @@ jobs:
   prisma:
     name: Prisma schema validate
     runs-on: ubuntu-latest
+    env:
+      # `prisma validate` resolves the datasource url = env("DATABASE_URL"); a
+      # dummy value is enough (no DB connection is made). Without it the step
+      # fails with a getConfig validation error on every run.
+      DATABASE_URL: postgresql://user:pass@localhost:5432/db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v6
