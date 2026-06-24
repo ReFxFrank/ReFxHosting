@@ -26,9 +26,14 @@ import { join } from 'node:path';
 import { randomFillSync } from 'node:crypto';
 
 import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import * as argon2 from 'argon2';
 
-const prisma = new PrismaClient();
+// Prisma 7 connects via a driver adapter (no bundled engine). DATABASE_URL is
+// set by the migrate container at run time.
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
+});
 
 // ---------------------------------------------------------------------------
 // uuidv7 helper

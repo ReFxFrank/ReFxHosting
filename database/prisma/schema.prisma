@@ -14,15 +14,17 @@
 // ============================================================================
 
 generator client {
-  provider        = "prisma-client-js"
+  provider = "prisma-client-js"
   // Full-text search is handled by OpenSearch (see docs/09-infrastructure.md),
   // so no Postgres FTS preview feature is required here.
-  previewFeatures = ["metrics"]
+  // (The "metrics" preview feature was removed in Prisma 7; it was unused here.)
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // Prisma 7: the connection URL moved out of the schema. Migrate reads it from
+  // prisma.config.ts; the runtime connects via the pg driver adapter (see
+  // PrismaService). DATABASE_URL is supplied by the environment.
 }
 
 // ---------------------------------------------------------------------------

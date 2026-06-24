@@ -32,11 +32,13 @@ COPY <<'EOF' /repo/package.json
   "name": "refx-migrate",
   "private": true,
   "dependencies": {
-    "@prisma/client": "^6.19.3",
-    "prisma": "^6.19.3",
+    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-pg": "^7.8.0",
+    "pg": "^8.22.0",
+    "prisma": "^7.8.0",
     "argon2": "^0.41.1",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.0"
+    "typescript": "^5.9.0"
   }
 }
 EOF
@@ -63,8 +65,26 @@ EOF
 COPY database/prisma ./database/prisma
 COPY database/seed ./database/seed
 
+# Prisma 7 reads CLI config (schema path + Migrate's datasource url) from
+# prisma.config.ts and no longer accepts --schema. The runtime/seed connection
+# goes through the pg driver adapter; DATABASE_URL is injected at run time, with
+# a non-connecting placeholder so the build-time `generate` succeeds without it.
+COPY <<'EOF' /repo/prisma.config.ts
+import { defineConfig } from 'prisma/config';
+
+export default defineConfig({
+  schema: './database/prisma/schema.prisma',
+  migrations: { path: './database/prisma/migrations' },
+  datasource: {
+    url:
+      process.env.DATABASE_URL ??
+      'postgresql://placeholder:placeholder@localhost:5432/placeholder',
+  },
+});
+EOF
+
 # Generate the Prisma client at build time so the seed has it available.
-RUN npx prisma generate --schema ./database/prisma/schema.prisma
+RUN npx prisma generate
 
 # ---------------------------------------------------------------------------
 # Entrypoint:
@@ -80,20 +100,21 @@ RUN npx prisma generate --schema ./database/prisma/schema.prisma
 COPY <<'EOF' /usr/local/bin/run-migrate.sh
 #!/bin/sh
 set -e
-SCHEMA=./database/prisma/schema.prisma
+# Prisma 7: the schema path + Migrate datasource url come from prisma.config.ts
+# (in /repo), and --schema / --skip-generate were removed from the CLI.
 
 reconcile() {
   echo "[migrate] deploy failed — self-healing schema with 'prisma db push'"
   # Bring the live database up to the schema (additive: adds the missing
   # columns/tables without touching existing data). --accept-data-loss is
   # required by the CLI flag set even when no destructive change is needed.
-  npx prisma db push --schema "$SCHEMA" --accept-data-loss --skip-generate
+  npx prisma db push --accept-data-loss
   # Re-sync migration history so the next `migrate deploy` is a clean no-op
   # instead of re-running ADD COLUMN against now-existing columns.
   for dir in ./database/prisma/migrations/*/; do
     name=$(basename "$dir")
     [ -f "$dir/migration.sql" ] || continue
-    npx prisma migrate resolve --applied "$name" --schema "$SCHEMA" 2>/dev/null \
+    npx prisma migrate resolve --applied "$name" 2>/dev/null \
       || true
   done
   echo "[migrate] self-heal complete"
@@ -101,10 +122,10 @@ reconcile() {
 
 echo "[migrate] applying migrations (prisma migrate deploy)"
 if [ -d ./database/prisma/migrations ]; then
-  npx prisma migrate deploy --schema "$SCHEMA" || reconcile
+  npx prisma migrate deploy || reconcile
 else
   echo "[migrate] no migrations/ dir — using prisma db push (dev fallback)"
-  npx prisma db push --schema "$SCHEMA" --accept-data-loss
+  npx prisma db push --accept-data-loss
 fi
 
 if [ -f ./database/seed/seed.ts ]; then

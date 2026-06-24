@@ -43,8 +43,12 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci || npm install
-      - run: npx prisma validate --schema database/prisma/schema.prisma
-      - run: npx prisma generate --schema database/prisma/schema.prisma
+      # Prisma 7 removed --schema; config (schema path) lives in
+      # apps/panel-api/prisma.config.ts, so run the CLI from there.
+      - run: npx prisma validate
+        working-directory: apps/panel-api
+      - run: npx prisma generate
+        working-directory: apps/panel-api
 
   # ---------------------------------------------------------------------------
   node-apps:
@@ -71,7 +75,9 @@ jobs:
         run: npm ci || npm install
       - name: Generate Prisma client (panel-api)
         if: matrix.app == 'panel-api'
-        run: npx prisma generate --schema database/prisma/schema.prisma
+        working-directory: ${{ matrix.dir }}
+        # Prisma 7 removed --schema; the schema path lives in prisma.config.ts.
+        run: npm run prisma:generate
       - name: Lint
         working-directory: ${{ matrix.dir }}
         run: npm run lint --if-present
