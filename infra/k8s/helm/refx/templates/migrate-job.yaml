@@ -25,7 +25,9 @@ spec:
         - name: migrate
           image: {{ include "refx.image" (dict "Values" .Values "Chart" .Chart "image" .Values.migrations.image) }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["npx", "prisma", "migrate", "deploy", "--schema", "database/prisma/schema.prisma"]
+          # Prisma 7 removed --schema; the migrate image ships prisma.config.ts
+          # (schema path + datasource url) at its /repo workdir.
+          command: ["npx", "prisma", "migrate", "deploy"]
           envFrom:
             - secretRef:
                 name: {{ include "refx.secretName" . }}

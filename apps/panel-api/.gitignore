@@ -1,0 +1,5 @@
+
+# Compiled Prisma CLI config artifact (source is prisma.config.ts)
+prisma.config.js
+prisma.config.js.map
+prisma.config.d.ts

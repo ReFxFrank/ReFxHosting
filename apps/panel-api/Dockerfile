@@ -23,6 +23,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 COPY --from=deps /repo/apps/panel-api/node_modules apps/panel-api/node_modules
 COPY database/prisma database/prisma
 COPY apps/panel-api apps/panel-api
+# Prisma 7 resolves @prisma/client relative to the schema dir (database/prisma),
+# walking up to /repo/node_modules. This image keeps deps under apps/panel-api,
+# so expose them at the repo root for that resolution (mirrors the npm-workspace
+# hoist used in dev). Build-time only — the runtime stage imports normally.
+RUN ln -s apps/panel-api/node_modules /repo/node_modules
 WORKDIR /repo/apps/panel-api
 RUN npm run prisma:generate && npm run build
 
