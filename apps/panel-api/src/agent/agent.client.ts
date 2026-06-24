@@ -2,8 +2,13 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 import { Node } from '@prisma/client';
 import * as tls from 'node:tls';
+import { isIP } from 'node:net';
 import { createHash } from 'node:crypto';
-import { Agent as UndiciAgent, type Dispatcher } from 'undici';
+import {
+  Agent as UndiciAgent,
+  fetch as undiciFetch,
+  type Dispatcher,
+} from 'undici';
 import { AppConfig } from '../config/configuration';
 import { CryptoService } from '../common/crypto/crypto.service';
 import {
@@ -17,6 +22,15 @@ import {
 
 /** The agent caps signed request bodies at 32 MiB; stay under it for uploads. */
 export const AGENT_MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
+
+/**
+ * TLS SNI servername for a node host. Node rejects an IP servername (RFC 6066 —
+ * SNI is for hostnames only; on newer Node it throws outright), and many nodes
+ * are addressed by raw IP. Return undefined for IPs so we simply don't send SNI;
+ * the pinned cert is the identity check, so SNI is unnecessary there anyway.
+ */
+export const sniServerName = (host: string): string | undefined =>
+  isIP(host) ? undefined : host;
 
 export type PowerSignal = 'start' | 'stop' | 'restart' | 'kill';
 
@@ -120,7 +134,8 @@ export class NodeAgentClient {
       agent = new UndiciAgent({
         connect: {
           ca: node.agentCertPem,
-          servername: node.fqdn,
+          // SNI only valid for hostnames; the pinned `ca` is the identity check.
+          servername: sniServerName(node.fqdn),
           rejectUnauthorized: true,
           // We pin the EXACT leaf cert via `ca`, so the connection only succeeds
           // for that cert. Hostname matching is then redundant and would reject
@@ -145,7 +160,9 @@ export class NodeAgentClient {
         {
           host: node.fqdn,
           port: node.daemonPort,
-          servername: node.fqdn,
+          // Node throws on an IP servername (RFC 6066); without this, pinning a
+          // raw-IP node fails right here at capture.
+          servername: sniServerName(node.fqdn),
           rejectUnauthorized: false,
           timeout: this.timeoutMs,
         },
@@ -325,7 +342,7 @@ export class NodeAgentClient {
       Math.max(this.timeoutMs, 60_000),
     );
     try {
-      const res = await fetch(url, {
+      const res = await undiciFetch(url, {
         method: 'POST',
         headers: {
           'content-type': 'application/octet-stream',
@@ -333,10 +350,10 @@ export class NodeAgentClient {
           [SIGN_HEADER_TIMESTAMP]: timestamp,
           [SIGN_HEADER_SIGNATURE]: signature,
         },
-        body: bytes as unknown as BodyInit,
+        body: bytes,
         signal: controller.signal,
         dispatcher: this.dispatcherFor(node),
-      } as RequestInit & { dispatcher?: Dispatcher });
+      });
       if (!res.ok) {
         const text = await res.text().catch(() => '');
         throw new ServiceUnavailableException(
@@ -570,7 +587,7 @@ export class NodeAgentClient {
     const timer = setTimeout(() => controller.abort(), opts?.timeoutMs ?? this.timeoutMs);
 
     try {
-      const res = await fetch(url, {
+      const res = await undiciFetch(url, {
         method,
         headers: {
           'content-type': opts?.rawBody
@@ -583,9 +600,11 @@ export class NodeAgentClient {
         body: serialized || undefined,
         signal: controller.signal,
         // Pin the agent's TLS cert when enabled (undici dispatcher); otherwise
-        // the default transport is used.
+        // the default transport is used. Using undici's own fetch (not the
+        // global one) guarantees the dispatcher and fetch share an undici
+        // instance, so a version skew can't silently break every node call.
         dispatcher: this.dispatcherFor(node),
-      } as RequestInit & { dispatcher?: Dispatcher });
+      });
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
