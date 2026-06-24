@@ -1,9 +1,19 @@
 import { CronExpressionParser } from 'cron-parser';
 
-/** True if `expr` is a parseable 5-field cron expression. */
+/** True if `expr` is a parseable 5-field cron expression (or an @-alias). */
 export function isValidCron(expr: string): boolean {
+  if (typeof expr !== 'string') return false;
+  const trimmed = expr.trim();
+  // cron-parser v5 is lenient about shape: it accepts an empty string and odd
+  // field counts, treating missing fields as wildcards. Enforce the documented
+  // contract — exactly 5 fields, or an @-alias like @daily — up front.
+  if (!/^@\w+$/.test(trimmed) && trimmed.split(/\s+/).length !== 5) return false;
   try {
-    CronExpressionParser.parse(expr, { tz: 'UTC' });
+    // parse() is also LAZY in v5 — it doesn't validate field RANGES until the
+    // expression is iterated, so force one iteration to reject out-of-range
+    // fields (e.g. "99 99 * * *") rather than storing a schedule that can never
+    // advance.
+    CronExpressionParser.parse(trimmed, { tz: 'UTC' }).next();
     return true;
   } catch {
     return false;
