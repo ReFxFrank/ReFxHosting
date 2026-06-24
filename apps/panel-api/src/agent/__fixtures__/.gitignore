@@ -1,0 +1,4 @@
+# Test-only self-signed certificates (NOT secrets). The repo-wide `*.pem` ignore
+# would otherwise drop them; keep these tracked so the pinning integration test
+# (agent.client.pinning.int.spec.ts) can run in CI.
+!*.pem
