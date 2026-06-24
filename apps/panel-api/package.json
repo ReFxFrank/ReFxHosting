@@ -47,7 +47,7 @@
     "class-validator": "^0.15.1",
     "cron-parser": "^5.6.0",
     "fflate": "^0.8.3",
-    "graphql": "^16.11.0",
+    "graphql": "^17.0.1",
     "helmet": "^8.2.0",
     "ioredis": "^5.3.2",
     "nodemailer": "^9.0.1",
@@ -59,7 +59,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
     "stripe": "^22.2.2",
-    "undici": "^6.27.0",
+    "undici": "^8.5.0",
     "uuid": "^14.0.1",
     "ws": "^8.16.0",
     "zod": "^4.4.3"
