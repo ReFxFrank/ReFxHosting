@@ -1,5 +1,5 @@
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { generateSecret, generateSync } from 'otplib';
+import { generateSecret, generateSync, createGuardrails } from 'otplib';
 import { AuthService } from './auth.service';
 
 /**
@@ -187,6 +187,32 @@ describe('AuthService TOTP', () => {
           {},
         ),
       ).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('verifies a legacy otplib-12 (80-bit) secret at login instead of 500ing', async () => {
+      // 16 base32 chars = 10 bytes, exactly what otplib 12's
+      // authenticator.generateSecret() produced. otplib 13 rejects sub-128-bit
+      // secrets unless the guardrail is relaxed (see TOTP_GUARDRAILS).
+      const legacy = 'LEEBEYK2BVLX4LQ5';
+      prisma.user.findFirst.mockResolvedValue({
+        id: USER_ID,
+        email: 'u@example.com',
+        globalRole: 'USER',
+        passwordHash: await argonHashOf('correct-horse'),
+        state: 'ACTIVE',
+        totpEnabledAt: new Date(),
+        totpSecretEnc: `enc(${legacy})`,
+      });
+      const relaxed = createGuardrails({ MIN_SECRET_BYTES: 8 });
+      const res = await service.login(
+        {
+          email: 'u@example.com',
+          password: 'correct-horse',
+          totp: generateSync({ secret: legacy, guardrails: relaxed }),
+        },
+        { ip: '1.2.3.4' },
+      );
+      expect(res.accessToken).toBe('signed.jwt.token');
     });
 
     it('issues tokens when password and TOTP are both valid', async () => {

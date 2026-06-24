@@ -9,7 +9,12 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { generateSecret, generateURI, verifySync } from 'otplib';
+import {
+  createGuardrails,
+  generateSecret,
+  generateURI,
+  verifySync,
+} from 'otplib';
 import { Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
@@ -34,6 +39,13 @@ const REFRESH_ROTATION_GRACE_MS = 60 * 1000; // 60s
 // log in again; an idle one stays valid this long. Normal sessions use the
 // configured jwt.refreshTtl (default 30d).
 const TRUSTED_REFRESH_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
+
+// otplib 13 enforces a 16-byte (128-bit) minimum secret, but accounts enrolled
+// under otplib 12 have 10-byte (80-bit) base32 secrets — without relaxing the
+// floor, verifying their codes THROWS (a 500) instead of returning a result.
+// New enrollments use otplib's 160-bit default, so this only affects legacy
+// secrets. 8 bytes (64 bits) is a safe lower bound for any pre-existing secret.
+const TOTP_GUARDRAILS = createGuardrails({ MIN_SECRET_BYTES: 8 });
 
 /** Claims carried by the short-lived MFA login-challenge JWT. */
 interface MfaChallengeClaims {
@@ -169,7 +181,7 @@ export class AuthService {
       // Fast path: a valid TOTP code supplied inline clears the challenge.
       if (totpOn && dto.totp) {
         const secret = this.crypto.decrypt(user.totpSecretEnc!);
-        if (!verifySync({ token: dto.totp, secret }).valid) {
+        if (!verifySync({ token: dto.totp, secret, guardrails: TOTP_GUARDRAILS }).valid) {
           throw new UnauthorizedException('Invalid MFA code');
         }
         return this.issueTokens(user, ctx, { trusted: !!dto.rememberMe });
@@ -415,7 +427,7 @@ export class AuthService {
     });
     if (!user.totpSecretEnc) throw new BadRequestException('No TOTP enrollment in progress');
     const secret = this.crypto.decrypt(user.totpSecretEnc);
-    if (!verifySync({ token: code, secret }).valid) {
+    if (!verifySync({ token: code, secret, guardrails: TOTP_GUARDRAILS }).valid) {
       throw new BadRequestException('Invalid TOTP code');
     }
 
@@ -482,7 +494,7 @@ export class AuthService {
         throw new UnauthorizedException('MFA is not configured');
       }
       const secret = this.crypto.decrypt(user.totpSecretEnc);
-      if (!verifySync({ token: code, secret }).valid) {
+      if (!verifySync({ token: code, secret, guardrails: TOTP_GUARDRAILS }).valid) {
         throw new UnauthorizedException('Invalid MFA code');
       }
     }
