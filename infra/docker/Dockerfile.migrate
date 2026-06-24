@@ -120,6 +120,20 @@ reconcile() {
   echo "[migrate] self-heal complete"
 }
 
+# A FRESH Postgres volume restarts the server mid-init: the compose healthcheck
+# (pg_isready on the unix socket) can pass while the network TCP listener is
+# briefly down, so a migrate that starts here would fail with P1001. Wait for a
+# real TCP connection (via the pg driver we already bundle) before migrating.
+echo "[migrate] waiting for the database to accept connections..."
+i=0
+until node -e "const{Client}=require('pg');const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.end()).then(()=>process.exit(0)).catch(()=>process.exit(1))" 2>/dev/null; do
+  i=$((i+1))
+  if [ "$i" -ge 30 ]; then echo "[migrate] database unreachable after ~60s — giving up"; exit 1; fi
+  echo "[migrate] db not ready (attempt $i) — retrying in 2s"
+  sleep 2
+done
+echo "[migrate] database is reachable"
+
 echo "[migrate] applying migrations (prisma migrate deploy)"
 if [ -d ./database/prisma/migrations ]; then
   npx prisma migrate deploy || reconcile
