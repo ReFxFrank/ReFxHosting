@@ -86,6 +86,12 @@ jobs:
       - name: Test
         working-directory: ${{ matrix.dir }}
         run: npm run test --if-present -- --passWithNoTests
+      # e2e (supertest, mocked I/O — no DB/network) guards the integration wiring
+      # that unit tests mock away. panel-api only; setup-e2e.ts provides env.
+      - name: Test (e2e)
+        if: matrix.app == 'panel-api'
+        working-directory: ${{ matrix.dir }}
+        run: npm run test:e2e
 
   # ---------------------------------------------------------------------------
   node-agent:

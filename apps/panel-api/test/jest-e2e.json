@@ -6,6 +6,7 @@
   "transform": {
     "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "<rootDir>/tsconfig.json" }]
   },
+  "transformIgnorePatterns": ["/node_modules/(?!(otplib|@otplib|@scure|@noble)/)"],
   "testEnvironment": "node",
   "setupFilesAfterEnv": ["<rootDir>/test/setup-e2e.ts"]
 }

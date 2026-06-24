@@ -4,6 +4,7 @@ import { buildTestApp, PREFIX, type TestAppHandles } from './utils/test-app';
 import { ServersController } from '../src/servers/servers.controller';
 import { ServersService } from '../src/servers/servers.service';
 import { ServerResourcesService } from '../src/servers/server-resources.service';
+import { BillingService } from '../src/billing/billing.service';
 import { ScheduleRunner } from '../src/servers/schedule.runner';
 import { ModsService } from '../src/servers/mods.service';
 import { ModpackService } from '../src/servers/modpack.service';
@@ -30,6 +31,8 @@ describe('Servers (e2e)', () => {
       controllers: [ServersController],
       providers: [
         ServersService,
+        // Injected by ServersService; billing logic isn't under test here.
+        { provide: BillingService, useValue: {} },
         { provide: ServerResourcesService, useValue: {} },
         { provide: ScheduleRunner, useValue: { runNow: jest.fn() } },
         { provide: ModsService, useValue: {} },

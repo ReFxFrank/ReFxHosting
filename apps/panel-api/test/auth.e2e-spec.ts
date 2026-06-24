@@ -7,6 +7,7 @@ import { AuthService } from '../src/auth/auth.service';
 import { WebAuthnService } from '../src/auth/webauthn.service';
 import { ServersController } from '../src/servers/servers.controller';
 import { ServersService } from '../src/servers/servers.service';
+import { BillingService } from '../src/billing/billing.service';
 import { ServerResourcesService } from '../src/servers/server-resources.service';
 import { ScheduleRunner } from '../src/servers/schedule.runner';
 import { ModsService } from '../src/servers/mods.service';
@@ -41,6 +42,9 @@ describe('Auth (e2e)', () => {
         // WebAuthnService is needed only because AuthController injects it.
         { provide: WebAuthnService, useValue: {} },
         ServersService,
+        // ServersService injects BillingService (plan changes on settle); these
+        // auth/servers routing+validation tests don't exercise billing.
+        { provide: BillingService, useValue: {} },
         { provide: ServerResourcesService, useValue: {} },
         { provide: ScheduleRunner, useValue: { runNow: jest.fn() } },
         { provide: ModsService, useValue: {} },
@@ -108,7 +112,8 @@ describe('Auth (e2e)', () => {
         .post(`${PREFIX}/auth/register`)
         .send({
           email: 'new@example.com',
-          password: 'a-strong-password-123',
+          // Must satisfy the strong-password policy: lower, UPPER, number, symbol.
+          password: 'A-strong-password-123',
           addressLine1: '123 Main St',
           city: 'Springfield',
           region: 'IL',

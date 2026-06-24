@@ -16,6 +16,7 @@ import { EmailService } from '../../src/email/email.service';
 import { ApiKeyService } from '../../src/auth/api-key.service';
 import { UsersService } from '../../src/users/users.service';
 import { SettingsService } from '../../src/platform/settings.service';
+import { NotificationsService } from '../../src/platform/notifications.service';
 import { JwtStrategy } from '../../src/auth/strategies/jwt.strategy';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/auth/guards/roles.guard';
@@ -92,6 +93,9 @@ export async function buildTestApp(
       ApiKeyService,
       UsersService,
       SettingsService,
+      // Depends only on (mocked) Prisma; commonly pulled in transitively via
+      // BillingService, so provide it here rather than in every billing spec.
+      NotificationsService,
       JwtStrategy,
       // Auth guards (real).
       JwtAuthGuard,
