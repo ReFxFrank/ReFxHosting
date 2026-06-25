@@ -52,6 +52,16 @@ func (m *Manager) resolve(rel string) (string, error) {
 				return "", ErrTraversal
 			}
 		}
+		// The parent check above does NOT cover the final component: if the leaf
+		// is itself a symlink (e.g. planted by the game process), os.Open /
+		// os.OpenFile would follow it out of the jail (read/write/truncate
+		// arbitrary host files). Reject any final-component symlink — the file
+		// manager never follows symlinks, matching the SFTP server which refuses
+		// to create them. Lstat (not Stat) so the link itself is inspected; a
+		// not-yet-existent leaf (new file) returns an error and is allowed.
+		if fi, err := os.Lstat(abs); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			return "", ErrTraversal
+		}
 	}
 	return abs, nil
 }

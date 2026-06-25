@@ -74,7 +74,8 @@ const toList = (v: string | undefined): string[] =>
     .map((s) => s.trim())
     .filter(Boolean);
 
-export default (): AppConfig => ({
+export default (): AppConfig => {
+  const config: AppConfig = {
   env: process.env.NODE_ENV ?? 'development',
   port: toInt(process.env.PORT, 4000),
   apiPrefix: process.env.API_PREFIX ?? 'api/v1',
@@ -144,4 +145,22 @@ export default (): AppConfig => ({
     ttl: toInt(process.env.THROTTLE_TTL, 60),
     limit: toInt(process.env.THROTTLE_LIMIT, 120),
   },
-});
+  };
+
+  // Fail CLOSED: never boot production on the insecure development defaults
+  // (an all-zero encryption key makes "encrypted" secrets trivially decryptable;
+  // known JWT secrets let anyone forge sessions). Crash loudly instead.
+  if (config.env === 'production') {
+    const insecure: string[] = [];
+    if (config.secretsEncKey === '0'.repeat(64)) insecure.push('SECRETS_ENC_KEY');
+    if (config.jwt.accessSecret === 'dev-access-secret') insecure.push('JWT_ACCESS_SECRET');
+    if (config.jwt.refreshSecret === 'dev-refresh-secret') insecure.push('JWT_REFRESH_SECRET');
+    if (insecure.length > 0) {
+      throw new Error(
+        `Refusing to start in production with insecure default secret(s): ${insecure.join(', ')}. Set strong random values.`,
+      );
+    }
+  }
+
+  return config;
+};

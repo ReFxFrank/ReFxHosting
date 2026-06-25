@@ -1,6 +1,7 @@
 package files
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +37,37 @@ func TestResolveAllowsInside(t *testing.T) {
 	}
 	if !strings.HasPrefix(abs, filepath.Clean(root)) {
 		t.Errorf("resolved path %q escaped root %q", abs, root)
+	}
+}
+
+// A symlink planted inside the jail (e.g. by the game process) whose target is
+// outside the jail must NOT be followed for read or write — otherwise the file
+// manager reads/overwrites arbitrary host files.
+func TestResolveRejectsFinalComponentSymlinkEscape(t *testing.T) {
+	root := filepath.Clean(t.TempDir())
+	outside := filepath.Clean(t.TempDir())
+	secret := filepath.Join(outside, "secret.txt")
+	if err := os.WriteFile(secret, []byte("TOP-SECRET"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m, err := New(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(root, "link")); err != nil {
+		t.Skipf("symlinks unsupported on this platform: %v", err)
+	}
+
+	if rc, err := m.Read("link"); err == nil {
+		b, _ := io.ReadAll(rc)
+		rc.Close()
+		t.Fatalf("Read followed a symlink out of the jail; leaked %q", string(b))
+	}
+	if err := m.Write("link", strings.NewReader("PWNED")); err == nil {
+		t.Fatal("Write followed a symlink out of the jail")
+	}
+	if b, _ := os.ReadFile(secret); string(b) != "TOP-SECRET" {
+		t.Fatalf("outside file modified through symlink: %q", string(b))
 	}
 }
 

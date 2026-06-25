@@ -64,13 +64,36 @@ export class AuditInterceptor implements NestInterceptor {
     );
   }
 
-  private safeMeta(req: any): Record<string, unknown> {
-    const body = { ...(req?.body ?? {}) };
-    // Redact secrets and large base64 blobs (license keys, avatar data URLs) so
-    // the audit metadata stays small and free of sensitive payloads.
-    for (const k of ['password', 'token', 'secret', 'refreshToken', 'data', 'dataUrl']) {
-      if (k in body) body[k] = '[redacted]';
+  // Any key whose NAME matches is redacted at every depth — payment-gateway
+  // secrets, Steam/SFTP/DB passwords, tokens, TOTP seeds, encryption keys, etc.
+  // Over-redaction is safe here; leaking a secret into the audit log is not.
+  private static readonly SENSITIVE_KEY =
+    /pass|secret|token|key|credential|seed|totp|mfa|otp|cvv|card|webhook/i;
+
+  /** Recursively redact sensitive keys and truncate large blobs. */
+  private redact(value: unknown, depth = 0): unknown {
+    if (value == null || depth > 6) return depth > 6 ? '[depth]' : value;
+    if (Array.isArray(value)) return value.map((v) => this.redact(v, depth + 1));
+    if (typeof value === 'object') {
+      const out: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+        out[k] = AuditInterceptor.SENSITIVE_KEY.test(k)
+          ? '[redacted]'
+          : this.redact(v, depth + 1);
+      }
+      return out;
     }
-    return { method: req?.method, params: req?.params, body };
+    // Truncate large strings (license keys, avatar/base64 data URLs) regardless
+    // of key so the audit metadata stays small.
+    if (typeof value === 'string' && value.length > 512) return '[truncated]';
+    return value;
+  }
+
+  private safeMeta(req: any): Record<string, unknown> {
+    return {
+      method: req?.method,
+      params: this.redact(req?.params ?? {}),
+      body: this.redact(req?.body ?? {}),
+    };
   }
 }

@@ -142,6 +142,39 @@ export class ServersService {
     return this.withPrimaryAllocation(server);
   }
 
+  /**
+   * Ownership-scoped get for surfaces that DON'T sit behind PermissionGuard
+   * (e.g. the GraphQL resolver). Restricts to servers the caller owns or is an
+   * active sub-user on — same scoping as list() — so it can't be used as an IDOR
+   * to read another tenant's server. Staff use the admin surface, not this.
+   */
+  async getForUser(user: AuthUser, id: string): Promise<Server> {
+    const server = await this.prisma.server.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        OR: [
+          { ownerId: user.id },
+          { subUsers: { some: { userId: user.id, state: 'ACTIVE' } } },
+        ],
+      },
+      include: {
+        template: true,
+        node: true,
+        allocations: true,
+        variables: true,
+      },
+    });
+    if (!server) throw new NotFoundException('Server not found');
+    return this.withPrimaryAllocation(server);
+  }
+
+  /** Game-switch history, gated on the caller's access to the server first. */
+  async gameHistoryForUser(user: AuthUser, id: string) {
+    await this.getForUser(user, id); // throws NotFound if the caller can't see it
+    return this.gameHistory(id);
+  }
+
   // ---- create / provision ------------------------------------------------
 
   async create(

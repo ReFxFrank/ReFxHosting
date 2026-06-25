@@ -142,6 +142,9 @@ export class AuthController {
   }
 
   @Public()
+  // Tighter than the global per-IP limit: blunts password brute-forcing while
+  // still allowing a legitimate user a few retries.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('login')
   @HttpCode(200)
   login(@Body() dto: LoginDto, @Req() req: any) {

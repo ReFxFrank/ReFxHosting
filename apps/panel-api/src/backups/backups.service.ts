@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Backup, Node, Server } from '@prisma/client';
@@ -8,6 +8,9 @@ import { uuidv7 } from '../common/util/uuid';
 import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { BackupJob, JOB, QUEUE } from '../queues/queue.constants';
 import { CreateBackupDto } from './dto/backups.dto';
+
+/** Max non-failed backups a single server may hold (disk + job-flood guard). */
+const MAX_BACKUPS_PER_SERVER = 25;
 
 /**
  * Server backups. Backup rows are the source of truth for state; the actual
@@ -65,6 +68,16 @@ export class BackupsService {
 
   async create(serverId: string, dto: CreateBackupDto): Promise<Backup> {
     await this.serverWithNode(serverId);
+    // Cap backups per server to bound disk use and queued backup jobs — without
+    // this a client can enqueue unbounded backups (disk exhaustion / job flood).
+    const existing = await this.prisma.backup.count({
+      where: { serverId, state: { not: 'FAILED' } },
+    });
+    if (existing >= MAX_BACKUPS_PER_SERVER) {
+      throw new ConflictException(
+        `Backup limit reached (${MAX_BACKUPS_PER_SERVER}). Delete an existing backup before creating another.`,
+      );
+    }
     const backup = await this.prisma.backup.create({
       data: {
         id: uuidv7(),
