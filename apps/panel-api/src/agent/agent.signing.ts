@@ -55,11 +55,14 @@ export function signRequest(
   path: string,
   timestamp: string,
   body: string,
+  includeQuery = false,
 ): string {
   const bodyHash = createHash('sha256').update(body ?? '').digest('hex');
-  const canonical = `${method.toUpperCase()}\n${pathWithoutQuery(
-    path,
-  )}\n${timestamp}\n${bodyHash}`;
+  // includeQuery covers path/mode/wipe query params in the signature. Default
+  // off (legacy path-only) so a panel upgrade can't break not-yet-updated agents;
+  // flip AGENT_SIGN_QUERY=true once every node runs the dual-accept agent.
+  const canonicalPath = includeQuery ? path : pathWithoutQuery(path);
+  const canonical = `${method.toUpperCase()}\n${canonicalPath}\n${timestamp}\n${bodyHash}`;
   return createHmac('sha256', key).update(canonical).digest('hex');
 }
 
@@ -74,11 +77,11 @@ export function signRequestRaw(
   path: string,
   timestamp: string,
   body: Uint8Array,
+  includeQuery = false,
 ): string {
   const bodyHash = createHash('sha256').update(body).digest('hex');
-  const canonical = `${method.toUpperCase()}\n${pathWithoutQuery(
-    path,
-  )}\n${timestamp}\n${bodyHash}`;
+  const canonicalPath = includeQuery ? path : pathWithoutQuery(path);
+  const canonical = `${method.toUpperCase()}\n${canonicalPath}\n${timestamp}\n${bodyHash}`;
   return createHmac('sha256', key).update(canonical).digest('hex');
 }
 

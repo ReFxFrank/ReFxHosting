@@ -41,6 +41,8 @@ export interface AppConfig {
   };
   agent: {
     requestTimeoutMs: number;
+    /** Cover the request query string in the panel->agent HMAC signature. */
+    signQuery: boolean;
   };
   stripe: {
     secretKey: string;
@@ -123,6 +125,10 @@ export default (): AppConfig => {
   },
   agent: {
     requestTimeoutMs: toInt(process.env.AGENT_REQUEST_TIMEOUT_MS, 15000),
+    // OFF by default. Flip to true ONLY after every node runs an agent that
+    // dual-accepts the signature (v1.0.10+); otherwise not-yet-updated nodes
+    // reject panel calls. See apps/node-agent authSignature.
+    signQuery: (process.env.AGENT_SIGN_QUERY ?? 'false').toLowerCase() === 'true',
   },
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY ?? '',
