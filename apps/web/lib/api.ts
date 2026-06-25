@@ -530,6 +530,8 @@ export const api = {
     voice: (id: string) => http.get<VoiceInfo>(`/servers/${id}/voice`),
     voiceAcceptLicense: (id: string) =>
       http.post<{ accepted: true }>(`/servers/${id}/voice/accept-license`),
+    voiceRotateQuery: (id: string) =>
+      http.post<{ accepted: true }>(`/servers/${id}/voice/rotate-query`),
     voiceStatus: (id: string) =>
       http.get<VoiceStatus>(`/servers/${id}/voice/status`),
     voiceRename: (id: string, name: string) =>

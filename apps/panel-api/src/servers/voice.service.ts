@@ -102,6 +102,8 @@ export interface VoiceStatus {
 
 const STATUS_FILE = 'refx-voice-status.txt';
 const CMD_FILE = 'refx-voice-cmd.txt';
+/** Marker that asks the launcher to rotate the ServerQuery admin password. */
+const ROTATE_FILE = 'refx-voice-rotate.txt';
 /** TeamSpeak commercial license file (read from the server's working dir). */
 const LICENSE_KEY_FILE = 'licensekey.dat';
 
@@ -247,6 +249,24 @@ export class VoiceService {
       where: { id: serverId },
       data: { environment },
     });
+    return { accepted: true };
+  }
+
+  /**
+   * Rotate the ServerQuery `serveradmin` password. Drops a marker on the volume;
+   * the TS3 launcher regenerates the password via `clientsetserverquerylogin` on
+   * its next tick and rewrites refx-voice.json. Fail-safe: the launcher only
+   * overwrites the credentials file on success, so a failed rotation leaves the
+   * current login intact. The new password surfaces via info() once written.
+   */
+  async rotateQueryPassword(serverId: string): Promise<{ accepted: true }> {
+    const server = await this.loadVoice(serverId);
+    await this.agent.uploadFileBytes(
+      server.node,
+      serverId,
+      ROTATE_FILE,
+      Buffer.from('1'),
+    );
     return { accepted: true };
   }
 

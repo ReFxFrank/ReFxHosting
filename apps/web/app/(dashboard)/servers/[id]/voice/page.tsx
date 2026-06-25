@@ -111,6 +111,15 @@ export default function VoicePage() {
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Couldn't record acceptance"),
   });
+  const rotateQuery = useMutation({
+    mutationFn: () => api.servers.voiceRotateQuery(id),
+    onSuccess: () => {
+      toast.success("Rotating the ServerQuery password — it'll refresh here shortly.");
+      qc.invalidateQueries({ queryKey: ["server", id, "voice"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Couldn't rotate the password"),
+  });
   // Commercial license key (licensekey.dat) upload — lifts the free 32-slot cap.
   const licenseInputRef = useRef<HTMLInputElement>(null);
   const uploadLicense = useMutation({
@@ -824,14 +833,25 @@ export default function VoicePage() {
               <div className="rounded-lg border p-3">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm font-medium">ServerQuery admin</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setRevealed((v) => !v)}
-                  >
-                    {revealed ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-                    {revealed ? "Hide" : "Reveal"}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={rotateQuery.isPending}
+                      onClick={() => rotateQuery.mutate()}
+                      title="Generate a new ServerQuery admin password"
+                    >
+                      <RefreshCw className="size-4" /> Rotate
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setRevealed((v) => !v)}
+                    >
+                      {revealed ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      {revealed ? "Hide" : "Reveal"}
+                    </Button>
+                  </div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Login">

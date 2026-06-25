@@ -336,6 +336,13 @@ export class ServersController {
     return this.voice.rename(id, dto.name);
   }
 
+  @Post(':id/voice/rotate-query')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.voice.rotate-query', targetType: 'Server', targetParam: 'id' })
+  voiceRotateQuery(@Param('id') id: string) {
+    return this.voice.rotateQueryPassword(id);
+  }
+
   @Post(':id/voice/kick')
   @RequirePermissions('settings.update')
   @Audit({ action: 'server.voice.kick', targetType: 'Server', targetParam: 'id' })
