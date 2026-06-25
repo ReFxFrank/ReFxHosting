@@ -30,6 +30,9 @@ const STATE_ACTIONS: { state: TicketState; label: string }[] = [
   { state: "OPEN", label: "Reopen ticket" },
 ];
 
+/** How often the open thread re-checks for new replies / status changes. */
+const TICKET_POLL_MS = 15_000;
+
 function authorName(message: TicketMessage) {
   const a = message.author;
   if (!a) return "Unknown";
@@ -46,6 +49,13 @@ export default function TicketDetailPage() {
   const { data: ticket, isLoading } = useQuery({
     queryKey: ["support", "ticket", id],
     queryFn: () => api.support.ticket(id),
+    // Keep the open thread live: a reply or status change from the other party
+    // shows up without a manual refresh (the global default is
+    // refetchOnWindowFocus:false). Polling pauses automatically while the tab is
+    // hidden (refetchIntervalInBackground defaults to false), so the focus
+    // refetch covers the come-back.
+    refetchInterval: TICKET_POLL_MS,
+    refetchOnWindowFocus: true,
   });
 
   const invalidate = () =>

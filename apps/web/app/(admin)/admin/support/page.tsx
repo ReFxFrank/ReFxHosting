@@ -77,6 +77,9 @@ const PRIORITY_VARIANT: Record<TicketPriority, BadgeProps["variant"]> = {
   URGENT: "destructive",
 };
 
+/** How often an open ticket drawer re-checks for new replies / status changes. */
+const TICKET_POLL_MS = 15_000;
+
 function stateLabel(s: TicketState) {
   return STATES.find((o) => o.value === s)?.label ?? s;
 }
@@ -220,6 +223,11 @@ function TicketDrawer({
     queryKey: ["admin", "ticket", ticketId],
     queryFn: () => api.support.ticket(ticketId as string),
     enabled: open,
+    // Live updates while the drawer is open: a customer reply (or another agent's
+    // note) appears without a manual refresh, mirroring the customer ticket view.
+    // Gated by `enabled: open`, so no polling once the drawer is closed.
+    refetchInterval: TICKET_POLL_MS,
+    refetchOnWindowFocus: true,
   });
   const staffQ = useQuery({
     queryKey: ["support", "staff"],
