@@ -111,6 +111,19 @@ export type ServerState =
 
 export type PowerSignal = "start" | "stop" | "restart" | "kill";
 
+/**
+ * Voice (e.g. TeamSpeak) vs game server. Set once at creation and immutable —
+ * the authoritative discriminator the UI uses to keep voice servers separate.
+ */
+export type ServerType = "GAME_SERVER" | "VOICE_SERVER";
+
+/** True for a voice server, by the authoritative serverType discriminator. */
+export function isVoiceServer(
+  server?: { serverType?: ServerType | null } | null,
+): boolean {
+  return server?.serverType === "VOICE_SERVER";
+}
+
 export interface Server {
   id: string;
   shortId: string;
@@ -124,6 +137,7 @@ export interface Server {
   templateVersion: number | null;
   state: ServerState;
   deployMethod: DeployMethod;
+  serverType: ServerType;
   cpuCores: number;
   memoryMb: number;
   swapMb: number;
@@ -422,7 +436,10 @@ export interface VoiceInfo {
   ready: boolean;
   queryAdmin: string | null;
   queryPassword: string | null;
+  /** Raw (telnet) ServerQuery port — loopback-only on the node, default 10011. */
   queryPort: number;
+  /** ServerQuery-over-SSH port (TeamSpeak query_ssh_port), default 10022. */
+  querySshPort: number;
   privilegeKey: string | null;
   licenseAccepted: boolean;
   /**

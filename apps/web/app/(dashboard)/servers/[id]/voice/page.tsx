@@ -833,7 +833,7 @@ export default function VoicePage() {
                     {revealed ? "Hide" : "Reveal"}
                   </Button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Login">
                     <code className="rounded bg-muted px-2 py-1 font-mono text-sm">
                       {data.queryAdmin ?? "serveradmin"}
@@ -855,12 +855,24 @@ export default function VoicePage() {
                       </Button>
                     </div>
                   </Field>
-                  <Field label="Query port">
+                  <Field label="SSH query port">
+                    <code className="rounded bg-muted px-2 py-1 font-mono text-sm">
+                      {data.querySshPort}
+                    </code>
+                  </Field>
+                  <Field label="Raw query port">
                     <code className="rounded bg-muted px-2 py-1 font-mono text-sm">
                       {data.queryPort}
                     </code>
                   </Field>
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  ServerQuery is bound on the server host over{" "}
+                  <span className="font-medium text-foreground">SSH</span> (encrypted, port {data.querySshPort})
+                  and raw telnet (port {data.queryPort}), using the login and password above. These admin
+                  ports aren&apos;t published to the internet by default — an operator must expose port{" "}
+                  {data.querySshPort} before remote ServerQuery-over-SSH tooling can reach it.
+                </p>
               </div>
 
               <Button

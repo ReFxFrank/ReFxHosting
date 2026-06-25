@@ -81,6 +81,18 @@ export const DbEngine = {
 } as const;
 export type DbEngine = (typeof DbEngine)[keyof typeof DbEngine];
 
+/**
+ * Distinguishes a voice (e.g. TeamSpeak 3) server from a game server. Set once
+ * at server creation and immutable — the authoritative game-vs-voice
+ * discriminator (replaces the old template-slug heuristic). Distinct from
+ * ProductType.VOICE_SERVER, which classifies a billing *product*, not a server.
+ */
+export const ServerType = {
+  GAME_SERVER: 'GAME_SERVER',
+  VOICE_SERVER: 'VOICE_SERVER',
+} as const;
+export type ServerType = (typeof ServerType)[keyof typeof ServerType];
+
 export const ProductType = {
   GAME_SERVER: 'GAME_SERVER',
   VOICE_SERVER: 'VOICE_SERVER',

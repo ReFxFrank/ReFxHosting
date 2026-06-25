@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { isVoiceServer } from "@/lib/types";
 
 /**
  * Server landing page. Game servers open on the Console; voice servers (which
@@ -20,8 +21,7 @@ export default function ServerIndex() {
 
   useEffect(() => {
     if (!server) return;
-    const isVoice = (server.template?.slug ?? "").startsWith("teamspeak");
-    router.replace(`/servers/${id}/${isVoice ? "voice" : "console"}`);
+    router.replace(`/servers/${id}/${isVoiceServer(server) ? "voice" : "console"}`);
   }, [server, id, router]);
 
   return null;

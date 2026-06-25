@@ -12,6 +12,8 @@ interface VoiceCreds {
   queryAdmin?: string;
   queryPassword?: string;
   queryPort?: number;
+  /** ServerQuery-over-SSH port (TeamSpeak `query_ssh_port`, default 10022). */
+  querySshPort?: number;
   privilegeKey?: string;
   slots?: number;
 }
@@ -26,7 +28,10 @@ export interface VoiceInfo {
   ready: boolean;
   queryAdmin: string | null;
   queryPassword: string | null;
+  /** Raw (telnet) ServerQuery port — loopback-only on the node, default 10011. */
   queryPort: number;
+  /** ServerQuery-over-SSH port (TeamSpeak `query_ssh_port`), default 10022. */
+  querySshPort: number;
   /** First-boot ServerQuery admin privilege key (single-use in the TS client). */
   privilegeKey: string | null;
   /** Whether the TeamSpeak license has been accepted (required to start). */
@@ -148,9 +153,8 @@ export class VoiceService {
     });
     if (!server) throw new NotFoundException('Server not found');
 
-    const slug = server.template?.slug ?? '';
-    if (!slug.startsWith('teamspeak')) {
-      throw new BadRequestException('This server is not a TeamSpeak voice server');
+    if (server.serverType !== 'VOICE_SERVER') {
+      throw new BadRequestException('This server is not a voice server');
     }
 
     const primary =
@@ -191,6 +195,7 @@ export class VoiceService {
       queryAdmin: creds?.queryAdmin ?? null,
       queryPassword: creds?.queryPassword ?? null,
       queryPort: creds?.queryPort ?? 10011,
+      querySshPort: creds?.querySshPort ?? 10022,
       privilegeKey: creds?.privilegeKey ?? null,
       licenseAccepted,
       licenseKeyInstalled,
@@ -258,8 +263,8 @@ export class VoiceService {
       include: { node: true, template: true },
     });
     if (!server) throw new NotFoundException('Server not found');
-    if (!(server.template?.slug ?? '').startsWith('teamspeak')) {
-      throw new BadRequestException('This server is not a TeamSpeak voice server');
+    if (server.serverType !== 'VOICE_SERVER') {
+      throw new BadRequestException('This server is not a voice server');
     }
 
     const empty: VoiceStatus = {
@@ -408,8 +413,8 @@ export class VoiceService {
       include: { node: true, template: true },
     });
     if (!server) throw new NotFoundException('Server not found');
-    if (!(server.template?.slug ?? '').startsWith('teamspeak')) {
-      throw new BadRequestException('This server is not a TeamSpeak voice server');
+    if (server.serverType !== 'VOICE_SERVER') {
+      throw new BadRequestException('This server is not a voice server');
     }
     return server;
   }

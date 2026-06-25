@@ -160,6 +160,7 @@ export class ServersService {
 
     const template = await this.prisma.gameTemplate.findUnique({
       where: { id: dto.templateId },
+      include: { category: { select: { slug: true } } },
     });
     if (!template) throw new NotFoundException('Template not found');
     this.assertTemplateAllowed(subscription.product.allowedTemplateIds, dto.templateId);
@@ -238,6 +239,12 @@ export class ServersService {
         // the first payment clears (see billing.markInvoicePaid → provision).
         state: opts.deferProvision ? 'PENDING_PAYMENT' : 'INSTALLING',
         deployMethod: (template.deployMethods[0] as any) ?? 'DOCKER',
+        // Voice servers are a separate product line; record the type now and
+        // treat it as immutable (a voice server is never game-switched). Classify
+        // by the TEMPLATE — identical to adminCreate() and the migration backfill —
+        // so an order and an admin-create of the same template always agree,
+        // independent of how the product's per-slot pricing happens to be set.
+        serverType: this.isVoiceTemplate(template) ? 'VOICE_SERVER' : 'GAME_SERVER',
         cpuCores: limits.cpuCores,
         memoryMb: limits.memoryMb,
         diskMb: limits.diskMb,
@@ -306,11 +313,22 @@ export class ServersService {
       template.category?.slug === 'voice' || template.slug.startsWith('teamspeak');
     const slots = dto.slots && dto.slots > 0 ? Math.floor(dto.slots) : null;
 
-    // Resources fall back to the template's recommended specs when not supplied
-    // (always the case for voice servers, which the staff form sizes by slots).
-    const cpuCores = dto.cpuCores ?? template.recCpuCores;
-    const memoryMb = dto.memoryMb ?? template.recMemoryMb;
-    const diskMb = dto.diskMb ?? template.recDiskMb;
+    // Voice servers are SLOT-BASED: staff pick a slot count, never RAM/CPU. Size
+    // them from the egg's recommended specs and require a slot count — any raw
+    // cpu/mem/disk in the request is ignored so voice can't carry a hardware
+    // designation. Game servers use the supplied (or recommended) specs as before.
+    if (isVoice && !slots) {
+      throw new BadRequestException('Voice servers require a slot count.');
+    }
+    const cpuCores = isVoice
+      ? template.recCpuCores
+      : (dto.cpuCores ?? template.recCpuCores);
+    const memoryMb = isVoice
+      ? template.recMemoryMb
+      : (dto.memoryMb ?? template.recMemoryMb);
+    const diskMb = isVoice
+      ? template.recDiskMb
+      : (dto.diskMb ?? template.recDiskMb);
 
     // Inject the slot cap into the container environment so the runtime (and
     // TeamSpeak's ServerQuery, via the egg launcher) can enforce it. SLOTS is
@@ -334,6 +352,8 @@ export class ServersService {
         templateVersion: template.version,
         state: 'INSTALLING',
         deployMethod: (template.deployMethods[0] as any) ?? 'DOCKER',
+        // Authoritative voice/game discriminator, set once at creation.
+        serverType: isVoice ? 'VOICE_SERVER' : 'GAME_SERVER',
         cpuCores,
         memoryMb,
         diskMb,
@@ -457,9 +477,9 @@ export class ServersService {
     });
     if (!server) throw new NotFoundException('Server not found');
 
-    // Voice servers (TeamSpeak) can't be switched to a game — they keep their
-    // identity for life. Reject here too, not just in the UI.
-    if (this.isVoiceServer(server.template)) {
+    // Voice servers can't be switched to a game — they keep their identity for
+    // life. Authoritative check on the stored discriminator, not the template.
+    if (server.serverType === 'VOICE_SERVER') {
       throw new BadRequestException('Voice servers cannot be switched to a game.');
     }
 
@@ -481,8 +501,9 @@ export class ServersService {
     if (!target) throw new NotFoundException('Target template not found');
 
     // Voice and game servers are separate worlds: a game server can't be
-    // switched *into* a voice server (the reverse is rejected above).
-    if (this.isVoiceServer(target)) {
+    // switched *into* a voice template (the reverse is rejected above). The
+    // target has no Server row yet, so classify it by template.
+    if (this.isVoiceTemplate(target)) {
       throw new BadRequestException(
         'Game servers cannot be switched into a voice server.',
       );
@@ -1390,9 +1411,9 @@ export class ServersService {
     });
     if (!server) throw new NotFoundException('Server not found');
 
-    // Voice servers (TeamSpeak) keep their identity for the life of the server —
-    // game switching doesn't apply, so there's nothing to switch to.
-    if (this.isVoiceServer(server.template)) return [];
+    // Voice servers keep their identity for the life of the server — game
+    // switching doesn't apply, so there's nothing to switch to.
+    if (server.serverType === 'VOICE_SERVER') return [];
 
     const allowed = server.subscription?.product.allowedTemplateIds ?? [];
     const templates = await this.prisma.gameTemplate.findMany({
@@ -1402,11 +1423,16 @@ export class ServersService {
     });
     // Never offer voice templates as switch targets — voice servers are a
     // separate product line and can't be swapped with game servers.
-    return templates.filter((t) => !this.isVoiceServer(t));
+    return templates.filter((t) => !this.isVoiceTemplate(t));
   }
 
-  /** True for voice templates (TeamSpeak / the "voice" category). */
-  private isVoiceServer(
+  /**
+   * Classifies a TEMPLATE as voice (TeamSpeak / the "voice" category). Used only
+   * where there is no Server row to read serverType from — i.e. deciding a
+   * server's type AT CREATION and rejecting voice templates as switch targets.
+   * For an existing server, prefer the authoritative `server.serverType`.
+   */
+  private isVoiceTemplate(
     template: { slug: string; category?: { slug: string } | null } | null,
   ): boolean {
     if (!template) return false;

@@ -20,6 +20,10 @@ export class ServerModel {
   @Field()
   deployMethod!: string;
 
+  /** GAME_SERVER | VOICE_SERVER — the authoritative voice/game discriminator. */
+  @Field()
+  serverType!: string;
+
   @Field(() => Float)
   cpuCores!: number;
 

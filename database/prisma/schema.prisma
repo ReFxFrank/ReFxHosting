@@ -475,6 +475,15 @@ enum ServerState {
   PENDING_PAYMENT
 }
 
+/// Distinguishes a voice (e.g. TeamSpeak 3) server from a game server. Set ONCE
+/// at creation and treated as immutable — a voice server can never be
+/// game-switched — so this is the AUTHORITATIVE discriminator for all
+/// game-vs-voice separation (it replaces the old template-slug heuristic).
+enum ServerType {
+  GAME_SERVER
+  VOICE_SERVER
+}
+
 model Server {
   id              String        @id @db.Uuid
   // Short, user-facing identifier (e.g. "a1b2c3d4") used in URLs/SFTP user.
@@ -495,6 +504,8 @@ model Server {
 
   state           ServerState   @default(INSTALLING)
   deployMethod    DeployMethod  @default(DOCKER)
+  // Voice vs game — authoritative discriminator, set at creation, never changes.
+  serverType      ServerType    @default(GAME_SERVER)
 
   // Resource limits (the customer's plan; survives game switch)
   cpuCores        Float
@@ -545,6 +556,7 @@ model Server {
   @@index([ownerId])
   @@index([nodeId])
   @@index([state])
+  @@index([serverType])
 }
 
 enum WorkshopKind {

@@ -77,7 +77,9 @@ export default function SwitchGamePage() {
   );
 
   const currentId = server?.templateId;
-  const isVoice = (server?.template?.slug ?? "").startsWith("teamspeak");
+  // Authoritative discriminator (matches the layout, backend and migration) —
+  // not the template slug, which misses non-TeamSpeak voice servers.
+  const isVoice = server?.serverType === "VOICE_SERVER";
 
   // Voice servers (TeamSpeak) keep their identity for life — game switching
   // doesn't apply. Show a clear message rather than an empty catalog.
