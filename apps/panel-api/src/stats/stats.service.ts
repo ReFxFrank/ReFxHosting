@@ -41,9 +41,13 @@ export class StatsService {
     await this.serverWithNode(serverId);
     const windowMs = RANGE_MS[range] ?? RANGE_MS['1h'];
     const since = new Date(Date.now() - windowMs);
-    return this.prisma.serverStat.findMany({
+    // Cap the result set: ServerStat is written every ~5s, so a wide range can be
+    // hundreds of thousands of rows. Take the newest N, then return chronological.
+    const rows = await this.prisma.serverStat.findMany({
       where: { serverId, recordedAt: { gte: since } },
-      orderBy: { recordedAt: 'asc' },
+      orderBy: { recordedAt: 'desc' },
+      take: 5000,
     });
+    return rows.reverse();
   }
 }

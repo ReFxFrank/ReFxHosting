@@ -20,12 +20,20 @@ export class ServersResolver {
   }
 
   @Query(() => ServerModel, { name: 'server' })
-  async server(@Args('id') id: string): Promise<ServerModel> {
-    return (await this.servers.get(id)) as unknown as ServerModel;
+  async server(
+    @CurrentUser() user: AuthUser,
+    @Args('id') id: string,
+  ): Promise<ServerModel> {
+    // Scoped to the caller — this query is NOT behind PermissionGuard, so the
+    // service enforces ownership/membership (prevents cross-tenant IDOR).
+    return (await this.servers.getForUser(user, id)) as unknown as ServerModel;
   }
 
   @Query(() => [GameSwitchLogModel], { name: 'serverGameHistory' })
-  async gameHistory(@Args('id') id: string): Promise<GameSwitchLogModel[]> {
-    return (await this.servers.gameHistory(id)) as unknown as GameSwitchLogModel[];
+  async gameHistory(
+    @CurrentUser() user: AuthUser,
+    @Args('id') id: string,
+  ): Promise<GameSwitchLogModel[]> {
+    return (await this.servers.gameHistoryForUser(user, id)) as unknown as GameSwitchLogModel[];
   }
 }

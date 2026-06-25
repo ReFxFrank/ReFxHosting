@@ -36,6 +36,18 @@ export class AdminPermissionGuard implements CanActivate {
     const user: AuthUser | undefined = req?.user;
     if (!user) throw new ForbiddenException('Not authenticated');
 
+    // API-key WRITE-scope ceiling on the admin surface: a scoped key inherits its
+    // user's full RBAC permissions, so without this a READ-only key could drive
+    // mutating admin actions. Require WRITE/ADMIN scope for mutating REST methods
+    // (mirrors the per-server PermissionGuard); reads stay allowed with any scope.
+    if (user.apiKeyScopes && context.getType<'graphql'>() !== 'graphql') {
+      const method = (req?.method ?? 'GET').toUpperCase();
+      if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+        const hasWrite = user.apiKeyScopes.some((s) => s === 'WRITE' || s === 'ADMIN');
+        if (!hasWrite) throw new ForbiddenException('API key lacks write scope');
+      }
+    }
+
     const perms = user.permissions ?? [];
 
     if (required.length === 0) {

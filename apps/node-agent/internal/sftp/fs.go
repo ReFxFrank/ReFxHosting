@@ -38,6 +38,21 @@ func (f *jailedFS) abs(p string) (string, error) {
 	if abs != f.root && !strings.HasPrefix(abs, f.root+string(os.PathSeparator)) {
 		return "", errEscape
 	}
+	if abs != f.root {
+		// Reject symlink escapes. The game process can plant a symlink on the
+		// volume; without this, Fileread/Filewrite would follow it to read/write
+		// host files outside the jail. Check the parent's real path AND reject a
+		// final-component symlink (the SFTP server never follows symlinks; it also
+		// refuses to create them). A not-yet-existent leaf (new file) is allowed.
+		if parent, err := filepath.EvalSymlinks(filepath.Dir(abs)); err == nil {
+			if parent != f.root && !strings.HasPrefix(parent, f.root+string(os.PathSeparator)) {
+				return "", errEscape
+			}
+		}
+		if fi, err := os.Lstat(abs); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+			return "", errEscape
+		}
+	}
 	return abs, nil
 }
 

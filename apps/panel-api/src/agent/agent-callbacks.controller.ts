@@ -185,9 +185,16 @@ export class AgentCallbacksController {
   @UseGuards(AgentSignatureGuard)
   @Post('stats')
   async stats(
+    @Req() req: ReqWithNode,
     @Body() body: { stats?: StatSample[] },
   ): Promise<{ ok: true }> {
-    const samples = body.stats ?? [];
+    const all = body.stats ?? [];
+    if (all.length === 0) return { ok: true };
+
+    // A node is only authenticated as ITSELF; drop any samples for servers that
+    // don't belong to it so one node can't write another node's telemetry/state.
+    const owned = await this.ownedServerIds(req.refxNodeId!, all.map((s) => s.serverId));
+    const samples = all.filter((s) => owned.has(s.serverId));
     if (samples.length === 0) return { ok: true };
 
     await this.prisma.serverStat.createMany({
@@ -215,8 +222,16 @@ export class AgentCallbacksController {
   @Public()
   @UseGuards(AgentSignatureGuard)
   @Post('logs')
-  logs(@Body() body: { lines?: LogLine[] }): { ok: true } {
-    for (const line of body.lines ?? []) {
+  async logs(
+    @Req() req: ReqWithNode,
+    @Body() body: { lines?: LogLine[] },
+  ): Promise<{ ok: true }> {
+    const lines = body.lines ?? [];
+    // Only relay console lines for servers that belong to the calling node, so a
+    // node can't inject output into another tenant's console stream.
+    const owned = await this.ownedServerIds(req.refxNodeId!, lines.map((l) => l.serverId));
+    for (const line of lines) {
+      if (!owned.has(line.serverId)) continue;
       this.console.emitConsole(line.serverId, {
         type: 'console',
         line: line.line,
@@ -230,7 +245,13 @@ export class AgentCallbacksController {
   @Public()
   @UseGuards(AgentSignatureGuard)
   @Post('power-event')
-  async powerEvent(@Body() body: PowerEventBody): Promise<{ ok: true }> {
+  async powerEvent(
+    @Req() req: ReqWithNode,
+    @Body() body: PowerEventBody,
+  ): Promise<{ ok: true }> {
+    // Reject power events for servers that aren't on the calling node.
+    const owned = await this.ownedServerIds(req.refxNodeId!, [body.serverId]);
+    if (!owned.has(body.serverId)) return { ok: true };
     const state = this.toServerState(body.state);
     if (state) await this.applyServerState(body.serverId, state);
     this.console.emitPower(body.serverId, {
@@ -244,8 +265,18 @@ export class AgentCallbacksController {
   @UseGuards(AgentSignatureGuard)
   @Post('backup-progress')
   async backupProgress(
+    @Req() req: ReqWithNode,
     @Body() body: BackupProgressBody,
   ): Promise<{ ok: true }> {
+    // Only let a node update backups whose server lives on that node.
+    const backup = await this.prisma.backup
+      .findUnique({
+        where: { id: body.backupId },
+        select: { server: { select: { nodeId: true } } },
+      })
+      .catch(() => null);
+    if (!backup || backup.server.nodeId !== req.refxNodeId) return { ok: true };
+
     const data: Prisma.BackupUpdateInput = {};
     const state = this.toBackupState(body.status);
     if (state) data.state = state;
@@ -264,6 +295,20 @@ export class AgentCallbacksController {
   }
 
   // ---- mapping helpers ----------------------------------------------------
+
+  /** Of the given serverIds, those that actually belong to `nodeId`. */
+  private async ownedServerIds(
+    nodeId: string,
+    serverIds: string[],
+  ): Promise<Set<string>> {
+    const ids = [...new Set(serverIds.filter(Boolean))];
+    if (ids.length === 0) return new Set();
+    const rows = await this.prisma.server.findMany({
+      where: { id: { in: ids }, nodeId },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
+  }
 
   /**
    * Persist a server's state; on a notable transition (online / offline /
