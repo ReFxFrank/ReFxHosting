@@ -56,8 +56,19 @@ func (s *Server) authSignature(next http.Handler) http.Handler {
 			r.Body = io.NopCloser(bytes.NewReader(b))
 		}
 
-		// Path used in the canonical string is the raw request path.
-		if !panel.Verify(s.deps.SigningKey, r.Method, r.URL.Path, ts, sig, body) {
+		// Accept EITHER canonical path form, so a panel can transition to signing
+		// the query string without a flag day:
+		//   - legacy: r.URL.Path           (query NOT covered by the signature)
+		//   - current: path + "?" + query  (query IS covered — path/mode/wipe params)
+		// An attacker still can't forge either form without the per-node key, and a
+		// query-signed request whose query is tampered fails both checks.
+		pathOnly := r.URL.Path
+		withQuery := pathOnly
+		if r.URL.RawQuery != "" {
+			withQuery = pathOnly + "?" + r.URL.RawQuery
+		}
+		if !panel.Verify(s.deps.SigningKey, r.Method, withQuery, ts, sig, body) &&
+			!panel.Verify(s.deps.SigningKey, r.Method, pathOnly, ts, sig, body) {
 			writeError(w, http.StatusUnauthorized, "invalid signature")
 			return
 		}

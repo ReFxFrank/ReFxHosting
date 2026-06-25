@@ -107,6 +107,8 @@ export class NodeAgentClient {
   private readonly timeoutMs: number;
   private readonly secretsEncKey: string;
   private readonly pinningEnabled: boolean;
+  /** Whether to cover the query string in panel->agent signatures (rollout flag). */
+  private readonly signQuery: boolean;
   /** Cache one undici dispatcher per pinned cert so we don't rebuild per call. */
   private readonly dispatchers = new Map<string, UndiciAgent>();
 
@@ -115,6 +117,7 @@ export class NodeAgentClient {
     private readonly crypto: CryptoService,
   ) {
     this.timeoutMs = config.get<AppConfig['agent']>('agent')!.requestTimeoutMs;
+    this.signQuery = config.get<AppConfig['agent']>('agent')!.signQuery;
     this.secretsEncKey = config.get<string>('secretsEncKey')!;
     this.pinningEnabled = config.get<AppConfig['agentTlsPinning']>('agentTlsPinning')!;
   }
@@ -334,6 +337,7 @@ export class NodeAgentClient {
       path,
       timestamp,
       bytes,
+      this.signQuery,
     );
 
     const controller = new AbortController();
@@ -581,6 +585,7 @@ export class NodeAgentClient {
       path,
       timestamp,
       serialized,
+      this.signQuery,
     );
 
     const controller = new AbortController();
