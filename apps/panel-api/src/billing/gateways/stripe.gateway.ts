@@ -81,8 +81,12 @@ export class StripeGateway implements PaymentGateway {
         );
       }
       this.cachedClient = new Stripe(key, {
-        // Pin the API version the SDK major targets; bump deliberately when
-        // upgrading the SDK (stripe-node v22 → 2026-05-27.dahlia).
+        // Pin the API version to the one the SDK targets. `stripe` is also pinned
+        // to an EXACT version in package.json: the panel-api Docker build runs
+        // `npm install` without a lockfile, so a caret range pulls a newer SDK
+        // whose required apiVersion literal no longer matches and fails the build.
+        // Bump the SDK and this string together, deliberately
+        // (stripe-node 22.2.3 → 2026-05-27.dahlia).
         apiVersion: '2026-05-27.dahlia',
         typescript: true,
       });

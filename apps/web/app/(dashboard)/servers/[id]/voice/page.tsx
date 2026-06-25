@@ -867,11 +867,13 @@ export default function VoicePage() {
                   </Field>
                 </div>
                 <p className="mt-2 text-xs text-muted-foreground">
-                  ServerQuery is bound on the server host over{" "}
-                  <span className="font-medium text-foreground">SSH</span> (encrypted, port {data.querySshPort})
-                  and raw telnet (port {data.queryPort}), using the login and password above. These admin
-                  ports aren&apos;t published to the internet by default — an operator must expose port{" "}
-                  {data.querySshPort} before remote ServerQuery-over-SSH tooling can reach it.
+                  ServerQuery is reachable over <span className="font-medium text-foreground">SSH</span>{" "}
+                  (encrypted) on port {data.querySshPort}, using the login and password above — e.g.{" "}
+                  <code className="rounded bg-muted px-1 font-mono">
+                    ssh {data.queryAdmin ?? "serveradmin"}@{data.address?.split(":")[0] ?? "<server-ip>"} -p {data.querySshPort}
+                  </code>
+                  . Only the encrypted SSH ServerQuery is published; the raw (telnet) port {data.queryPort} has
+                  no allocation, so it isn&apos;t reachable from outside the node.
                 </p>
               </div>
 
