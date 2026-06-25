@@ -165,6 +165,19 @@ describe('ServersService.switchGame', () => {
     expect(reinstallQueue.add).not.toHaveBeenCalled();
   });
 
+  it('rejects switching a voice server to a game (authoritative serverType, not slug)', async () => {
+    // The source check keys off the stored serverType discriminator, so it fires
+    // before any target lookup even if the template looks game-ish.
+    prisma.server.findFirst.mockResolvedValue(
+      makeServer({ serverType: 'VOICE_SERVER', template: { slug: 'minecraft' } }),
+    );
+    await expect(
+      service.switchGame(SERVER_ID, ACTOR_ID, dto()),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.gameTemplate.findUnique).not.toHaveBeenCalled();
+    expect(reinstallQueue.add).not.toHaveBeenCalled();
+  });
+
   it('on success writes an audit log, repoints the server, clears variables and queues a reinstall', async () => {
     prisma.server.findFirst.mockResolvedValue(makeServer());
     prisma.gameTemplate.findUnique.mockResolvedValue(makeTarget());

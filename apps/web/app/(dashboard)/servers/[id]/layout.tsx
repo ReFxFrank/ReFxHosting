@@ -1,10 +1,12 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { usePathname, useParams } from "next/navigation";
+import { usePathname, useParams, useRouter } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ArrowLeft, CreditCard } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { isVoiceServer } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ServerStateBadge, Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,19 +32,22 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
   const isMinecraft = slug === "minecraft" || slug.startsWith("minecraft-");
   const supportsMods = isMinecraft && loader !== "vanilla";
   const supportsWorkshop = !!server?.template?.supportsWorkshop;
-  const isVoice = slug.startsWith("teamspeak");
-  // Minecraft/Mods/Modpacks tabs are Minecraft-only; Workshop is Steam-only;
-  // Voice is TeamSpeak-only.
+  const isVoice = isVoiceServer(server);
+  // Minecraft/Mods/Modpacks tabs are Minecraft-only; Workshop is Steam-only.
+  // Voice servers are a separate product line, so the game-oriented sections
+  // (console + live compute, switch-game, databases, schedules, upgrade) don't
+  // apply and are hidden — leaving Overview, Files, Backups and Settings.
   const filtered = serverTabs(id).filter((t) => {
     if (t.href.endsWith("/minecraft")) return isMinecraft;
     if (t.href.endsWith("/mods")) return supportsMods;
     if (t.href.endsWith("/modpacks")) return isMinecraft;
     if (t.href.endsWith("/workshop")) return supportsWorkshop;
     if (t.href.endsWith("/voice")) return isVoice;
-    // Voice servers have no game console / live computing usage.
     if (t.href.endsWith("/console")) return !isVoice;
-    // Voice servers keep their identity for life — no game switching.
     if (t.href.endsWith("/switch-game")) return !isVoice;
+    if (t.href.endsWith("/databases")) return !isVoice;
+    if (t.href.endsWith("/schedules")) return !isVoice;
+    if (t.href.endsWith("/upgrade")) return !isVoice;
     return true;
   });
 
@@ -56,6 +61,25 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
           return voice ? [{ ...voice, label: "Overview" }, ...rest] : filtered;
         })()
       : filtered;
+
+  // Hard separation: a voice server reached on a game-only section by direct URL
+  // / bookmark (e.g. /console, which would otherwise open a console WebSocket) is
+  // sent to the voice overview. Rendering the notice instead of {children} also
+  // stops that page from ever mounting.
+  const router = useRouter();
+  const voiceAllowed =
+    pathname === `/servers/${id}` ||
+    ["/voice", "/files", "/backups", "/settings"].some((s) => pathname.endsWith(s));
+  const onGameOnlyPath = !voiceAllowed;
+  // A confirmed voice server on a game-only section is redirected to its overview.
+  const blockedForVoice = !!server && isVoice && onGameOnlyPath;
+  // Until the server is loaded we don't yet know its type, so HOLD rendering of
+  // any game-only section — otherwise a voice server would briefly mount it
+  // (e.g. the console, which opens a WebSocket) during the cold direct-URL load.
+  const holdForLoad = onGameOnlyPath && !server;
+  useEffect(() => {
+    if (blockedForVoice) router.replace(`/servers/${id}/voice`);
+  }, [blockedForVoice, id, router]);
 
   return (
     <div className="space-y-6">
@@ -108,7 +132,17 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
         })}
       </nav>
 
-      <div>{children}</div>
+      <div>
+        {blockedForVoice ? (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            Redirecting to the voice overview…
+          </p>
+        ) : holdForLoad ? (
+          <Skeleton className="h-40 w-full" />
+        ) : (
+          children
+        )}
+      </div>
     </div>
   );
 }

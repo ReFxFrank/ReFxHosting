@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, Trash2, ExternalLink, Power, Play, RotateCw, Square, Zap } from "lucide-react";
+import { HardDrive, Plus, Minus, Trash2, ExternalLink, Power, Play, RotateCw, Square, Zap } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -411,21 +411,64 @@ export default function AdminServersPage() {
             )}
 
             {isVoice ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="srv-slots">Slots (max simultaneous users)</Label>
-                <Input
-                  id="srv-slots"
-                  type="number"
+              <div className="space-y-2">
+                <Label htmlFor="srv-slots">Slots (max simultaneous voice users)</Label>
+                {/* Slot picker — voice servers are provisioned by slot count, not
+                    RAM/CPU. Stepper + slider over 1..1024 (staff are trusted; the
+                    free TS3 license caps at 32, a key lifts it). */}
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={form.slots <= 1}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, slots: Math.max(1, f.slots - 1) }))
+                    }
+                  >
+                    <Minus className="size-4" />
+                  </Button>
+                  <Input
+                    id="srv-slots"
+                    type="number"
+                    min={1}
+                    max={1024}
+                    step={1}
+                    value={form.slots}
+                    className="w-24 text-center"
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        slots: Math.min(1024, Math.max(1, Math.floor(Number(e.target.value) || 1))),
+                      }))
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon-sm"
+                    disabled={form.slots >= 1024}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, slots: Math.min(1024, f.slots + 1) }))
+                    }
+                  >
+                    <Plus className="size-4" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground">slots</span>
+                </div>
+                <input
+                  type="range"
                   min={1}
+                  max={1024}
                   step={1}
-                  value={form.slots}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, slots: Number(e.target.value) }))
-                  }
+                  value={Math.min(1024, Math.max(1, form.slots))}
+                  onChange={(e) => setForm((f) => ({ ...f, slots: Number(e.target.value) }))}
+                  className="w-full accent-primary"
+                  aria-label="Slots"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Voice servers are sized by slots. CPU, memory and disk are set
-                  automatically from this template&apos;s recommended specs
+                  Voice servers are sized by slots — no RAM/CPU designation. CPU,
+                  memory and disk auto-size from this template&apos;s recommended specs
                   {selectedTemplate
                     ? ` (${selectedTemplate.recCpuCores} vCPU · ${selectedTemplate.recMemoryMb} MB RAM · ${selectedTemplate.recDiskMb} MB disk).`
                     : "."}
