@@ -26,10 +26,9 @@ function ok(b) { return b ? 'OK' : 'MISSING/BAD'; }
 
 // ---- 1) Load config the SAME way configuration.ts does ---------------------
 const keyP8 = (
-  process.env.APNS_KEY_P8 ??
-  (process.env.APNS_KEY_P8_BASE64
+  process.env.APNS_KEY_P8_BASE64
     ? Buffer.from(process.env.APNS_KEY_P8_BASE64, 'base64').toString('utf8')
-    : '')
+    : process.env.APNS_KEY_P8 || ''
 ).replace(/\\n/g, '\n');
 const keyId = process.env.APNS_KEY_ID ?? '';
 const teamId = process.env.APNS_TEAM_ID ?? '';
@@ -140,9 +139,22 @@ function interpret(r) {
     console.log(`  DB query failed: ${e.message}`);
   }
 
-  // ---- 5) LIVE SEND to real tokens (only with `send`) ------------------------
+  // ---- 5) LIVE SEND -----------------------------------------------------------
   const mode = process.argv[2];
   const emailFilter = process.argv[3];
+  // `token <hex>` — send to a literal token passed on the CLI (no DB needed).
+  if (mode === 'token' && process.argv[3]) {
+    console.log('\n=== [5b] LIVE TEST-SEND to the supplied token ===');
+    const r = await apnsSend(process.argv[3].trim(), payloadFor({}));
+    console.log(`  status=${r.status} apns-id=${r.apnsId} reason=${r.reason || r.error || ''} => ${interpret(r)}`);
+    if (client) await client.end().catch(() => {});
+    console.log('\n=== VERDICT ===');
+    console.log(r.status === 200
+      ? 'APNs ACCEPTED the push (200) — backend fully RULED OUT; issue is device display/Focus settings.'
+      : `APNs returned ${r.status} ${r.reason || r.error || ''} — see interpretation above.`);
+    line();
+    return;
+  }
   if (mode === 'send' && rows.length) {
     console.log('\n=== [5b] LIVE TEST-SEND to real iOS tokens ===');
     // Re-read full tokens (we only had prefixes above).

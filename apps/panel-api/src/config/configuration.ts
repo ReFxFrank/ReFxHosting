@@ -164,11 +164,13 @@ export default (): AppConfig => {
     // The .p8 may be supplied directly (APNS_KEY_P8) or base64-encoded
     // (APNS_KEY_P8_BASE64) to survive single-line env files; literal "\n"
     // escapes are normalised back to real newlines either way.
+    // Prefer the base64 form when provided — it survives single-line env files
+    // (raw multi-line .p8 in an env_file gets truncated to its first line). Only
+    // fall back to a raw APNS_KEY_P8 when no base64 is set.
     keyP8: (
-      process.env.APNS_KEY_P8 ??
-      (process.env.APNS_KEY_P8_BASE64
+      process.env.APNS_KEY_P8_BASE64
         ? Buffer.from(process.env.APNS_KEY_P8_BASE64, 'base64').toString('utf8')
-        : '')
+        : process.env.APNS_KEY_P8 || ''
     ).replace(/\\n/g, '\n'),
     keyId: process.env.APNS_KEY_ID ?? '',
     teamId: process.env.APNS_TEAM_ID ?? '',
