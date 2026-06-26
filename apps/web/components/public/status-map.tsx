@@ -1,5 +1,6 @@
 import type { StatusLevel, StatusRegion } from "@/lib/types";
-import { regionCoords, project, flagEmoji } from "@/lib/geo";
+import { regionCoords, project } from "@/lib/geo";
+import { CountryFlag } from "@/components/ui/country-flag";
 import { LAND_PATHS } from "@/lib/world-land";
 
 const DOT: Record<StatusLevel, string> = {
@@ -92,7 +93,7 @@ export function StatusMap({ regions }: { regions: StatusRegion[] }) {
                 <span className={`relative inline-flex size-2.5 rounded-full ${DOT[s]} ring-2 ring-black/40`} />
               </span>
               <span className="pointer-events-none absolute left-1/2 top-4 -translate-x-1/2 whitespace-nowrap rounded-md bg-black/50 px-1.5 py-0.5 text-[10px] font-medium text-white/90 backdrop-blur-sm">
-                {flagEmoji(region.country)} {region.name}
+                <CountryFlag code={region.country} className="align-middle" /> {region.name}
               </span>
             </div>
           );

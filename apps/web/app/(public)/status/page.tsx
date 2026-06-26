@@ -7,7 +7,7 @@ import { api } from "@/lib/api";
 import type { StatusLevel, StatusIncident, IncidentImpact, StatusRegion } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusMap } from "@/components/public/status-map";
-import { flagEmoji } from "@/lib/geo";
+import { CountryFlag } from "@/components/ui/country-flag";
 
 const IMPACT: Record<IncidentImpact, { label: string; cls: string }> = {
   OUTAGE: { label: "Outage", cls: "border-red-500/30 bg-red-500/[0.06] text-red-400" },
@@ -208,7 +208,6 @@ function Row({ name, status }: { name: string; status: StatusLevel }) {
 
 function LocationRow({ region }: { region: StatusRegion }) {
   const m = META[region.status];
-  const flag = flagEmoji(region.country);
   const nodeLabel =
     region.nodesTotal === 0
       ? "—"
@@ -220,7 +219,7 @@ function LocationRow({ region }: { region: StatusRegion }) {
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="flex items-center gap-2 text-sm font-medium">
-            {flag ? <span aria-hidden="true">{flag}</span> : null}
+            <CountryFlag code={region.country} />
             {region.name}
             <span className="text-xs font-normal text-muted-foreground">{region.country}</span>
           </p>
