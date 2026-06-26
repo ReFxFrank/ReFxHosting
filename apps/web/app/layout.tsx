@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+// Self-hosted country-flag SVGs (bundled at build time; no external requests).
+import "flag-icons/css/flag-icons.min.css";
 import { Providers } from "@/components/providers";
 import { CookieConsent } from "@/components/shared/cookie-consent";
 

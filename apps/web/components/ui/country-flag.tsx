@@ -1,15 +1,13 @@
-"use client";
-
-import { useState } from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Cross-platform country flag.
+ * Cross-platform country flag, fully self-hosted.
  *
  * Emoji flags (regional-indicator codepoints) DON'T render on Windows — Chrome/
- * Edge there show the two-letter code instead (e.g. "CA"). So render an SVG flag
- * image, and if it can't load (offline / blocked / unknown code) fall back to a
- * styled uppercase code chip so it still looks intentional everywhere.
+ * Edge there show the two-letter code instead (e.g. "CA"). We render the flag via
+ * `flag-icons`, whose SVGs are bundled into the build (no external requests), so
+ * it looks identical on every OS. Unknown / non-2-letter codes fall back to a
+ * styled uppercase code chip so it still looks intentional.
  */
 export function CountryFlag({
   code,
@@ -19,10 +17,8 @@ export function CountryFlag({
   className?: string;
 }) {
   const cc = (code ?? "").trim().toLowerCase();
-  const valid = /^[a-z]{2}$/.test(cc);
-  const [failed, setFailed] = useState(false);
 
-  if (!valid || failed) {
+  if (!/^[a-z]{2}$/.test(cc)) {
     if (!cc) return null;
     return (
       <span
@@ -38,18 +34,14 @@ export function CountryFlag({
   }
 
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={`https://flagcdn.com/${cc}.svg`}
-      alt={cc.toUpperCase()}
-      width={18}
-      height={13}
-      loading="lazy"
-      onError={() => setFailed(true)}
+    <span
       className={cn(
-        "inline-block h-[13px] w-[18px] rounded-[2px] object-cover align-[-2px]",
+        `fi fi-${cc}`,
+        "inline-block h-[13px] w-[18px] rounded-[2px] align-[-2px]",
         className,
       )}
+      role="img"
+      aria-label={cc.toUpperCase()}
     />
   );
 }
