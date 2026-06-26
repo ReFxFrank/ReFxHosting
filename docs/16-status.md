@@ -17,7 +17,7 @@ Legend:
 > typechecks; the node-agent builds/vets/tests on linux/amd64, linux/arm64,
 > windows/amd64; `apps/web` builds, typechecks, and lints; and `apps/panel-api`
 > compiles with 0 type errors, boots (all modules init, all REST routes map, the
-> code-first GraphQL schema generates), and passes **150 unit + 47 e2e tests**.
+> code-first GraphQL schema generates), and passes **291 unit + 47 e2e tests**.
 
 ## Components
 
@@ -25,9 +25,9 @@ Legend:
 |-----------|--------|-------|
 | `database` (Prisma schema) | **Done** | Full canonical schema across all domains; validates. **Committed migration chain** (`0_init` → auth-hardening, storefront, node port-range, user contact/address, RBAC roles, platform settings). Seed script + ~24 game templates that **auto-load create-only on every deploy** (new eggs appear without `SEED_DEMO`); other demo content is gated behind `SEED_DEMO` (first-run only) so deleted data isn't resurrected. |
 | `packages/shared` | **Done** | Enums mirroring the schema, panel↔agent WS protocol, per-server permission strings + `hasPermission`, common DTOs. Typechecks clean. (Apps still carry local copies pending migration onto it.) |
-| `panel-api` (NestJS) | **Done (foundation)** | 118 TS files across auth, users, servers, nodes, billing, support, platform, agent, queues, common, prisma. Compiles clean and boots. |
-| `node-agent` (Go) | **Done (foundation)** | 43 Go files. `Runtime` interface with real Docker + native-process backends, build-tagged limits, WS hub, signed control API, file jail, backups, SFTP, stats. Cross-compiles + tests pass. |
-| `web` (Next.js) | **Done (foundation)** | shadcn/ui design system, 28 routes incl. live console, file manager, billing, support, admin, storefront, and the game-switch flow. Builds/typechecks/lints. |
+| `panel-api` (NestJS) | **Done (foundation)** | 222 TS files across auth, users, servers, nodes, billing, orders, support, platform, push, status, agent, queues, common, prisma. Compiles clean and boots. |
+| `node-agent` (Go) | **Done (foundation)** | 61 Go files. `Runtime` interface with real Docker + native-process backends, build-tagged limits, WS hub, signed control API, file jail, backups, SFTP, stats. Cross-compiles + tests pass. |
+| `web` (Next.js) | **Done (foundation)** | shadcn/ui design system, ~60 routes incl. live console, file manager, billing, support, admin, storefront, public status page, legal pages, and the game-switch flow. Builds/typechecks/lints. |
 | `infra/docker` | **Done** | Full Compose stack (postgres, redis, opensearch, minio, rabbitmq, prometheus, grafana, loki, panel-api, web) + observability provisioning + migrate service. |
 | `infra/k8s/helm/refx` | **Done** | Helm chart: Deployments/Services for panel-api+web, HPAs, Ingress (WS timeouts), ConfigMap/Secret, ServiceAccount, NetworkPolicy, pre-upgrade migrate Job, NOTES. |
 | `infra/scripts` | **Done** | `install-node.sh` (Ubuntu/Debian/Alma/Rocky), `install-node.ps1` (Windows Server), `refx-agent.service`, `bootstrap.sh`. |
@@ -128,6 +128,8 @@ beyond a single build session, and are called out so expectations are clear:
 - **OpenSearch indexing, migration importers** (Pterodactyl/AMP/TCAdmin) —
   designed (docs 11) with `TODO(impl)` stubs. (Transactional email delivery for
   password reset / verification is implemented via nodemailer/SMTP.)
-- **Test coverage** — 150 unit + 47 e2e (panel-api) and security-critical agent
-  paths are covered; broader coverage (esp. the modpack installer and web E2E) is
+- **Test coverage** — 291 unit + 47 e2e (panel-api) and security-critical agent
+  paths are covered, including the billing settlement/dunning/renewal engine, the
+  auth/credential hardening controls, node-to-node transfers, APNs push, and the
+  status rollup; broader coverage (esp. the modpack installer and web E2E) is
   still growing.

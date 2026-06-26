@@ -6,14 +6,14 @@
 
 ### The open, multi‑OS **game & voice** server‑hosting platform — with GPortal‑style game switching
 
-**Game servers** sell on configurable **hardware tiers** (Low · Mid · High). **Voice servers** (TeamSpeak 3) sell **per slot**. Customers buy a server **once** and swap between Minecraft, Rust, ARK, Valheim, Palworld, CS2, FiveM and more **without redeploying** — a production‑grade, self‑hostable alternative to **Pterodactyl**, **AMP**, and **GPortal** with an original cross‑platform node agent, recurring **Stripe + PayPal** billing, and a built‑in helpdesk.
+**Game servers** sell on configurable **hardware tiers** (Low · Mid · High). **Voice servers** (TeamSpeak 3) sell **per slot**. Customers buy a server **once** and swap between Minecraft, Rust, ARK, Valheim, Palworld, CS2, FiveM and more **without redeploying** — a production‑grade, self‑hostable alternative to **Pterodactyl**, **AMP**, and **GPortal** with an original cross‑platform node agent, recurring **Stripe + PayPal** billing, a built‑in helpdesk, a **native iOS companion app** with **APNs push**, and a **public status page** with a live world map and operator incidents.
 
 <br/>
 
 [![CI](https://github.com/refxfrank/refxhosting/actions/workflows/ci.yml/badge.svg)](./.github/workflows/ci.yml)
 [![Security](https://github.com/refxfrank/refxhosting/actions/workflows/security.yml/badge.svg)](./.github/workflows/security.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-0072FF.svg?style=flat-square)](./LICENSE)
-[![Tests](https://img.shields.io/badge/tests-150_unit_·_47_e2e_green-0072FF?style=flat-square)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-291_unit_·_47_e2e_green-0072FF?style=flat-square)](#-testing)
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](#-tech-stack)
 [![Go](https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white)](#-node-agent--apps-node-agent)
@@ -25,7 +25,7 @@
 
 **<samp>Primary&nbsp;#0072FF</samp>** · Dark glassy control‑panel UI · One Go binary for Linux **and** Windows nodes
 
-[Quick start](#-quick-start) · [Cheat-sheet](#-operator-cheat-sheet-this-box) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [Pricing model](#-how-pricing-works) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
+[Quick start](#-quick-start) · [Cheat-sheet](#-operator-cheat-sheet-this-box) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [Pricing model](#-how-pricing-works) · [iOS app & status page](#-ios-companion-app--public-status-page) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
 
 </div>
 
@@ -60,13 +60,19 @@ Two product types, each with the right pricing model:
 | 🛠️ **Admin power tools** | Create servers straight from an egg (no SSH), manage & delete nodes, **start/stop/restart individual servers from the node view**, pick a node's **region from a dropdown**, and watch **live node CPU / RAM / disk / ping graphs** from heartbeats. |
 | 🗂️ **Real file manager + live SFTP** | Browse, edit, upload, compress/extract files in the browser, or connect over **SFTP** — credentials you rotate in the panel propagate to the node **immediately** (no restart). |
 | 🎨 **ReFx Glassy UI** | Dark, premium control-panel design (`#0072ff`) with a live `xterm.js` console that **survives page switches and refreshes**, real-time resource gauges, per-game storefront artwork, and **sessions that stay signed in across panel rebuilds**. |
+| 📱 **iOS app + push** | A **native iOS companion app** backed by **token-based APNs** (ES256 `.p8`, no SDK dependency). Customers register a device (`/account/push-tokens`) and get push for **server state** (online/offline/crashed, throttled), **invoices** (created/due/failed), **support replies**, and **status incidents**. Stale tokens auto-prune on `410/BadDeviceToken`; push disables cleanly when APNs isn't configured. |
+| 🌍 **Public status page** | A polished **`/status`** page with a real **world map** (Natural Earth land paths, regions plotted at their datacenter coords) that rolls live node health into **per-region + per-component** status — **Control Panel API, Web Dashboard, Game Server Nodes, iOS App**. Operators post **incidents** with a timeline (admin CRUD, `content.manage`); active + 30-day history render publicly, and an incident update can **broadcast a push** to customers. |
+| 🔀 **Server transfers between nodes** | Admin-only, Pterodactyl-style **move a server to another node** (`POST /admin/servers/:id/transfer`). A `TRANSFER` job snapshots on the source (backup→S3), provisions + restores on the destination with fresh ports, then repoints atomically — the **server keeps its identity** and the **source is deleted only after the destination verifies**, so any failure rolls back and the server survives. |
+| 🔑 **Admin password management** | From **Admin → Users** an admin can **email a reset link** or **set a temporary password** (auto-generated or chosen). A temp password flags `mustChangePassword`, **revokes all the user's sessions**, and **forces a change at next sign-in** — enforced **server-side** (you can't skip it by hitting the API directly, or even via the WebSocket console). Admins can only act on **strictly lower-privileged** accounts. |
+| 🛡️ **Hardened by default** | Security controls enforced at the framework layer, not just the UI: **server-side `mustChangePassword`** (global interceptor blocks every route bar change-password/me/logout/refresh), an **API-key WRITE-scope ceiling** (a READ key can never drive a mutating request, even on JWT-only controllers), **single-use + time-boxed node bootstrap tokens** (atomic consume, 30-min TTL), and **GraphQL introspection/playground off in production**. |
+| ⚖️ **Launch-ready legal** | First-class **Terms, Privacy, Acceptable-Use and Refund** pages, a footer that links them, an **honest cookie-consent banner** (necessary + telemetry only — no ad/tracking cookies), and a central `lib/legal.ts` with a sub-processor list and `{{placeholder}}` fields that stay visible until the operator fills them in. |
 | 📦 **Migrate in** | Importers for **Pterodactyl** (live), AMP & TCAdmin (scaffolded). |
 
 > [!NOTE]
-> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**150 unit + 47 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
+> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**291 unit + 47 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
 
 > [!TIP]
-> **Recently shipped:** **Steam Workshop management** (per‑server Workshop tab for Garry's Mod / Arma 3 / Project Zomboid / DayZ / CS2 — add items & collections, enable/reorder, Apply) + **central SteamCMD login & Web API key** · **hardware‑tier game servers** (Low/Mid/High cards + admin tier editor) · **slot‑based voice hosting — TeamSpeak 3** · **tier upgrade/downgrade** from the panel · **recurring PayPal via the Subscriptions API** (auto‑bills each cycle) · **PayPal capture fix** (no more "could not resolve invoice" after paying) · **public "Meet the team" page** + admin staff curation · **invoices select‑all + bulk delete** (paid invoices protected) · **node ping** now distinguishes "agent alive but port blocked" from "offline" and self‑heals · **node‑agent TLS cert persists across restarts** (pins stay valid) · **smoother dialogs** (removed costly backdrop‑blur) · **coupons + gift cards + account/store credit** · **custom RBAC** + permission‑gated admin · **admin Support ticket queue** · **owner‑only payment‑gateway/key editor** · unified **one‑Minecraft** product with loader/version tab · built‑in **Modrinth** mods + **modpack installer** · **rootless** game containers · in‑browser **file manager** + live **SFTP** rotation · console that **persists across navigations & refreshes**.
+> **Recently shipped:** **native iOS companion app + token-based APNs push** (server state · invoices · support replies · status incidents) · **public status page** with a live world map, per-region/per-component health and operator **incidents** (+ customer push broadcast) · **admin-only server transfers between nodes** (snapshot → provision → restore → repoint, with rollback) · **admin password management** (email reset or temp password + forced change) · a **security-hardening pass** (server-side `mustChangePassword`, API-key write-scope ceiling, single-use/time-boxed bootstrap tokens, GraphQL introspection off in prod) verified against a self-audit · **legal/policy pages + cookie-consent banner** · **billing settlement/dunning/renewal test suite** · **Steam Workshop management** (per‑server Workshop tab + central SteamCMD login & Web API key) · **hardware‑tier game servers** (Low/Mid/High cards + admin tier editor) · **slot‑based voice hosting — TeamSpeak 3** · **recurring PayPal via the Subscriptions API** · **public "Meet the team" page** · **coupons + gift cards + account/store credit** · **custom RBAC** + permission‑gated admin · **admin Support ticket queue** · **owner‑only payment‑gateway/key editor** · unified **one‑Minecraft** product with loader/version tab · built‑in **Modrinth** mods + **modpack installer** · **rootless** game containers · in‑browser **file manager** + live **SFTP** rotation · console that **persists across navigations & refreshes**.
 
 ---
 
@@ -85,6 +91,9 @@ Two product types, each with the right pricing model:
 | Single-binary agent | ✅ Go | ✅ Go (Wings) | ⚠️ .NET | n/a |
 | **Billing built in** | ✅ | ❌ (add-on) | ⚠️ basic | ✅ |
 | **Helpdesk built in** | ✅ | ❌ | ❌ | ✅ |
+| **Native mobile app** (iOS + push) | ✅ | ❌ | ❌ | ⚠️ |
+| **Public status page** (map + incidents) | ✅ | ❌ | ❌ | ⚠️ |
+| **Live server transfer** between nodes | ✅ | ⚠️ manual | ⚠️ | ✅ |
 | REST **+ GraphQL** API | ✅ | ⚠️ REST | ⚠️ RPC | ❌ |
 | Self-hostable | ✅ | ✅ | ✅ | ❌ |
 
@@ -99,19 +108,22 @@ all four evolve.)_
 
 ```mermaid
 flowchart TB
-    subgraph Client["🌐 Browser / API clients"]
+    subgraph Client["🌐 Browser / mobile / API clients"]
         UI["Web Panel — Next.js 14"]
+        IOS["📱 iOS app"]
         API_C["REST / GraphQL clients"]
     end
 
     subgraph Central["🧠 Central Panel"]
         API["panel-api — NestJS<br/>REST /api/v1 · GraphQL · Swagger"]
-        Q["BullMQ workers<br/>provision · backup · renew · suspend"]
+        Q["BullMQ workers<br/>provision · backup · renew · suspend · transfer"]
         DB[("PostgreSQL")]
         R[("Redis")]
         S3[("S3 / MinIO<br/>backups + attachments")]
         OS[("OpenSearch")]
     end
+
+    APNS[["🍎 Apple APNs"]]
 
     subgraph Nodes["🖥️ Game Nodes (Linux / Windows)"]
         A1["node-agent (Go)"]
@@ -121,11 +133,14 @@ flowchart TB
     end
 
     UI --> API
+    IOS --> API
     API_C --> API
     API <--> DB
     API <--> R
     API <--> OS
     Q <--> R
+    API -- "push (HTTP/2, ES256)" --> APNS
+    APNS -. "alerts" .-> IOS
     API -- "HMAC-signed HTTPS + WebSocket" --> A1
     API -- "HMAC-signed HTTPS + WebSocket" --> A2
     A1 -- "stats · logs · backups" --> API
@@ -204,6 +219,28 @@ Both models support **weekly · biweekly · monthly · quarterly · semi‑annua
 
 ---
 
+## 📱 iOS companion app & public status page
+
+### 📱 iOS companion app + push
+
+A **native iOS app** lets customers power/monitor their servers, watch billing, and answer support tickets on the go. It's backed by **first-party, token-based APNs** in `panel-api` (HTTP/2 + ES256 `.p8`, **no third-party SDK**):
+
+- A device registers via `POST /api/v1/account/push-tokens` (removed with `DELETE …/:token`); tokens live in the `PushToken` model.
+- `PushService.sendToUser()` mirrors in-app events as pushes — `server.state` (online/offline/crashed, **30-min per-server/state throttle**), `billing.invoice` (created/due/failed), `support.reply` (staff → customer) and `status.incident` — each carrying a `type` + id at the payload top level for deep-linking.
+- A `410 / BadDeviceToken` response **auto-prunes** the stale token. APNs is configured from `APNS_KEY_P8_BASE64` / `APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_BUNDLE_ID` (+ `APNS_PRODUCTION`); when unset, push **disables cleanly** and the rest of the panel is unaffected. The app's `apple-app-site-association` is served from `/.well-known`, and the storefront carries an **App Store** listing (`NEXT_PUBLIC_APP_STORE_URL`).
+
+> The iOS app's own Swift source lives outside this monorepo; everything the panel needs to **serve** it — push, token endpoints, deep-link payloads, the universal-links file and the store listing — ships here.
+
+### 🌍 Public status page (`/status`)
+
+A polished, **public** status page (no login) that turns real telemetry into an at-a-glance picture:
+
+- `GET /api/v1/status` (cached) rolls each node's **state + heartbeat freshness** into **per-region** and **per-component** status — **Control Panel API, Web Dashboard** (panel-api pings the web container's health), **Game Server Nodes**, and **iOS App**.
+- The web page (`apps/web/app/(public)/status`) draws a real **world map** — land outlines from **Natural Earth 110m** (public domain) in [`apps/web/lib/world-land.ts`](apps/web/lib/world-land.ts) — and plots each region as a status-coloured dot at its datacenter coordinates with **up / total** node counts.
+- Operators post **incidents** (`StatusIncident` + `StatusIncidentUpdate` timeline) from **Admin → Status** (`content.manage`): create/update/resolve, choose impact (maintenance / degraded / outage) and the affected components. Unresolved incidents drive those components' status; **active + 30-day history** render on `/status`, and an incident update can **broadcast a push** to customers. The **iOS App** component has no auto-signal, so its status is **admin-declared** via incidents.
+
+---
+
 ## 🧰 Tech stack
 
 | Layer | Choice | Why |
@@ -220,16 +257,20 @@ Both models support **weekly · biweekly · monthly · quarterly · semi‑annua
 ## 🧩 Components & key functions
 
 ### 🧠 panel-api — [`apps/panel-api`](apps/panel-api)
-NestJS central panel. **Compiles clean & boots; 150 unit + 47 e2e tests green.**
+NestJS central panel. **Compiles clean & boots; 291 unit + 47 e2e tests green.**
 
 | Area | Where | Notable functions / endpoints |
 |------|-------|-------------------------------|
-| Auth & MFA | `src/auth` | `register` / `login` (Argon2id), JWT access+refresh with **rotation + reuse detection**, `totpEnroll`/`totpVerify`, WebAuthn ceremonies, scoped + IP-allowlisted API keys |
+| Auth & MFA | `src/auth` | `register` / `login` (Argon2id), JWT access+refresh with **rotation + reuse detection**, `totpEnroll`/`totpVerify`, WebAuthn ceremonies, scoped + IP-allowlisted API keys, **admin password tools** (`adminSendPasswordReset` / `adminSetPassword` → temp password + `mustChangePassword` + session revoke) |
 | AuthZ | `src/auth/guards` | `RolesGuard` (global roles), `PermissionGuard` (per-server `SubUser` perms, owner/admin override, wildcard `files.*`) |
-| Servers | `src/servers` | `POST /servers` (queues provisioning), power `start/stop/restart/kill`, `reinstall`, **`switchGame()`**, **`setMinecraftConfig()`** (loader + version), **Modrinth mod search/install**, **modpack installer** (`ModpackProcessor` — `.mrpack` → loader/version switch + mods/config), `resize()` (capacity-checked), variables/allocations/sub-users/schedules |
-| Agent link | `src/agent` | `NodeAgentClient` (HMAC-signed calls), `ConsoleGateway` (browser ↔ agent WebSocket relay) |
-| Billing | `src/billing` | **two billing models** (`HARDWARE_TIER` tiers + `PER_SLOT`), `HardwareTier` CRUD, server‑side price validation, `calculateTax()` (VAT/GST/US), invoice numbering, `StripeGateway`/`PayPalGateway` with **DB‑backed encrypted keys**, **Stripe + PayPal verified webhooks**, **recurring PayPal Subscriptions** (`ensurePayPalPlan`/`startPayPalSubscription`/`settlePayPalRecurringPayment`), renewal + dunning workers |
+| Hardening | `src/common/interceptors` | global `PasswordChangeInterceptor` (server-side `mustChangePassword` ceiling + `@AllowWhenPasswordExpired`), `ApiKeyWriteScopeInterceptor` (READ keys can't mutate); `ConsoleGateway` re-checks account state so the WS surface isn't a bypass |
+| Servers | `src/servers` | `POST /servers` (queues provisioning), power `start/stop/restart/kill`, `reinstall`, **`switchGame()`**, **`setMinecraftConfig()`** (loader + version), **Modrinth mod search/install**, **modpack installer** (`ModpackProcessor` — `.mrpack` → loader/version switch + mods/config), `resize()` (capacity-checked), **`TransfersService`** (admin node-to-node move: snapshot → provision → restore → repoint, rollback-safe), variables/allocations/sub-users/schedules |
+| Nodes | `src/nodes` | create/heartbeat/capacity, per-node allocation port range, **single-use + time-boxed bootstrap tokens** (`registerAgentByToken` — atomic consume, 30-min TTL, `regenerateBootstrap`) |
+| Agent link | `src/agent` | `NodeAgentClient` (HMAC-signed calls), `ConsoleGateway` (browser ↔ agent WebSocket relay), optional cert **pinning** (`AGENT_TLS_PINNING`) |
+| Billing | `src/billing` | **two billing models** (`HARDWARE_TIER` tiers + `PER_SLOT`), `HardwareTier` CRUD, server‑side price validation, `calculateTax()` (VAT/GST/US), invoice numbering, `StripeGateway`/`PayPalGateway` with **DB‑backed encrypted keys**, **Stripe + PayPal verified webhooks**, **recurring PayPal Subscriptions** (`ensurePayPalPlan`/`startPayPalSubscription`/`settlePayPalRecurringPayment`), **settlement funnel** (`markInvoicePaid` idempotent), renewal + dunning workers (covered by `billing.service.settlement.spec.ts`) |
 | Orders | `src/orders` | checkout orchestration: validate product/tier/slots, create subscription + first invoice, settle via gateway (or start a PayPal subscription), reserve‑then‑provision on payment |
+| Push | `src/push` | token-based **APNs** over HTTP/2 (ES256 `.p8`, no SDK), `PushService.sendToUser`, `PushToken` model, `/account/push-tokens`; auto-prune on `410/BadDeviceToken` |
+| Status | `src/status`, `src/platform` (incidents) | public `GET /status` (region/component rollup, cached), `StatusIncident` + timeline, admin incident CRUD (`/admin/status/incidents`), customer push broadcast |
 | Support | `src/support` | **admin ticket queue** (reply/notes/status/priority/assign), **categories (SLA) + canned responses CRUD**, SLA breach computation, KB |
 | AuthZ (custom RBAC) | `src/admin`, `src/common/permissions.ts` | `Role` model + granular admin-permission catalog, `AdminPermissionGuard` + `@RequirePerm`, owner-only Roles management |
 | Platform | `src/platform` | audit query, notifications, global alerts, **staff/“team” content** (`StaffService`), encrypted settings store, `/health`, Prometheus `/metrics` |
@@ -254,8 +295,11 @@ Next.js 14 customer + admin panel. **Builds, typechecks & lints clean.**
 - **Upgrade** — move a game server **between hardware tiers** (or scale slots for voice) with a live price preview; resources re‑provision immediately.
 - **Public Team page** + admin **Staff** curation — animated avatar group, dependency‑free reveal animations.
 - **Separate customer & admin areas** — distinct layouts/nav; the entire `/admin` surface is **permission-gated** (server-enforced), so customers never see staff tooling.
-- **Admin power tools** — create servers from an egg; manage nodes (region **dropdown** on create) with **per-server power controls**; **Products** with an inline **price editor**; an **owner-only Payments** page with a gateway/key editor; **Orders/Invoices** (void/delete); a **Support** ticket queue + categories/canned responses; a **Roles & permissions** builder; **Customers/Users** with full account view + delete.
-- Sessions **stay signed in across panel rebuilds** (transient-tolerant token refresh + optional "keep me signed in"); an **idle-session timeout** prompts before logging out.
+- **Admin power tools** — create servers from an egg; manage nodes (region **dropdown** on create) with **per-server power controls**; **transfer a server to another node** with live progress; **Products** with an inline **price editor**; an **owner-only Payments** page with a gateway/key editor; **Orders/Invoices** (void/delete); a **Support** ticket queue + categories/canned responses; a **Status/Incidents** console; a **Roles & permissions** builder; **Customers/Users** with full account view, delete, and **password management** (email a reset or set a temp password).
+- **Public status page** (`/status`) — a world map of regions with per-component/per-region health and an incident feed (active + history), all driven by the live `/api/v1/status` feed.
+- **Legal & consent** — Terms / Privacy / Acceptable-Use / Refund pages, a footer that links them, and an honest **cookie-consent banner** (necessary + telemetry only).
+- **iOS app listing** — an App Store promo on the storefront plus the universal-links `apple-app-site-association`, ready for the native companion app.
+- Sessions **stay signed in across panel rebuilds** (transient-tolerant token refresh + optional "keep me signed in"); an **idle-session timeout** prompts before logging out; an admin-set temporary password triggers a **forced password change** (enforced server-side).
 - Plus dashboard, backups, databases, schedules, billing, account/security, and a glassy **storefront** with per-game artwork, node-derived server locations, and a public **Meet the team** page.
 
 ### ⚙️ node-agent — [`apps/node-agent`](apps/node-agent)
@@ -447,6 +491,11 @@ CORS_ORIGINS=https://example.com,https://www.example.com
 PANEL_URL=https://example.com
 
 # Optional: SMTP (email), STRIPE_*/PAYPAL_* (live billing)
+# Optional: iOS push (APNs) — leave unset to disable push cleanly.
+#   APNS_KEY_P8_BASE64=<base64 of the .p8>   APNS_KEY_ID=...   APNS_TEAM_ID=...
+#   APNS_BUNDLE_ID=com.example.refx           APNS_PRODUCTION=true
+#   NEXT_PUBLIC_APP_STORE_URL=https://apps.apple.com/app/...  (storefront listing)
+# Keep the APNs .p8 in env/secrets only — never commit it to the repo.
 # Demo content (sample regions/products/templates) only seeds on a first run;
 # set SEED_DEMO=true to force it, or leave blank so deleted data isn't resurrected.
 ```
@@ -744,13 +793,20 @@ curl http://localhost:4000/api/v1/servers -H "Authorization: Bearer $TOKEN"
 # Power action
 curl -X POST http://localhost:4000/api/v1/servers/$ID/power \
   -H "Authorization: Bearer $TOKEN" -d '{"action":"restart"}'
+
+# Public status feed (no auth) — region/component health + incidents
+curl http://localhost:4000/api/v1/status
+
+# Register an iOS device for push
+curl -X POST http://localhost:4000/api/v1/account/push-tokens \
+  -H "Authorization: Bearer $TOKEN" -d '{"token":"<apns-device-token>","platform":"ios"}'
 ```
 
 ```graphql
 query { me { id email servers { id name state template { name } } } }
 ```
 
-Full spec: **[docs/03-api.md](docs/03-api.md)**.
+Other notable surfaces: `POST /api/v1/admin/servers/:id/transfer` (move a server between nodes), `POST /api/v1/admin/users/:id/set-password` (admin temp password), and `…/admin/status/incidents` (incident CRUD). Full spec: **[docs/03-api.md](docs/03-api.md)**.
 
 ---
 
@@ -774,11 +830,19 @@ refxhosting/
 ## 🧪 Testing
 
 ```bash
-cd apps/panel-api && npm test          # 150 unit tests
+cd apps/panel-api && npm test          # 291 unit tests (34 suites)
 cd apps/panel-api && npm run test:e2e  # 47 HTTP integration tests
 cd apps/node-agent && go test ./...    # agent unit tests
 npx prisma validate --schema database/prisma/schema.prisma
 ```
+
+Highlights of the unit suite: the **billing settlement/dunning/renewal** engine
+(`billing.service.settlement.spec.ts`), the **security-hardening** controls
+(`auth.service.hardening.spec.ts`, `password-change.interceptor.spec.ts`,
+`api-key-write-scope.interceptor.spec.ts`, `nodes.service.bootstrap-token.spec.ts`),
+**server transfers** (`transfers.service.spec.ts`), **APNs push**
+(`push.service.spec.ts` + the agent/support push hooks), the **status** rollup
+(`status.service.spec.ts`), and **game switching** (`servers.service.switch-game.spec.ts`).
 
 ---
 
