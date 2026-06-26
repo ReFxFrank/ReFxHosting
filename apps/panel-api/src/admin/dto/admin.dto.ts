@@ -40,6 +40,50 @@ export class UpdateUserDto {
   state?: UserState;
 }
 
+/** Admin-created account (e.g. a test/reviewer login). */
+export class AdminCreateUserDto {
+  @ApiProperty()
+  @IsEmail()
+  email!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Initial password (10+ chars, mixed case + number + symbol). Omit to auto-generate a strong one (returned once).',
+  })
+  @IsOptional()
+  @IsStrongPassword()
+  password?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  firstName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  lastName?: string;
+
+  @ApiPropertyOptional({
+    enum: GlobalRole,
+    description: 'Global role (default CUSTOMER). Must be below your own level.',
+  })
+  @IsOptional()
+  @IsEnum(GlobalRole)
+  role?: GlobalRole;
+
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Mark the email verified so the account can sign in immediately (default true).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  emailVerified?: boolean;
+}
+
 export class SetUserRoleDto {
   @ApiPropertyOptional({ enum: GlobalRole })
   @IsOptional()

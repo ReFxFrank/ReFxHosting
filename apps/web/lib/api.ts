@@ -904,6 +904,19 @@ export const api = {
 
     users: (query?: { q?: string; role?: string; state?: string }) =>
       http.get<Paginated<User>>("/admin/users", { query }),
+    /** Create an account (e.g. an iOS test/reviewer login). Returns the password once. */
+    createUser: (input: {
+      email: string;
+      password?: string;
+      firstName?: string;
+      lastName?: string;
+      role?: User["globalRole"];
+      emailVerified?: boolean;
+    }) =>
+      http.post<{ id: string; email: string; password: string }>(
+        "/admin/users",
+        input,
+      ),
     /** Paying customers (ACTIVE + PAID services) with per-row aggregates. */
     customers: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminCustomer>>("/admin/customers", { query }),

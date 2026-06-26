@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 
@@ -78,5 +78,65 @@ describe('AuthService admin password management', () => {
     prisma.user.findFirst.mockResolvedValue(TARGET('ADMIN'));
     await svc.adminSendPasswordReset(owner, 'target-1');
     expect(prisma.passwordResetToken.create).toHaveBeenCalled();
+  });
+
+  describe('adminCreateUser', () => {
+    beforeEach(() => {
+      prisma.user.findUnique = jest.fn().mockResolvedValue(null); // email free
+      prisma.user.create = jest
+        .fn()
+        .mockImplementation(async ({ data }: any) => ({
+          id: data.id,
+          email: data.email,
+        }));
+    });
+
+    it('creates an ACTIVE, email-verified CUSTOMER with a generated password', async () => {
+      const res = await svc.adminCreateUser(admin, { email: 'New@Test.com' });
+      const data = prisma.user.create.mock.calls[0][0].data;
+      expect(data.email).toBe('new@test.com'); // normalized
+      expect(data.globalRole).toBe('CUSTOMER');
+      expect(data.state).toBe('ACTIVE');
+      expect(data.emailVerifiedAt).toBeInstanceOf(Date);
+      expect(data.passwordHash).toBeTruthy();
+      expect(res.password).toMatch(
+        /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{10,}$/,
+      );
+    });
+
+    it('uses a supplied password and can leave the email unverified', async () => {
+      const res = await svc.adminCreateUser(admin, {
+        email: 'a@b.com',
+        password: 'Sup3r$ecret!!',
+        emailVerified: false,
+      });
+      expect(res.password).toBe('Sup3r$ecret!!');
+      expect(prisma.user.create.mock.calls[0][0].data.emailVerifiedAt).toBeNull();
+    });
+
+    it('enforces the privilege ceiling (support cannot create an admin)', async () => {
+      await expect(
+        svc.adminCreateUser(support, { email: 'x@y.com', role: 'ADMIN' as any }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a duplicate live email', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'u9', deletedAt: null });
+      await expect(
+        svc.adminCreateUser(admin, { email: 'dupe@test.com' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('releases a soft-deleted holder of the address then creates', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'old',
+        deletedAt: new Date(),
+      });
+      await svc.adminCreateUser(admin, { email: 'reuse@test.com' });
+      expect(prisma.user.update).toHaveBeenCalled(); // tombstone rename
+      expect(prisma.user.create).toHaveBeenCalled();
+    });
   });
 });

@@ -85,6 +85,7 @@ import {
   AdminCreateServerDto,
   BulkIdsDto,
   CreateRoleDto,
+  AdminCreateUserDto,
   GrantCreditDto,
   SetEmailConfigDto,
   SetGatewayConfigDto,
@@ -354,6 +355,21 @@ export class AdminController {
       role: role as GlobalRole | undefined,
       state: state as UserState | undefined,
     });
+  }
+
+  /**
+   * Create an account (e.g. a test/reviewer login for the iOS app). ACTIVE +
+   * email-verified by default so it can sign in immediately. Returns the
+   * password ONCE. Can only create accounts below your own privilege level.
+   */
+  @Post('users')
+  @RequirePerm('users.manage')
+  @Audit({ action: 'admin.user.create', targetType: 'User' })
+  createUser(
+    @CurrentUser() actor: AuthUser,
+    @Body() dto: AdminCreateUserDto,
+  ): Promise<{ id: string; email: string; password: string }> {
+    return this.auth.adminCreateUser(actor, dto);
   }
 
   /** Paying customers — accounts with an ACTIVE subscription backed by a PAID invoice. */

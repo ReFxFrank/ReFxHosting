@@ -17,7 +17,7 @@ import {
   generateURI,
   verifySync,
 } from 'otplib';
-import { Prisma, User } from '@prisma/client';
+import { GlobalRole, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../common/crypto/crypto.service';
 import { EmailService } from '../email/email.service';
@@ -644,6 +644,78 @@ export class AuthService {
       .catch(() => undefined);
 
     return { password: plaintext };
+  }
+
+  /**
+   * Admin: create a new account (e.g. a test/reviewer login for the iOS app).
+   * The new account is ACTIVE and (by default) email-verified so it can sign in
+   * immediately — no verification email or forced password change. Enforces the
+   * same privilege ceiling as credential management: an admin can only create an
+   * account STRICTLY below their own role. Returns the (provided or generated)
+   * password once so the admin can relay it.
+   */
+  async adminCreateUser(
+    actor: { id: string; globalRole: string },
+    dto: {
+      email: string;
+      password?: string;
+      firstName?: string;
+      lastName?: string;
+      role?: GlobalRole;
+      emailVerified?: boolean;
+    },
+  ): Promise<{ id: string; email: string; password: string }> {
+    const email = dto.email.trim().toLowerCase();
+    const role = dto.role ?? GlobalRole.CUSTOMER;
+
+    // Privilege ceiling: never create an account at or above your own level.
+    const a = AuthService.ROLE_RANK[actor.globalRole] ?? 0;
+    const t = AuthService.ROLE_RANK[role] ?? 0;
+    if (a <= t) {
+      throw new ForbiddenException(
+        'You cannot create an account at or above your privilege level.',
+      );
+    }
+
+    // Email uniqueness — release a soft-deleted holder of the address (same
+    // policy as self-service registration).
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      if (!existing.deletedAt) {
+        throw new ConflictException('Email already registered');
+      }
+      await this.prisma.user.update({
+        where: { id: existing.id },
+        data: { email: `deleted:${Date.now()}:${email}` },
+      });
+    }
+
+    const plaintext = dto.password?.trim() || this.generateTempPassword();
+    try {
+      const user = await this.prisma.user.create({
+        data: {
+          id: uuidv7(),
+          email,
+          passwordHash: await argon2.hash(plaintext, ARGON_OPTS),
+          firstName: dto.firstName?.trim() || null,
+          lastName: dto.lastName?.trim() || null,
+          globalRole: role,
+          state: 'ACTIVE',
+          // Default to verified so the account works for sign-in right away.
+          emailVerifiedAt: dto.emailVerified === false ? null : new Date(),
+        },
+        select: { id: true, email: true },
+      });
+      return { id: user.id, email: user.email, password: plaintext };
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException('Email already registered');
+      }
+      throw e;
+    }
   }
 
   /** A strong, policy-compliant random password (10+ chars, all classes). */

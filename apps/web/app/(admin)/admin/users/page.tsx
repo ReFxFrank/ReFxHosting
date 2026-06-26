@@ -13,13 +13,16 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  UserPlus,
+  Copy,
+  Check,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Label } from "@/components/ui/input";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import {
   Table,
@@ -45,7 +48,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { formatDate } from "@/lib/utils";
+import { formatDate, copyToClipboard } from "@/lib/utils";
 import type { GlobalRole, User, UserState } from "@/lib/types";
 
 const stateMeta: Record<UserState, { label: string; variant: BadgeProps["variant"] }> = {
@@ -76,6 +79,13 @@ export default function AdminUsersPage() {
   // Confirm dialog for destructive transitions (ban / suspend).
   const [confirm, setConfirm] = useState<{ user: User; state: UserState } | null>(null);
 
+  // Create-user dialog.
+  const emptyCreate = { email: "", password: "", firstName: "", lastName: "" };
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createForm, setCreateForm] = useState(emptyCreate);
+  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "users", search, page],
     // `page` is forwarded as a raw query param by the REST client.
@@ -101,6 +111,30 @@ export default function AdminUsersPage() {
       toast.error(e instanceof ApiError ? e.message : "Failed to update user"),
   });
 
+  const createMutation = useMutation({
+    mutationFn: () =>
+      api.admin.createUser({
+        email: createForm.email.trim(),
+        password: createForm.password.trim() || undefined,
+        firstName: createForm.firstName.trim() || undefined,
+        lastName: createForm.lastName.trim() || undefined,
+      }),
+    onSuccess: (res) => {
+      setCreated({ email: res.email, password: res.password });
+      setCreateForm(emptyCreate);
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to create user"),
+  });
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setCreated(null);
+    setCopied(false);
+    setCreateForm(emptyCreate);
+  };
+
   const totalPages = data ? Math.max(1, Math.ceil(data.total / data.perPage)) : 1;
 
   return (
@@ -108,6 +142,13 @@ export default function AdminUsersPage() {
       <PageHeader
         title="Users"
         description="Search accounts and manage access state."
+        actions={
+          canManage ? (
+            <Button onClick={() => setCreateOpen(true)}>
+              <UserPlus /> Create user
+            </Button>
+          ) : undefined
+        }
       />
 
       <form
@@ -285,6 +326,128 @@ export default function AdminUsersPage() {
               {confirm?.state === "BANNED" ? "Ban user" : "Suspend user"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create a new account (e.g. an iOS test/reviewer login) */}
+      <Dialog open={createOpen} onOpenChange={(o) => (o ? setCreateOpen(true) : closeCreate())}>
+        <DialogContent>
+          {created ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>User created</DialogTitle>
+                <DialogDescription>
+                  Copy the password now — it won&apos;t be shown again. The account is
+                  active and email-verified, so it can sign in immediately.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <Input readOnly value={created.email} className="font-mono" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Password</Label>
+                  <div className="flex items-center gap-2">
+                    <Input readOnly value={created.password} className="font-mono" />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      aria-label="Copy password"
+                      onClick={async () => {
+                        if (await copyToClipboard(created.password)) {
+                          setCopied(true);
+                          toast.success("Password copied");
+                          setTimeout(() => setCopied(false), 1500);
+                        } else {
+                          toast.error("Couldn't copy");
+                        }
+                      }}
+                    >
+                      {copied ? <Check className="text-success" /> : <Copy />}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button onClick={closeCreate}>Done</Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>Create user</DialogTitle>
+                <DialogDescription>
+                  Creates an active, email-verified customer account. Leave the password
+                  blank to auto-generate a strong one.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="cu-email">Email</Label>
+                  <Input
+                    id="cu-email"
+                    type="email"
+                    placeholder="reviewer@example.com"
+                    value={createForm.email}
+                    onChange={(e) =>
+                      setCreateForm((f) => ({ ...f, email: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cu-first">First name (optional)</Label>
+                    <Input
+                      id="cu-first"
+                      value={createForm.firstName}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({ ...f, firstName: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="cu-last">Last name (optional)</Label>
+                    <Input
+                      id="cu-last"
+                      value={createForm.lastName}
+                      onChange={(e) =>
+                        setCreateForm((f) => ({ ...f, lastName: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="cu-pass">Password (optional)</Label>
+                  <Input
+                    id="cu-pass"
+                    type="text"
+                    placeholder="Leave blank to auto-generate"
+                    value={createForm.password}
+                    onChange={(e) =>
+                      setCreateForm((f) => ({ ...f, password: e.target.value }))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    If set: 10+ chars with upper, lower, number &amp; symbol.
+                  </p>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={closeCreate}>
+                  Cancel
+                </Button>
+                <Button
+                  loading={createMutation.isPending}
+                  disabled={!createForm.email.trim()}
+                  onClick={() => createMutation.mutate()}
+                >
+                  Create user
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
