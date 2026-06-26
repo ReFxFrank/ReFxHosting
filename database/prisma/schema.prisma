@@ -81,6 +81,10 @@ model User {
   // be charged off-session at renewal. Created on first card save.
   gatewayCustomerId String?
 
+  // Set when an admin issues a temporary password; the user is forced to choose
+  // a new one on next login (cleared on any self-service password change/reset).
+  mustChangePassword Boolean    @default(false)
+
   // MFA
   totpSecretEnc     String?     // AES-256-GCM encrypted TOTP seed
   totpEnabledAt     DateTime?

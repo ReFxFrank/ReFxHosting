@@ -216,6 +216,27 @@ export class EmailService {
     });
   }
 
+  /** Security notice: an administrator set a temporary password for this account. */
+  async sendPasswordChangedByAdmin(user: MailRecipient): Promise<void> {
+    const { html, text } = await this.compose({
+      title: 'Your password was changed',
+      greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
+      preheader: 'An administrator set a temporary password on your account.',
+      intro: [
+        'An administrator has set a <strong>temporary password</strong> on your ReFx Hosting account, and all active sessions were signed out.',
+        "You'll be asked to choose a new password the next time you sign in. If you didn't expect this, contact support immediately.",
+      ],
+      button: { label: 'Sign in', url: `${this.panelUrl}/login` },
+      outro: ['For your security, never share your password with anyone.'],
+    });
+    await this.sendGeneric({
+      to: user.email,
+      subject: 'Your ReFx Hosting password was changed',
+      text,
+      html,
+    });
+  }
+
   /** Broadcast notice when an operator posts a major status incident. */
   async sendIncidentNotice(
     user: MailRecipient,

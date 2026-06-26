@@ -19,6 +19,8 @@ export interface User {
   timezone: string;
   avatarUrl: string | null;
   totpEnabledAt: string | null;
+  /** True when an admin set a temporary password — forces a change on next login. */
+  mustChangePassword?: boolean;
   // Contact / billing address (self-service, optional).
   phone: string | null;
   addressLine1: string | null;

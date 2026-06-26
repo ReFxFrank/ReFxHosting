@@ -27,6 +27,7 @@ import { ServersService } from '../servers/servers.service';
 import { AlertsService } from '../platform/alerts.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 import { IncidentsService } from '../platform/incidents.service';
+import { AuthService } from '../auth/auth.service';
 import {
   CreateIncidentDto,
   UpdateIncidentDto,
@@ -55,7 +56,7 @@ import { RolesService } from './roles.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminPermissionGuard } from '../auth/guards/admin-permission.guard';
 import { RequirePerm } from '../common/decorators/require-permission.decorator';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateNodeDto, UpdateNodeDto, UpdateAgentsDto } from '../nodes/dto/node.dto';
@@ -87,6 +88,7 @@ import {
   SetEmailConfigDto,
   SetGatewayConfigDto,
   SetSteamConfigDto,
+  SetUserPasswordDto,
   SetUserRoleDto,
   TestEmailDto,
   UpdateAlertDto,
@@ -116,6 +118,7 @@ export class AdminController {
     private readonly alerts: AlertsService,
     private readonly homepageAlerts: HomepageAlertsService,
     private readonly incidents: IncidentsService,
+    private readonly auth: AuthService,
     private readonly staff: StaffService,
     private readonly audit: AuditService,
     private readonly roles: RolesService,
@@ -392,6 +395,36 @@ export class AdminController {
   @Audit({ action: 'admin.user.purge', targetType: 'User', targetParam: 'id' })
   purgeUser(@Param('id') id: string) {
     return this.users.purgeUser(id);
+  }
+
+  /** Email the user a password-reset link (admin never sees the password). */
+  @Post('users/:id/send-password-reset')
+  @HttpCode(200)
+  @RequirePerm('users.manage')
+  @Audit({ action: 'admin.user.password.send-reset', targetType: 'User', targetParam: 'id' })
+  async sendUserPasswordReset(
+    @CurrentUser() actor: AuthUser,
+    @Param('id') id: string,
+  ): Promise<{ sent: true }> {
+    await this.auth.adminSendPasswordReset(actor, id);
+    return { sent: true };
+  }
+
+  /**
+   * Set a temporary password (forces a change on next login, revokes sessions).
+   * Returns the password ONCE so the admin can relay it. Omit the body to
+   * auto-generate a strong password.
+   */
+  @Post('users/:id/set-password')
+  @HttpCode(200)
+  @RequirePerm('users.manage')
+  @Audit({ action: 'admin.user.password.set-temporary', targetType: 'User', targetParam: 'id' })
+  setUserPassword(
+    @CurrentUser() actor: AuthUser,
+    @Param('id') id: string,
+    @Body() dto: SetUserPasswordDto,
+  ): Promise<{ password: string }> {
+    return this.auth.adminSetPassword(actor, id, dto.password);
   }
 
   /** A user's store-credit balance + ledger (admin account view). */

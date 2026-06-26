@@ -22,6 +22,8 @@ import {
   Wallet,
   Plus,
   Minus,
+  KeyRound,
+  Copy,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
@@ -72,6 +74,9 @@ export default function AdminUserDetailPage() {
   const [creditMode, setCreditMode] = useState<"grant" | "deduct">("grant");
   const [creditAmount, setCreditAmount] = useState("10.00");
   const [creditNote, setCreditNote] = useState("");
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwValue, setPwValue] = useState("");
+  const [pwResult, setPwResult] = useState<string | null>(null);
   // SUPPORT staff see a read-only account view; account actions are ADMIN+.
   const canManage = useAuthStore((s) => s.hasRole("ADMIN"));
 
@@ -132,6 +137,24 @@ export default function AdminUserDetailPage() {
       invalidate();
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to verify email"),
+  });
+
+  const sendResetMutation = useMutation({
+    mutationFn: () => api.admin.sendUserPasswordReset(id),
+    onSuccess: () => {
+      toast.success("Password reset email sent to the user");
+      setPwOpen(false);
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to send reset"),
+  });
+
+  const setPasswordMutation = useMutation({
+    mutationFn: () => api.admin.setUserPassword(id, pwValue.trim() || undefined),
+    onSuccess: (res) => {
+      setPwResult(res.password);
+      invalidate();
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to set password"),
   });
 
   const deleteMutation = useMutation({
@@ -203,6 +226,17 @@ export default function AdminUserDetailPage() {
                 <Ban className="size-4" /> Ban
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setPwValue("");
+                setPwResult(null);
+                setPwOpen(true);
+              }}
+            >
+              <KeyRound className="size-4" /> Password
+            </Button>
             <Button variant="destructive" size="sm" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="size-4" /> Delete
             </Button>
@@ -482,6 +516,88 @@ export default function AdminUserDetailPage() {
               {creditMode === "grant" ? "Grant credit" : "Deduct credit"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Password management */}
+      <Dialog open={pwOpen} onOpenChange={setPwOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset password — {fullName(user) || user.email}</DialogTitle>
+            <DialogDescription>
+              Email the user a reset link (recommended), or set a temporary password they must
+              change on next sign-in. Either way, the user&apos;s active sessions are ended.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pwResult ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Temporary password set. <strong>Copy it now — it won&apos;t be shown again.</strong>{" "}
+                The user must change it at next sign-in.
+              </p>
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-3">
+                <code className="flex-1 break-all font-mono text-sm">{pwResult}</code>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(pwResult).then(
+                      () => toast.success("Copied"),
+                      () => toast.error("Copy failed"),
+                    );
+                  }}
+                >
+                  <Copy className="size-4" />
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button onClick={() => setPwOpen(false)}>Done</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <Button
+                  className="w-full"
+                  loading={sendResetMutation.isPending}
+                  onClick={() => sendResetMutation.mutate()}
+                >
+                  <Mail className="size-4" /> Send password reset email
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  The user sets their own password from the link. You never see it.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="temp-pw">Temporary password</Label>
+                <Input
+                  id="temp-pw"
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Leave blank to auto-generate a strong one"
+                  value={pwValue}
+                  onChange={(e) => setPwValue(e.target.value)}
+                />
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  loading={setPasswordMutation.isPending}
+                  onClick={() => setPasswordMutation.mutate()}
+                >
+                  <KeyRound className="size-4" /> Set temporary password
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Ends all sessions and forces a change on next sign-in. The user is emailed a notice.
+                </p>
+              </div>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
+import { IsStrongPassword } from '../../auth/password.validator';
 import {
   IsArray,
   IsBoolean,
@@ -320,4 +321,14 @@ export class AdminCreateServerDto {
   @IsOptional()
   @IsObject()
   environment?: Record<string, string>;
+}
+
+export class SetUserPasswordDto {
+  @ApiPropertyOptional({
+    description:
+      'New password (10+ chars, mixed case + number + symbol). Omit to auto-generate a strong temporary password.',
+  })
+  @IsOptional()
+  @IsStrongPassword()
+  password?: string;
 }

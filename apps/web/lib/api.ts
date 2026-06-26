@@ -894,6 +894,10 @@ export const api = {
       http.patch<User>(`/admin/users/${id}/role`, input),
     deleteUser: (id: string) => http.delete<void>(`/admin/users/${id}`),
     purgeUser: (id: string) => http.post<void>(`/admin/users/${id}/purge`),
+    sendUserPasswordReset: (id: string) =>
+      http.post<{ sent: true }>(`/admin/users/${id}/send-password-reset`),
+    setUserPassword: (id: string, password?: string) =>
+      http.post<{ password: string }>(`/admin/users/${id}/set-password`, password ? { password } : {}),
 
     // Store credit (account balance) — view ledger + grant/deduct.
     userCredit: (id: string) => http.get<CreditLedger>(`/admin/users/${id}/credit`),

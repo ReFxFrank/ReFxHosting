@@ -1,11 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { randomInt } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
@@ -533,6 +535,135 @@ export class AuthService {
     );
   }
 
+  // ---- Admin-initiated credential management -----------------------------
+
+  /** GlobalRole privilege ranking — higher number = more privileged. */
+  private static readonly ROLE_RANK: Record<string, number> = {
+    CUSTOMER: 0,
+    SUPPORT: 1,
+    ADMIN: 2,
+    OWNER: 3,
+  };
+
+  /**
+   * Guard against privilege escalation / lateral takeover: an admin may only
+   * manage credentials for an account STRICTLY LOWER in privilege than their
+   * own, and never their own account through this path.
+   */
+  private assertCanManageCredentials(
+    actor: { id: string; globalRole: string },
+    target: { id: string; globalRole: string },
+  ): void {
+    if (actor.id === target.id) {
+      throw new ForbiddenException(
+        'Use your own account settings to change your password.',
+      );
+    }
+    const a = AuthService.ROLE_RANK[actor.globalRole] ?? 0;
+    const t = AuthService.ROLE_RANK[target.globalRole] ?? 0;
+    if (a <= t) {
+      throw new ForbiddenException(
+        'You cannot manage the credentials of an account at or above your privilege level.',
+      );
+    }
+  }
+
+  private async loadCredentialTarget(targetId: string) {
+    const target = await this.prisma.user.findFirst({
+      where: { id: targetId, deletedAt: null },
+      select: { id: true, email: true, firstName: true, globalRole: true },
+    });
+    if (!target) throw new NotFoundException('User not found');
+    return target;
+  }
+
+  /** Admin: email the target user a password-reset link (admin never sees it). */
+  async adminSendPasswordReset(
+    actor: { id: string; globalRole: string },
+    targetId: string,
+  ): Promise<void> {
+    const target = await this.loadCredentialTarget(targetId);
+    this.assertCanManageCredentials(actor, target);
+
+    const token = this.crypto.token(32);
+    await this.prisma.passwordResetToken.create({
+      data: {
+        id: uuidv7(),
+        userId: target.id,
+        tokenHash: this.crypto.hash(token),
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TTL_MS),
+      },
+    });
+    await this.email.sendPasswordReset(
+      { email: target.email, firstName: target.firstName },
+      token,
+    );
+  }
+
+  /**
+   * Admin: set a temporary password for the target user. Forces a change on next
+   * login, revokes ALL their sessions, records history, and emails a security
+   * notice. Returns the plaintext (to relay once). Generates a strong password
+   * when none is supplied.
+   */
+  async adminSetPassword(
+    actor: { id: string; globalRole: string },
+    targetId: string,
+    password?: string,
+  ): Promise<{ password: string }> {
+    const target = await this.loadCredentialTarget(targetId);
+    this.assertCanManageCredentials(actor, target);
+
+    const plaintext = password?.trim() || this.generateTempPassword();
+    const currentHash = (
+      await this.prisma.user.findUnique({
+        where: { id: target.id },
+        select: { passwordHash: true },
+      })
+    )?.passwordHash;
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: target.id },
+        data: {
+          passwordHash: await argon2.hash(plaintext, ARGON_OPTS),
+          mustChangePassword: true,
+        },
+      }),
+      // A reset implies the account may be compromised — kill every session.
+      this.prisma.session.updateMany({
+        where: { userId: target.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
+    ]);
+    await this.recordPasswordHistory(target.id, currentHash);
+
+    // Best-effort security notice so the owner sees an admin reset.
+    await this.email
+      .sendPasswordChangedByAdmin({ email: target.email, firstName: target.firstName })
+      .catch(() => undefined);
+
+    return { password: plaintext };
+  }
+
+  /** A strong, policy-compliant random password (10+ chars, all classes). */
+  private generateTempPassword(): string {
+    const lower = 'abcdefghijkmnpqrstuvwxyz';
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const nums = '23456789';
+    const syms = '!@#$%^&*?-_';
+    const all = lower + upper + nums + syms;
+    const pick = (set: string) => set[randomInt(set.length)];
+    const chars = [pick(lower), pick(upper), pick(nums), pick(syms)];
+    for (let i = chars.length; i < 16; i++) chars.push(pick(all));
+    // Fisher–Yates shuffle so the guaranteed classes aren't always first.
+    for (let i = chars.length - 1; i > 0; i--) {
+      const j = randomInt(i + 1);
+      [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    return chars.join('');
+  }
+
   /**
    * Complete a password reset: validate the (hashed) token, set a new argon2id
    * hash, mark the token used and revoke every existing session for the user.
@@ -560,7 +691,10 @@ export class AuthService {
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: record.userId },
-        data: { passwordHash: await argon2.hash(newPassword, ARGON_OPTS) },
+        data: {
+          passwordHash: await argon2.hash(newPassword, ARGON_OPTS),
+          mustChangePassword: false,
+        },
       }),
       this.prisma.passwordResetToken.update({
         where: { id: record.id },
@@ -726,7 +860,10 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash: await argon2.hash(newPassword, ARGON_OPTS) },
+      data: {
+        passwordHash: await argon2.hash(newPassword, ARGON_OPTS),
+        mustChangePassword: false,
+      },
     });
     // Remember the just-replaced password so it can't be reused later.
     await this.recordPasswordHistory(userId, user.passwordHash);
