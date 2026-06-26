@@ -40,6 +40,7 @@ import type {
   AuditLog,
   GlobalAlert,
   AdminServer,
+  ServerTransfer,
   StorefrontGame,
   StorefrontGameDetail,
   TeamMember,
@@ -1041,6 +1042,12 @@ export const api = {
       environment?: Record<string, string>;
     }) => http.post<Server>("/admin/servers", input),
     deleteServer: (id: string) => http.delete<void>(`/admin/servers/${id}`),
+    /** Move a server to another node (Pterodactyl-style). Returns the queued transfer. */
+    transferServer: (id: string, toNodeId: string) =>
+      http.post<ServerTransfer>(`/admin/servers/${id}/transfer`, { toNodeId }),
+    /** Transfer history for a server (latest first) — for status/progress polling. */
+    serverTransfers: (id: string) =>
+      http.get<ServerTransfer[]>(`/admin/servers/${id}/transfers`),
 
     templates: () => getList<GameTemplate>("/admin/templates"),
     saveTemplate: ({ id, ...body }: Partial<GameTemplate>) =>

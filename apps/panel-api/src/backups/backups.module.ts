@@ -12,5 +12,6 @@ import { QUEUE } from '../queues/queue.constants';
   imports: [BullModule.registerQueue({ name: QUEUE.BACKUPS })],
   controllers: [BackupsController],
   providers: [BackupsService],
+  exports: [BackupsService],
 })
 export class BackupsModule {}

@@ -11,6 +11,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  IsUUID,
   Length,
   Max,
   MaxLength,
@@ -321,6 +322,16 @@ export class AdminCreateServerDto {
   @IsOptional()
   @IsObject()
   environment?: Record<string, string>;
+}
+
+/**
+ * Admin "Transfer server to another node" (Pterodactyl-style). Moves the server
+ * to `toNodeId` while keeping its identity (shortId, SFTP, backups, plan).
+ */
+export class TransferServerDto {
+  @ApiProperty({ description: 'Destination node id (must differ from the current node).' })
+  @IsUUID()
+  toNodeId!: string;
 }
 
 export class SetUserPasswordDto {

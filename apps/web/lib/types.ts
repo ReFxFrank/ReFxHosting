@@ -160,6 +160,31 @@ export interface AdminServer extends Server {
   owner?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
 }
 
+/** Lifecycle of an admin-initiated server transfer between nodes. */
+export type TransferState =
+  | "PENDING"
+  | "SNAPSHOTTING"
+  | "PROVISIONING"
+  | "RESTORING"
+  | "FINALIZING"
+  | "SUCCEEDED"
+  | "FAILED";
+
+/** A record of moving a server from one node to another (admin node transfer). */
+export interface ServerTransfer {
+  id: string;
+  serverId: string;
+  fromNodeId: string;
+  toNodeId: string;
+  backupId: string | null;
+  state: TransferState;
+  error: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** Minimal customer reference embedded in admin billing rows. */
 export type AdminUserRef = Pick<User, "id" | "email" | "firstName" | "lastName">;
 

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, Minus, Trash2, ExternalLink, Power, Play, RotateCw, Square, Zap } from "lucide-react";
+import { HardDrive, Plus, Minus, Trash2, ExternalLink, Power, Play, RotateCw, Square, Zap, ArrowLeftRight, Loader2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,7 +41,36 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import type { AdminServer, GameTemplate } from "@/lib/types";
+import type { AdminServer, GameTemplate, ServerTransfer, TransferState } from "@/lib/types";
+
+/** Non-terminal transfer states (an in-flight move). */
+const ACTIVE_TRANSFER_STATES: TransferState[] = [
+  "PENDING",
+  "SNAPSHOTTING",
+  "PROVISIONING",
+  "RESTORING",
+  "FINALIZING",
+];
+
+/** Human-readable step label for a transfer state. */
+function transferStepLabel(state: TransferState): string {
+  switch (state) {
+    case "PENDING":
+      return "Queued";
+    case "SNAPSHOTTING":
+      return "Snapshotting source";
+    case "PROVISIONING":
+      return "Provisioning destination";
+    case "RESTORING":
+      return "Restoring snapshot";
+    case "FINALIZING":
+      return "Finalizing";
+    case "SUCCEEDED":
+      return "Completed";
+    case "FAILED":
+      return "Failed";
+  }
+}
 
 function ownerLabel(s: AdminServer): string {
   const o = s.owner;
@@ -69,6 +98,9 @@ export default function AdminServersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<AdminServer | null>(null);
+  // The server currently open in the Transfer dialog, + the chosen destination.
+  const [transferTarget, setTransferTarget] = useState<AdminServer | null>(null);
+  const [transferToNodeId, setTransferToNodeId] = useState("");
 
   const { data: servers, isLoading } = useQuery({
     queryKey: ["admin", "servers"],
@@ -179,6 +211,51 @@ export default function AdminServersPage() {
       toast.error(e instanceof ApiError ? e.message : "Power action failed"),
   });
 
+  // ---- Transfer (move a server to another node) --------------------------
+  // Candidate destination nodes (loaded lazily when the dialog opens). The
+  // current node is filtered out of the picker below.
+  const { data: transferNodes } = useQuery({
+    queryKey: ["admin", "nodes"],
+    queryFn: () => api.admin.nodes(),
+    enabled: !!transferTarget,
+  });
+
+  // Poll the open server's transfer history so the in-flight progress updates
+  // live; stops polling once the latest transfer is terminal.
+  const { data: transfers } = useQuery({
+    queryKey: ["admin", "server-transfers", transferTarget?.id],
+    queryFn: () => api.admin.serverTransfers(transferTarget!.id),
+    enabled: !!transferTarget,
+    refetchInterval: (query) => {
+      const latest = query.state.data?.[0];
+      return latest && ACTIVE_TRANSFER_STATES.includes(latest.state) ? 3_000 : false;
+    },
+  });
+
+  const latestTransfer: ServerTransfer | undefined = transfers?.[0];
+  const transferInFlight =
+    !!latestTransfer && ACTIVE_TRANSFER_STATES.includes(latestTransfer.state);
+
+  const transferMutation = useMutation({
+    mutationFn: (v: { id: string; toNodeId: string }) =>
+      api.admin.transferServer(v.id, v.toNodeId),
+    onSuccess: () => {
+      toast.success("Transfer started — the server will move to the new node");
+      invalidate();
+      setTransferToNodeId("");
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "server-transfers", transferTarget?.id],
+      });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to start transfer"),
+  });
+
+  const openTransfer = (s: AdminServer) => {
+    setTransferToNodeId("");
+    setTransferTarget(s);
+  };
+
   const canSubmit =
     form.name.trim() &&
     form.ownerId &&
@@ -277,6 +354,15 @@ export default function AdminServersPage() {
                           <Link href={`/servers/${s.id}`}>
                             <ExternalLink className="size-4" /> Manage
                           </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Transfer to another node"
+                          disabled={s.state === "TRANSFERRING"}
+                          onClick={() => openTransfer(s)}
+                        >
+                          <ArrowLeftRight className="size-4" /> Transfer
                         </Button>
                         <Button
                           variant="ghost"
@@ -527,6 +613,112 @@ export default function AdminServersPage() {
               onClick={() => createMutation.mutate()}
             >
               Create server
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer server to another node */}
+      <Dialog
+        open={!!transferTarget}
+        onOpenChange={(o) => {
+          if (!o) {
+            setTransferTarget(null);
+            setTransferToNodeId("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Transfer server</DialogTitle>
+            <DialogDescription>
+              Move {transferTarget?.name} to another node. The server keeps its
+              identity (SFTP, backups, plan). It is stopped and snapshotted on the
+              current node, re-created and restored on the destination, then the old
+              copy is removed — only after the destination is verified.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Current node</Label>
+              <p className="text-sm text-muted-foreground">
+                {transferTarget?.node?.name ?? "—"}
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Destination node</Label>
+              <Select
+                value={transferToNodeId}
+                onValueChange={setTransferToNodeId}
+                disabled={transferInFlight}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select destination node" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(transferNodes ?? [])
+                    .filter((n) => n.id !== transferTarget?.nodeId)
+                    .map((n) => (
+                      <SelectItem key={n.id} value={n.id}>
+                        {n.name}
+                        {n.maintenance ? " · maintenance" : ""}
+                        {n.state !== "ONLINE" ? ` · ${n.state.toLowerCase()}` : ""}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Live status of the most recent transfer for this server. */}
+            {latestTransfer && (
+              <div className="rounded-md border border-border bg-muted/30 p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  {transferInFlight && (
+                    <Loader2 className="size-4 animate-spin text-muted-foreground" />
+                  )}
+                  <span className="font-medium">
+                    {transferStepLabel(latestTransfer.state)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {latestTransfer.state === "FAILED"
+                      ? ""
+                      : transferInFlight
+                        ? "(in progress)"
+                        : ""}
+                  </span>
+                </div>
+                {latestTransfer.state === "FAILED" && latestTransfer.error && (
+                  <p className="mt-1 text-destructive">{latestTransfer.error}</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setTransferTarget(null);
+                setTransferToNodeId("");
+              }}
+            >
+              Close
+            </Button>
+            <Button
+              loading={transferMutation.isPending}
+              disabled={!transferToNodeId || transferInFlight}
+              onClick={() =>
+                transferTarget &&
+                transferToNodeId &&
+                transferMutation.mutate({
+                  id: transferTarget.id,
+                  toNodeId: transferToNodeId,
+                })
+              }
+            >
+              <ArrowLeftRight className="size-4" /> Start transfer
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -9,23 +9,28 @@ import { ModpackService } from './modpack.service';
 import { WorkshopService } from './workshop.service';
 import { VoiceService } from './voice.service';
 import { ScheduleRunner } from './schedule.runner';
+import { TransfersService } from './transfers.service';
 import { ServersController } from './servers.controller';
 import { ServersResolver } from './servers.resolver';
 import { ModpackProcessor } from '../queues/processors/modpack.processor';
+import { TransferProcessor } from '../queues/processors/transfer.processor';
 import { NodesModule } from '../nodes/nodes.module';
 import { BillingModule } from '../billing/billing.module';
+import { BackupsModule } from '../backups/backups.module';
 import { QUEUE } from '../queues/queue.constants';
 
 @Module({
   imports: [
     NodesModule,
     BillingModule,
+    BackupsModule,
     BullModule.registerQueue(
       { name: QUEUE.PROVISIONING },
       { name: QUEUE.REINSTALL },
       { name: QUEUE.SUSPENSION },
       { name: QUEUE.MODPACK },
       { name: QUEUE.BACKUPS },
+      { name: QUEUE.TRANSFER },
     ),
   ],
   controllers: [ServersController],
@@ -39,9 +44,11 @@ import { QUEUE } from '../queues/queue.constants';
     WorkshopService,
     VoiceService,
     ModpackProcessor,
+    TransferProcessor,
+    TransfersService,
     ScheduleRunner,
     ServersResolver,
   ],
-  exports: [ServersService],
+  exports: [ServersService, TransfersService],
 })
 export class ServersModule {}

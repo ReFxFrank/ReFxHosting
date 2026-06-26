@@ -568,6 +568,7 @@ model Server {
   variables       ServerVariable[]
   workshopMods    WorkshopMod[]
   gameHistory     GameSwitchLog[]
+  transfers       ServerTransfer[]
   stats           ServerStat[]
 
   createdAt       DateTime      @default(now())
@@ -627,6 +628,42 @@ model GameSwitchLog {
   createdAt     DateTime @default(now())
 
   @@index([serverId])
+}
+
+// Lifecycle of an admin-initiated server transfer between nodes. Terminal
+// states are SUCCEEDED / FAILED; everything else is in-flight.
+enum TransferState {
+  PENDING
+  SNAPSHOTTING
+  PROVISIONING
+  RESTORING
+  FINALIZING
+  SUCCEEDED
+  FAILED
+}
+
+// An admin-only, Pterodactyl-style move of a server from one node to another.
+// The orchestration (snapshot on source → provision on dest → restore →
+// repoint → delete source) runs in a BullMQ job; this row tracks its progress
+// and is the source of truth the UI polls. The server keeps its identity
+// (shortId, SFTP, backups, subscription) throughout — only its nodeId changes.
+model ServerTransfer {
+  id         String        @id @db.Uuid
+  serverId   String        @db.Uuid
+  server     Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  fromNodeId String        @db.Uuid
+  toNodeId   String        @db.Uuid
+  // The snapshot taken on the source node and restored on the destination.
+  backupId   String?       @db.Uuid
+  state      TransferState @default(PENDING)
+  error      String?
+  startedAt  DateTime      @default(now())
+  finishedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([serverId])
+  @@index([state])
 }
 
 model ServerStat {

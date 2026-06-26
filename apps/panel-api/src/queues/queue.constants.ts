@@ -11,6 +11,7 @@ export const QUEUE = {
   BILLING_RENEWAL: 'billing-renewal',
   SUSPENSION: 'suspension',
   MODPACK: 'modpack',
+  TRANSFER: 'transfer',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
@@ -67,6 +68,11 @@ export interface ModpackUninstallJob {
   title?: string;
 }
 
+/** Move a server from its current node to another (admin-only node transfer). */
+export interface TransferJob {
+  transferId: string;
+}
+
 export const JOB = {
   PROVISION: 'provision',
   RECONFIGURE: 'reconfigure',
@@ -77,4 +83,5 @@ export const JOB = {
   SUSPEND: 'suspend',
   INSTALL_MODPACK: 'install-modpack',
   UNINSTALL_MODPACK: 'uninstall-modpack',
+  TRANSFER: 'transfer',
 } as const;

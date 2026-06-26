@@ -24,6 +24,7 @@ import { UsersService } from '../users/users.service';
 import { BillingService } from '../billing/billing.service';
 import { TemplatesService } from '../templates/templates.service';
 import { ServersService } from '../servers/servers.service';
+import { TransfersService } from '../servers/transfers.service';
 import { AlertsService } from '../platform/alerts.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 import { IncidentsService } from '../platform/incidents.service';
@@ -91,6 +92,7 @@ import {
   SetUserPasswordDto,
   SetUserRoleDto,
   TestEmailDto,
+  TransferServerDto,
   UpdateAlertDto,
   UpdateProductDto,
   UpdateRoleDto,
@@ -115,6 +117,7 @@ export class AdminController {
     private readonly billing: BillingService,
     private readonly templates: TemplatesService,
     private readonly servers: ServersService,
+    private readonly transfers: TransfersService,
     private readonly alerts: AlertsService,
     private readonly homepageAlerts: HomepageAlertsService,
     private readonly incidents: IncidentsService,
@@ -797,6 +800,26 @@ export class AdminController {
   @Audit({ action: 'admin.server.delete', targetType: 'Server', targetParam: 'id' })
   deleteServer(@Param('id') id: string) {
     return this.servers.delete(id);
+  }
+
+  /**
+   * Transfer a server to another node (Pterodactyl-style). Stops + snapshots on
+   * the source, provisions + restores on the destination, then repoints the
+   * server — the source copy is removed only once the destination is verified,
+   * so the server always survives. Runs in a queue; returns the transfer row.
+   */
+  @Post('servers/:id/transfer')
+  @RequirePerm('servers.manage')
+  @Audit({ action: 'admin.server.transfer', targetType: 'Server', targetParam: 'id' })
+  transferServer(@Param('id') id: string, @Body() dto: TransferServerDto) {
+    return this.transfers.requestTransfer(id, dto.toNodeId);
+  }
+
+  /** Transfer history for a server (latest first) — for status/progress. */
+  @Get('servers/:id/transfers')
+  @RequirePerm('servers.read')
+  serverTransfers(@Param('id') id: string) {
+    return this.transfers.listTransfers(id);
   }
 
   // ---- Alerts ------------------------------------------------------------
