@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# =============================================================================
+# ReFx Hosting — canonical docker compose wrapper
+# -----------------------------------------------------------------------------
+# ALWAYS invoke compose through this script on a server. It bakes in the two
+# things that are easy to forget and silently break a deploy:
+#
+#   1. --env-file <repo>/.env   so ${VAR} substitution in the compose file reads
+#      the repo-root .env. Without it, Compose looks for .env next to the compose
+#      file (infra/docker/), finds none, and every ${VAR:-default} falls back to
+#      its default — most damagingly DATABASE_URL's password becomes the literal
+#      "refx", so the panel can't authenticate to Postgres (auth-failed loop).
+#
+#   2. -f <repo>/infra/docker/docker-compose.yml   the compose file location.
+#
+# Usage (from anywhere):
+#   infra/scripts/dc up -d
+#   infra/scripts/dc logs -f panel-api
+#   infra/scripts/dc run --rm migrate ...
+#
+# NOTE: your .env MUST use compose SERVICE HOSTNAMES, not localhost — e.g.
+#   DATABASE_URL=postgresql://refx:<password>@postgres:5432/refx?schema=public
+# (.env.example ships localhost values for running the API outside Docker.)
+# =============================================================================
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+if [ ! -f "$ROOT/.env" ]; then
+  echo "dc: no .env at $ROOT/.env — copy apps/panel-api/.env.example to $ROOT/.env first." >&2
+  exit 1
+fi
+
+exec docker compose \
+  --env-file "$ROOT/.env" \
+  -f "$ROOT/infra/docker/docker-compose.yml" \
+  "$@"

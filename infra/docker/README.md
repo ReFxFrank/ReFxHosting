@@ -60,23 +60,33 @@ npm run stack:logs    # follow logs
 npm run stack:down    # stop everything
 ```
 
-…or directly from this directory:
+…or directly, via the `dc` wrapper that bakes in `--env-file` + the compose
+file path (works from anywhere in the repo):
 
 ```bash
-cd infra/docker
-docker compose up -d            # build + start the full stack
-docker compose ps               # check health
-docker compose logs -f panel-api
-docker compose down             # stop (add -v to also drop named volumes)
+infra/scripts/dc up -d            # build + start the full stack
+infra/scripts/dc ps               # check health
+infra/scripts/dc logs -f panel-api
+infra/scripts/dc down             # stop (add -v to also drop named volumes)
 ```
+
+> **⚠️ Never run a bare `docker compose -f infra/docker/docker-compose.yml …`
+> without `--env-file <repo>/.env`.** Compose looks for `.env` next to the
+> compose file (`infra/docker/`), finds none, so every `${VAR:-default}` in the
+> file falls back to its default — most damagingly `DATABASE_URL`'s password
+> becomes the literal `refx` and the panel can't authenticate to Postgres
+> (endless "db not ready" / `password authentication failed`). Always go through
+> `infra/scripts/dc`, `npm run stack:up`, or `infra/scripts/update-panel.sh` —
+> all of which pass `--env-file`. Also: your `.env` must use compose **service
+> hostnames** (`@postgres:5432`, `redis`, …), not `localhost`.
 
 The first `up` builds three images: `migrate`, `panel-api`, and `web` (build
 context is the **repo root**, `../../`, so the Prisma schema and seed are
 available).
 
 > **Web build note:** `apps/web/Dockerfile` is owned by another agent. If it is
-> not present yet, `docker compose build web` will fail — comment out the `web`
-> service (or run `docker compose up -d` for the services you need) until that
+> not present yet, `infra/scripts/dc build web` will fail — comment out the `web`
+> service (or `infra/scripts/dc up -d` for the services you need) until that
 > Dockerfile lands.
 
 ### Optional: RabbitMQ (scale-out profile)
