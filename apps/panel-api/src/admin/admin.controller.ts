@@ -283,6 +283,19 @@ export class AdminController {
     return this.nodes.unpinAgentCert(id);
   }
 
+  /**
+   * Rotate the node's bootstrap token: mints a fresh single-use, time-boxed
+   * token and clears the used marker so the agent can (re)register. The old
+   * token is immediately invalidated. Returns the new plaintext once.
+   */
+  @Post('nodes/:id/bootstrap-token')
+  @HttpCode(200)
+  @RequirePerm('nodes.manage')
+  @Audit({ action: 'admin.node.bootstrap.rotate', targetType: 'Node', targetParam: 'id' })
+  regenerateNodeBootstrap(@Param('id') id: string) {
+    return this.nodes.regenerateBootstrap(id);
+  }
+
   @Patch('nodes/:id')
   @RequirePerm('nodes.manage')
   @Audit({ action: 'admin.node.update', targetType: 'Node', targetParam: 'id' })

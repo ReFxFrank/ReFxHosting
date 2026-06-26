@@ -10,6 +10,13 @@ export interface AuthUser {
   email: string;
   globalRole: string;
   state: string;
+  /**
+   * True when an admin set a temporary password and the user has not yet
+   * chosen a new one. While true, the global PasswordChangeInterceptor blocks
+   * every route except the password-change allowlist (see
+   * common/interceptors/password-change.interceptor.ts).
+   */
+  mustChangePassword?: boolean;
   /** Effective admin permissions (from the assigned RBAC role, or role defaults). */
   permissions: string[];
   /** Present when the request authenticated via an API key. */

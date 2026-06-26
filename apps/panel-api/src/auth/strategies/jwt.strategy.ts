@@ -38,6 +38,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       email: string;
       globalRole: string;
       state: string;
+      mustChangePassword: boolean;
       role?: { permissions: string[] } | null;
     };
     let user: LoadedUser | null;
@@ -49,6 +50,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
           email: true,
           globalRole: true,
           state: true,
+          mustChangePassword: true,
           role: { select: { permissions: true } },
         },
       })) as LoadedUser | null;
@@ -57,7 +59,13 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       // basic lookup so authentication never hard-fails for the whole app.
       user = (await this.prisma.user.findFirst({
         where: { id: payload.sub, deletedAt: null },
-        select: { id: true, email: true, globalRole: true, state: true },
+        select: {
+          id: true,
+          email: true,
+          globalRole: true,
+          state: true,
+          mustChangePassword: true,
+        },
       })) as LoadedUser | null;
     }
     if (!user) throw new UnauthorizedException('User not found');
@@ -72,6 +80,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       email: user.email,
       globalRole: user.globalRole,
       state: user.state,
+      mustChangePassword: user.mustChangePassword ?? false,
       permissions,
     };
   }

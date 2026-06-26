@@ -300,6 +300,13 @@ model Node {
   agentVersion  String?
   // Bcrypt/argon hash of the per-node bootstrap token.
   tokenHash     String
+  // Bootstrap token lifecycle. The token a node first registers with is
+  // single-use and time-boxed: it must be presented before
+  // bootstrapTokenExpiresAt and only once (bootstrapTokenUsedAt is stamped on a
+  // successful register). Rotating the token (admin "regenerate") clears used +
+  // sets a fresh expiry.
+  bootstrapTokenExpiresAt DateTime?
+  bootstrapTokenUsedAt    DateTime?
   daemonPort    Int        @default(8443)
   sftpPort      Int        @default(2022)
   scheme        String     @default("https")

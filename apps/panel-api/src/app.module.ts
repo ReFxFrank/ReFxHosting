@@ -13,6 +13,8 @@ import { CryptoModule } from './common/crypto/crypto.module';
 import { EmailModule } from './email/email.module';
 import { PushModule } from './push/push.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
+import { PasswordChangeInterceptor } from './common/interceptors/password-change.interceptor';
+import { ApiKeyWriteScopeInterceptor } from './common/interceptors/api-key-write-scope.interceptor';
 
 import { AgentModule } from './agent/agent.module';
 import { AuthModule } from './auth/auth.module';
@@ -80,15 +82,25 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     }),
 
     // Code-first GraphQL (schema generated from resolvers/models at boot).
-    GraphQLModule.forRoot<ApolloDriverConfig>({
+    GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
-      // Generate the schema in-memory: the production image has no writable
-      // `src/` (runs as non-root, only `dist/` is shipped), and we don't need
-      // the .gql artifact at runtime.
-      autoSchemaFile: true,
-      sortSchema: true,
-      playground: true,
-      context: ({ req }) => ({ req }),
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => {
+        // The Playground UI and schema introspection are powerful recon tools;
+        // expose them only outside production. In production both are disabled so
+        // the GraphQL schema isn't enumerable by anonymous clients.
+        const isProd = config.get<AppConfig['env']>('env') === 'production';
+        return {
+          // Generate the schema in-memory: the production image has no writable
+          // `src/` (runs as non-root, only `dist/` is shipped), and we don't need
+          // the .gql artifact at runtime.
+          autoSchemaFile: true,
+          sortSchema: true,
+          playground: !isProd,
+          introspection: !isProd,
+          context: ({ req }: { req: unknown }) => ({ req }),
+        };
+      },
     }),
 
     // Infra
@@ -122,6 +134,16 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Runs first among the interceptors so an admin-set temporary password
+    // (mustChangePassword=true) blocks the request with a distinguishable 403
+    // BEFORE the audit/metrics interceptors subscribe to the handler.
+    { provide: APP_INTERCEPTOR, useClass: PasswordChangeInterceptor },
+    // Global API-key WRITE-scope ceiling: a READ-scoped key may never drive a
+    // mutating (POST/PUT/PATCH/DELETE) request, on ANY controller — including
+    // JwtAuthGuard-only surfaces (account, billing, support, orders) that have
+    // no PermissionGuard/AdminPermissionGuard to enforce the ceiling. Runs as an
+    // interceptor (after guards) so req.user's apiKeyScopes are populated.
+    { provide: APP_INTERCEPTOR, useClass: ApiKeyWriteScopeInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
     { provide: APP_INTERCEPTOR, useClass: MetricsInterceptor },
   ],

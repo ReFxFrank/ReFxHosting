@@ -19,6 +19,7 @@ import { PushService } from '../push/push.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
+import { AllowWhenPasswordExpired } from '../common/decorators/allow-when-password-expired.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateApiKeyDto, TotpVerifyDto } from '../auth/dto/auth.dto';
 import { UpdateProfileDto } from '../users/dto/update-profile.dto';
@@ -151,6 +152,9 @@ export class AccountController {
 
   @Post('password')
   @HttpCode(204)
+  // The user MUST be able to reach this even with mustChangePassword set —
+  // it is how they clear the flag.
+  @AllowWhenPasswordExpired()
   @Audit({ action: 'account.password.change', targetType: 'User' })
   changePassword(
     @CurrentUser('id') userId: string,

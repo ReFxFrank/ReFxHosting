@@ -85,7 +85,17 @@ export class ApiKeyService {
 
     const key = await this.prisma.apiKey.findUnique({
       where: { prefix },
-      include: { user: { select: { id: true, email: true, globalRole: true, state: true } } },
+      include: {
+        user: {
+          select: {
+            id: true,
+            email: true,
+            globalRole: true,
+            state: true,
+            mustChangePassword: true,
+          },
+        },
+      },
     });
     if (!key || key.keyHash !== this.crypto.hash(rawKey)) {
       throw new UnauthorizedException('Invalid API key');
@@ -111,6 +121,7 @@ export class ApiKeyService {
       email: key.user.email,
       globalRole: key.user.globalRole,
       state: key.user.state,
+      mustChangePassword: key.user.mustChangePassword,
       permissions: permissionsForGlobalRole(key.user.globalRole),
       apiKeyId: key.id,
       apiKeyScopes: key.scopes,

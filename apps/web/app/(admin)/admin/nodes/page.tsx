@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import {
   Boxes,
+  KeyRound,
   Plus,
   Activity,
   Copy,
@@ -560,6 +561,20 @@ export default function AdminNodesPage() {
       toast.error(e instanceof ApiError ? e.message : "Failed to delete node"),
   });
 
+  const regenerateBootstrapMutation = useMutation({
+    mutationFn: (id: string) => api.admin.regenerateNodeBootstrap(id),
+    onSuccess: (res) => {
+      // The old token is now dead; surface the fresh one in the same dialog the
+      // create flow uses.
+      setDetailNode(null);
+      setBootstrapToken(res.bootstrapToken);
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to regenerate token",
+      ),
+  });
+
   const restartAgentMutation = useMutation({
     mutationFn: (id: string) => api.admin.restartNodeAgent(id),
     onSuccess: () => {
@@ -988,6 +1003,15 @@ export default function AdminNodesPage() {
                 onClick={() => detailNode && setSteamClearTarget(detailNode)}
               >
                 <Boxes className="size-4" /> Clear Steam cache
+              </Button>
+              <Button
+                variant="outline"
+                loading={regenerateBootstrapMutation.isPending}
+                onClick={() =>
+                  detailNode && regenerateBootstrapMutation.mutate(detailNode.id)
+                }
+              >
+                <KeyRound className="size-4" /> Regenerate token
               </Button>
             </div>
             <Button variant="ghost" onClick={() => setDetailNode(null)}>

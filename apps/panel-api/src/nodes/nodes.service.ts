@@ -30,6 +30,14 @@ function isUuid(v: string): boolean {
   return UUID_RE.test(v);
 }
 
+/**
+ * How long a freshly-minted node bootstrap token is valid for. The token is a
+ * single-use bearer credential that yields the node's signing key, so it is
+ * deliberately short-lived: the operator installs the agent and registers
+ * within this window, or rotates the token (admin "regenerate") for a new one.
+ */
+const BOOTSTRAP_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
+
 @Injectable()
 export class NodesService {
   private readonly secretsEncKey: string;
@@ -172,6 +180,10 @@ export class NodesService {
         // We store the SHA-256 of the bootstrap token; the agent is provisioned
         // with the same value as its HMAC signing secret (see NodeAgentClient).
         tokenHash: this.crypto.hash(bootstrapToken),
+        // Single-use + time-boxed: the token must be redeemed within the TTL and
+        // is consumed on first successful registration.
+        bootstrapTokenExpiresAt: new Date(Date.now() + BOOTSTRAP_TOKEN_TTL_MS),
+        bootstrapTokenUsedAt: null,
         cpuCores: dto.cpuCores,
         memoryMb: dto.memoryMb,
         diskMb: dto.diskMb,
@@ -469,14 +481,25 @@ export class NodesService {
     });
   }
 
-  /** Re-issue a bootstrap token for an existing node (rotation). */
-  async regenerateBootstrap(id: string): Promise<{ bootstrapToken: string }> {
+  /**
+   * Re-issue a bootstrap token for an existing node (rotation). Mints a fresh
+   * single-use token with a new expiry window and clears the used marker so the
+   * node can register again.
+   */
+  async regenerateBootstrap(
+    id: string,
+  ): Promise<{ bootstrapToken: string; expiresAt: Date }> {
     const bootstrapToken = this.crypto.token(32);
+    const expiresAt = new Date(Date.now() + BOOTSTRAP_TOKEN_TTL_MS);
     await this.prisma.node.update({
       where: { id },
-      data: { tokenHash: this.crypto.hash(bootstrapToken) },
+      data: {
+        tokenHash: this.crypto.hash(bootstrapToken),
+        bootstrapTokenExpiresAt: expiresAt,
+        bootstrapTokenUsedAt: null,
+      },
     });
-    return { bootstrapToken };
+    return { bootstrapToken, expiresAt };
   }
 
   /**
@@ -735,13 +758,34 @@ export class NodesService {
     });
     if (!node) throw new BadRequestException('Invalid bootstrap token');
 
-    await this.prisma.node.update({
-      where: { id: node.id },
+    // Single-use: a token that has already been redeemed is dead. The operator
+    // must rotate it (admin "regenerate bootstrap token") to register again.
+    if (node.bootstrapTokenUsedAt) {
+      throw new BadRequestException('Bootstrap token already used');
+    }
+    // Time-boxed: reject an expired token. A null expiry (legacy rows created
+    // before this field) is treated as non-expiring for backward compatibility.
+    if (
+      node.bootstrapTokenExpiresAt &&
+      node.bootstrapTokenExpiresAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('Bootstrap token expired');
+    }
+
+    // Consume the token atomically: only flip it when it is STILL unused, so two
+    // concurrent registrations with the same valid token cannot both win the
+    // check-then-set race above. The DB enforces single-use; a loser sees 0 rows.
+    const consumed = await this.prisma.node.updateMany({
+      where: { id: node.id, bootstrapTokenUsedAt: null },
       data: {
         state: 'ONLINE',
         agentVersion: dto.agentVersion ?? node.agentVersion,
+        bootstrapTokenUsedAt: new Date(),
       },
     });
+    if (consumed.count === 0) {
+      throw new BadRequestException('Bootstrap token already used');
+    }
 
     const servers = await this.buildServerInstallSpecs(node.id);
 
@@ -852,12 +896,32 @@ export class NodesService {
     if (!node || node.tokenHash !== this.crypto.hash(dto.bootstrapToken)) {
       throw new BadRequestException('Invalid bootstrap token');
     }
-    const updated = await this.prisma.node.update({
-      where: { id: nodeId },
+    // Same single-use + time-boxed lifecycle as registerAgentByToken — this
+    // legacy path must NOT let a used/expired token be replayed.
+    if (node.bootstrapTokenUsedAt) {
+      throw new BadRequestException('Bootstrap token already used');
+    }
+    if (
+      node.bootstrapTokenExpiresAt &&
+      node.bootstrapTokenExpiresAt.getTime() < Date.now()
+    ) {
+      throw new BadRequestException('Bootstrap token expired');
+    }
+    // Consume atomically (only while still unused) so concurrent replays of one
+    // valid token can't both succeed.
+    const consumed = await this.prisma.node.updateMany({
+      where: { id: node.id, bootstrapTokenUsedAt: null },
       data: {
         state: 'ONLINE',
         agentVersion: dto.agentVersion ?? node.agentVersion,
+        bootstrapTokenUsedAt: new Date(),
       },
+    });
+    if (consumed.count === 0) {
+      throw new BadRequestException('Bootstrap token already used');
+    }
+    const updated = await this.prisma.node.findUniqueOrThrow({
+      where: { id: nodeId },
     });
     return {
       nodeId: updated.id,

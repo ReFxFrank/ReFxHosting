@@ -52,6 +52,17 @@ export class ConsoleGateway
       if (!token) throw new UnauthorizedException('missing token');
       const secret = this.config.get<AppConfig['jwt']>('jwt')!.accessSecret;
       const payload = await this.jwt.verifyAsync(token, { secret });
+      // The WS console is the one authenticated surface that bypasses the HTTP
+      // guards/interceptors, so re-check the user's status here: a suspended/
+      // banned account, or one with an admin-set temporary password it hasn't
+      // changed yet (mustChangePassword), must not reach live server control.
+      const user = await this.prisma.user.findFirst({
+        where: { id: payload.sub, deletedAt: null },
+        select: { state: true, mustChangePassword: true },
+      });
+      if (!user || user.state !== 'ACTIVE' || user.mustChangePassword) {
+        throw new UnauthorizedException('account not permitted');
+      }
       client.data.userId = payload.sub;
       client.data.role = payload.role;
     } catch {

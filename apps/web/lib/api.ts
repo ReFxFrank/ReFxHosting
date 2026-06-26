@@ -219,6 +219,20 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
 
   // unwrap below after error handling
 
+  // The server blocks every route except the password-change allowlist while
+  // `mustChangePassword` is set, with a distinguishable 403. This isn't an error
+  // to surface — the ForcePasswordChange modal (gated on the same user flag) is
+  // already shown. Swallow it with a never-settling promise so no generic error
+  // toast fires; the modal drives the user to clear the flag, after which calls
+  // succeed again.
+  if (
+    res.status === 403 &&
+    isJson &&
+    (data as { code?: string } | null)?.code === "PASSWORD_CHANGE_REQUIRED"
+  ) {
+    return new Promise<T>(() => {});
+  }
+
   if (!res.ok) {
     const message =
       (isJson && (data?.message || data?.error)) ||
@@ -861,6 +875,12 @@ export const api = {
     unpinNodeCert: (id: string) => http.delete<void>(`/admin/nodes/${id}/pin-cert`),
     createNode: (input: Partial<Node> & { regionId: string }) =>
       http.post<Node & { bootstrapToken: string }>("/admin/nodes", input),
+    /** Rotate a node's single-use, time-boxed bootstrap token. Returns the new
+     *  plaintext + expiry once; the old token is immediately invalidated. */
+    regenerateNodeBootstrap: (id: string) =>
+      http.post<{ bootstrapToken: string; expiresAt: string }>(
+        `/admin/nodes/${id}/bootstrap-token`,
+      ),
     setNodeMaintenance: (id: string, maintenance: boolean) =>
       http.patch<Node>(`/admin/nodes/${id}`, { maintenance }),
     updateNode: (

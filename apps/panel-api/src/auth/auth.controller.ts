@@ -23,6 +23,7 @@ import {
   AuthUser,
 } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
+import { AllowWhenPasswordExpired } from '../common/decorators/allow-when-password-expired.decorator';
 import {
   CreateApiKeyDto,
   ForgotPasswordDto,
@@ -62,6 +63,9 @@ export class AuthController {
 
   @ApiBearerAuth()
   @Get('me')
+  // Allowed while a password change is pending so the web can bootstrap the
+  // session (and render the forced-change modal) instead of erroring.
+  @AllowWhenPasswordExpired()
   async me(@CurrentUser() user: AuthUser) {
     const profile = await this.users.getProfile(user.id);
     // Expose the caller's effective admin permissions so the web can gate the
@@ -157,6 +161,7 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(200)
+  @AllowWhenPasswordExpired()
   refresh(@Body() dto: RefreshDto, @Req() req: any) {
     return this.auth.refresh(dto.refreshToken, {
       ip: req.ip,
@@ -167,6 +172,7 @@ export class AuthController {
   @Public()
   @Post('logout')
   @HttpCode(204)
+  @AllowWhenPasswordExpired()
   async logout(@Body() dto: RefreshDto) {
     await this.auth.logout(dto.refreshToken);
   }
