@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label } from "@/components/ui/input";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -56,6 +57,7 @@ export default function AdminIncidentsPage() {
     status: "INVESTIGATING" as IncidentStatusStage,
     components: [] as string[],
     body: "",
+    notify: false,
   });
   const [updateTarget, setUpdateTarget] = useState<StatusIncident | null>(null);
   const [update, setUpdate] = useState({ status: "IDENTIFIED" as IncidentStatusStage, body: "" });
@@ -73,7 +75,7 @@ export default function AdminIncidentsPage() {
       toast.success("Incident posted");
       invalidate();
       setCreateOpen(false);
-      setCreate({ title: "", impact: "DEGRADED", status: "INVESTIGATING", components: [], body: "" });
+      setCreate({ title: "", impact: "DEGRADED", status: "INVESTIGATING", components: [], body: "", notify: false });
     },
     onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to post incident"),
   });
@@ -279,6 +281,18 @@ export default function AdminIncidentsPage() {
                 placeholder="We are investigating reports of…"
                 value={create.body}
                 onChange={(e) => setCreate((c) => ({ ...c, body: e.target.value }))}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <p className="text-sm font-medium">Notify all customers</p>
+                <p className="text-xs text-muted-foreground">
+                  Sends an in-app notification, push, and email. Use for major incidents only.
+                </p>
+              </div>
+              <Switch
+                checked={create.notify}
+                onCheckedChange={(v: boolean) => setCreate((c) => ({ ...c, notify: v }))}
               />
             </div>
           </div>

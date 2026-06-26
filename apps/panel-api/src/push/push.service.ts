@@ -13,7 +13,7 @@ export interface PushMessage {
   /** App-icon badge count (optional). */
   badge?: number;
   /** Routed on by the iOS app (top-level, alongside `aps`). */
-  type: 'server.state' | 'billing.invoice' | 'support.reply';
+  type: 'server.state' | 'billing.invoice' | 'support.reply' | 'status.incident';
   /** Extra top-level fields the app reads, e.g. { serverId } / { ticketId }. */
   data?: Record<string, string | number>;
 }

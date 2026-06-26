@@ -288,6 +288,50 @@ async function seedRegionAndNode() {
   return { region, node };
 }
 
+/**
+ * One resolved sample incident so the public /status page has history on a
+ * fresh install. Demo-gated and idempotent (fixed id) — operators can delete it
+ * from Admin → Status Incidents. Never a scary "outage": a routine, resolved
+ * maintenance window.
+ */
+async function seedDemoIncidents() {
+  const id = '01900000-0000-7000-8000-00000000d001';
+  if (await prisma.statusIncident.findUnique({ where: { id } })) {
+    console.log('  • Status incidents: sample present');
+    return;
+  }
+  const started = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
+  const resolved = new Date(started.getTime() + 75 * 60 * 1000);
+  await prisma.statusIncident.create({
+    data: {
+      id,
+      title: 'Scheduled network maintenance — CA-East',
+      impact: 'MAINTENANCE',
+      status: 'RESOLVED',
+      components: ['nodes'],
+      startedAt: started,
+      resolvedAt: resolved,
+      updates: {
+        create: [
+          {
+            id: uuidv7(),
+            status: 'MONITORING',
+            body: 'Maintenance window has started. Brief connectivity blips are possible while we upgrade network links.',
+            createdAt: started,
+          },
+          {
+            id: uuidv7(),
+            status: 'RESOLVED',
+            body: 'Maintenance complete — all nodes healthy and accepting connections.',
+            createdAt: resolved,
+          },
+        ],
+      },
+    },
+  });
+  console.log('  • Status incidents: 1 sample (resolved) created');
+}
+
 async function seedTicketCategories() {
   const categories: Array<{
     name: string;
@@ -927,6 +971,9 @@ async function main() {
     console.log('Catalog:');
     const categorySlugToId = await seedGameCategories();
     await seedTemplates(categorySlugToId);
+
+    console.log('Status:');
+    await seedDemoIncidents();
   } else {
     console.log(
       'Demo content: skipped (already initialised; set SEED_DEMO=true to force).',

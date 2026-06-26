@@ -216,6 +216,32 @@ export class EmailService {
     });
   }
 
+  /** Broadcast notice when an operator posts a major status incident. */
+  async sendIncidentNotice(
+    user: MailRecipient,
+    incident: { title: string; body: string; impact: string },
+  ): Promise<void> {
+    const { html, text } = await this.compose({
+      title: incident.title,
+      greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
+      preheader: `Service status update: ${incident.title}`,
+      intro: [
+        `We're letting you know about a current service ${incident.impact.toLowerCase()} affecting ReFx Hosting.`,
+        incident.body,
+      ],
+      button: { label: 'View status page', url: `${this.panelUrl}/status` },
+      outro: [
+        "We'll post updates on the status page as we have them. Thanks for your patience.",
+      ],
+    });
+    await this.sendGeneric({
+      to: user.email,
+      subject: `[Status] ${incident.title}`,
+      text,
+      html,
+    });
+  }
+
   /** Receipt after a successful payment. */
   async sendPaymentReceipt(
     user: MailRecipient,

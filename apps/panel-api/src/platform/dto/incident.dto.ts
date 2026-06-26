@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsIn,
   IsOptional,
@@ -36,6 +37,14 @@ export class CreateIncidentDto {
   @IsString()
   @MaxLength(2000)
   body!: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Broadcast this incident to all active customers (in-app + push + email).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  notify?: boolean;
 }
 
 export class AddIncidentUpdateDto {

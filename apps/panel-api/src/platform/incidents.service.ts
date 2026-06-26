@@ -1,7 +1,10 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { IncidentImpact, IncidentStatus, Prisma } from '@prisma/client';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { IncidentImpact, IncidentStatus, Prisma, UserState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { uuidv7 } from '../common/util/uuid';
+import { NotificationsService } from './notifications.service';
+import { PushService } from '../push/push.service';
+import { EmailService } from '../email/email.service';
 import {
   CreateIncidentDto,
   UpdateIncidentDto,
@@ -22,7 +25,14 @@ const HISTORY_LIMIT = 15;
  */
 @Injectable()
 export class IncidentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(IncidentsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+    private readonly push: PushService,
+    private readonly email: EmailService,
+  ) {}
 
   /** Admin: every incident, newest first, with its update timeline. */
   listAll() {
@@ -60,9 +70,9 @@ export class IncidentsService {
   }
 
   /** Create an incident with its first timeline update. */
-  create(dto: CreateIncidentDto) {
+  async create(dto: CreateIncidentDto) {
     const status = dto.status ?? IncidentStatus.INVESTIGATING;
-    return this.prisma.statusIncident.create({
+    const incident = await this.prisma.statusIncident.create({
       data: {
         id: uuidv7(),
         title: dto.title,
@@ -74,6 +84,58 @@ export class IncidentsService {
       },
       include: incidentInclude,
     });
+
+    // Opt-in broadcast (in-app + push + email) to all active customers. Detached
+    // so a large fan-out never blocks the admin request; best-effort.
+    if (dto.notify) {
+      void this.broadcast(incident.id, dto.title, dto.body, dto.impact).catch((e) =>
+        this.logger.warn(`incident broadcast failed: ${String(e)}`),
+      );
+    }
+    return incident;
+  }
+
+  /** Fan a major incident out to every active customer. Best-effort. */
+  private async broadcast(
+    incidentId: string,
+    title: string,
+    body: string,
+    impact: IncidentImpact,
+  ): Promise<void> {
+    const users = await this.prisma.user.findMany({
+      where: { state: UserState.ACTIVE, deletedAt: null },
+      select: { id: true, email: true, firstName: true },
+    });
+    if (!users.length) return;
+    this.logger.log(`Broadcasting incident ${incidentId} to ${users.length} user(s)`);
+
+    // In-app notifications in one batch.
+    await this.notifications
+      .notifyMany(
+        users.map((u) => u.id),
+        { title: `Service status: ${title}`, body },
+      )
+      .catch(() => undefined);
+
+    // Push + email, chunked to bound concurrency.
+    const CHUNK = 25;
+    for (let i = 0; i < users.length; i += CHUNK) {
+      const batch = users.slice(i, i + CHUNK);
+      await Promise.allSettled(
+        batch.flatMap((u) => [
+          this.push.sendToUser(u.id, {
+            title: `Service status: ${title}`,
+            body,
+            type: 'status.incident',
+            data: { incidentId },
+          }),
+          this.email.sendIncidentNotice(
+            { email: u.email, firstName: u.firstName ?? undefined },
+            { title, body, impact },
+          ),
+        ]),
+      );
+    }
   }
 
   /** Append a timeline update; syncs the incident's status + resolvedAt. */

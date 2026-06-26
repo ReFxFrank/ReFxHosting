@@ -1060,6 +1060,7 @@ export const api = {
       status?: IncidentStatusStage;
       components: string[];
       body: string;
+      notify?: boolean;
     }) => http.post<StatusIncident>("/admin/status/incidents", body),
     addIncidentUpdate: (
       id: string,
