@@ -392,6 +392,15 @@ type SeedInterval =
   | 'ANNUAL';
 
 /**
+ * Storefront pricing rate: USD **cents per GB of RAM per month**. Every game
+ * tier seeds at `tier RAM (GB) × this rate` so adding a game auto-prices
+ * sensibly. Derived from node cost × target margin — see docs/25-pricing.md.
+ * Override per-deploy with SEED_PRICE_PER_GB_CENTS.
+ */
+const PRICE_PER_GB_CENTS =
+  Number.parseInt(process.env.SEED_PRICE_PER_GB_CENTS ?? '', 10) || 600;
+
+/**
  * Interval price points derived from a monthly base. Short terms are charged
  * proportionally; longer terms discount progressively. Covers all six durations
  * offered on the order page (weekly → annual).
@@ -520,8 +529,11 @@ async function seedGameTierProducts() {
       const cpuCores = Math.max(1, Math.round(t.recCpuCores * spec.mult * 2) / 2);
       const memoryMb = Math.max(1024, Math.round((t.recMemoryMb * spec.mult) / 512) * 512);
       const diskMb = Math.max(5120, Math.round((t.recDiskMb * spec.mult) / 1024) * 1024);
-      // ~$2 per GB RAM per month, floored at $3.
-      const monthly = Math.max(300, Math.round((memoryMb / 1024) * 200));
+      // Price = tier RAM (GB) × PRICE_PER_GB_CENTS, floored at $5.
+      const monthly = Math.max(
+        500,
+        Math.round((memoryMb / 1024) * PRICE_PER_GB_CENTS),
+      );
 
       // Idempotent on (productId, name): reuse the existing tier if present.
       const existing = await prisma.hardwareTier.findFirst({
