@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   description: `How cancellations, refunds, and account credit work at ${LEGAL.brand}.`,
 };
 
-// DRAFT — review with legal counsel and fill the {{PLACEHOLDERS}} in lib/legal.ts before launch.
-// Tune the windows/amounts below ({{...}}) to your actual commercial policy.
+// DRAFT — review with legal counsel and set the legal values via env (see
+// .env.production.example) before launch. Until then {{PLACEHOLDERS}} render verbatim.
 export default function RefundsPage() {
   return (
     <LegalPage
@@ -26,7 +26,7 @@ export default function RefundsPage() {
       <h2>2. Money-back window for new orders</h2>
       <p>
         New eligible subscriptions may be refunded if you request a refund within{" "}
-        <strong>{`{{REFUND WINDOW — e.g. 72 hours}}`}</strong> of the initial
+        <strong>{LEGAL.refundWindow}</strong> of the initial
         purchase and the service has not been abused. To request a refund, contact{" "}
         <a href={`mailto:${LEGAL.contactEmail}`}>{LEGAL.contactEmail}</a> from the
         email on your account. Where consumer law grants a longer withdrawal period

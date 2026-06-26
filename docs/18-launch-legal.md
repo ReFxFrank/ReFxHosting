@@ -17,29 +17,33 @@ All link from the site **footer** (a "Legal" column + a bottom bar) and
 cross-link each other. The footer also shows a **"Download on the App Store"**
 badge, and the home page has an **app showcase** band (`/#app`).
 
-## Before you go live — fill these in
+## Before you go live — fill these in (via env, no source edit)
 
-Edit **`apps/web/lib/legal.ts`** and replace every `{{PLACEHOLDER}}`:
+Every legal value is sourced from a `NEXT_PUBLIC_*` env var, with the
+`{{PLACEHOLDER}}` as the fallback that renders verbatim until you set it. Set them
+in your production `.env` (see **`.env.production.example`**) and rebuild `web`:
 
-- `entity` — the legal company/entity name that operates the service
-- `registeredAddress` — registered business address
-- `contactEmail` / `privacyEmail` / `legalEmail` — real inboxes
-- `jurisdiction` — governing law & venue
-- `effectiveDate` — the date the policies take effect
-- `SUBPROCESSORS[]` — confirm the infrastructure + email providers (Stripe,
-  PayPal, Apple/APNs are pre-filled)
+| Env var | Fills |
+|---|---|
+| `NEXT_PUBLIC_LEGAL_ENTITY` | Operating legal entity name |
+| `NEXT_PUBLIC_LEGAL_ADDRESS` | Registered business address |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | Support/contact inbox |
+| `NEXT_PUBLIC_PRIVACY_EMAIL` | Privacy/DPO inbox |
+| `NEXT_PUBLIC_LEGAL_EMAIL` | Legal/abuse inbox |
+| `NEXT_PUBLIC_LEGAL_JURISDICTION` | Governing law & venue |
+| `NEXT_PUBLIC_LEGAL_EFFECTIVE_DATE` | "Last updated" date on each policy |
+| `NEXT_PUBLIC_REFUND_WINDOW` | New-order money-back window (Refund Policy) |
+| `NEXT_PUBLIC_INFRA_PROVIDER` | Sub-processor: hosting/infrastructure |
+| `NEXT_PUBLIC_EMAIL_PROVIDER` | Sub-processor: transactional email |
+| `NEXT_PUBLIC_SITE_DOMAIN` | Your bare domain (e.g. `refx.gg`) |
+| `NEXT_PUBLIC_BRAND_NAME` | Brand shown across the pages |
+| `NEXT_PUBLIC_APP_STORE_URL` | App Store/TestFlight link (else "Coming soon") |
 
-In **`apps/web/.env`** (or the build environment):
-
-- `NEXT_PUBLIC_SITE_DOMAIN` — your bare domain (e.g. `refx.gg`)
-- `NEXT_PUBLIC_APP_STORE_URL` — the App Store / TestFlight link. Until set, the
-  badge renders "Coming soon" and is inert.
-
-In **`app/(public)/refunds/page.tsx`** tune the `{{REFUND WINDOW}}` and any
-amounts to your actual commercial policy.
+Stripe, PayPal and Apple (APNs) are pre-filled in the sub-processor list. The
+entity name + address typically wait until the legal entity is formed.
 
 > `NEXT_PUBLIC_*` values are baked in at **web build time** — set them before
-> building the web image, then rebuild.
+> building the web image, then rebuild (`docker compose build web`).
 
 ## App Store submission checklist (iOS)
 
