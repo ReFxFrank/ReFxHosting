@@ -59,6 +59,14 @@ export interface AppConfig {
     defaultCurrency: string;
     schedulerEnabled: boolean;
   };
+  support: {
+    /** Auto-resolve/close stale tickets on a schedule. */
+    autoResolveEnabled: boolean;
+    /** Days a ticket awaiting the customer can idle before auto-RESOLVE (0=off). */
+    autoResolveDays: number;
+    /** Days a RESOLVED ticket can idle before auto-CLOSE (0=off). */
+    autoCloseDays: number;
+  };
   throttle: {
     ttl: number;
     limit: number;
@@ -159,6 +167,12 @@ export default (): AppConfig => {
     // The renewal/dunning cron sweep. Defaults on; set BILLING_SCHEDULER=false to
     // disable (e.g. when running a separate dedicated scheduler process).
     schedulerEnabled: (process.env.BILLING_SCHEDULER ?? 'true').toLowerCase() !== 'false',
+  },
+  support: {
+    autoResolveEnabled:
+      (process.env.SUPPORT_AUTORESOLVE ?? 'true').toLowerCase() !== 'false',
+    autoResolveDays: toInt(process.env.SUPPORT_AUTORESOLVE_DAYS, 7),
+    autoCloseDays: toInt(process.env.SUPPORT_AUTOCLOSE_DAYS, 3),
   },
   throttle: {
     ttl: toInt(process.env.THROTTLE_TTL, 60),

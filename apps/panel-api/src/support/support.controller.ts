@@ -113,6 +113,18 @@ export class SupportController {
     return this.support.addMessage(user, id, dto);
   }
 
+  /** Close a ticket — staff OR the requester (customer "Close ticket" button). */
+  @Post('tickets/:id/close')
+  @HttpCode(200)
+  @Audit({
+    action: 'support.ticket.close',
+    targetType: 'Ticket',
+    targetParam: 'id',
+  })
+  closeTicket(@CurrentUser() user: AuthUser, @Param('id') id: string) {
+    return this.support.closeTicket(user, id);
+  }
+
   @Post('tickets/:id/assign')
   @HttpCode(200)
   @UseGuards(RolesGuard)

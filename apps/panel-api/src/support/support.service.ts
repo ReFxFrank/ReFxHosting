@@ -418,6 +418,33 @@ export class SupportService {
     return this.prisma.ticket.update({ where: { id }, data });
   }
 
+  /**
+   * Close a ticket. Allowed for staff OR the ticket's own requester (the
+   * customer-facing "Close ticket" button) — once closed, the customer can no
+   * longer reply (see addMessage). Reopening remains staff-only. No-op if it's
+   * already closed/archived.
+   */
+  async closeTicket(user: AuthUser, id: string): Promise<Ticket> {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id },
+      select: { id: true, requesterId: true, state: true },
+    });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (!this.isStaff(user) && ticket.requesterId !== user.id) {
+      throw new ForbiddenException('You cannot modify this ticket');
+    }
+    if (
+      ticket.state === TicketState.CLOSED ||
+      ticket.state === TicketState.ARCHIVED
+    ) {
+      return this.prisma.ticket.findUniqueOrThrow({ where: { id } });
+    }
+    return this.prisma.ticket.update({
+      where: { id },
+      data: { state: TicketState.CLOSED },
+    });
+  }
+
   /** Staff convenience: assign a ticket to a staff member. */
   async assignTicket(
     user: AuthUser,

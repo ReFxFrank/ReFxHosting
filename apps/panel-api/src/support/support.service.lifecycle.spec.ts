@@ -47,7 +47,11 @@ describe('SupportService ticket lifecycle', () => {
       },
     };
     const prisma = {
-      ticket: { findUnique: jest.fn().mockResolvedValue(ticket) },
+      ticket: {
+        findUnique: jest.fn().mockResolvedValue(ticket),
+        findUniqueOrThrow: jest.fn().mockResolvedValue(ticket),
+        update: jest.fn(async ({ data }: any) => ({ ...ticket, ...data })),
+      },
       $transaction: jest.fn(async (cb: any) => cb(tx)),
     };
     const notifications = { createNotification: jest.fn(), notifyMany: jest.fn() };
@@ -124,5 +128,37 @@ describe('SupportService ticket lifecycle', () => {
     await expect(svc.deleteTicket(customer, 't1')).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  describe('closeTicket', () => {
+    it('lets the requester close their own ticket', async () => {
+      const { svc, prisma } = make({ state: 'OPEN', requesterId: 'c1' });
+      await svc.closeTicket(customer, 't1');
+      expect(prisma.ticket.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { state: 'CLOSED' } }),
+      );
+    });
+
+    it('lets staff close any ticket', async () => {
+      const { svc, prisma } = make({ state: 'PENDING_AGENT', requesterId: 'c1' });
+      await svc.closeTicket(staff, 't1');
+      expect(prisma.ticket.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { state: 'CLOSED' } }),
+      );
+    });
+
+    it('forbids a non-owner, non-staff user', async () => {
+      const { svc } = make({ state: 'OPEN', requesterId: 'someone-else' });
+      await expect(svc.closeTicket(customer, 't1')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
+    it('is a no-op when already closed', async () => {
+      const { svc, prisma } = make({ state: 'CLOSED', requesterId: 'c1' });
+      await svc.closeTicket(customer, 't1');
+      expect(prisma.ticket.update).not.toHaveBeenCalled();
+      expect(prisma.ticket.findUniqueOrThrow).toHaveBeenCalled();
+    });
   });
 });

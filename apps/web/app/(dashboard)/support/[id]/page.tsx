@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Send, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Lock, Send, ShieldAlert } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -57,6 +57,16 @@ export default function TicketDetailPage() {
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to send reply"),
+  });
+
+  const closeMutation = useMutation({
+    mutationFn: () => api.support.closeTicket(id),
+    onSuccess: () => {
+      toast.success("Ticket closed");
+      invalidate();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to close ticket"),
   });
 
   const backLink = (
@@ -113,6 +123,17 @@ export default function TicketDetailPage() {
             <TicketStateBadge state={ticket.state} />
             <TicketPriorityBadge priority={ticket.priority} />
           </span>
+        }
+        actions={
+          locked ? undefined : (
+            <Button
+              variant="outline"
+              loading={closeMutation.isPending}
+              onClick={() => closeMutation.mutate()}
+            >
+              <Lock className="size-4" /> Close ticket
+            </Button>
+          )
         }
       />
 

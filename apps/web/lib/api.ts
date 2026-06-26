@@ -807,6 +807,9 @@ export const api = {
     ) => http.patch<Ticket>(`/support/tickets/${id}`, input),
     setState: (id: string, state: Ticket["state"]) =>
       http.patch<Ticket>(`/support/tickets/${id}`, { state }),
+    /** Close a ticket — usable by the requester (customer) or staff. */
+    closeTicket: (id: string) =>
+      http.post<Ticket>(`/support/tickets/${id}/close`),
     assign: (id: string, assigneeId: string) =>
       http.post<Ticket>(`/support/tickets/${id}/assign`, { assigneeId }),
     // Storage / cleanup of past tickets (staff).
