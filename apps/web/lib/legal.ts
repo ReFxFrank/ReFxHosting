@@ -18,9 +18,7 @@ export const LEGAL = {
   brand: process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting",
   domain: process.env.NEXT_PUBLIC_SITE_DOMAIN ?? "refx.gg",
   /** The legal entity that operates the service. */
-  entity:
-    process.env.NEXT_PUBLIC_LEGAL_ENTITY ??
-    "{{LEGAL ENTITY NAME — e.g. ReFx Hosting LLC}}",
+  entity: process.env.NEXT_PUBLIC_LEGAL_ENTITY ?? "ReFx Hosting",
   registeredAddress:
     process.env.NEXT_PUBLIC_LEGAL_ADDRESS ?? "{{REGISTERED BUSINESS ADDRESS}}",
   contactEmail:
