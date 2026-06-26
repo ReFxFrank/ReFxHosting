@@ -50,6 +50,7 @@ consistent with the canonical data model in
 - [23 — Backups & Disaster Recovery](23-backups-dr.md) — what's backed up, the encrypted panel-DB backup/restore scripts, and the restore drill.
 - [24 — Branded server hostnames](24-server-hostnames.md) — GPortal-style per-server addresses via a per-node wildcard game domain.
 - [25 — Pricing basis](25-pricing.md) — how tiers are priced ($/GB rate + cost basis), and how to add games/nodes and reprice.
+- [26 — Game egg / install audit](26-egg-audit.md) — pre-launch audit of all 31 eggs: boot-blockers, fixes, and the smoke-test go-live order.
 - [18 — Installation Guide](18-installation.md) — local Docker Compose, env vars, node agent install (Linux/Windows), node registration.
 - [19 — Production Deployment](19-production-deployment.md) — Kubernetes via Helm, secrets, scaling, observability, backups, upgrades.
 - [20 — Upgrade & Data Migration](20-upgrade-migration.md) — Prisma migrations, zero-downtime rollouts, agent compatibility, rollback.
