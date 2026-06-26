@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, AlertTriangle, Wrench, XCircle, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
-import type { StatusLevel, StatusIncident, IncidentImpact } from "@/lib/types";
+import type { StatusLevel, StatusIncident, IncidentImpact, StatusRegion } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import { StatusMap } from "@/components/public/status-map";
+import { flagEmoji } from "@/lib/geo";
 
 const IMPACT: Record<IncidentImpact, { label: string; cls: string }> = {
   OUTAGE: { label: "Outage", cls: "border-red-500/30 bg-red-500/[0.06] text-red-400" },
@@ -109,13 +111,16 @@ export default function StatusPage() {
             </div>
           </section>
 
-          {/* Regions */}
+          {/* Network map */}
+          {data && data.regions.length > 0 ? <StatusMap regions={data.regions} /> : null}
+
+          {/* Locations detail */}
           {data && data.regions.length > 0 ? (
             <section className="mt-8">
-              <h2 className="text-sm font-semibold text-muted-foreground">Regions</h2>
+              <h2 className="text-sm font-semibold text-muted-foreground">Locations</h2>
               <div className="mt-3 divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.08]">
                 {data.regions.map((r) => (
-                  <Row key={r.code} name={r.name} status={r.status} />
+                  <LocationRow key={r.code} region={r} />
                 ))}
               </div>
             </section>
@@ -193,6 +198,34 @@ function Row({ name, status }: { name: string; status: StatusLevel }) {
     <div className="flex items-center justify-between gap-4 px-5 py-4">
       <span className="text-sm font-medium">{name}</span>
       <span className={`flex items-center gap-2 text-sm ${m.text}`}>
+        <span className={`size-2.5 rounded-full ${m.dot}`} aria-hidden="true" />
+        {m.label}
+      </span>
+    </div>
+  );
+}
+// `Row` is still used by the Components section below.
+
+function LocationRow({ region }: { region: StatusRegion }) {
+  const m = META[region.status];
+  const flag = flagEmoji(region.country);
+  const nodeLabel =
+    region.nodesTotal === 0
+      ? "—"
+      : region.nodesUp === region.nodesTotal
+        ? `All ${region.nodesTotal} node${region.nodesTotal > 1 ? "s" : ""} operational`
+        : `${region.nodesUp} of ${region.nodesTotal} nodes operational`;
+  return (
+    <div className="flex items-center justify-between gap-4 px-5 py-4">
+      <div className="min-w-0">
+        <p className="flex items-center gap-2 text-sm font-medium">
+          {flag ? <span aria-hidden="true">{flag}</span> : null}
+          {region.name}
+          <span className="text-xs font-normal text-muted-foreground">{region.country}</span>
+        </p>
+        <p className="text-xs text-muted-foreground">{nodeLabel}</p>
+      </div>
+      <span className={`flex shrink-0 items-center gap-2 text-sm ${m.text}`}>
         <span className={`size-2.5 rounded-full ${m.dot}`} aria-hidden="true" />
         {m.label}
       </span>

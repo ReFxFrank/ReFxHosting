@@ -119,3 +119,66 @@ export const US_STATES: Option[] = [
   { code: "WI", name: "Wisconsin" },
   { code: "WY", name: "Wyoming" },
 ];
+
+// ---------------------------------------------------------------------------
+// Status-map coordinates: plot a region/datacenter on the world panel.
+// Resolved by region `code` first (most specific), then by `country`. Region ≈
+// datacenter location — no DB columns required. Extend as you add regions.
+// ---------------------------------------------------------------------------
+
+type LatLng = [number, number];
+
+const CODE_COORDS: { match: string; coords: LatLng }[] = [
+  { match: "ca-east", coords: [45.31, -73.87] }, // Beauharnois / Montréal
+  { match: "bhs", coords: [45.31, -73.87] },
+  { match: "ca-west", coords: [49.28, -123.12] }, // Vancouver
+  { match: "us-east", coords: [39.04, -77.49] }, // Ashburn, VA
+  { match: "us-central", coords: [41.26, -95.94] }, // Omaha
+  { match: "us-west", coords: [45.6, -121.18] }, // Oregon
+  { match: "eu-west", coords: [50.11, 8.68] }, // Frankfurt
+  { match: "eu-central", coords: [50.11, 8.68] },
+  { match: "fra", coords: [50.11, 8.68] },
+  { match: "lon", coords: [51.51, -0.13] },
+  { match: "uk", coords: [51.51, -0.13] },
+  { match: "ams", coords: [52.37, 4.9] },
+  { match: "sg", coords: [1.35, 103.82] },
+  { match: "syd", coords: [-33.87, 151.21] },
+  { match: "tok", coords: [35.68, 139.69] },
+];
+
+const COUNTRY_COORDS: Record<string, LatLng> = {
+  CA: [56.13, -106.35], CANADA: [56.13, -106.35],
+  US: [39.83, -98.58], USA: [39.83, -98.58], "UNITED STATES": [39.83, -98.58],
+  GB: [54.0, -2.0], UK: [54.0, -2.0], "UNITED KINGDOM": [54.0, -2.0],
+  DE: [51.16, 10.45], GERMANY: [51.16, 10.45],
+  FR: [46.6, 2.2], FRANCE: [46.6, 2.2],
+  NL: [52.13, 5.29], NETHERLANDS: [52.13, 5.29],
+  PL: [51.92, 19.15], POLAND: [51.92, 19.15],
+  SG: [1.35, 103.82], SINGAPORE: [1.35, 103.82],
+  AU: [-25.27, 133.78], AUSTRALIA: [-25.27, 133.78],
+  JP: [36.2, 138.25], JAPAN: [36.2, 138.25],
+  BR: [-14.24, -51.93], BRAZIL: [-14.24, -51.93],
+  IN: [20.59, 78.96], INDIA: [20.59, 78.96],
+  ZA: [-30.56, 22.94], "SOUTH AFRICA": [-30.56, 22.94],
+};
+
+export function regionCoords(code: string, country: string): LatLng | null {
+  const c = (code ?? "").toLowerCase();
+  for (const e of CODE_COORDS) if (c.includes(e.match)) return e.coords;
+  const k = (country ?? "").trim().toUpperCase();
+  return COUNTRY_COORDS[k] ?? null;
+}
+
+/** Equirectangular projection → percentage position within a 2:1 world panel. */
+export function project(lat: number, lng: number): { x: number; y: number } {
+  return { x: ((lng + 180) / 360) * 100, y: ((90 - lat) / 180) * 100 };
+}
+
+/** ISO-3166 alpha-2 country code → flag emoji ("" if not a 2-letter code). */
+export function flagEmoji(country: string): string {
+  const cc = (country ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return "";
+  return String.fromCodePoint(
+    ...[...cc].map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65),
+  );
+}

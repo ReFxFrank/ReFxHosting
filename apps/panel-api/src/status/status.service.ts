@@ -14,7 +14,10 @@ export interface ComponentStatus {
 export interface RegionStatus {
   code: string;
   name: string;
+  country: string;
   status: StatusLevel;
+  nodesUp: number;
+  nodesTotal: number;
 }
 export interface IncidentUpdateView {
   status: string;
@@ -89,20 +92,32 @@ export class StatusService {
     }
 
     // Group node statuses by region.
-    const byRegion = new Map<string, { name: string; statuses: StatusLevel[] }>();
+    const byRegion = new Map<
+      string,
+      { name: string; country: string; statuses: StatusLevel[] }
+    >();
     for (const n of nodes) {
       if (!n.region) continue;
       const fresh =
         n.heartbeats[0] != null &&
         now - new Date(n.heartbeats[0].recordedAt).getTime() < STALE_HEARTBEAT_MS;
       const nodeStatus = this.nodeStatus(n.state, n.maintenance, fresh);
-      const entry = byRegion.get(n.region.code) ?? { name: n.region.name, statuses: [] };
+      const entry =
+        byRegion.get(n.region.code) ??
+        { name: n.region.name, country: n.region.country, statuses: [] };
       entry.statuses.push(nodeStatus);
       byRegion.set(n.region.code, entry);
     }
 
     const regions: RegionStatus[] = [...byRegion.entries()]
-      .map(([code, { name, statuses }]) => ({ code, name, status: this.rollup(statuses) }))
+      .map(([code, { name, country, statuses }]) => ({
+        code,
+        name,
+        country,
+        status: this.rollup(statuses),
+        nodesUp: statuses.filter((s) => s === 'operational').length,
+        nodesTotal: statuses.length,
+      }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const nodesStatus: StatusLevel = regions.length
@@ -147,7 +162,7 @@ export class StatusService {
         select: {
           state: true,
           maintenance: true,
-          region: { select: { code: true, name: true } },
+          region: { select: { code: true, name: true, country: true } },
           heartbeats: {
             orderBy: { recordedAt: 'desc' },
             take: 1,

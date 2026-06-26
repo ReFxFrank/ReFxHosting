@@ -1032,7 +1032,10 @@ export interface StatusComponent {
 export interface StatusRegion {
   code: string;
   name: string;
+  country: string;
   status: StatusLevel;
+  nodesUp: number;
+  nodesTotal: number;
 }
 
 export type IncidentImpact = "MAINTENANCE" | "DEGRADED" | "OUTAGE";
