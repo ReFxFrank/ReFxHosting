@@ -63,6 +63,15 @@ export interface AppConfig {
     ttl: number;
     limit: number;
   };
+  apns: {
+    /** Contents of the .p8 token-signing key (PEM). Empty disables push. */
+    keyP8: string;
+    keyId: string;
+    teamId: string;
+    bundleId: string;
+    /** true -> api.push.apple.com, false -> api.sandbox.push.apple.com */
+    production: boolean;
+  };
 }
 
 const toInt = (v: string | undefined, fallback: number): number => {
@@ -150,6 +159,21 @@ export default (): AppConfig => {
   throttle: {
     ttl: toInt(process.env.THROTTLE_TTL, 60),
     limit: toInt(process.env.THROTTLE_LIMIT, 120),
+  },
+  apns: {
+    // The .p8 may be supplied directly (APNS_KEY_P8) or base64-encoded
+    // (APNS_KEY_P8_BASE64) to survive single-line env files; literal "\n"
+    // escapes are normalised back to real newlines either way.
+    keyP8: (
+      process.env.APNS_KEY_P8 ??
+      (process.env.APNS_KEY_P8_BASE64
+        ? Buffer.from(process.env.APNS_KEY_P8_BASE64, 'base64').toString('utf8')
+        : '')
+    ).replace(/\\n/g, '\n'),
+    keyId: process.env.APNS_KEY_ID ?? '',
+    teamId: process.env.APNS_TEAM_ID ?? '',
+    bundleId: process.env.APNS_BUNDLE_ID ?? '',
+    production: (process.env.APNS_PRODUCTION ?? 'false').toLowerCase() === 'true',
   },
   };
 

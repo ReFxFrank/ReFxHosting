@@ -75,3 +75,7 @@ Thumbs.db
 !.vscode/settings.json.example
 *.swp
 *~
+
+# APNs / Apple signing keys — NEVER commit private keys
+*.p8
+AuthKey_*.p8

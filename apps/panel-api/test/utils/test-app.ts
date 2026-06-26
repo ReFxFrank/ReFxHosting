@@ -17,6 +17,7 @@ import { ApiKeyService } from '../../src/auth/api-key.service';
 import { UsersService } from '../../src/users/users.service';
 import { SettingsService } from '../../src/platform/settings.service';
 import { NotificationsService } from '../../src/platform/notifications.service';
+import { PushService } from '../../src/push/push.service';
 import { JwtStrategy } from '../../src/auth/strategies/jwt.strategy';
 import { JwtAuthGuard } from '../../src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/auth/guards/roles.guard';
@@ -96,6 +97,10 @@ export async function buildTestApp(
       // Depends only on (mocked) Prisma; commonly pulled in transitively via
       // BillingService, so provide it here rather than in every billing spec.
       NotificationsService,
+      // Real PushService; with APNs unconfigured it's a no-op (never opens a
+      // socket), so any service that depends on it (billing, support, account)
+      // resolves without per-spec wiring.
+      PushService,
       JwtStrategy,
       // Auth guards (real).
       JwtAuthGuard,

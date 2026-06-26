@@ -11,6 +11,7 @@ import configuration, { AppConfig } from './config/configuration';
 import { PrismaModule } from './prisma/prisma.module';
 import { CryptoModule } from './common/crypto/crypto.module';
 import { EmailModule } from './email/email.module';
+import { PushModule } from './push/push.module';
 import { AuditInterceptor } from './common/interceptors/audit.interceptor';
 
 import { AgentModule } from './agent/agent.module';
@@ -94,6 +95,7 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     CryptoModule,
     AgentModule,
     EmailModule,
+    PushModule,
 
     // Features
     AuthModule,

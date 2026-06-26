@@ -39,6 +39,7 @@ import { StripeGateway } from './gateways/stripe.gateway';
 import { PayPalGateway } from './gateways/paypal.gateway';
 import { EmailService } from '../email/email.service';
 import { NotificationsService } from '../platform/notifications.service';
+import { PushService } from '../push/push.service';
 import { addInterval } from './interval.util';
 import { generateInvoiceNumber } from './invoice-number.util';
 import { calculateTax } from './tax.util';
@@ -76,6 +77,7 @@ export class BillingService {
     private readonly settings: SettingsService,
     private readonly email: EmailService,
     private readonly notifications: NotificationsService,
+    private readonly push: PushService,
     @InjectQueue(QUEUE.BILLING_RENEWAL) private readonly renewalQueue: Queue,
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
     @InjectQueue(QUEUE.PROVISIONING) private readonly provisionQueue: Queue,
@@ -1470,6 +1472,12 @@ export class BillingService {
         title: 'Pay to complete your upgrade',
         body: `Invoice ${number} for ${amount} is ready. Your plan upgrade applies once it's paid.`,
       });
+      await this.push.sendToUser(subscription.userId, {
+        title: 'Pay to complete your upgrade',
+        body: `Invoice ${number} — ${amount} due. Your upgrade applies once paid.`,
+        type: 'billing.invoice',
+        data: { invoiceId: invoice.id },
+      });
     } catch {
       // best-effort
     }
@@ -1623,6 +1631,12 @@ export class BillingService {
       await this.notifications.createNotification(subscription.userId, {
         title: 'New invoice available',
         body: `Invoice ${number} for ${amount} is ready to pay${due}.`,
+      });
+      await this.push.sendToUser(subscription.userId, {
+        title: 'New invoice available',
+        body: `Invoice ${number} — ${amount} due${due}.`,
+        type: 'billing.invoice',
+        data: { invoiceId: invoice.id },
       });
     } catch {
       // best-effort
@@ -1863,6 +1877,17 @@ export class BillingService {
         currency: invoice.currency,
         reason,
       });
+    }
+    try {
+      const amount = `${(invoice.totalMinor / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`;
+      await this.push.sendToUser(invoice.userId, {
+        title: 'Payment failed',
+        body: `Payment for invoice ${invoice.number} (${amount}) failed. Update your payment method to avoid suspension.`,
+        type: 'billing.invoice',
+        data: { invoiceId: invoice.id },
+      });
+    } catch {
+      // best-effort; never break the failure-handling path
     }
 
     const subscription = invoice.subscription;

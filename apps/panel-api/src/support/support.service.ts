@@ -19,6 +19,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../platform/notifications.service';
+import { PushService } from '../push/push.service';
 import {
   Paginated,
   PaginationDto,
@@ -47,6 +48,7 @@ export class SupportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly push: PushService,
   ) {}
 
   /** Whether a principal is support staff (SUPPORT / ADMIN / OWNER). */
@@ -276,7 +278,7 @@ export class SupportService {
 
     // Post-commit notifications for public replies (best-effort).
     if (!isInternal) {
-      await this.notifyTicketReply(ticket, user, staff).catch(() => undefined);
+      await this.notifyTicketReply(ticket, user, staff, dto.body).catch(() => undefined);
     }
 
     return message;
@@ -292,6 +294,7 @@ export class SupportService {
     ticket: Ticket,
     author: AuthUser,
     authorIsStaff: boolean,
+    replyBody?: string,
   ): Promise<void> {
     const ref = `#${ticket.number} "${ticket.subject}"`;
     if (authorIsStaff) {
@@ -299,6 +302,13 @@ export class SupportService {
         await this.notifications.createNotification(ticket.requesterId, {
           title: 'Support replied to your ticket',
           body: `A staff member replied to your ticket ${ref}.`,
+        });
+        // Mobile push to the customer with a short preview of the reply.
+        await this.push.sendToUser(ticket.requesterId, {
+          title: `Support replied — ${ref}`,
+          body: this.preview(replyBody) ?? 'A staff member replied to your ticket.',
+          type: 'support.reply',
+          data: { ticketId: ticket.id },
         });
       }
       return;
@@ -328,6 +338,14 @@ export class SupportService {
         body: `${author.email} replied to unassigned ticket ${ref}.`,
       },
     );
+  }
+
+  /** One-line, length-capped preview of a reply body for push notifications. */
+  private preview(body?: string): string | undefined {
+    if (!body) return undefined;
+    const flat = body.replace(/\s+/g, ' ').trim();
+    if (!flat) return undefined;
+    return flat.length > 140 ? `${flat.slice(0, 139)}…` : flat;
   }
 
   /**

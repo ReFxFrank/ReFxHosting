@@ -15,6 +15,7 @@ import { AuthService } from '../auth/auth.service';
 import { ApiKeyService } from '../auth/api-key.service';
 import { UsersService } from '../users/users.service';
 import { NotificationsService } from '../platform/notifications.service';
+import { PushService } from '../push/push.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
@@ -22,6 +23,7 @@ import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateApiKeyDto, TotpVerifyDto } from '../auth/dto/auth.dto';
 import { UpdateProfileDto } from '../users/dto/update-profile.dto';
 import { ChangePasswordDto, SetAvatarDto, TotpEnableDto } from './dto/account.dto';
+import { RegisterPushTokenDto } from './dto/push-token.dto';
 
 /**
  * Account self-service surface the web calls under `/account/*`. Thin aliases
@@ -38,6 +40,7 @@ export class AccountController {
     private readonly apiKeys: ApiKeyService,
     private readonly users: UsersService,
     private readonly notifications: NotificationsService,
+    private readonly push: PushService,
   ) {}
 
   // ---- Profile -----------------------------------------------------------
@@ -215,5 +218,29 @@ export class AccountController {
   @HttpCode(200)
   clearAllNotifications(@CurrentUser('id') userId: string) {
     return this.notifications.clearAll(userId);
+  }
+
+  // ---- Push tokens (mobile) ----------------------------------------------
+
+  /** Register/refresh this device's push token for the caller (idempotent). */
+  @Post('push-tokens')
+  @HttpCode(204)
+  @Audit({ action: 'account.push-token.register', targetType: 'User' })
+  async registerPushToken(
+    @CurrentUser('id') userId: string,
+    @Body() dto: RegisterPushTokenDto,
+  ): Promise<void> {
+    await this.push.registerToken(userId, dto.token, dto.platform);
+  }
+
+  /** Remove this device's push token (e.g. on sign-out). Idempotent. */
+  @Delete('push-tokens/:token')
+  @HttpCode(204)
+  @Audit({ action: 'account.push-token.remove', targetType: 'User' })
+  async removePushToken(
+    @CurrentUser('id') userId: string,
+    @Param('token') token: string,
+  ): Promise<void> {
+    await this.push.removeToken(userId, token);
   }
 }

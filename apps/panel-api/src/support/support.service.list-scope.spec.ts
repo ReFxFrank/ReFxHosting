@@ -16,7 +16,11 @@ describe('SupportService.listTickets scoping', () => {
       },
     };
     const notifications = { createNotification: jest.fn(), notifyMany: jest.fn() };
-    return { prisma, svc: new SupportService(prisma as any, notifications as any) };
+    const push = { sendToUser: jest.fn() };
+    return {
+      prisma,
+      svc: new SupportService(prisma as any, notifications as any, push as any),
+    };
   }
 
   const staff = { id: 'staff-1', email: 's@x', globalRole: 'ADMIN', state: 'ACTIVE' } as AuthUser;

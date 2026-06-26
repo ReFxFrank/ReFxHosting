@@ -19,6 +19,7 @@ import { RawResponse } from '../common/decorators/raw-response.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodesService } from '../nodes/nodes.service';
 import { NotificationsService } from '../platform/notifications.service';
+import { PushService } from '../push/push.service';
 import { ConsoleGateway } from './console.gateway';
 import { AgentSignatureGuard } from './agent-signature.guard';
 import { uuidv7 } from '../common/util/uuid';
@@ -32,6 +33,18 @@ import { uuidv7 } from '../common/util/uuid';
 const SERVER_STATE_NOTICES: Partial<Record<ServerState, string>> = {
   [ServerState.CRASHED]: 'has crashed',
   [ServerState.SUSPENDED]: 'was suspended',
+};
+
+/**
+ * Server transitions worth a mobile PUSH to the owner. Broader than the in-app
+ * notices above (includes routine online/offline) because the iOS app surfaces
+ * these as live status — but throttled per-server+state so a flapping server
+ * can't spam the lock screen.
+ */
+const SERVER_STATE_PUSH: Partial<Record<ServerState, string>> = {
+  [ServerState.RUNNING]: 'is now online',
+  [ServerState.OFFLINE]: 'is now offline',
+  [ServerState.CRASHED]: 'has crashed',
 };
 
 // Don't re-notify the same server entering the same state more than once within
@@ -115,11 +128,18 @@ export class AgentCallbacksController {
     string,
     { state: ServerState; at: number }
   >();
+  // Separate throttle map for mobile pushes (different state set than in-app
+  // notices, so it can't share recentStateNotices without cross-suppressing).
+  private readonly recentStatePushes = new Map<
+    string,
+    { state: ServerState; at: number }
+  >();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly nodes: NodesService,
     private readonly notifications: NotificationsService,
+    private readonly push: PushService,
     private readonly console: ConsoleGateway,
   ) {}
 
@@ -356,6 +376,39 @@ export class AgentCallbacksController {
           .catch(() => undefined);
       }
     }
+
+    // Mobile push (online/offline/crashed), throttled independently. Best-effort.
+    const pushPhrase = SERVER_STATE_PUSH[state];
+    if (pushPhrase && !this.pushThrottled(serverId, state)) {
+      await this.push
+        .sendToUser(server.ownerId, {
+          title: 'Server status changed',
+          body: `${server.name} ${pushPhrase}.`,
+          type: 'server.state',
+          data: { serverId },
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  /**
+   * True if a push for this server+state was already sent inside the throttle
+   * window; otherwise records this send and returns false. Bounds the map by
+   * sweeping expired entries when it grows large.
+   */
+  private pushThrottled(serverId: string, state: ServerState): boolean {
+    const now = Date.now();
+    const last = this.recentStatePushes.get(serverId);
+    if (last && last.state === state && now - last.at < STATE_NOTICE_THROTTLE_MS) {
+      return true;
+    }
+    this.recentStatePushes.set(serverId, { state, at: now });
+    if (this.recentStatePushes.size > STATE_NOTICE_MAX_ENTRIES) {
+      for (const [sid, v] of this.recentStatePushes) {
+        if (now - v.at >= STATE_NOTICE_THROTTLE_MS) this.recentStatePushes.delete(sid);
+      }
+    }
+    return false;
   }
 
   /** Map an agent state string onto the Prisma ServerState enum, if valid. */
