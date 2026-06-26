@@ -45,6 +45,29 @@ Margin at $6/GB, conservative **1:1** (no overcommit), fully sold:
 - Any RAM **overcommit** you run (1.5–2× is normal for game hosting) is pure
   upside not baked into the price, so you stay safe at full face-value sell-out.
 
+## Billing durations & margin (every term stays profitable)
+
+Longer terms discount, but never below cost. Effective **$/GB** and margin vs the
+**most expensive** node ($2.80/GB) and the **blended** cost ($2.18/GB):
+
+| Term | Discount | Effective $/GB | × worst node | × blended |
+|------|----------|----------------|--------------|-----------|
+| Weekly / Biweekly | none (pro-rated) | $6.00 | 2.14× | 2.75× |
+| Monthly | — | $6.00 | 2.14× | 2.75× |
+| Quarterly | −10% | $5.40 | 1.93× | 2.48× |
+| Semi-annual | −15% | $5.10 | 1.82× | 2.34× |
+| **Annual** | **−20%** | **$4.80** | **1.71×** | **2.20×** |
+
+So even the deepest term (annual) earns **1.71× on the priciest node** and **2.2×
+blended** — profitable everywhere. The reprice script writes all six terms from
+this curve, so they stay in lock-step with the monthly base automatically. Weekly/
+biweekly are pro-rated (same per-day rate as monthly), not discounted.
+
+> Display note: the storefront "from $X/mo" and tier cards show the **monthly**
+> price (`storefront.service.startingPrice` + `monthlyPrice()` in
+> `game-detail.tsx`). The customer picks the actual term at checkout, which
+> charges that term's stored price.
+
 ## Per-game prices @ $6/GB (monthly)
 
 | Recommended RAM → games | Low (0.5×) | Mid ⭐ (1×) | High (2×) |

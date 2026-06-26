@@ -145,16 +145,23 @@ export class StorefrontService {
     templateId: string,
     products: PricedProduct[],
   ): StartingPrice | null {
+    // The storefront shows this as a "from $X/mo", so compare MONTHLY prices only
+    // — otherwise the cheapest interval (weekly) wins and gets mislabelled /mo.
     let best: StartingPrice | null = null;
+    let anyBest: StartingPrice | null = null; // fallback if a product has no monthly
     for (const p of products) {
       if (!this.productAllows(p, templateId)) continue;
       for (const price of this.allPrices(p)) {
+        if (!anyBest || price.amountMinor < anyBest.amountMinor) {
+          anyBest = { amountMinor: price.amountMinor, currency: price.currency };
+        }
+        if (price.interval !== 'MONTHLY') continue;
         if (!best || price.amountMinor < best.amountMinor) {
           best = { amountMinor: price.amountMinor, currency: price.currency };
         }
       }
     }
-    return best;
+    return best ?? anyBest;
   }
 
   /** Shape a product into the safe plan view used by the storefront. */

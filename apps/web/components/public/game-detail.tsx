@@ -30,10 +30,18 @@ interface PlanCard {
   price: { amountMinor: number; currency: string } | null;
 }
 
-/** Cheapest price in a list, or null. */
-function cheapest(prices: { amountMinor: number; currency: string }[]) {
+/**
+ * The MONTHLY price for a tier/plan (the cards label it "/mo"), falling back to
+ * the cheapest available interval if no monthly price exists. Picking the raw
+ * cheapest would surface the weekly amount under a "/mo" label.
+ */
+function monthlyPrice(
+  prices: { interval: string; amountMinor: number; currency: string }[],
+) {
   if (!prices.length) return null;
-  return prices.reduce((a, b) => (b.amountMinor < a.amountMinor ? b : a));
+  const monthly = prices.find((p) => p.interval === "MONTHLY");
+  const pick = monthly ?? prices.reduce((a, b) => (b.amountMinor < a.amountMinor ? b : a));
+  return { amountMinor: pick.amountMinor, currency: pick.currency };
 }
 
 /**
@@ -56,7 +64,7 @@ function planCards(plans: StorefrontPlan[]): PlanCard[] {
           recommendedPlayers: t.recommendedPlayers,
           recommended: t.isRecommended,
           perSlot: false,
-          price: cheapest(t.prices),
+          price: monthlyPrice(t.prices),
         });
       }
     } else {
@@ -71,7 +79,7 @@ function planCards(plans: StorefrontPlan[]): PlanCard[] {
         recommendedPlayers: null,
         recommended: false,
         perSlot: p.perSlot,
-        price: cheapest(p.prices),
+        price: monthlyPrice(p.prices),
       });
     }
   }
