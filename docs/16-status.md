@@ -53,6 +53,7 @@ Legend:
 | Queues (provisioning/reinstall/backup/renewal/suspension/modpack) | **Done** | BullMQ processors call agent/billing; **hourly renewal/dunning cron** (`BillingScheduler`, `@nestjs/schedule`) enqueues RENEW for due subs + DUNNING for past-due (deterministic jobIds = multi-instance safe; toggle `BILLING_SCHEDULER`). |
 | Support (admin queue/notes/canned/SLA/KB) | **Done** | Admin ticket queue (reply, status/priority, categorise, assign, internal notes); **ticket archive (storage) + permanent delete**; **category (SLA) + canned-response CRUD**; SLA breach computation; `support.*` permissions. |
 | Platform (audit query, notifications, alerts, health, metrics) | **Done** | Prometheus `/metrics`, `/health`. |
+| Mobile push (APNs, iOS) | **Done** | Native token-based APNs over HTTP/2 (ES256 `.p8`, no SDK dep): `PushService` + `PushToken` model + `POST/DELETE /account/push-tokens`. Pushes mirror in-app events — `server.state` (online/offline/crashed, 30-min per-server throttle), `billing.invoice` (created/due/failed), `support.reply` (staff→customer) — with `type`+id fields at the payload top level. 410/BadDeviceToken auto-prunes stale tokens. Key from `APNS_KEY_P8_BASE64`/`APNS_*`; disabled cleanly when unset. **Android/FCM:** the `platform` field accepts `android` but only `ios` is delivered today (FCM sender `TODO(impl)`). |
 | REST + GraphQL + Swagger | **Done** | REST primary; code-first GraphQL mirrors key reads; Swagger at `/docs`. |
 
 ## node-agent (detail)
