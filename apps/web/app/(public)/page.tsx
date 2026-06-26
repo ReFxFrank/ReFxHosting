@@ -9,6 +9,7 @@ import {
   HostingFeatureCards,
 } from "@/components/public/home-sections";
 import { HomepageAlertBanner } from "@/components/public/homepage-alert-banner";
+import { AppPromo } from "@/components/public/app-promo";
 import {
   GameGrid,
   GameCategoryTabs,
@@ -93,6 +94,10 @@ export default function HomePage() {
 
       <Reveal>
         <HostingFeatureCards />
+      </Reveal>
+
+      <Reveal>
+        <AppPromo />
       </Reveal>
     </>
   );
