@@ -112,9 +112,13 @@ See **[docs/19-production-deployment.md](19-production-deployment.md)** and the
 Game-server *volumes* back up to S3 already. The **panel's own Postgres** (users,
 billing, subscriptions) is the crown jewels and needs its own backups.
 
-- [ ] ❌ **Panel DB backups**: scheduled `pg_dump` → encrypted off-box/S3, with
-      retention. *(to build — Track J)*
-- [ ] ❌ **Restore drill**: prove a backup actually restores into a clean DB.
+- [x] ✅ **Panel DB backup tooling**: `infra/scripts/backup-panel-db.sh`
+      (`pg_dump` → AES-256 → S3 + retention) and `restore-panel-db.sh`. See
+      **[docs/23-backups-dr.md](23-backups-dr.md)**.
+- [ ] 🤝 **Configure + schedule it**: set `PANEL_BACKUP_*` in `.env` and add the
+      cron entry (daily).
+- [ ] 🤝 **Restore drill**: restore the latest backup into a scratch DB and verify
+      (the documented drill). Record the date.
 - [ ] 🤝 Back up `.env` / `SECRETS_ENC_KEY` to a secure secret store — if it's
       lost, every encrypted secret (gateway keys, TOTP seeds, SFTP creds) is
       unrecoverable.
@@ -189,12 +193,14 @@ If all eight pass cleanly on prod, you're ready to take customers.
 
 Concrete engineering items from the tracks above that need no external accounts:
 
-1. **Panel Postgres backup tooling** — `pg_dump` → encrypted S3, scheduled, with a
-   documented restore drill (Track E).
-2. **Production preflight validator** — refuse to boot / warn loudly on weak
-   secrets, wildcard CORS, http API behind https, default passwords (Track D).
-3. **`.env.production.example`** — a fully-annotated production template wiring all
-   the prod flags in one place (Track D).
+1. ✅ **Panel Postgres backup tooling** — `pg_dump` → encrypted S3, scheduled, with
+   a documented restore drill (Track E). *Done: `infra/scripts/backup-panel-db.sh`,
+   `restore-panel-db.sh`, `docs/23-backups-dr.md`.*
+2. ✅ **Production preflight validator** — refuses to boot / warns loudly on weak
+   secrets, wildcard CORS, http API behind https, placeholder passwords (Track D).
+   *Done: `apps/panel-api/src/config/preflight.ts`.*
+3. ✅ **`.env.production.example`** — a fully-annotated production template wiring all
+   the prod flags in one place (Track D). *Done.*
 4. **Alerting rules** — Prometheus/Grafana alert definitions for the ops signals
    in Track F.
 5. **Reverse-proxy configs** — ready-to-use Caddy/nginx files for the

@@ -47,6 +47,7 @@ consistent with the canonical data model in
 ### Status & runbooks
 - [16 — Implementation Status](16-status.md) — honest implemented-vs-scaffolded matrix.
 - [22 — Go-Live Checklist](22-go-live-checklist.md) — the master runbook for taking paying customers: business/legal, payments go-live, prod infra, DR, ops, and the pre-launch smoke test.
+- [23 — Backups & Disaster Recovery](23-backups-dr.md) — what's backed up, the encrypted panel-DB backup/restore scripts, and the restore drill.
 - [18 — Installation Guide](18-installation.md) — local Docker Compose, env vars, node agent install (Linux/Windows), node registration.
 - [19 — Production Deployment](19-production-deployment.md) — Kubernetes via Helm, secrets, scaling, observability, backups, upgrades.
 - [20 — Upgrade & Data Migration](20-upgrade-migration.md) — Prisma migrations, zero-downtime rollouts, agent compatibility, rollback.
