@@ -43,13 +43,16 @@ const INTERVAL_LABEL: Record<BillingInterval, string> = {
   SEMIANNUAL: "6 months",
   ANNUAL: "Yearly",
 };
+// Monthly is the anchor term, so it leads — followed by the longer "save more"
+// terms, then the short terms. This drives both the order of the duration picker
+// and the `sorted[0]` fallback price, so Monthly is the default everywhere.
 const INTERVAL_ORDER: BillingInterval[] = [
-  "WEEKLY",
-  "BIWEEKLY",
   "MONTHLY",
   "QUARTERLY",
   "SEMIANNUAL",
   "ANNUAL",
+  "BIWEEKLY",
+  "WEEKLY",
 ];
 
 // A product is a VOICE offering purely by its type (drives grouping + icon).
