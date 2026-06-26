@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { json, raw } from 'express';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/configuration';
+import { runPreflight } from './config/preflight';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -25,6 +26,24 @@ async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: false });
   const config = app.get(ConfigService);
   const reflector = app.get(Reflector);
+
+  // Production preflight: refuse to boot on insecure/footgun config (weak
+  // secrets, wildcard CORS, http public URL, placeholder DB password). In
+  // non-production this only warns. Override with ALLOW_INSECURE_CONFIG=true.
+  const appConfig: AppConfig = {
+    env: config.get<AppConfig['env']>('env')!,
+    secretsEncKey: config.get<AppConfig['secretsEncKey']>('secretsEncKey')!,
+    jwt: config.get<AppConfig['jwt']>('jwt')!,
+    database: config.get<AppConfig['database']>('database')!,
+    corsOrigins: config.get<AppConfig['corsOrigins']>('corsOrigins')!,
+    panelUrl: config.get<AppConfig['panelUrl']>('panelUrl')!,
+    rpId: config.get<AppConfig['rpId']>('rpId')!,
+    email: config.get<AppConfig['email']>('email')!,
+    stripe: config.get<AppConfig['stripe']>('stripe')!,
+    paypal: config.get<AppConfig['paypal']>('paypal')!,
+    agentTlsPinning: config.get<AppConfig['agentTlsPinning']>('agentTlsPinning')!,
+  } as AppConfig;
+  runPreflight(appConfig);
 
   // Behind a reverse proxy (Caddy/nginx) the socket peer is the proxy, not the
   // client. Trust the proxy so Express derives req.ip from X-Forwarded-For —

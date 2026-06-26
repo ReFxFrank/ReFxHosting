@@ -190,24 +190,8 @@ export default (): AppConfig => {
   },
   };
 
-  // Warn LOUDLY if production is running on the insecure development defaults
-  // (an all-zero encryption key makes "encrypted" secrets trivially decryptable;
-  // known JWT secrets let anyone forge sessions). A startup warning rather than a
-  // hard crash so a deploy can't be bricked by config — but these MUST be set.
-  if (config.env === 'production') {
-    const insecure: string[] = [];
-    if (config.secretsEncKey === '0'.repeat(64)) insecure.push('SECRETS_ENC_KEY');
-    if (config.jwt.accessSecret === 'dev-access-secret') insecure.push('JWT_ACCESS_SECRET');
-    if (config.jwt.refreshSecret === 'dev-refresh-secret') insecure.push('JWT_REFRESH_SECRET');
-    if (insecure.length > 0) {
-      // eslint-disable-next-line no-console
-      console.error(
-        `[SECURITY] Production is using INSECURE DEFAULT secret(s): ${insecure.join(', ')}. ` +
-          'Encrypted data is trivially decryptable and sessions are forgeable — ' +
-          'set strong random values immediately.',
-      );
-    }
-  }
-
+  // NOTE: production-readiness checks (insecure secrets, wildcard CORS, http
+  // public URL, …) live in `runPreflight` (config/preflight.ts), invoked at boot
+  // in main.ts so they can abort startup — not here, to keep this factory pure.
   return config;
 };
