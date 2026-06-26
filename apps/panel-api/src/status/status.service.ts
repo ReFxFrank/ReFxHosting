@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { AppConfig } from '../config/configuration';
 
 export type StatusLevel = 'operational' | 'maintenance' | 'degraded' | 'outage';
 
@@ -24,6 +26,8 @@ export interface SystemStatus {
 const STALE_HEARTBEAT_MS = 3 * 60 * 1000;
 /** Public status is cached briefly so the endpoint can't hammer the DB. */
 const CACHE_TTL_MS = 15 * 1000;
+/** Web-health ping timeout — keep the status endpoint snappy. */
+const WEB_PING_TIMEOUT_MS = 2500;
 
 const SEVERITY: Record<StatusLevel, number> = {
   operational: 0,
@@ -40,27 +44,16 @@ const SEVERITY: Record<StatusLevel, number> = {
 export class StatusService {
   private cache: { value: SystemStatus; at: number } | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
 
   async getStatus(): Promise<SystemStatus> {
     const now = Date.now();
     if (this.cache && now - this.cache.at < CACHE_TTL_MS) return this.cache.value;
 
-    const nodes = await this.prisma.node
-      .findMany({
-        where: { deletedAt: null },
-        select: {
-          state: true,
-          maintenance: true,
-          region: { select: { code: true, name: true } },
-          heartbeats: {
-            orderBy: { recordedAt: 'desc' },
-            take: 1,
-            select: { recordedAt: true },
-          },
-        },
-      })
-      .catch(() => []);
+    const [nodes, webStatus] = await Promise.all([this.loadNodes(), this.checkWeb()]);
 
     // Group node statuses by region.
     const byRegion = new Map<string, { name: string; statuses: StatusLevel[] }>();
@@ -79,14 +72,14 @@ export class StatusService {
       .map(([code, { name, statuses }]) => ({ code, name, status: this.rollup(statuses) }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    // The control panel API is operational by definition — this code is serving
-    // the request. Node fleet status is the worst region rollup.
     const nodesStatus: StatusLevel = regions.length
       ? this.worst(regions.map((r) => r.status))
       : 'operational';
 
     const components: ComponentStatus[] = [
+      // This code is serving the request, so the API itself is operational.
       { key: 'panel-api', name: 'Control Panel API', status: 'operational' },
+      { key: 'web', name: 'Web Dashboard', status: webStatus },
       { key: 'nodes', name: 'Game Server Nodes', status: nodesStatus },
     ];
 
@@ -98,6 +91,38 @@ export class StatusService {
     };
     this.cache = { value, at: now };
     return value;
+  }
+
+  private loadNodes() {
+    return this.prisma.node
+      .findMany({
+        where: { deletedAt: null },
+        select: {
+          state: true,
+          maintenance: true,
+          region: { select: { code: true, name: true } },
+          heartbeats: {
+            orderBy: { recordedAt: 'desc' },
+            take: 1,
+            select: { recordedAt: true },
+          },
+        },
+      })
+      .catch(() => []);
+  }
+
+  /** Ping the web container's health route; unreachable/non-200 = outage. */
+  private async checkWeb(): Promise<StatusLevel> {
+    const url = this.config.get<AppConfig['web']>('web')?.healthUrl;
+    if (!url) return 'operational';
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(WEB_PING_TIMEOUT_MS),
+      });
+      return res.ok ? 'operational' : 'outage';
+    } catch {
+      return 'outage';
+    }
   }
 
   private nodeStatus(state: string, maintenance: boolean, fresh: boolean): StatusLevel {

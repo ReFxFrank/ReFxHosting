@@ -72,6 +72,10 @@ export interface AppConfig {
     /** true -> api.push.apple.com, false -> api.sandbox.push.apple.com */
     production: boolean;
   };
+  web: {
+    /** URL the status feed pings to report Web Dashboard health. */
+    healthUrl: string;
+  };
 }
 
 const toInt = (v: string | undefined, fallback: number): number => {
@@ -176,6 +180,13 @@ export default (): AppConfig => {
     teamId: process.env.APNS_TEAM_ID ?? '',
     bundleId: process.env.APNS_BUNDLE_ID ?? '',
     production: (process.env.APNS_PRODUCTION ?? 'false').toLowerCase() === 'true',
+  },
+  web: {
+    // Defaults to the public panel URL's health route; in compose, override to
+    // the internal service (http://web:3000/api/health) for a reliable check.
+    healthUrl:
+      process.env.WEB_HEALTH_URL ??
+      `${process.env.PANEL_URL ?? 'http://localhost:3000'}/api/health`,
   },
   };
 

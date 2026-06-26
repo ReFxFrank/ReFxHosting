@@ -8,9 +8,15 @@ describe('StatusService.getStatus', () => {
   const fresh = new Date(Date.now() - 60 * 1000).toISOString(); // 1m ago
   const stale = new Date(Date.now() - 10 * 60 * 1000).toISOString(); // 10m ago
 
+  beforeEach(() => {
+    // Web health ping defaults to OK so node assertions aren't masked by it.
+    global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
+  });
+
   function svc(nodes: unknown[]) {
     const prisma = { node: { findMany: jest.fn().mockResolvedValue(nodes) } };
-    return new StatusService(prisma as any);
+    const config = { get: jest.fn().mockReturnValue({ healthUrl: 'http://web/api/health' }) };
+    return new StatusService(prisma as any, config as any);
   }
   const node = (
     state: string,
@@ -27,6 +33,14 @@ describe('StatusService.getStatus', () => {
     expect(s.status).toBe('operational');
     expect(s.regions[0].status).toBe('operational');
     expect(s.components.find((c) => c.key === 'panel-api')?.status).toBe('operational');
+    expect(s.components.find((c) => c.key === 'web')?.status).toBe('operational');
+  });
+
+  it('marks the Web Dashboard as outage (and overall) when the web ping fails', async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof fetch;
+    const s = await svc([node('ONLINE', { hb: fresh })]).getStatus();
+    expect(s.components.find((c) => c.key === 'web')?.status).toBe('outage');
+    expect(s.status).toBe('outage');
   });
 
   it('degrades a region when one node is OFFLINE among healthy ones', async () => {
@@ -55,6 +69,6 @@ describe('StatusService.getStatus', () => {
     const s = await svc([]).getStatus();
     expect(s.status).toBe('operational');
     expect(s.regions).toHaveLength(0);
-    expect(s.components).toHaveLength(2);
+    expect(s.components).toHaveLength(3); // panel-api, web, nodes
   });
 });
