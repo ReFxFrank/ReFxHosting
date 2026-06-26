@@ -1020,3 +1020,24 @@ export interface LoginResponse {
   mfaToken?: string;
   methods?: ("totp" | "webauthn" | "recovery")[];
 }
+
+export type StatusLevel = "operational" | "maintenance" | "degraded" | "outage";
+
+export interface StatusComponent {
+  key: string;
+  name: string;
+  status: StatusLevel;
+}
+
+export interface StatusRegion {
+  code: string;
+  name: string;
+  status: StatusLevel;
+}
+
+export interface SystemStatus {
+  status: StatusLevel;
+  updatedAt: string;
+  components: StatusComponent[];
+  regions: StatusRegion[];
+}

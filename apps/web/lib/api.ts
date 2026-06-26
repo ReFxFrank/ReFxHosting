@@ -70,6 +70,7 @@ import type {
   ProfileUpdate,
   AdminRole,
   WebAuthnCredential,
+  SystemStatus,
 } from "@/lib/types";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
@@ -690,6 +691,9 @@ export const api = {
       getList<HomepageAlert>("/catalog/homepage-alerts", { anonymous: true }),
     team: () => getList<TeamMember>("/catalog/team", { anonymous: true }),
   },
+
+  // Public platform status feed for the /status page.
+  status: () => http.get<SystemStatus>("/status", { anonymous: true }),
 
   orders: {
     // Creates a checkout session / provisions a server. TODO(impl): Stripe redirect.

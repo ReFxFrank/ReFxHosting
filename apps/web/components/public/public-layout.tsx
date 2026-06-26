@@ -110,7 +110,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             title="Support"
             links={[
               { label: "Help center", href: "/support" },
-              { label: "Browse games", href: "/games" },
+              { label: "System status", href: "/status" },
               { label: "Our team", href: "/team" },
             ]}
           />
