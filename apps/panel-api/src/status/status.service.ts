@@ -18,6 +18,7 @@ export interface RegionStatus {
   status: StatusLevel;
   nodesUp: number;
   nodesTotal: number;
+  nodes: { name: string; status: StatusLevel }[];
 }
 export interface IncidentUpdateView {
   status: string;
@@ -91,10 +92,10 @@ export class StatusService {
       }
     }
 
-    // Group node statuses by region.
+    // Group nodes by region.
     const byRegion = new Map<
       string,
-      { name: string; country: string; statuses: StatusLevel[] }
+      { name: string; country: string; nodes: { name: string; status: StatusLevel }[] }
     >();
     for (const n of nodes) {
       if (!n.region) continue;
@@ -104,20 +105,24 @@ export class StatusService {
       const nodeStatus = this.nodeStatus(n.state, n.maintenance, fresh);
       const entry =
         byRegion.get(n.region.code) ??
-        { name: n.region.name, country: n.region.country, statuses: [] };
-      entry.statuses.push(nodeStatus);
+        { name: n.region.name, country: n.region.country, nodes: [] };
+      entry.nodes.push({ name: n.name, status: nodeStatus });
       byRegion.set(n.region.code, entry);
     }
 
     const regions: RegionStatus[] = [...byRegion.entries()]
-      .map(([code, { name, country, statuses }]) => ({
-        code,
-        name,
-        country,
-        status: this.rollup(statuses),
-        nodesUp: statuses.filter((s) => s === 'operational').length,
-        nodesTotal: statuses.length,
-      }))
+      .map(([code, { name, country, nodes: rNodes }]) => {
+        const statuses = rNodes.map((n) => n.status);
+        return {
+          code,
+          name,
+          country,
+          status: this.rollup(statuses),
+          nodesUp: statuses.filter((s) => s === 'operational').length,
+          nodesTotal: rNodes.length,
+          nodes: rNodes.sort((a, b) => a.name.localeCompare(b.name)),
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name));
 
     const nodesStatus: StatusLevel = regions.length
@@ -160,6 +165,7 @@ export class StatusService {
       .findMany({
         where: { deletedAt: null },
         select: {
+          name: true,
           state: true,
           maintenance: true,
           region: { select: { code: true, name: true, country: true } },

@@ -1036,6 +1036,7 @@ export interface StatusRegion {
   status: StatusLevel;
   nodesUp: number;
   nodesTotal: number;
+  nodes: { name: string; status: StatusLevel }[];
 }
 
 export type IncidentImpact = "MAINTENANCE" | "DEGRADED" | "OUTAGE";

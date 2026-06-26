@@ -24,11 +24,16 @@ describe('StatusService.getStatus', () => {
   }
   const node = (
     state: string,
-    opts: { region?: string; hb?: string | null; maintenance?: boolean } = {},
+    opts: { region?: string; hb?: string | null; maintenance?: boolean; name?: string } = {},
   ) => ({
+    name: opts.name ?? 'node-1',
     state,
     maintenance: opts.maintenance ?? false,
-    region: { code: opts.region ?? 'us', name: (opts.region ?? 'us').toUpperCase() },
+    region: {
+      code: opts.region ?? 'us',
+      name: (opts.region ?? 'us').toUpperCase(),
+      country: 'US',
+    },
     heartbeats: opts.hb === null || opts.hb === undefined ? [] : [{ recordedAt: opts.hb }],
   });
 

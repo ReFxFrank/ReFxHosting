@@ -216,19 +216,39 @@ function LocationRow({ region }: { region: StatusRegion }) {
         ? `All ${region.nodesTotal} node${region.nodesTotal > 1 ? "s" : ""} operational`
         : `${region.nodesUp} of ${region.nodesTotal} nodes operational`;
   return (
-    <div className="flex items-center justify-between gap-4 px-5 py-4">
-      <div className="min-w-0">
-        <p className="flex items-center gap-2 text-sm font-medium">
-          {flag ? <span aria-hidden="true">{flag}</span> : null}
-          {region.name}
-          <span className="text-xs font-normal text-muted-foreground">{region.country}</span>
-        </p>
-        <p className="text-xs text-muted-foreground">{nodeLabel}</p>
+    <div className="px-5 py-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            {flag ? <span aria-hidden="true">{flag}</span> : null}
+            {region.name}
+            <span className="text-xs font-normal text-muted-foreground">{region.country}</span>
+          </p>
+          <p className="text-xs text-muted-foreground">{nodeLabel}</p>
+        </div>
+        <span className={`flex shrink-0 items-center gap-2 text-sm ${m.text}`}>
+          <span className={`size-2.5 rounded-full ${m.dot}`} aria-hidden="true" />
+          {m.label}
+        </span>
       </div>
-      <span className={`flex shrink-0 items-center gap-2 text-sm ${m.text}`}>
-        <span className={`size-2.5 rounded-full ${m.dot}`} aria-hidden="true" />
-        {m.label}
-      </span>
+
+      {/* Individual nodes */}
+      {region.nodes.length > 0 ? (
+        <ul className="mt-3 space-y-1.5 border-l border-white/[0.08] pl-3">
+          {region.nodes.map((n) => {
+            const nm = META[n.status];
+            return (
+              <li key={n.name} className="flex items-center justify-between gap-3">
+                <span className="truncate font-mono text-xs text-muted-foreground">{n.name}</span>
+                <span className={`flex shrink-0 items-center gap-1.5 text-xs ${nm.text}`}>
+                  <span className={`size-2 rounded-full ${nm.dot}`} aria-hidden="true" />
+                  {nm.label}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
     </div>
   );
 }
