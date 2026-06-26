@@ -94,7 +94,11 @@ export class PushService implements OnModuleDestroy {
       this.logger.warn(`push: failed to load tokens for ${userId}: ${String(err)}`);
       return;
     }
-    if (tokens.length === 0) return;
+    if (tokens.length === 0) {
+      this.logger.debug(`[push-trace] sendToUser ${userId} type=${message.type}: 0 ios tokens, nothing to send`);
+      return;
+    }
+    this.logger.debug(`[push-trace] sendToUser ${userId} type=${message.type}: sending to ${tokens.length} token(s)`);
 
     const payload = JSON.stringify(this.buildPayload(message));
     await Promise.all(tokens.map((t) => this.sendOne(t.token, payload)));
@@ -185,6 +189,7 @@ export class PushService implements OnModuleDestroy {
   private async sendOne(token: string, payload: string): Promise<void> {
     try {
       const { status, reason } = await this.post(token, payload);
+      this.logger.debug(`[push-trace] APNs ${this.host} token=${token.slice(0, 12)}… status=${status}${reason ? ' reason=' + reason : ''}`);
       if (status === 200) return;
       if (status === 410 || (status === 400 && reason && DEAD_TOKEN_REASONS.has(reason))) {
         await this.prisma.pushToken.deleteMany({ where: { token } }).catch(() => undefined);

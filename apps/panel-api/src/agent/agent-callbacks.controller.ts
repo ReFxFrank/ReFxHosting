@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  Logger,
   Post,
   Req,
   UseGuards,
@@ -124,6 +125,7 @@ type ReqWithNode = Request & { refxNodeId?: string };
 export class AgentCallbacksController {
   // Per-server throttle for owner state-change notifications (in-memory; resets
   // on panel restart, which is fine — it only suppresses near-duplicate alerts).
+  private readonly logger = new Logger(AgentCallbacksController.name);
   private readonly recentStateNotices = new Map<
     string,
     { state: ServerState; at: number }
@@ -345,7 +347,17 @@ export class AgentCallbacksController {
         select: { ownerId: true, name: true, state: true },
       })
       .catch(() => null);
-    if (!server || server.state === state) return;
+    if (!server || server.state === state) {
+      this.logger.debug(
+        `[push-trace] state ${serverId} -> ${state}: ${
+          !server ? 'no server' : 'unchanged'
+        } (no push)`,
+      );
+      return;
+    }
+    this.logger.debug(
+      `[push-trace] state ${serverId} ${server.state} -> ${state} owner=${server.ownerId}`,
+    );
 
     await this.prisma.server
       .update({ where: { id: serverId }, data: { state } })
@@ -379,16 +391,27 @@ export class AgentCallbacksController {
 
     // Mobile push (online/offline/crashed), throttled independently. Best-effort.
     const pushPhrase = SERVER_STATE_PUSH[state];
-    if (pushPhrase && !this.pushThrottled(serverId, state)) {
-      await this.push
-        .sendToUser(server.ownerId, {
-          title: 'Server status changed',
-          body: `${server.name} ${pushPhrase}.`,
-          type: 'server.state',
-          data: { serverId },
-        })
-        .catch(() => undefined);
+    if (!pushPhrase) {
+      this.logger.debug(`[push-trace] ${serverId} -> ${state}: not a push-worthy state, skip`);
+      return;
     }
+    if (this.pushThrottled(serverId, state)) {
+      this.logger.debug(
+        `[push-trace] ${serverId} -> ${state}: THROTTLED (same state within 30min), skip`,
+      );
+      return;
+    }
+    this.logger.log(
+      `[push-trace] ${serverId} -> ${state}: sending push to owner=${server.ownerId}`,
+    );
+    await this.push
+      .sendToUser(server.ownerId, {
+        title: 'Server status changed',
+        body: `${server.name} ${pushPhrase}.`,
+        type: 'server.state',
+        data: { serverId },
+      })
+      .catch((e) => this.logger.warn(`[push-trace] sendToUser threw: ${String(e)}`));
   }
 
   /**
