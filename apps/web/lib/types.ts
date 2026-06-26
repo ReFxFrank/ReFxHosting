@@ -346,6 +346,8 @@ export interface Node {
   /** Public port range the panel auto-assigns to servers on this node. */
   allocationPortStart?: number;
   allocationPortEnd?: number;
+  /** Optional wildcard game domain for branded per-server addresses. */
+  gameDomain?: string | null;
   servers?: number;
   /** Most-recent heartbeat for live gauges (null until the agent reports). */
   latestHeartbeat?: NodeHeartbeat | null;

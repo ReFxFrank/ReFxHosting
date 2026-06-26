@@ -897,6 +897,7 @@ export const api = {
         cpuOvercommit: number;
         memOvercommit: number;
         maintenance: boolean;
+        gameDomain: string;
       }>,
     ) => http.patch<Node>(`/admin/nodes/${id}`, input),
     deleteNode: (id: string) => http.delete<void>(`/admin/nodes/${id}`),

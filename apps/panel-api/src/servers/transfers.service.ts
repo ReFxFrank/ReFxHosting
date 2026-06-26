@@ -26,6 +26,7 @@ import {
   pickFreePort,
   PORT_RANGE_START,
   PORT_RANGE_END,
+  buildAllocationAlias,
 } from './allocation-port.util';
 import { buildInstallSpec, steamLogin } from '../queues/processors/install-spec.util';
 
@@ -432,6 +433,14 @@ export class TransfersService {
     const rangeStart = destNode.allocationPortStart || PORT_RANGE_START;
     const rangeEnd = destNode.allocationPortEnd || PORT_RANGE_END;
 
+    // Re-derive the branded hostname from the DESTINATION node's game domain, so
+    // a transferred server's address follows it to the new node/region.
+    const srv = await this.prisma.server.findUniqueOrThrow({
+      where: { id: serverId },
+      select: { shortId: true },
+    });
+    const alias = buildAllocationAlias(srv.shortId, destNode.gameDomain);
+
     const taken = new Set<number>(
       (
         await this.prisma.allocation.findMany({
@@ -461,6 +470,7 @@ export class TransfersService {
               id: uuidv7(),
               nodeId: destNode.id,
               ip: destNode.fqdn,
+              alias,
               port: candidate,
               serverId,
               isPrimary: src.isPrimary,

@@ -208,7 +208,7 @@ export default function ConsolePage() {
   }
 
   const address = server?.primaryAllocation
-    ? `${server.primaryAllocation.ip}:${server.primaryAllocation.port}`
+    ? `${server.primaryAllocation.alias || server.primaryAllocation.ip}:${server.primaryAllocation.port}`
     : null;
 
   async function copyAddress() {

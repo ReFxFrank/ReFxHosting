@@ -40,6 +40,7 @@ import {
   PORT_RANGE_END,
   pickFreePort,
   isPortEnvName,
+  buildAllocationAlias,
 } from './allocation-port.util';
 import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
 import { MinecraftResolverService } from './minecraft-resolver.service';
@@ -1574,9 +1575,22 @@ export class ServersService {
   ): Promise<number> {
     const node = await this.prisma.node.findUnique({
       where: { id: nodeId },
-      select: { fqdn: true, allocationPortStart: true, allocationPortEnd: true },
+      select: {
+        fqdn: true,
+        gameDomain: true,
+        allocationPortStart: true,
+        allocationPortEnd: true,
+      },
     });
     if (!node) throw new NotFoundException('Node not found');
+
+    // Branded per-server hostname (GPortal-style) when the node has a wildcard
+    // game domain; otherwise null and we advertise the node fqdn as before.
+    const srv = await this.prisma.server.findUniqueOrThrow({
+      where: { id: serverId },
+      select: { shortId: true },
+    });
+    const alias = buildAllocationAlias(srv.shortId, node.gameDomain);
 
     // Per-node configurable range (falls back to the global default).
     const rangeStart = node.allocationPortStart || PORT_RANGE_START;
@@ -1603,6 +1617,7 @@ export class ServersService {
             id: uuidv7(),
             nodeId,
             ip: node.fqdn,
+            alias,
             port: candidate,
             serverId,
             isPrimary: true,
@@ -1670,6 +1685,7 @@ export class ServersService {
               id: uuidv7(),
               nodeId,
               ip: node.fqdn,
+              alias,
               port: candidate,
               serverId,
               isPrimary: false,

@@ -172,7 +172,7 @@ export default function DashboardPage() {
                       <Badge variant="warning">Complete payment</Badge>
                     ) : server.primaryAllocation ? (
                       <Badge variant="secondary" className="font-mono">
-                        {server.primaryAllocation.ip}:{server.primaryAllocation.port}
+                        {server.primaryAllocation.alias || server.primaryAllocation.ip}:{server.primaryAllocation.port}
                       </Badge>
                     ) : null}
                   </Link>

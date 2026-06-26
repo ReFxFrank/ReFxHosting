@@ -65,6 +65,14 @@ export class CreateNodeDto {
   @IsInt()
   @Min(1)
   allocationPortEnd?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional wildcard game domain (e.g. "fra.refx.gg") for branded per-server addresses. Requires a *.<domain> DNS record pointing at this node. Leave empty to advertise the node fqdn.',
+  })
+  @IsOptional()
+  @IsString()
+  gameDomain?: string;
 }
 
 export class UpdateNodeDto {
@@ -136,6 +144,14 @@ export class UpdateNodeDto {
   @IsInt()
   @Min(1)
   allocationPortEnd?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Optional wildcard game domain (e.g. "fra.refx.gg") for branded per-server addresses. Empty string clears it.',
+  })
+  @IsOptional()
+  @IsString()
+  gameDomain?: string;
 }
 
 export class HeartbeatDto {

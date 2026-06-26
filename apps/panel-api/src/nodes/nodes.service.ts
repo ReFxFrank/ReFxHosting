@@ -15,6 +15,7 @@ import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto
 import {
   PORT_RANGE_START,
   PORT_RANGE_END,
+  normalizeGameDomain,
 } from '../servers/allocation-port.util';
 import {
   CreateNodeDto,
@@ -191,6 +192,7 @@ export class NodesService {
         sftpPort: dto.sftpPort ?? 2022,
         allocationPortStart: portStart,
         allocationPortEnd: portEnd,
+        gameDomain: normalizeGameDomain(dto.gameDomain),
         state: 'PROVISIONING',
       },
     });
@@ -436,8 +438,13 @@ export class NodesService {
     }
     const data: UpdateNodeDto = { ...dto };
     if (data.fqdn !== undefined) data.fqdn = data.fqdn.trim();
+    // Normalize/allow-clear the optional game domain (empty string -> null).
+    const updateData =
+      dto.gameDomain !== undefined
+        ? { ...data, gameDomain: normalizeGameDomain(dto.gameDomain) }
+        : data;
     try {
-      return await this.prisma.node.update({ where: { id }, data });
+      return await this.prisma.node.update({ where: { id }, data: updateData });
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&

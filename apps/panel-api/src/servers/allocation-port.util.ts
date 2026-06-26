@@ -27,3 +27,39 @@ export function pickFreePort(
 export function isPortEnvName(envName: string): boolean {
   return envName.toUpperCase().includes('PORT');
 }
+
+/**
+ * Branded per-server connection hostname (GPortal-style). When a node has a
+ * wildcard `gameDomain` (e.g. "fra.refx.gg") and a matching `*.fra.refx.gg` DNS
+ * record points at the node, each server advertises "<shortId>.<gameDomain>"
+ * instead of the raw node IP. Returns null when the node has no game domain, so
+ * the caller falls back to the node fqdn. The shortId is lower-cased and any
+ * non-DNS-safe chars are dropped so the label is always valid.
+ */
+export function buildAllocationAlias(
+  shortId: string,
+  gameDomain: string | null | undefined,
+): string | null {
+  const domain = normalizeGameDomain(gameDomain) ?? '';
+  if (!domain) return null;
+  const label = shortId.toLowerCase().replace(/[^a-z0-9-]/g, '');
+  if (!label) return null;
+  return `${label}.${domain}`;
+}
+
+/**
+ * Normalize an operator-entered game domain for storage: trim, drop a leading
+ * scheme / wildcard label and surrounding dots, lower-case. Returns null for an
+ * empty value so it can clear the column.
+ */
+export function normalizeGameDomain(
+  value: string | null | undefined,
+): string | null {
+  const cleaned = (value ?? '')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^\*\./, '')
+    .replace(/^\.+|\.+$/g, '')
+    .toLowerCase();
+  return cleaned || null;
+}

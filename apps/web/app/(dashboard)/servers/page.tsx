@@ -76,7 +76,7 @@ export default function ServersPage() {
 
                   {server.primaryAllocation && (
                     <Badge variant="secondary" className="font-mono text-xs">
-                      {server.primaryAllocation.ip}:{server.primaryAllocation.port}
+                      {server.primaryAllocation.alias || server.primaryAllocation.ip}:{server.primaryAllocation.port}
                     </Badge>
                   )}
 

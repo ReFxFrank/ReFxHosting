@@ -215,6 +215,7 @@ function CapacityForm({
   const [cpuCores, setCpuCores] = useState(node.cpuCores ?? 1);
   const [memoryMb, setMemoryMb] = useState(node.memoryMb ?? 1024);
   const [diskMb, setDiskMb] = useState(node.diskMb ?? 10240);
+  const [gameDomain, setGameDomain] = useState(node.gameDomain ?? "");
 
   return (
     <div className="space-y-5">
@@ -255,6 +256,21 @@ function CapacityForm({
           The panel reaches the agent at{" "}
           <span className="font-mono">{scheme}://{fqdn || "…"}:{daemonPort}</span>.
         </p>
+        <div className="space-y-1.5">
+          <Label htmlFor="node-game-domain-edit">Game domain (optional)</Label>
+          <Input
+            id="node-game-domain-edit"
+            placeholder="e.g. fra.refx.gg"
+            value={gameDomain}
+            onChange={(e) => setGameDomain(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Branded per-server addresses via a wildcard{" "}
+            <span className="font-mono">*.{gameDomain.trim() || "fra.refx.gg"}</span> DNS
+            record → this node&apos;s IP. Applies to newly-provisioned servers. Blank = use
+            the FQDN.
+          </p>
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -298,7 +314,15 @@ function CapacityForm({
           loading={saving}
           disabled={!fqdn.trim()}
           onClick={() =>
-            onSubmit({ fqdn: fqdn.trim(), scheme, daemonPort, cpuCores, memoryMb, diskMb })
+            onSubmit({
+              fqdn: fqdn.trim(),
+              scheme,
+              daemonPort,
+              cpuCores,
+              memoryMb,
+              diskMb,
+              gameDomain: gameDomain.trim(),
+            })
           }
         >
           Save node
@@ -449,6 +473,7 @@ const emptyForm = {
   diskMb: 512000,
   allocationPortStart: 25565,
   allocationPortEnd: 25999,
+  gameDomain: "",
 };
 
 export default function AdminNodesPage() {
@@ -527,6 +552,7 @@ export default function AdminNodesPage() {
         diskMb: form.diskMb,
         allocationPortStart: form.allocationPortStart,
         allocationPortEnd: form.allocationPortEnd,
+        gameDomain: form.gameDomain.trim() || undefined,
       }),
     onSuccess: (node) => {
       toast.success("Node created");
@@ -914,6 +940,23 @@ export default function AdminNodesPage() {
               Servers on this node get their game + query/RCON ports from this range.
               Open it on the node&apos;s firewall / security group.
             </p>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="node-game-domain">Game domain (optional)</Label>
+              <Input
+                id="node-game-domain"
+                placeholder="e.g. fra.refx.gg"
+                value={form.gameDomain}
+                onChange={(e) => setForm((f) => ({ ...f, gameDomain: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Branded per-server addresses. Add a wildcard DNS record
+                <span className="font-mono"> *.{form.gameDomain.trim() || "fra.refx.gg"} </span>
+                → this node&apos;s public IP; each server then shows
+                <span className="font-mono"> &lt;id&gt;.{form.gameDomain.trim() || "fra.refx.gg"}:port </span>
+                instead of the raw IP. Leave blank to use the node FQDN.
+              </p>
+            </div>
           </div>
 
           <DialogFooter>

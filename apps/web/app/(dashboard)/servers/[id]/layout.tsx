@@ -99,7 +99,7 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
               {server.template && <Badge variant="secondary">{server.template.name}</Badge>}
               {server.primaryAllocation && (
                 <Badge variant="outline" className="font-mono">
-                  {server.primaryAllocation.ip}:{server.primaryAllocation.port}
+                  {server.primaryAllocation.alias || server.primaryAllocation.ip}:{server.primaryAllocation.port}
                 </Badge>
               )}
               {server.state === "PENDING_PAYMENT" && (

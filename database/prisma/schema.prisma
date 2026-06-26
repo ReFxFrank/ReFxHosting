@@ -323,6 +323,13 @@ model Node {
   allocationPortStart Int   @default(25565)
   allocationPortEnd   Int   @default(25999)
 
+  // Optional wildcard "game domain" for branded per-server connection addresses
+  // (GPortal-style). When set (e.g. "fra.refx.gg") and a matching wildcard DNS
+  // record (*.fra.refx.gg -> this node's public IP) exists, each new server is
+  // assigned an allocation alias "<shortId>.<gameDomain>" that customers see
+  // instead of the raw node IP. Empty -> servers advertise the node fqdn.
+  gameDomain    String?
+
   // Capacity (advertised by agent, overridable by admin)
   cpuCores      Int
   memoryMb      Int
