@@ -71,6 +71,9 @@ import type {
   AdminRole,
   WebAuthnCredential,
   SystemStatus,
+  StatusIncident,
+  IncidentImpact,
+  IncidentStatusStage,
 } from "@/lib/types";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
@@ -1048,6 +1051,31 @@ export const api = {
         : http.post<HomepageAlert>("/admin/homepage-alerts", body),
     deleteHomepageAlert: (id: string) =>
       http.delete<void>(`/admin/homepage-alerts/${id}`),
+
+    // Status incidents (public /status page).
+    incidents: () => getList<StatusIncident>("/admin/status/incidents"),
+    createIncident: (body: {
+      title: string;
+      impact: IncidentImpact;
+      status?: IncidentStatusStage;
+      components: string[];
+      body: string;
+    }) => http.post<StatusIncident>("/admin/status/incidents", body),
+    addIncidentUpdate: (
+      id: string,
+      body: { status: IncidentStatusStage; body: string },
+    ) => http.post<StatusIncident>(`/admin/status/incidents/${id}/updates`, body),
+    updateIncident: (
+      id: string,
+      body: Partial<{
+        title: string;
+        impact: IncidentImpact;
+        status: IncidentStatusStage;
+        components: string[];
+      }>,
+    ) => http.patch<StatusIncident>(`/admin/status/incidents/${id}`, body),
+    deleteIncident: (id: string) =>
+      http.delete<void>(`/admin/status/incidents/${id}`),
 
     // Staff / "Meet the team" (public page content).
     staff: () => getList<TeamMember>("/admin/staff"),

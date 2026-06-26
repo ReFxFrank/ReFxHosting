@@ -13,10 +13,14 @@ describe('StatusService.getStatus', () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch;
   });
 
-  function svc(nodes: unknown[]) {
+  function svc(nodes: unknown[], active: unknown[] = []) {
     const prisma = { node: { findMany: jest.fn().mockResolvedValue(nodes) } };
     const config = { get: jest.fn().mockReturnValue({ healthUrl: 'http://web/api/health' }) };
-    return new StatusService(prisma as any, config as any);
+    const incidents = {
+      activeIncidents: jest.fn().mockResolvedValue(active),
+      listPublic: jest.fn().mockResolvedValue({ active: [], recent: [] }),
+    };
+    return new StatusService(prisma as any, config as any, incidents as any);
   }
   const node = (
     state: string,
@@ -69,6 +73,18 @@ describe('StatusService.getStatus', () => {
     const s = await svc([]).getStatus();
     expect(s.status).toBe('operational');
     expect(s.regions).toHaveLength(0);
-    expect(s.components).toHaveLength(3); // panel-api, web, nodes
+    expect(s.components).toHaveLength(4); // panel-api, web, nodes, ios-app
+    expect(s.components.find((c) => c.key === 'ios-app')?.status).toBe('operational');
+  });
+
+  it('lets an active incident drive a component status (e.g. iOS App outage)', async () => {
+    const s = await svc(
+      [node('ONLINE', { hb: fresh })],
+      [{ impact: 'OUTAGE', components: ['ios-app'] }],
+    ).getStatus();
+    expect(s.components.find((c) => c.key === 'ios-app')?.status).toBe('outage');
+    expect(s.status).toBe('outage');
+    // Components without the incident stay healthy.
+    expect(s.components.find((c) => c.key === 'nodes')?.status).toBe('operational');
   });
 });

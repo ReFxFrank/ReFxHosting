@@ -178,6 +178,23 @@ export const HomepageAlertType = {
 export type HomepageAlertType =
   (typeof HomepageAlertType)[keyof typeof HomepageAlertType];
 
+export const IncidentStatus = {
+  INVESTIGATING: 'INVESTIGATING',
+  IDENTIFIED: 'IDENTIFIED',
+  MONITORING: 'MONITORING',
+  RESOLVED: 'RESOLVED',
+} as const;
+export type IncidentStatus =
+  (typeof IncidentStatus)[keyof typeof IncidentStatus];
+
+export const IncidentImpact = {
+  MAINTENANCE: 'MAINTENANCE',
+  DEGRADED: 'DEGRADED',
+  OUTAGE: 'OUTAGE',
+} as const;
+export type IncidentImpact =
+  (typeof IncidentImpact)[keyof typeof IncidentImpact];
+
 export const ApiKeyScope = {
   READ: 'READ',
   WRITE: 'WRITE',

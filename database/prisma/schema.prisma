@@ -1323,6 +1323,52 @@ model HomepageAlert {
   updatedAt   DateTime          @updatedAt
 }
 
+/// Lifecycle stage of a status incident (mirrors the public timeline).
+enum IncidentStatus {
+  INVESTIGATING
+  IDENTIFIED
+  MONITORING
+  RESOLVED
+}
+
+/// How severely an incident impacts the affected component(s).
+enum IncidentImpact {
+  MAINTENANCE
+  DEGRADED
+  OUTAGE
+}
+
+/// An operator-posted status incident shown on the public /status page. While
+/// unresolved it drives the affected components' displayed status (worst of the
+/// auto-derived health and the incident impact). `components` holds component
+/// keys: "panel-api" | "web" | "nodes" | "ios-app".
+model StatusIncident {
+  id          String                 @id @db.Uuid
+  title       String
+  status      IncidentStatus         @default(INVESTIGATING)
+  impact      IncidentImpact         @default(DEGRADED)
+  components  String[]
+  startedAt   DateTime               @default(now())
+  resolvedAt  DateTime?
+  updates     StatusIncidentUpdate[]
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
+
+  @@index([resolvedAt])
+}
+
+/// A timeline entry on an incident (Investigating → Identified → … → Resolved).
+model StatusIncidentUpdate {
+  id         String         @id @db.Uuid
+  incidentId String         @db.Uuid
+  incident   StatusIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  status     IncidentStatus
+  body       String
+  createdAt  DateTime       @default(now())
+
+  @@index([incidentId])
+}
+
 /// Admin-curated team member for the public "Meet the team" page. Not tied to a
 /// user account — purely marketing content (name, title, bio, avatar).
 model StaffMember {

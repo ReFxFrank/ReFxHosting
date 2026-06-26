@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { AppConfig } from '../config/configuration';
+import { IncidentsService } from '../platform/incidents.service';
 
 export type StatusLevel = 'operational' | 'maintenance' | 'degraded' | 'outage';
 
@@ -15,11 +16,27 @@ export interface RegionStatus {
   name: string;
   status: StatusLevel;
 }
+export interface IncidentUpdateView {
+  status: string;
+  body: string;
+  createdAt: string;
+}
+export interface IncidentView {
+  id: string;
+  title: string;
+  status: string;
+  impact: string;
+  components: string[];
+  startedAt: string;
+  resolvedAt: string | null;
+  updates: IncidentUpdateView[];
+}
 export interface SystemStatus {
   status: StatusLevel;
   updatedAt: string;
   components: ComponentStatus[];
   regions: RegionStatus[];
+  incidents: { active: IncidentView[]; recent: IncidentView[] };
 }
 
 /** A node heartbeat older than this counts as stale (node not reporting). */
@@ -47,13 +64,29 @@ export class StatusService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly incidents: IncidentsService,
   ) {}
 
   async getStatus(): Promise<SystemStatus> {
     const now = Date.now();
     if (this.cache && now - this.cache.at < CACHE_TTL_MS) return this.cache.value;
 
-    const [nodes, webStatus] = await Promise.all([this.loadNodes(), this.checkWeb()]);
+    const [nodes, webStatus, activeIncidents, publicIncidents] = await Promise.all([
+      this.loadNodes(),
+      this.checkWeb(),
+      this.incidents.activeIncidents(),
+      this.incidents.listPublic(),
+    ]);
+
+    // Worst active-incident impact per affected component key.
+    const incidentLevel = new Map<string, StatusLevel>();
+    for (const inc of activeIncidents) {
+      const level = IncidentsService.impactLevel(inc.impact);
+      for (const key of inc.components) {
+        const prev = incidentLevel.get(key);
+        if (!prev || SEVERITY[level] > SEVERITY[prev]) incidentLevel.set(key, level);
+      }
+    }
 
     // Group node statuses by region.
     const byRegion = new Map<string, { name: string; statuses: StatusLevel[] }>();
@@ -76,18 +109,32 @@ export class StatusService {
       ? this.worst(regions.map((r) => r.status))
       : 'operational';
 
-    const components: ComponentStatus[] = [
+    // Auto-derived base status per component. iOS App has no server-side signal,
+    // so it is operational unless an active incident says otherwise.
+    const base: ComponentStatus[] = [
       // This code is serving the request, so the API itself is operational.
       { key: 'panel-api', name: 'Control Panel API', status: 'operational' },
       { key: 'web', name: 'Web Dashboard', status: webStatus },
       { key: 'nodes', name: 'Game Server Nodes', status: nodesStatus },
+      { key: 'ios-app', name: 'iOS App', status: 'operational' },
     ];
+
+    // Overlay active incidents: a component is at least as bad as any incident
+    // declared against it.
+    const components: ComponentStatus[] = base.map((c) => {
+      const inc = incidentLevel.get(c.key);
+      return inc ? { ...c, status: this.worst([c.status, inc]) } : c;
+    });
 
     const value: SystemStatus = {
       status: this.worst(components.map((c) => c.status)),
       updatedAt: new Date(now).toISOString(),
       components,
       regions,
+      incidents: {
+        active: publicIncidents.active.map(toIncidentView),
+        recent: publicIncidents.recent.map(toIncidentView),
+      },
     };
     this.cache = { value, at: now };
     return value;
@@ -149,4 +196,32 @@ export class StatusService {
       'operational',
     );
   }
+}
+
+type IncidentRow = {
+  id: string;
+  title: string;
+  status: string;
+  impact: string;
+  components: string[];
+  startedAt: Date;
+  resolvedAt: Date | null;
+  updates: { status: string; body: string; createdAt: Date }[];
+};
+
+function toIncidentView(i: IncidentRow): IncidentView {
+  return {
+    id: i.id,
+    title: i.title,
+    status: i.status,
+    impact: i.impact,
+    components: i.components,
+    startedAt: i.startedAt.toISOString(),
+    resolvedAt: i.resolvedAt ? i.resolvedAt.toISOString() : null,
+    updates: i.updates.map((u) => ({
+      status: u.status,
+      body: u.body,
+      createdAt: u.createdAt.toISOString(),
+    })),
+  };
 }

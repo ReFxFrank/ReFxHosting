@@ -4,8 +4,20 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, AlertTriangle, Wrench, XCircle, RefreshCw } from "lucide-react";
 import { api } from "@/lib/api";
-import type { StatusLevel } from "@/lib/types";
+import type { StatusLevel, StatusIncident, IncidentImpact } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const IMPACT: Record<IncidentImpact, { label: string; cls: string }> = {
+  OUTAGE: { label: "Outage", cls: "border-red-500/30 bg-red-500/[0.06] text-red-400" },
+  DEGRADED: { label: "Degraded", cls: "border-amber-500/30 bg-amber-500/[0.06] text-amber-400" },
+  MAINTENANCE: { label: "Maintenance", cls: "border-sky-500/30 bg-sky-500/[0.06] text-sky-400" },
+};
+const STAGE_LABEL: Record<string, string> = {
+  INVESTIGATING: "Investigating",
+  IDENTIFIED: "Identified",
+  MONITORING: "Monitoring",
+  RESOLVED: "Resolved",
+};
 
 const META: Record<
   StatusLevel,
@@ -77,6 +89,16 @@ export default function StatusPage() {
             ) : null}
           </div>
 
+          {/* Active incidents */}
+          {data && data.incidents.active.length > 0 ? (
+            <section className="mt-8 space-y-3">
+              <h2 className="text-sm font-semibold text-muted-foreground">Active incidents</h2>
+              {data.incidents.active.map((inc) => (
+                <IncidentCard key={inc.id} incident={inc} />
+              ))}
+            </section>
+          ) : null}
+
           {/* Components */}
           <section className="mt-10">
             <h2 className="text-sm font-semibold text-muted-foreground">Components</h2>
@@ -99,6 +121,20 @@ export default function StatusPage() {
             </section>
           ) : null}
 
+          {/* Past incidents */}
+          {data && data.incidents.recent.length > 0 ? (
+            <section className="mt-8">
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                Past incidents (last 30 days)
+              </h2>
+              <div className="mt-3 space-y-3">
+                {data.incidents.recent.map((inc) => (
+                  <IncidentCard key={inc.id} incident={inc} resolved />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <p className="mt-10 text-xs text-muted-foreground">
             This page reflects live infrastructure health and refreshes
             automatically. For help with a specific server, open a ticket from the{" "}
@@ -106,6 +142,47 @@ export default function StatusPage() {
           </p>
         </>
       )}
+    </div>
+  );
+}
+
+function IncidentCard({ incident, resolved }: { incident: StatusIncident; resolved?: boolean }) {
+  const impact = IMPACT[incident.impact];
+  return (
+    <div className={`rounded-2xl border p-5 ${resolved ? "border-white/[0.08] bg-white/[0.02]" : impact.cls}`}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${impact.cls}`}>
+          {impact.label}
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {STAGE_LABEL[incident.status] ?? incident.status}
+        </span>
+        {incident.components.length > 0 ? (
+          <span className="text-xs text-muted-foreground">
+            · {incident.components.join(", ")}
+          </span>
+        ) : null}
+      </div>
+      <h3 className="mt-2 font-semibold text-foreground">{incident.title}</h3>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Started {new Date(incident.startedAt).toLocaleString()}
+        {incident.resolvedAt
+          ? ` · Resolved ${new Date(incident.resolvedAt).toLocaleString()}`
+          : ""}
+      </p>
+      <ol className="mt-3 space-y-2 border-l border-white/[0.1] pl-4">
+        {incident.updates.map((u, i) => (
+          <li key={u.id ?? i} className="text-sm">
+            <span className="font-medium text-foreground">
+              {STAGE_LABEL[u.status] ?? u.status}
+            </span>{" "}
+            <span className="text-xs text-muted-foreground">
+              {new Date(u.createdAt).toLocaleString()}
+            </span>
+            <p className="text-muted-foreground">{u.body}</p>
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

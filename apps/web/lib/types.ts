@@ -1035,9 +1035,35 @@ export interface StatusRegion {
   status: StatusLevel;
 }
 
+export type IncidentImpact = "MAINTENANCE" | "DEGRADED" | "OUTAGE";
+export type IncidentStatusStage =
+  | "INVESTIGATING"
+  | "IDENTIFIED"
+  | "MONITORING"
+  | "RESOLVED";
+
+export interface IncidentUpdate {
+  id?: string;
+  status: IncidentStatusStage;
+  body: string;
+  createdAt: string;
+}
+
+export interface StatusIncident {
+  id: string;
+  title: string;
+  status: IncidentStatusStage;
+  impact: IncidentImpact;
+  components: string[];
+  startedAt: string;
+  resolvedAt: string | null;
+  updates: IncidentUpdate[];
+}
+
 export interface SystemStatus {
   status: StatusLevel;
   updatedAt: string;
   components: StatusComponent[];
   regions: StatusRegion[];
+  incidents: { active: StatusIncident[]; recent: StatusIncident[] };
 }

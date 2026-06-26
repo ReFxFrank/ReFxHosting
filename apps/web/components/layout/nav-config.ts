@@ -12,6 +12,7 @@ import {
   Package,
   Egg,
   Megaphone,
+  Siren,
   Bell,
   ScrollText,
   Settings,
@@ -95,6 +96,7 @@ export const adminNav: NavSection[] = [
     title: "Content",
     items: [
       { label: "Homepage Alerts", href: "/admin/homepage-alerts", icon: Megaphone, perm: "content.manage" },
+      { label: "Status Incidents", href: "/admin/incidents", icon: Siren, perm: "content.manage" },
       { label: "Alerts", href: "/admin/alerts", icon: Bell, perm: "content.manage" },
       { label: "Staff", href: "/admin/staff", icon: Users, perm: "content.manage" },
     ],

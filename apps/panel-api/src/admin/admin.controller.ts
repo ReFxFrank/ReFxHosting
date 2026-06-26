@@ -26,6 +26,12 @@ import { TemplatesService } from '../templates/templates.service';
 import { ServersService } from '../servers/servers.service';
 import { AlertsService } from '../platform/alerts.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
+import { IncidentsService } from '../platform/incidents.service';
+import {
+  CreateIncidentDto,
+  UpdateIncidentDto,
+  AddIncidentUpdateDto,
+} from '../platform/dto/incident.dto';
 import { StaffService } from '../platform/staff.service';
 import {
   CreateStaffMemberDto,
@@ -109,6 +115,7 @@ export class AdminController {
     private readonly servers: ServersService,
     private readonly alerts: AlertsService,
     private readonly homepageAlerts: HomepageAlertsService,
+    private readonly incidents: IncidentsService,
     private readonly staff: StaffService,
     private readonly audit: AuditService,
     private readonly roles: RolesService,
@@ -828,6 +835,43 @@ export class AdminController {
   })
   deleteHomepageAlert(@Param('id') id: string) {
     return this.homepageAlerts.delete(id);
+  }
+
+  // ---- Status incidents (public /status page) ----------------------------
+
+  @Get('status/incidents')
+  @RequirePerm('content.manage')
+  listIncidents() {
+    return this.incidents.listAll();
+  }
+
+  @Post('status/incidents')
+  @RequirePerm('content.manage')
+  @Audit({ action: 'admin.incident.create', targetType: 'StatusIncident' })
+  createIncident(@Body() dto: CreateIncidentDto) {
+    return this.incidents.create(dto);
+  }
+
+  @Post('status/incidents/:id/updates')
+  @RequirePerm('content.manage')
+  @Audit({ action: 'admin.incident.update.add', targetType: 'StatusIncident', targetParam: 'id' })
+  addIncidentUpdate(@Param('id') id: string, @Body() dto: AddIncidentUpdateDto) {
+    return this.incidents.addUpdate(id, dto);
+  }
+
+  @Patch('status/incidents/:id')
+  @RequirePerm('content.manage')
+  @Audit({ action: 'admin.incident.update', targetType: 'StatusIncident', targetParam: 'id' })
+  updateIncident(@Param('id') id: string, @Body() dto: UpdateIncidentDto) {
+    return this.incidents.update(id, dto);
+  }
+
+  @Delete('status/incidents/:id')
+  @RequirePerm('content.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.incident.delete', targetType: 'StatusIncident', targetParam: 'id' })
+  deleteIncident(@Param('id') id: string) {
+    return this.incidents.remove(id);
   }
 
   // ---- Staff (public "Meet the team") ------------------------------------
