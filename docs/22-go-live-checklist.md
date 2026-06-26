@@ -88,8 +88,10 @@ See **[docs/19-production-deployment.md](19-production-deployment.md)** and the
 **[OVH quickstart](21-ovh-quickstart.md)**.
 
 - [ ] 🤝 Point DNS: `example.com`/`www` → web, `api.example.com` → panel-api.
-- [ ] 🤝 **Reverse proxy + TLS** (Caddy/nginx/Traefik) terminating HTTPS to the
-      loopback-bound ports. Caddy auto-upgrades the console WebSocket.
+- [ ] 🤝 **Reverse proxy + TLS** (Caddy/nginx) terminating HTTPS to the
+      loopback-bound ports — ready-to-edit configs in
+      **[`infra/reverse-proxy/`](../infra/reverse-proxy/)** (Caddy auto-upgrades the
+      console WebSocket; nginx config includes the WS upgrade map).
 - [ ] 🛠️ Production `.env`: strong `SECRETS_ENC_KEY` (64-hex), `JWT_ACCESS_SECRET`,
       `JWT_REFRESH_SECRET`; `BIND_HOST=127.0.0.1`, `TRUST_PROXY=1`,
       `CORS_ORIGINS=https://...`, `PANEL_URL=https://...`,
@@ -131,9 +133,15 @@ billing, subscriptions) is the crown jewels and needs its own backups.
 The `--profile full` stack ships Prometheus + Grafana + Loki and the panel
 exposes `/metrics` + `/health`. The public `/status` page is live.
 
-- [ ] 🤝 Run the **full profile** in prod (or wire external Prometheus/Grafana).
-- [ ] ❌ **Alert rules**: node down / heartbeat stale, payment-webhook failures,
-      disk pressure, TLS-cert expiry, queue backlog. *(to build — Track J)*
+- [ ] 🤝 Run the **full profile** in prod (or wire external Prometheus/Grafana) —
+      now includes an **Alertmanager** service.
+- [x] ✅ **Alert rules**: panel-api down, 5xx rate, p95 latency, payment-webhook
+      failures, no nodes online, host disk/memory, target down — in
+      `infra/docker/prometheus/rules/alerts.yml`, routed by
+      `infra/docker/alertmanager/alertmanager.yml`.
+- [ ] 🤝 **Wire an Alertmanager receiver** (email/Slack/PagerDuty — default is a
+      sink) so alerts actually reach you. (TLS-cert-expiry alert needs
+      blackbox_exporter; example included, commented.)
 - [ ] 🤝 External **uptime monitor** (independent of your own infra) hitting
       `/health`.
 - [ ] 🤝 Define the **incident process** on the `/status` page (who posts, when).
@@ -201,12 +209,13 @@ Concrete engineering items from the tracks above that need no external accounts:
    *Done: `apps/panel-api/src/config/preflight.ts`.*
 3. ✅ **`.env.production.example`** — a fully-annotated production template wiring all
    the prod flags in one place (Track D). *Done.*
-4. **Alerting rules** — Prometheus/Grafana alert definitions for the ops signals
-   in Track F.
-5. **Reverse-proxy configs** — ready-to-use Caddy/nginx files for the
-   web + api split (Track D).
+4. ✅ **Alerting rules** — Prometheus alert rules + an Alertmanager service for the
+   ops signals in Track F. *Done: `infra/docker/prometheus/rules/alerts.yml`,
+   `infra/docker/alertmanager/`.*
+5. ✅ **Reverse-proxy configs** — ready-to-use Caddy/nginx files for the
+   web + api split (Track D). *Done: `infra/reverse-proxy/`.*
 6. **Redis-backed rate limiter** — when multi-replica scaling is on the roadmap
-   (Track G).
+   (Track G). *Still open.*
 
 ---
 

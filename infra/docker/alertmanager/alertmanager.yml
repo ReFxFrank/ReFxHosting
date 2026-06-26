@@ -1,0 +1,49 @@
+# =============================================================================
+# ReFx Hosting — Alertmanager configuration
+# -----------------------------------------------------------------------------
+# Receives alerts from Prometheus (infra/docker/prometheus/rules/alerts.yml) and
+# routes them to a receiver. Out of the box the `default` receiver is a SINK (no
+# integration) so the pipeline runs without erroring — wire a real receiver
+# (email / Slack / PagerDuty) below before you depend on alerts reaching you.
+# =============================================================================
+route:
+  receiver: default
+  group_by: ["alertname", "job"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: default
+      repeat_interval: 1h
+
+receivers:
+  - name: default
+    # No integration = alerts are visible in the Alertmanager UI (:9093) but not
+    # pushed anywhere. Replace with one of the examples below.
+
+    # --- Email (SMTP) ---------------------------------------------------------
+    # email_configs:
+    #   - to: alerts@example.com
+    #     from: alertmanager@example.com
+    #     smarthost: smtp.example.com:587
+    #     auth_username: "<user>"
+    #     auth_password: "<password>"
+    #     require_tls: true
+
+    # --- Slack ----------------------------------------------------------------
+    # slack_configs:
+    #   - api_url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+    #     channel: "#alerts"
+    #     send_resolved: true
+
+    # --- PagerDuty ------------------------------------------------------------
+    # pagerduty_configs:
+    #   - routing_key: "<integration-key>"
+
+inhibit_rules:
+  # When a target is down (critical), suppress the noisier warning-level alerts
+  # for the same job until it recovers.
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: ["job"]

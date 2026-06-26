@@ -10,6 +10,16 @@ global:
   external_labels:
     cluster: refx-local
 
+# Alerting rules (loaded from the mounted rules dir).
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# Route fired alerts to Alertmanager (observability/full profile service).
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
 scrape_configs:
   # Prometheus scraping itself.
   - job_name: prometheus

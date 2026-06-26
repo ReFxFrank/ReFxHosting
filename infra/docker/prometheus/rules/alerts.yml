@@ -1,0 +1,115 @@
+# =============================================================================
+# ReFx Hosting — Prometheus alerting rules
+# -----------------------------------------------------------------------------
+# Grounded in metrics the panel actually exposes (see
+# apps/panel-api/src/platform/metrics.service.ts) plus node-exporter. Routed by
+# Alertmanager (infra/docker/alertmanager/alertmanager.yml).
+#
+# Tune thresholds to your traffic before relying on them.
+# =============================================================================
+groups:
+  - name: refx-panel
+    rules:
+      - alert: PanelApiDown
+        expr: up{job="panel-api"} == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "panel-api is down"
+          description: "Prometheus cannot scrape panel-api (up==0) for >2m. The site/API is likely offline."
+
+      - alert: PanelApiHighErrorRate
+        # 5xx ratio over 5m. NaN (no traffic) does not fire.
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+            / sum(rate(http_requests_total[5m])) > 0.05
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "panel-api 5xx rate >5%"
+          description: "More than 5% of API requests are returning 5xx over the last 5m."
+
+      - alert: PanelApiHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 1.5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "panel-api p95 latency >1.5s"
+          description: "95th-percentile request latency has exceeded 1.5s for 10m."
+
+      - alert: PaymentWebhookFailing
+        # Stripe/PayPal webhooks returning 4xx/5xx means invoices won't settle.
+        expr: sum(rate(http_requests_total{route=~".*webhooks.*",status_code=~"[45].."}[15m])) > 0
+        for: 15m
+        labels: { severity: critical }
+        annotations:
+          summary: "payment webhook errors"
+          description: "Stripe/PayPal webhook calls are erroring — invoices/checkouts may not be settling. Check the gateway webhook config + signing secret."
+
+  - name: refx-capacity
+    rules:
+      - alert: NoGameNodesOnline
+        expr: refx_nodes_online == 0
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "no game nodes online"
+          description: "refx_nodes_online == 0 for 5m — no capacity to run or provision servers. (Expected before you register your first node.)"
+
+  - name: refx-host
+    rules:
+      # Requires node-exporter (observability/full profile, and on each game node).
+      - alert: HostDiskAlmostFull
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+            / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) < 0.10
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "host disk <10% free"
+          description: "Root filesystem on {{ $labels.instance }} is below 10% free."
+
+      - alert: HostDiskCritical
+        expr: |
+          (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+            / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) < 0.05
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "host disk <5% free"
+          description: "Root filesystem on {{ $labels.instance }} is below 5% free — backups/provisioning will start failing."
+
+      - alert: HostMemoryLow
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.10
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "host memory <10% available"
+          description: "Available memory on {{ $labels.instance }} is below 10% for 10m."
+
+  - name: refx-targets
+    rules:
+      - alert: ScrapeTargetDown
+        # Catch-all: any configured target (node-agent, node-exporter, …) down.
+        expr: up == 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "scrape target down: {{ $labels.job }}"
+          description: "Prometheus target {{ $labels.job }} ({{ $labels.instance }}) has been down for 5m."
+
+# -----------------------------------------------------------------------------
+# TLS certificate expiry: requires blackbox_exporter probing your public URLs.
+# Add the exporter + a `blackbox` scrape job, then uncomment:
+#
+#  - name: refx-tls
+#    rules:
+#      - alert: TlsCertExpiringSoon
+#        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+#        for: 1h
+#        labels: { severity: warning }
+#        annotations:
+#          summary: "TLS cert expiring in <14d ({{ $labels.instance }})"
+# -----------------------------------------------------------------------------

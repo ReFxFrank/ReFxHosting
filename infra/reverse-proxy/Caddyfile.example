@@ -1,0 +1,59 @@
+# =============================================================================
+# ReFx Hosting — Caddy reverse proxy (production)
+# -----------------------------------------------------------------------------
+# Terminates HTTPS (auto Let's Encrypt) and routes to the loopback-bound
+# containers (BIND_HOST=127.0.0.1):
+#   web      :3000   ← example.com, www.example.com
+#   panel-api:4000   ← api.example.com
+#
+# Usage:
+#   1. Replace example.com / api.example.com with your domains.
+#   2. Point DNS A/AAAA records at this host.
+#   3. sudo caddy run --config ./Caddyfile   (or install the caddy service)
+#
+# Caddy auto-upgrades the console WebSocket — no extra config needed.
+# Make sure NEXT_PUBLIC_API_URL was built as https://api.<domain> and
+# CORS_ORIGINS lists https://<domain>(,https://www.<domain>).
+# =============================================================================
+
+{
+	# ACME account email for certificate notices.
+	email admin@example.com
+	# Uncomment to test against the staging CA first (avoids rate limits):
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+# ---- Web panel --------------------------------------------------------------
+example.com, www.example.com {
+	encode zstd gzip
+
+	header {
+		# HSTS (only enable once you're sure every subdomain is https).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Caddy serves over HTTP/2/3; remove the server banner.
+		-Server
+	}
+
+	reverse_proxy 127.0.0.1:3000
+}
+
+# ---- Panel API --------------------------------------------------------------
+api.example.com {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		-Server
+	}
+
+	# Larger bodies for the in-browser file-manager uploads.
+	request_body {
+		max_size 64MB
+	}
+
+	reverse_proxy 127.0.0.1:4000
+}

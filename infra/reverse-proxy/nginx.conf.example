@@ -1,0 +1,94 @@
+# =============================================================================
+# ReFx Hosting — nginx reverse proxy (production)
+# -----------------------------------------------------------------------------
+# Routes HTTPS to the loopback-bound containers (BIND_HOST=127.0.0.1):
+#   web      :3000   ← example.com, www.example.com
+#   panel-api:4000   ← api.example.com
+#
+# TLS: obtain certs with certbot (`certbot --nginx -d example.com -d
+# www.example.com -d api.example.com`) — it fills in the ssl_* lines. Paths
+# below assume the certbot layout; adjust if you manage certs differently.
+#
+# The console uses WebSockets, so the Upgrade/Connection headers below are
+# REQUIRED. Make sure NEXT_PUBLIC_API_URL was built as https://api.<domain>.
+# =============================================================================
+
+# Map the Upgrade header so WebSocket connections are proxied correctly.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+upstream refx_web { server 127.0.0.1:3000; keepalive 32; }
+upstream refx_api { server 127.0.0.1:4000; keepalive 32; }
+
+# ---- Redirect http -> https -------------------------------------------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name example.com www.example.com api.example.com;
+    return 301 https://$host$request_uri;
+}
+
+# ---- Web panel --------------------------------------------------------------
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name example.com www.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript application/xml;
+
+    location / {
+        proxy_pass http://refx_web;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+# ---- Panel API --------------------------------------------------------------
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name api.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/api.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.example.com/privkey.pem;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    # In-browser file-manager uploads; raise if you allow larger uploads.
+    client_max_body_size 64m;
+
+    gzip on;
+    gzip_types application/json text/plain;
+
+    location / {
+        proxy_pass http://refx_api;
+        proxy_http_version 1.1;
+        # WebSocket console relay lives under the API origin.
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Long-lived console sockets — don't cut them at the default 60s.
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
