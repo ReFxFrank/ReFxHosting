@@ -3,17 +3,19 @@
 /**
  * APNs backend doctor — proves the push backend end-to-end WITHOUT the iOS app.
  *
- * Run inside a container that has the panel-api env (.env via env_file) and `pg`:
+ * Run inside a container that has the panel-api env (.env via env_file) and `pg`.
+ * From the repo root on the VPS:
  *
  *   docker compose --env-file .env -f infra/docker/docker-compose.yml run --rm \
- *     -v "$PWD/apns-doctor.js:/repo/apns-doctor.js" \
- *     --entrypoint node migrate /repo/apns-doctor.js [send] [user@email]
+ *     -v "$PWD/infra/scripts/apns-doctor.js:/repo/apns-doctor.js" \
+ *     --entrypoint node migrate /repo/apns-doctor.js [mode] [arg]
  *
  * Modes:
  *   (no args)            config + DB rows + AUTH self-test to a throwaway token
  *                        (proves signing; never touches a real device)
  *   send                 ALSO send one real test alert to every stored iOS token
  *   send user@email      ALSO send only to that user's tokens
+ *   token <hex>          send one test alert to a literal device token (no DB)
  *
  * It replicates PushService's loading + signing + request EXACTLY so the result
  * reflects the real backend.

@@ -401,7 +401,7 @@ export class AgentCallbacksController {
       );
       return;
     }
-    this.logger.log(
+    this.logger.debug(
       `[push-trace] ${serverId} -> ${state}: sending push to owner=${server.ownerId}`,
     );
     await this.push
