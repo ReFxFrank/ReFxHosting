@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ChevronDown, Send, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Send, ShieldAlert } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,23 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Badge, TicketPriorityBadge, TicketStateBadge } from "@/components/ui/badge";
 import { toast } from "@/components/ui/sonner";
 import { cn, formatDateTime, initials } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
-import type { TicketMessage, TicketState } from "@/lib/types";
-
-const STATE_ACTIONS: { state: TicketState; label: string }[] = [
-  { state: "RESOLVED", label: "Mark resolved" },
-  { state: "CLOSED", label: "Close ticket" },
-  { state: "OPEN", label: "Reopen ticket" },
-];
+import type { TicketMessage } from "@/lib/types";
 
 /** How often the open thread re-checks for new replies / status changes. */
 const TICKET_POLL_MS = 15_000;
@@ -71,16 +59,6 @@ export default function TicketDetailPage() {
       toast.error(e instanceof ApiError ? e.message : "Failed to send reply"),
   });
 
-  const stateMutation = useMutation({
-    mutationFn: (state: TicketState) => api.support.setState(id, state),
-    onSuccess: (t) => {
-      toast.success(`Ticket marked ${t.state.toLowerCase().replace(/_/g, " ")}`);
-      invalidate();
-    },
-    onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to update ticket"),
-  });
-
   const backLink = (
     <Button variant="ghost" size="sm" asChild>
       <Link href="/support">
@@ -113,7 +91,9 @@ export default function TicketDetailPage() {
   }
 
   const visibleMessages = ticket.messages ?? [];
-  const isClosed = ticket.state === "CLOSED";
+  // Staff lock a ticket by closing (or archiving) it — once locked the customer
+  // can no longer reply. Only staff can reopen it (from the admin queue).
+  const locked = ticket.state === "CLOSED" || ticket.state === "ARCHIVED";
 
   return (
     <div className="space-y-6">
@@ -133,25 +113,6 @@ export default function TicketDetailPage() {
             <TicketStateBadge state={ticket.state} />
             <TicketPriorityBadge priority={ticket.priority} />
           </span>
-        }
-        actions={
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" loading={stateMutation.isPending}>
-                Change status <ChevronDown className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {STATE_ACTIONS.filter((a) => a.state !== ticket.state).map((a) => (
-                <DropdownMenuItem
-                  key={a.state}
-                  onSelect={() => stateMutation.mutate(a.state)}
-                >
-                  {a.label}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
         }
       />
 
@@ -211,9 +172,10 @@ export default function TicketDetailPage() {
 
       <Card>
         <CardContent className="space-y-3 p-4">
-          {isClosed ? (
+          {locked ? (
             <p className="text-sm text-muted-foreground">
-              This ticket is closed. Reopen it to continue the conversation.
+              This ticket is closed and can no longer be replied to. Please open a
+              new ticket if you still need help.
             </p>
           ) : (
             <>

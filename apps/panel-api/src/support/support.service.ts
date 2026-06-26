@@ -222,6 +222,19 @@ export class SupportService {
       throw new ForbiddenException('You cannot post on this ticket');
     }
 
+    // A closed (or archived) ticket is locked for customers — they can't reply
+    // once staff close it. Staff can still post (which reopens it via the state
+    // transition below), e.g. to follow up.
+    if (
+      !staff &&
+      (ticket.state === TicketState.CLOSED ||
+        ticket.state === TicketState.ARCHIVED)
+    ) {
+      throw new ForbiddenException(
+        'This ticket is closed and can no longer be replied to. Please open a new ticket if you still need help.',
+      );
+    }
+
     // Only staff may flag a message as an internal note.
     const isInternal = staff ? dto.isInternal ?? false : false;
 
@@ -438,9 +451,9 @@ export class SupportService {
   }
 
   /**
-   * Staff: permanently delete a ticket and its messages (cascade). Guarded to
-   * resolved/closed/archived tickets so an active conversation can't be deleted
-   * out from under a customer.
+   * Staff: permanently delete a ticket and its messages (cascade). Deleting
+   * CLOSES the ticket first (so it's locked from further customer replies and the
+   * close is the last recorded state) and then removes it — works from any state.
    */
   async deleteTicket(user: AuthUser, id: string): Promise<{ id: string }> {
     if (!this.isStaff(user)) throw new ForbiddenException('Staff only');
@@ -449,17 +462,21 @@ export class SupportService {
       select: { id: true, state: true },
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
-    const deletable: TicketState[] = [
-      TicketState.RESOLVED,
-      TicketState.CLOSED,
-      TicketState.ARCHIVED,
-    ];
-    if (!deletable.includes(ticket.state)) {
-      throw new BadRequestException(
-        'Only resolved, closed or archived tickets can be deleted.',
-      );
-    }
-    await this.prisma.ticket.delete({ where: { id } });
+
+    await this.prisma.$transaction(async (tx) => {
+      // Close it first unless it's already closed/archived, then delete (cascade
+      // removes its messages).
+      if (
+        ticket.state !== TicketState.CLOSED &&
+        ticket.state !== TicketState.ARCHIVED
+      ) {
+        await tx.ticket.update({
+          where: { id },
+          data: { state: TicketState.CLOSED },
+        });
+      }
+      await tx.ticket.delete({ where: { id } });
+    });
     return { id };
   }
 

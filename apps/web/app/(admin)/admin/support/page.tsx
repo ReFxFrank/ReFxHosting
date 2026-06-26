@@ -297,8 +297,9 @@ function TicketDrawer({
   });
 
   const canArchive = ticket?.state === "RESOLVED" || ticket?.state === "CLOSED";
-  const canDelete =
-    ticket?.state === "RESOLVED" || ticket?.state === "CLOSED" || ticket?.state === "ARCHIVED";
+  // Deleting works from any state — the backend closes the ticket first, then
+  // removes it (and its messages).
+  const canDelete = !!ticket;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
