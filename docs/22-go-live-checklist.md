@@ -164,6 +164,25 @@ exposes `/metrics` + `/health`. The public `/status` page is live.
 
 ---
 
+## Reviewer / demo account (App Store submission) 🛠️
+
+App Store review needs a working demo login. Seed one — with a real, provisioned
+sample server so the dashboard is populated — with one command (after
+`update-panel.sh` rebuilds the image):
+
+```bash
+infra/scripts/dc run --rm panel-api node dist/scripts/seed-reviewer.js
+```
+
+Idempotent (re-running reuses the account + its server). Configurable via env:
+`REVIEWER_EMAIL`, `REVIEWER_PASSWORD` (else generated + printed),
+`REVIEWER_SERVER_NAME`, `REVIEWER_TEMPLATE_SLUG` (default `minecraft`),
+`REVIEWER_NODE_ID` (default: first ONLINE node). The script prints the final
+email/password — paste them into App Store Connect's demo-account fields.
+
+Fallback (no script): create the user from **Admin → Users → Create user**, then
+**Admin → Servers → Create** assigned to that user.
+
 ## Track H — iOS app (can trail launch) 👤
 
 Backend push + universal-links + store listing are ready; the Swift app ships
