@@ -114,6 +114,22 @@ npm run db:reprice -- --rate=600
 npm run db:reprice -- --apply
 ```
 
+### Re-sync tier SPECS to the egg (after a recommended-spec change)
+
+`db:reprice` only changes *prices*. If you change an egg's recommended specs
+(e.g. ARK 12→16 GB), existing tiers keep their original RAM/CPU/disk (they were
+sized when first seeded). To resize the standard Low/Mid/High tiers from the egg's
+recommended specs **and** reprice them in one pass:
+
+```bash
+npm run db:resync-tiers            # preview
+npm run db:resync-tiers -- --apply # apply
+```
+
+It recomputes each tier at 0.5×/1×/2× the template's recommended specs (same
+formula as the seed) and reprices; custom admin tiers are left untouched. Prod run
+mirrors the reprice command via the `migrate` image.
+
 In the running stack (prod), via the migrate image:
 
 ```bash

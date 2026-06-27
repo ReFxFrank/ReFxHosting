@@ -32,6 +32,7 @@
     "prisma:studio": "prisma studio --schema database/prisma/schema.prisma",
     "db:seed": "ts-node --compiler-options '{\"module\":\"commonjs\"}' database/seed/seed.ts",
     "db:reprice": "ts-node --compiler-options '{\"module\":\"commonjs\"}' database/seed/reprice.ts",
+    "db:resync-tiers": "ts-node --compiler-options '{\"module\":\"commonjs\"}' database/seed/resync-tiers.ts",
     "stack:up": "docker compose -f infra/docker/docker-compose.yml --env-file .env up -d",
     "stack:down": "docker compose -f infra/docker/docker-compose.yml down",
     "stack:logs": "docker compose -f infra/docker/docker-compose.yml logs -f"
