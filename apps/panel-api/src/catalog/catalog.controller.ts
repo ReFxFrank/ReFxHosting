@@ -70,6 +70,18 @@ export class CatalogController {
     return this.storefront.getGame(slug);
   }
 
+  /** Published web-hosting plans for the public web catalog. */
+  @Get('web')
+  web() {
+    return this.storefront.listWeb();
+  }
+
+  /** One published web-hosting plan with its orderable plans + locations. */
+  @Get('web/:slug')
+  webApp(@Param('slug') slug: string) {
+    return this.storefront.getWebApp(slug);
+  }
+
   /** Active, in-window public homepage notices (separate from dashboard alerts). */
   @Get('homepage-alerts')
   homepageAlertsList() {

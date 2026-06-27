@@ -705,6 +705,10 @@ export const api = {
     games: () => getList<StorefrontGame>("/catalog/games", { anonymous: true }),
     game: (slug: string) =>
       http.get<StorefrontGameDetail>(`/catalog/games/${slug}`, { anonymous: true }),
+    // Public web-hosting catalog (same shape as games).
+    webApps: () => getList<StorefrontGame>("/catalog/web", { anonymous: true }),
+    webApp: (slug: string) =>
+      http.get<StorefrontGameDetail>(`/catalog/web/${slug}`, { anonymous: true }),
     homepageAlerts: () =>
       getList<HomepageAlert>("/catalog/homepage-alerts", { anonymous: true }),
     team: () => getList<TeamMember>("/catalog/team", { anonymous: true }),

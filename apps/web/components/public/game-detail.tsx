@@ -87,7 +87,15 @@ function planCards(plans: StorefrontPlan[]): PlanCard[] {
 }
 
 /** Detail-page hero using the egg's hero image with a glassy overlay. */
-export function GameDetailHero({ game }: { game: StorefrontGameDetail["game"] }) {
+export function GameDetailHero({
+  game,
+  backHref = "/games",
+  backLabel = "All games",
+}: {
+  game: StorefrontGameDetail["game"];
+  backHref?: string;
+  backLabel?: string;
+}) {
   return (
     <section className="relative overflow-hidden border-b border-white/[0.06]">
       <div className="absolute inset-0">
@@ -95,8 +103,8 @@ export function GameDetailHero({ game }: { game: StorefrontGameDetail["game"] })
         <div className="absolute inset-0 bg-gradient-to-t from-[#070b12] via-[#070b12]/80 to-[#070b12]/40" />
       </div>
       <div className="relative mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-        <Link href="/games" className="text-sm text-muted-foreground hover:text-foreground">
-          ← All games
+        <Link href={backHref} className="text-sm text-muted-foreground hover:text-foreground">
+          ← {backLabel}
         </Link>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {game.category && <Badge variant="secondary">{game.category.name}</Badge>}

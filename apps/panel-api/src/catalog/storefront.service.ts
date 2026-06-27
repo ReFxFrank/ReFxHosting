@@ -49,15 +49,27 @@ export class StorefrontService {
 
   /** All published games for the homepage/catalog, with a starting price. */
   async listGames() {
-    const [games, products] = await Promise.all([
+    return this.listCatalog('GAME', 'GAME_SERVER');
+  }
+
+  /** All published web-hosting plans for the web catalog, with a starting price. */
+  async listWeb() {
+    return this.listCatalog('WEB', 'WEB_HOSTING');
+  }
+
+  private async listCatalog(
+    kind: 'GAME' | 'WEB',
+    productType: 'GAME_SERVER' | 'WEB_HOSTING',
+  ) {
+    const [items, products] = await Promise.all([
       this.prisma.gameTemplate.findMany({
-        where: { isPublished: true },
+        where: { isPublished: true, kind },
         orderBy: [{ featured: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
         select: StorefrontService.CARD_SELECT,
       }),
-      this.activeGameProducts(),
+      this.activeProducts(productType),
     ]);
-    return games.map((g) => ({
+    return items.map((g) => ({
       ...g,
       startingPrice: this.startingPrice(g.id, products),
     }));
@@ -69,8 +81,21 @@ export class StorefrontService {
    * disabled/unknown slug shows a clean "unavailable" page.
    */
   async getGame(slug: string) {
+    return this.getDetail(slug, 'GAME', 'GAME_SERVER');
+  }
+
+  /** One published web-hosting plan by slug, with its plans + locations. */
+  async getWebApp(slug: string) {
+    return this.getDetail(slug, 'WEB', 'WEB_HOSTING');
+  }
+
+  private async getDetail(
+    slug: string,
+    kind: 'GAME' | 'WEB',
+    productType: 'GAME_SERVER' | 'WEB_HOSTING',
+  ) {
     const game = await this.prisma.gameTemplate.findFirst({
-      where: { slug, isPublished: true },
+      where: { slug, isPublished: true, kind },
       select: {
         ...StorefrontService.CARD_SELECT,
         author: true,
@@ -91,9 +116,9 @@ export class StorefrontService {
         },
       },
     });
-    if (!game) throw new NotFoundException('Game not available');
+    if (!game) throw new NotFoundException('Not available');
 
-    const products = await this.activeGameProducts();
+    const products = await this.activeProducts(productType);
     const plans = products
       .filter((p) => this.productAllows(p, game.id))
       .map((p) => this.toPublicPlan(p));
@@ -113,9 +138,11 @@ export class StorefrontService {
 
   // ---- helpers ------------------------------------------------------------
 
-  private activeGameProducts(): Promise<PricedProduct[]> {
+  private activeProducts(
+    type: 'GAME_SERVER' | 'WEB_HOSTING' = 'GAME_SERVER',
+  ): Promise<PricedProduct[]> {
     return this.prisma.product.findMany({
-      where: { isActive: true, type: 'GAME_SERVER' },
+      where: { isActive: true, type },
       include: {
         prices: { where: { isActive: true } },
         hardwareTiers: {

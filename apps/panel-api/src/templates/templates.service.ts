@@ -165,12 +165,12 @@ export class TemplatesService {
    * and (for now) any non-deleted template; returns the buyer-relevant fields.
    */
   listActive(filter: { categoryId?: string; search?: string; kind?: 'GAME' | 'WEB' }) {
-    // Public catalog: published templates only (admins use list() for everything).
-    // Default to GAME so the games grid never shows web-hosting plans; the web
-    // catalog requests kind=WEB explicitly.
+    // Published templates only (admins use list() for everything). Filter by kind
+    // ONLY when asked — the order page needs both kinds; the public games/web grids
+    // use the storefront list* methods which scope kind themselves.
     const where: Prisma.GameTemplateWhereInput = {
       isPublished: true,
-      kind: filter.kind ?? 'GAME',
+      ...(filter.kind ? { kind: filter.kind } : {}),
     };
     if (filter.categoryId) where.categoryId = filter.categoryId;
     if (filter.search) {

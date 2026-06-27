@@ -12,10 +12,16 @@ export const ALL = "__all__";
 export const FEATURED = "__featured__";
 
 /** A single game card linking to its detail/order page. */
-export function GameCard({ game }: { game: StorefrontGame }) {
+export function GameCard({
+  game,
+  basePath = "/games",
+}: {
+  game: StorefrontGame;
+  basePath?: string;
+}) {
   return (
     <Link
-      href={`/games/${game.slug}`}
+      href={`${basePath}/${game.slug}`}
       className="group refx-card relative flex flex-col overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:refx-glow"
     >
       <div className="relative aspect-[16/9] overflow-hidden">
@@ -77,18 +83,26 @@ export function GameCard({ game }: { game: StorefrontGame }) {
   );
 }
 
-export function GameGrid({ games }: { games: StorefrontGame[] }) {
+export function GameGrid({
+  games,
+  basePath = "/games",
+  emptyLabel = "No games match your filters yet.",
+}: {
+  games: StorefrontGame[];
+  basePath?: string;
+  emptyLabel?: string;
+}) {
   if (games.length === 0) {
     return (
       <div className="refx-card rounded-2xl p-12 text-center">
-        <p className="text-sm text-muted-foreground">No games match your filters yet.</p>
+        <p className="text-sm text-muted-foreground">{emptyLabel}</p>
       </div>
     );
   }
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
       {games.map((g) => (
-        <GameCard key={g.id} game={g} />
+        <GameCard key={g.id} game={g} basePath={basePath} />
       ))}
     </div>
   );
