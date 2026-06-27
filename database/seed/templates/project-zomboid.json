@@ -17,13 +17,13 @@
   "steamAppId": 380870,
   "supportsWorkshop": true,
   "workshopAppId": 108600,
-  "startupCommand": "./start-server.sh -servername \"{{SERVER_NAME}}\" -adminpassword \"{{ADMIN_PASS}}\" -port {{SERVER_PORT}} -udpport {{UDP_PORT}} -cachedir=/mnt/server/Zomboid",
+  "startupCommand": "./start-server.sh -servername refx -adminpassword \"{{ADMIN_PASS}}\" -port {{SERVER_PORT}} -udpport {{UDP_PORT}} -cachedir=/mnt/server/Zomboid",
   "startupDetect": "SERVER STARTED|Server Steam ID",
   "stopCommand": "quit",
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\n# Locate or bootstrap steamcmd (the parkervcp/steamcmd image does NOT ship it\n# on PATH; eggs are expected to fetch it themselves).\nif command -v steamcmd >/dev/null 2>&1; then\n  STEAMCMD=steamcmd\nelse\n  echo \"[steam] bootstrapping steamcmd\"\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  STEAMCMD=/mnt/server/steamcmd/steamcmd.sh\nfi\n\"$STEAMCMD\" +force_install_dir /mnt/server +login anonymous +app_update 380870 validate +quit\nmkdir -p /mnt/server/Zomboid/Server\nchmod +x start-server.sh || true\necho 'Project Zomboid install complete.'\n"
+    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\n# Locate or bootstrap steamcmd (the parkervcp/steamcmd image does NOT ship it\n# on PATH; eggs are expected to fetch it themselves).\nif command -v steamcmd >/dev/null 2>&1; then\n  STEAMCMD=steamcmd\nelse\n  echo \"[steam] bootstrapping steamcmd\"\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  STEAMCMD=/mnt/server/steamcmd/steamcmd.sh\nfi\n\"$STEAMCMD\" +force_install_dir /mnt/server +login anonymous +app_update 380870 validate +quit\nmkdir -p /mnt/server/Zomboid/Server\nchmod +x start-server.sh || true\n# Seed PZ's server preset \"refx\" (startup uses -servername refx). PublicName is the\n# display name; -servername is just the config preset id (was wrongly the display name).\nmkdir -p /mnt/server/Zomboid/Server\nZINI=/mnt/server/Zomboid/Server/refx.ini\nif [ ! -f \"$ZINI\" ]; then\n  cat > \"$ZINI\" <<EOF\nPublicName=${SERVER_NAME}\nMaxPlayers=${MAX_PLAYERS}\nDefaultPort=${SERVER_PORT}\nUDPPort=${UDP_PORT}\nMods=${MOD_IDS}\nPublic=true\nOpen=true\nEOF\nfi\n# Apply the tier RAM to the JVM heap (PZ ignores SERVER_MEMORY otherwise → OOM on big plans).\nfor J in /mnt/server/ProjectZomboid64.json; do\n  [ -f \"$J\" ] && sed -i -E \"s/\\\"-Xmx[0-9]+[mg]\\\"/\\\"-Xmx${SERVER_MEMORY}m\\\"/\" \"$J\" || true\ndone\necho 'Project Zomboid install complete.'\n"
   },
   "configFiles": [
     {
