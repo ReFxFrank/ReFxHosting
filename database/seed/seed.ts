@@ -878,6 +878,11 @@ async function seedTemplates(
             },
           });
         }
+        // When a plain egg switches to a ReFx launcher (`bash refx-*.sh` — e.g.
+        // Rust gaining refx-rust.sh), migrate existing server rows off their
+        // snapshotted direct command, same as the workshop/voice syncs do. Without
+        // this the template flips but live servers keep running the old command.
+        await migrateLauncherStartup(existing.id, tpl.startupCommand);
         continue;
       }
     }
