@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"time"
 
@@ -12,6 +13,10 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
 )
+
+// ansiRe strips the ANSI colour escapes steamcmd emits (e.g. "Public...\x1b[0mOK"),
+// which otherwise split the markers we match on.
+var ansiRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 // steamLoginScript warms steamcmd (a separate self-update run, so the actual
 // login is fast enough that a 30-second mobile Guard code survives) and then logs
@@ -139,21 +144,23 @@ func (d *DockerRuntime) RunSteamLogin(
 // fail before login), so success REQUIRES an explicit positive marker — never the
 // exit code alone. The unused exit param is kept for call-site clarity.
 func steamLoginSucceeded(out string, _ int64) bool {
-	low := strings.ToLower(out)
-	// Definitive success markers — printed ONLY after a full login completes. They
-	// take precedence: a successful login also prints benign lines like "Steam
-	// Guard code provided." which must NOT be read as a failure.
-	if strings.Contains(low, "waiting for user info...ok") ||
+	// Strip ANSI colour codes first — steamcmd splits otherwise-contiguous markers
+	// with them (e.g. "to Steam Public...\x1b[0mOK") and injects extra text inside
+	// others ("Waiting for user info...<compat>OK"), so match the clean text.
+	low := strings.ToLower(ansiRe.ReplaceAllString(out, ""))
+	// Definitive success: the login-result line ("...to Steam Public...OK") or the
+	// legacy "Logged in OK". A successful login also prints the benign line "Steam
+	// Guard code provided." — checking success FIRST keeps that from misfiring.
+	if strings.Contains(low, "to steam public...ok") ||
 		strings.Contains(low, "logged in ok") {
 		return true
 	}
-	// Otherwise, any of these means the login did not complete. Note the Guard
-	// markers are the specific PROMPT / mismatch, not the generic "steam guard".
+	// Otherwise, any of these means the login did not complete.
 	for _, bad := range []string{
-		"failed login", "login failure", "invalid password",
-		"two-factor code mismatch", "rate limit exceeded", "account logon denied",
-		"invalid login auth code", "steam guard code:", "two_factor",
-		"set_steam_guard", "permission denied", "failed to fetch steamcmd",
+		"to steam public...failed", "failed login", "login failure",
+		"invalid password", "two-factor code mismatch", "rate limit exceeded",
+		"account logon denied", "invalid login auth code", "steam guard code:",
+		"two_factor", "set_steam_guard", "permission denied", "failed to fetch steamcmd",
 	} {
 		if strings.Contains(low, bad) {
 			return false

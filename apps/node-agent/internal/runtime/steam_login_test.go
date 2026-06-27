@@ -9,17 +9,19 @@ func TestSteamLoginSucceeded(t *testing.T) {
 		want bool
 	}{
 		{
-			// The real success log: a benign "Steam Guard code provided." line must
-			// NOT be mistaken for a failure — the late "Waiting for user info...OK"
-			// marker is definitive.
-			name: "success with guard-code-provided line",
-			out: `Logging in using username/password.
-Steam Guard code provided.
-Logging in user 'refxhosting' to Steam Public...OK
-Waiting for client config...OK
-Waiting for user info...OK`,
+			// The REAL success log: ANSI colour codes split "Public...\x1b[0mOK", a
+			// benign "Steam Guard code provided." line appears, and "Waiting for user
+			// info..." has compat text injected before its OK. Must still read success.
+			name: "success with ANSI codes + guard-provided + compat text",
+			out: "Loading Steam API...\x1b[0mOK\n" +
+				"\x1b[0m\x1b[1mLogging in using username/password.\n" +
+				"\x1b[0m\x1b[1mSteam Guard code provided.\n" +
+				"\x1b[0mLogging in user 'refxhosting' [U:1:727415439] to Steam Public...\x1b[0mOK\n" +
+				"\x1b[0mWaiting for client config...\x1b[0mOK\n" +
+				"\x1b[0mWaiting for user info...\x1b[0mWaiting for compat in post-logon took: 0.098792sOK\n",
 			want: true,
 		},
+		{name: "login result FAILED", out: "Logging in user 'x' to Steam Public...\x1b[0mFAILED (Invalid Login Auth Code)", want: false},
 		{name: "legacy logged-in-ok", out: "Logging in...\nLogged in OK", want: true},
 		{name: "guard prompt (no code)", out: "Logging in...\nSteam Guard code:", want: false},
 		{name: "invalid password", out: "FAILED login with result code Invalid Password", want: false},
