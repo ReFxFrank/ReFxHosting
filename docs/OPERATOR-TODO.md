@@ -56,8 +56,16 @@ Build progress lives in code; these are the env steps only you can do.
       confirm nginx serves `public/index.html` on the allocated port (not yet
       node-verified; nginx runs non-root with all paths under the data dir).
 - [ ] **[node] Stand up a web node** — a box (new, or an existing node tagged for
-      web) running the agent + **Caddy** as the reverse proxy on :80/:443. Install
-      steps will be added to `infra/scripts/` (TBD this build).
+      web) running the agent + **Caddy** as the reverse proxy on :80/:443.
+      The agent drives Caddy's admin API (localhost:2019) and expects an http
+      server named **`srv0`** with empty routes + automatic HTTPS. Run Caddy with:
+      ```json
+      { "admin": { "listen": "localhost:2019" },
+        "apps": { "http": { "servers": { "srv0": {
+          "listen": [":80", ":443"], "routes": [] } } } } }
+      ```
+      (`caddy run --config caddy.json`). Override the admin URL the agent uses with
+      `REFX_CADDY_ADMIN` if needed. The agent appends/removes a route per domain.
 - [ ] **[dns] Wildcard DNS for convenience URLs** — `*.apps.refx.gg` → the web
       node's IP (A/AAAA). Lets every new site go live instantly at
       `https://<shortId>.apps.refx.gg` before a custom domain is attached.

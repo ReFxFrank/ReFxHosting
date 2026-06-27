@@ -18,6 +18,7 @@ import (
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/backup"
 	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
+	"github.com/refxfrank/refxhosting/node-agent/internal/proxy"
 	"github.com/refxfrank/refxhosting/node-agent/internal/runtime"
 	"github.com/refxfrank/refxhosting/node-agent/internal/server"
 	"github.com/refxfrank/refxhosting/node-agent/internal/sftp"
@@ -61,6 +62,8 @@ type Server struct {
 	deps   Deps
 	http   *http.Server
 	router chi.Router
+	// proxy maps web-app domains to local upstreams via the node's Caddy admin API.
+	proxy *proxy.Client
 
 	// Active console forwarders (serverID -> cancel), streaming a running
 	// server's stdout to the panel via PushLogs.
@@ -71,8 +74,9 @@ type Server struct {
 // New builds the API server with all routes and middleware wired.
 func New(addr string, tlsCfg *tls.Config, deps Deps) *Server {
 	s := &Server{
-		log:  deps.Logger.With().Str("component", "api").Logger(),
-		deps: deps,
+		log:   deps.Logger.With().Str("component", "api").Logger(),
+		deps:  deps,
+		proxy: proxy.NewClient(),
 	}
 	s.router = s.routes()
 	s.http = &http.Server{
@@ -114,6 +118,11 @@ func (s *Server) routes() chi.Router {
 		r.Post("/api/v1/system/update", s.handleAgentUpdate)
 		r.Post("/api/v1/system/steam-cache/clear", s.handleSteamCacheClear)
 		r.Post("/api/v1/system/steam-login", s.handleSteamLogin)
+
+		// Web-hosting reverse proxy: map a domain to a local web-app upstream
+		// (Caddy issues TLS automatically). Used by WEB_APP servers + domains.
+		r.Post("/api/v1/proxy/site", s.handleProxyAddSite)
+		r.Delete("/api/v1/proxy/site/{domain}", s.handleProxyRemoveSite)
 
 		r.Route("/api/v1/servers", func(r chi.Router) {
 			r.Post("/", s.handleInstall) // create + install
