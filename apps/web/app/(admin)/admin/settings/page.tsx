@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Boxes } from "lucide-react";
+import { Mail, Send, Boxes, ShieldCheck } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, ListSkeleton } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -10,7 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
+import { cn } from "@/lib/utils";
 
 export default function AdminSettingsPage() {
   return (
@@ -36,8 +44,32 @@ function SteamSettingsCard() {
   const [password, setPassword] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [guardCode, setGuardCode] = useState("");
+  const [verifyNode, setVerifyNode] = useState("");
+  const [verifyResult, setVerifyResult] = useState<{ ok: boolean; output: string } | null>(null);
 
   const usernameV = username ?? cfg?.username ?? "";
+
+  const { data: nodes } = useQuery({
+    queryKey: ["admin", "nodes"],
+    queryFn: () => api.admin.nodes(),
+  });
+
+  const verify = useMutation({
+    mutationFn: () =>
+      api.admin.verifySteamLogin(verifyNode, guardCode.trim() || undefined),
+    onSuccess: (res) => {
+      setVerifyResult(res);
+      if (res.ok) {
+        toast.success("Steam login verified + cached on the node");
+        setGuardCode("");
+      } else {
+        toast.error("Steam login failed — see details below");
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin", "steam-config"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Verify failed"),
+  });
 
   const save = useMutation({
     mutationFn: () => {
@@ -150,6 +182,63 @@ function SteamSettingsCard() {
               <Button loading={save.isPending} onClick={() => save.mutate()}>
                 Save Steam settings
               </Button>
+            </div>
+
+            <div className="space-y-2 border-t border-white/[0.06] pt-4">
+              <Label className="flex items-center gap-2">
+                <ShieldCheck className="size-4 text-primary" /> Verify &amp; cache login
+                on a node
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Logs in to Steam on a node <strong>right now</strong> — it pre-warms
+                steamcmd first so a fresh <strong>mobile-authenticator</strong> code
+                survives — and caches the machine-auth there. After it succeeds,
+                owned-game installs (Arma&nbsp;3, DayZ, …) on that node need no code.
+                Enter a fresh Guard code above first, then verify.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={verifyNode} onValueChange={setVerifyNode}>
+                  <SelectTrigger className="w-56">
+                    <SelectValue placeholder="Pick a node…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(nodes ?? []).map((n) => (
+                      <SelectItem key={n.id} value={n.id}>
+                        {n.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  loading={verify.isPending}
+                  disabled={!verifyNode}
+                  onClick={() => verify.mutate()}
+                >
+                  <ShieldCheck className="size-4" /> Verify &amp; cache
+                </Button>
+              </div>
+              {verifyResult && (
+                <div
+                  className={cn(
+                    "rounded-md border p-2 text-xs",
+                    verifyResult.ok
+                      ? "border-success/30 bg-success/5"
+                      : "border-destructive/30 bg-destructive/5",
+                  )}
+                >
+                  <p className="font-medium">
+                    {verifyResult.ok
+                      ? "✓ Login succeeded — this node is cached. No more codes needed here."
+                      : "✗ Login failed — check the credentials/code and the log below."}
+                  </p>
+                  {verifyResult.output && (
+                    <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-[10px] text-muted-foreground">
+                      {verifyResult.output}
+                    </pre>
+                  )}
+                </div>
+              )}
             </div>
           </>
         )}

@@ -228,6 +228,23 @@ export class SetSteamConfigDto {
   guardCode?: string;
 }
 
+/** Verify + cache the game-download Steam login on a specific node. */
+export class VerifySteamLoginDto {
+  @ApiProperty({ description: 'Node to run the login probe on (caches the sentry there).' })
+  @IsString()
+  nodeId!: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Fresh Steam Guard code to use right now (recommended for mobile-authenticator ' +
+      'accounts). Falls back to the staged code if omitted.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  guardCode?: string;
+}
+
 export class CreateRoleDto {
   @ApiProperty({ description: 'Unique key/slug, e.g. "billing-manager".' })
   @IsString()

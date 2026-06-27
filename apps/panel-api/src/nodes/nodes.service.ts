@@ -336,6 +336,24 @@ export class NodesService {
   }
 
   /**
+   * Verify + cache the game-download Steam login on a node (pre-warms steamcmd,
+   * then logs in on demand so a fresh Steam Guard code is used while still valid).
+   * On success the node caches the machine-auth, so owned-game installs (Arma 3,
+   * DayZ, …) need no further code. Credentials come from the caller (the admin
+   * Steam settings); only the node lookup happens here.
+   */
+  async verifySteamLogin(
+    id: string,
+    creds: { username: string; password: string; guard?: string },
+  ): Promise<{ ok: boolean; output: string }> {
+    const node = await this.prisma.node.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!node) throw new NotFoundException('Node not found');
+    return this.agent.steamLogin(node, creds);
+  }
+
+  /**
    * Self-update the node agent to the latest published release (downloads the
    * prebuilt binary, verifies it, swaps it in and re-execs). Running game servers
    * keep running and re-attach — no SSH needed.

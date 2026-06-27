@@ -113,6 +113,7 @@ func (s *Server) routes() chi.Router {
 		r.Post("/api/v1/system/restart", s.handleAgentRestart)
 		r.Post("/api/v1/system/update", s.handleAgentUpdate)
 		r.Post("/api/v1/system/steam-cache/clear", s.handleSteamCacheClear)
+		r.Post("/api/v1/system/steam-login", s.handleSteamLogin)
 
 		r.Route("/api/v1/servers", func(r chi.Router) {
 			r.Post("/", s.handleInstall) // create + install

@@ -221,3 +221,24 @@ func (m *Manager) Destroy(ctx context.Context, s *server.Server) error {
 
 // Capabilities exposes detected host capabilities for the panel handshake.
 func (m *Manager) Capabilities() osabstraction.Capabilities { return m.caps }
+
+// steamLoginRunner is implemented by the Docker runtime: an on-demand probe that
+// authenticates the node's game-download Steam account and caches its machine-auth.
+type steamLoginRunner interface {
+	RunSteamLogin(ctx context.Context, image, username, password, guard string) (string, bool, error)
+}
+
+// RunSteamLogin authenticates + caches the node's game-download Steam account so
+// owned-game installs (Arma 3, DayZ, …) need no further Steam Guard code. Routed
+// to the Docker runtime; errors if Docker is unavailable on this node.
+func (m *Manager) RunSteamLogin(
+	ctx context.Context,
+	image, username, password, guard string,
+) (string, bool, error) {
+	if docker, ok := m.backends[server.DeployDocker]; ok {
+		if r, ok := docker.(steamLoginRunner); ok {
+			return r.RunSteamLogin(ctx, image, username, password, guard)
+		}
+	}
+	return "", false, fmt.Errorf("docker runtime not available on this node")
+}

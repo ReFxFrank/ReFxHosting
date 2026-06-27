@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -90,6 +91,7 @@ import {
   SetEmailConfigDto,
   SetGatewayConfigDto,
   SetSteamConfigDto,
+  VerifySteamLoginDto,
   SetUserPasswordDto,
   SetUserRoleDto,
   TestEmailDto,
@@ -659,6 +661,36 @@ export class AdminController {
   @Audit({ action: 'admin.steam.update', targetType: 'PlatformSetting' })
   setSteamConfig(@Body() dto: SetSteamConfigDto) {
     return this.settings.setSteamConfig(dto);
+  }
+
+  /**
+   * Verify + cache the game-download Steam login on a node: pre-warms steamcmd
+   * then logs in NOW (while a fresh Guard code is valid), so owned-game installs
+   * (Arma 3, DayZ, …) need no further code. Uses the saved username/password plus
+   * the provided (or staged) Guard code; clears the staged code on success.
+   */
+  @Post('settings/steam/verify')
+  @HttpCode(200)
+  @RequirePerm('settings.manage')
+  @Audit({ action: 'admin.steam.verify', targetType: 'Node' })
+  async verifySteamLogin(
+    @Body() dto: VerifySteamLoginDto,
+  ): Promise<{ ok: boolean; output: string }> {
+    const cfg = await this.settings.steamConfig();
+    if (!cfg.username || !cfg.password) {
+      throw new BadRequestException(
+        'Set the Steam username and password first (and save), then verify.',
+      );
+    }
+    const guard = dto.guardCode?.trim() || cfg.guardCode || undefined;
+    const res = await this.nodes.verifySteamLogin(dto.nodeId, {
+      username: cfg.username,
+      password: cfg.password,
+      guard,
+    });
+    // A used code is consumed whether or not it succeeded (it's one-time anyway).
+    if (guard) await this.settings.consumeSteamGuardCode();
+    return res;
   }
 
   // ---- Products ----------------------------------------------------------

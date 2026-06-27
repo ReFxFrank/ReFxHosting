@@ -254,6 +254,21 @@ export class NodeAgentClient {
     return this.request(node, 'POST', `/api/v1/system/steam-cache/clear`);
   }
 
+  /** Authenticate + cache the node's game-download Steam account on demand
+   *  (pre-warms steamcmd, then logs in), so owned-game installs need no further
+   *  Steam Guard code. Returns whether login succeeded + a tail of the log. */
+  steamLogin(
+    node: Node,
+    body: { username: string; password: string; guard?: string },
+  ) {
+    return this.request<{ ok: boolean; output: string }>(
+      node,
+      'POST',
+      `/api/v1/system/steam-login`,
+      body,
+    );
+  }
+
   /** Self-update the agent to the latest published release, then re-exec.
    *  `githubToken` lets the agent download a private repo's release asset. */
   updateAgent(node: Node, githubToken?: string) {

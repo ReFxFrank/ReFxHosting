@@ -1142,6 +1142,13 @@ export const api = {
       password?: string;
       guardCode?: string;
     }) => http.patch<void>("/admin/settings/steam", input),
+    /** Verify + cache the game-download Steam login on a node (warms steamcmd,
+     *  logs in now). Returns whether it worked + a tail of the steamcmd log. */
+    verifySteamLogin: (nodeId: string, guardCode?: string) =>
+      http.post<{ ok: boolean; output: string }>(
+        "/admin/settings/steam/verify",
+        guardCode ? { nodeId, guardCode } : { nodeId },
+      ),
 
     auditLogs: (query?: { actorId?: string; targetType?: string; page?: number }) =>
       http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),

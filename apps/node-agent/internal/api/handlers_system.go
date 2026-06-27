@@ -43,6 +43,39 @@ func (s *Server) handleSteamCacheClear(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cleared"})
 }
 
+// handleSteamLogin authenticates the node's game-download Steam account on demand
+// and caches its machine-auth (sentry), so owned-game installs (Arma 3, DayZ, …)
+// need no further Steam Guard code. It pre-warms steamcmd then logs in once, while
+// the panel-supplied (short-lived) Guard code is still fresh. Returns whether the
+// login succeeded plus a tail of steamcmd's output for the admin UI.
+func (s *Server) handleSteamLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Guard    string `json:"guard"`
+		Image    string `json:"image"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req)
+	}
+	if strings.TrimSpace(req.Username) == "" || strings.TrimSpace(req.Password) == "" {
+		writeError(w, http.StatusBadRequest, "steam username and password are required")
+		return
+	}
+	out, ok, err := s.deps.Manager.RunSteamLogin(
+		r.Context(), req.Image, req.Username, req.Password, req.Guard,
+	)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "steam login: "+err.Error())
+		return
+	}
+	tail := out
+	if len(tail) > 4000 { // return only the relevant tail of the steamcmd log
+		tail = "…" + tail[len(tail)-4000:]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": ok, "output": tail})
+}
+
 // handleAgentRestart restarts the agent in place at the panel's request. It
 // responds first, then re-executes the same binary (see reExecAgent) after a
 // short delay so the HTTP reply flushes. Running game-server containers are
