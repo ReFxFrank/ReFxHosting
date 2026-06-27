@@ -140,18 +140,24 @@ func (d *DockerRuntime) RunSteamLogin(
 // exit code alone. The unused exit param is kept for call-site clarity.
 func steamLoginSucceeded(out string, _ int64) bool {
 	low := strings.ToLower(out)
-	// Any hard failure / Guard-required / setup failure wins over an earlier "OK".
+	// Definitive success markers — printed ONLY after a full login completes. They
+	// take precedence: a successful login also prints benign lines like "Steam
+	// Guard code provided." which must NOT be read as a failure.
+	if strings.Contains(low, "waiting for user info...ok") ||
+		strings.Contains(low, "logged in ok") {
+		return true
+	}
+	// Otherwise, any of these means the login did not complete. Note the Guard
+	// markers are the specific PROMPT / mismatch, not the generic "steam guard".
 	for _, bad := range []string{
-		"failed login", "invalid password", "two-factor code mismatch",
-		"rate limit exceeded", "account logon denied", "invalid login auth code",
-		"steam guard", "set_steam_guard", "two_factor",
-		"permission denied", "failed to fetch steamcmd",
+		"failed login", "login failure", "invalid password",
+		"two-factor code mismatch", "rate limit exceeded", "account logon denied",
+		"invalid login auth code", "steam guard code:", "two_factor",
+		"set_steam_guard", "permission denied", "failed to fetch steamcmd",
 	} {
 		if strings.Contains(low, bad) {
 			return false
 		}
 	}
-	// A successful steamcmd login prints one of these.
-	return strings.Contains(low, "logged in ok") ||
-		strings.Contains(low, "waiting for user info...ok")
+	return false
 }
