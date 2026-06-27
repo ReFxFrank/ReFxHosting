@@ -411,6 +411,8 @@ model GameTemplate {
   author          String
   description     String?
   version         Int            @default(1)
+  // GAME (default) or WEB (app-container hosting). Splits storefront/dashboard.
+  kind            TemplateKind   @default(GAME)
 
   // Supported deployment + OS matrix
   deployMethods   DeployMethod[]
@@ -517,6 +519,22 @@ enum ServerState {
 enum ServerType {
   GAME_SERVER
   VOICE_SERVER
+  WEB_APP
+}
+
+/// GameTemplate kind — splits the storefront/dashboard into games vs web hosting.
+/// A WEB template provisions an app container (WordPress, static nginx, Node) and
+/// its servers are ServerType.WEB_APP with Domain rows + reverse-proxy routing.
+enum TemplateKind {
+  GAME
+  WEB
+}
+
+/// SSL/issuance state for a custom Domain mapped to a web app.
+enum SslStatus {
+  PENDING
+  ACTIVE
+  FAILED
 }
 
 model Server {
@@ -584,6 +602,7 @@ model Server {
   gameHistory     GameSwitchLog[]
   transfers       ServerTransfer[]
   stats           ServerStat[]
+  domains         Domain[]
 
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -593,6 +612,23 @@ model Server {
   @@index([nodeId])
   @@index([state])
   @@index([serverType])
+}
+
+/// A hostname mapped to a WEB_APP server, fronted by the node's reverse proxy
+/// (Caddy) which terminates TLS. SSL is issued per-domain via Let's Encrypt once
+/// the hostname's DNS resolves to the node; sslStatus tracks issuance.
+model Domain {
+  id         String    @id @db.Uuid
+  serverId   String    @db.Uuid
+  server     Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  hostname   String    @unique
+  isPrimary  Boolean   @default(false)
+  sslStatus  SslStatus @default(PENDING)
+  verifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([serverId])
 }
 
 enum WorkshopKind {
@@ -817,6 +853,7 @@ enum ProductType {
   VPS
   DEDICATED
   ADDON
+  WEB_HOSTING
 }
 
 /// How a product is configured + priced at order time.

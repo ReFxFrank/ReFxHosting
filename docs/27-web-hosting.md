@@ -31,21 +31,26 @@ by `Host:` to the right app container.
   (wildcard cert) so it's live the instant it's provisioned, before the customer
   points a real domain.
 
-## Data model (additions to schema.prisma)
+## Data model (chosen: REUSE Server/GameTemplate, not parallel models)
 
-Keep it parallel to `Server` rather than overloading it.
+A web app **is a `Server`** with `serverType = WEB_APP` — it reuses provisioning,
+limits, stats, lifecycle, SFTP, the file manager, and the existing `ServerDatabase`
+relation (free phase-3 databases). Implemented in `schema.prisma`:
 
-- **`WebApp`** (mirrors `Server`): `id`, `shortId`, `ownerId`, `nodeId`,
-  `templateId`, `productId`/tier, `status`, limits, `dataDir`, SFTP creds. The agent
-  hosts it identically to a game server.
-- **`Domain`**: `id`, `webAppId`, `hostname`, `isPrimary`, `sslStatus`
-  (`PENDING`/`ACTIVE`/`FAILED`), `verifiedAt`. One WebApp ↔ many domains.
-- **`WebTemplate`** (or reuse `GameTemplate` with `kind = WEB`): `wordpress`,
-  `static-nginx`, `nodejs`, `php-apache`. Each defines the container image, the
-  internal port, install steps (e.g. WordPress pulls wp + writes wp-config), and
-  vars (PHP version, DB toggle).
-- Add `kind: GAME | WEB` to the product/template so the **storefront and dashboard
-  filter them into separate sections** (web plans must NOT appear in the games grid).
+- `ServerType += WEB_APP` — the authoritative discriminator (web apps are filtered
+  out of the game dashboards/lists exactly like voice servers already are).
+- `GameTemplate.kind: TemplateKind (GAME | WEB)` — web app types (`wordpress`,
+  `static-nginx`, `nodejs`, `php-apache`) are templates with `kind = WEB`; each
+  carries its container image, internal port, install steps, and vars (PHP version,
+  DB toggle). The storefront lists `kind = GAME` for games and `kind = WEB` for web.
+- `ProductType += WEB_HOSTING` — web plans are products of this type (HARDWARE_TIER
+  billing, same engine).
+- **New `Domain` model**: `id`, `serverId`, `hostname` (unique), `isPrimary`,
+  `sslStatus (PENDING|ACTIVE|FAILED)`, `verifiedAt`. One web app ↔ many domains.
+
+> Migration: run `prisma migrate dev --name web_hosting` against the panel DB to
+> generate + apply it (schema is committed; the migration is generated on the DB,
+> never hand-written).
 
 ## Panel ↔ agent additions
 
