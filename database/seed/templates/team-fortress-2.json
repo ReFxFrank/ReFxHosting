@@ -15,7 +15,7 @@
   },
   "steamAppId": 232250,
   "startupCommand": "./srcds_run -game tf -console -port {{SERVER_PORT}} +maxplayers {{MAX_PLAYERS}} +map {{MAP}} +sv_setsteamaccount {{GSLT}} +tv_port {{STV_PORT}}",
-  "startupDetect": "Connection to Steam servers successful",
+  "startupDetect": "Network: IP|Connection to Steam servers successful",
   "stopCommand": "quit",
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:debian",
