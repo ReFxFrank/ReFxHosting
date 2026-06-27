@@ -266,6 +266,8 @@ export class NodeAgentClient {
       'POST',
       `/api/v1/system/steam-login`,
       body,
+      // steamcmd self-update + login takes well over the 15s default; give it room.
+      { timeoutMs: 240_000 },
     );
   }
 

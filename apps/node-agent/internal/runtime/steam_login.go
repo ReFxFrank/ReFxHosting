@@ -28,12 +28,15 @@ if [ ! -x "$SC/steamcmd.sh" ]; then
   curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C "$SC" || { echo "REFX: failed to fetch steamcmd"; exit 3; }
 fi
 # Warm steamcmd (self-update) first so the login below is near-instant.
-"$SC/steamcmd.sh" +quit >/dev/null 2>&1 || true
-# Log in. Guard code (if any) is steamcmd's 3rd +login arg.
+"$SC/steamcmd.sh" +quit </dev/null >/dev/null 2>&1 || true
+# Log in. Guard code (if any) is steamcmd's 3rd +login arg. stdin is /dev/null so
+# a Steam Guard prompt (e.g. "send fresh code" with no code, or a wrong code) can
+# NEVER hang waiting for input — steamcmd fails fast, while the login attempt has
+# already triggered Steam to email a fresh code.
 if [ -n "${SG:-}" ]; then
-  "$SC/steamcmd.sh" +login "$SU" "$SP" "$SG" +quit
+  "$SC/steamcmd.sh" +login "$SU" "$SP" "$SG" +quit </dev/null
 else
-  "$SC/steamcmd.sh" +login "$SU" "$SP" +quit
+  "$SC/steamcmd.sh" +login "$SU" "$SP" +quit </dev/null
 fi`
 
 // steamLoginImage is the default throwaway image used to run the login probe.
