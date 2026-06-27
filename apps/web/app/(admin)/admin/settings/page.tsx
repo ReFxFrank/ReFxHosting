@@ -46,6 +46,7 @@ function SteamSettingsCard() {
   const [guardCode, setGuardCode] = useState("");
   const [verifyNode, setVerifyNode] = useState("");
   const [verifyResult, setVerifyResult] = useState<{ ok: boolean; output: string } | null>(null);
+  const [sentMsg, setSentMsg] = useState<string | null>(null);
 
   const usernameV = username ?? cfg?.username ?? "";
 
@@ -69,6 +70,33 @@ function SteamSettingsCard() {
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Verify failed"),
+  });
+
+  // "Send fresh code": attempt a login with NO Guard code, which makes Steam
+  // EMAIL a fresh code to the account (you can't generate an email code yourself —
+  // Steam sends one on a login attempt). If the node is already cached it just
+  // succeeds. Reuses the same verify endpoint.
+  const sendCode = useMutation({
+    mutationFn: () => api.admin.verifySteamLogin(verifyNode),
+    onSuccess: (res) => {
+      const out = (res.output || "").toLowerCase();
+      if (res.ok) {
+        setVerifyResult(res);
+        setSentMsg(null);
+        toast.success("Already logged in — this node is cached, no code needed.");
+      } else if (out.includes("invalid password") || out.includes("logon denied")) {
+        setVerifyResult(res);
+        setSentMsg(null);
+        toast.error("Steam rejected the username/password — fix + save those first.");
+      } else {
+        setSentMsg(
+          "Steam just emailed a fresh Guard code to the account. Check the inbox, enter it above, then click Verify & cache.",
+        );
+        toast.success("Triggered a fresh Steam Guard email");
+      }
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Couldn't trigger a code"),
   });
 
   const save = useMutation({
@@ -190,11 +218,12 @@ function SteamSettingsCard() {
                 on a node
               </Label>
               <p className="text-xs text-muted-foreground">
-                Logs in to Steam on a node <strong>right now</strong> — it pre-warms
-                steamcmd first so a fresh <strong>mobile-authenticator</strong> code
-                survives — and caches the machine-auth there. After it succeeds,
-                owned-game installs (Arma&nbsp;3, DayZ, …) on that node need no code.
-                Enter a fresh Guard code above first, then verify.
+                Logs in to Steam on a node <strong>right now</strong> (pre-warming
+                steamcmd so the code stays valid) and caches the machine-auth there —
+                after it succeeds, owned-game installs (Arma&nbsp;3, DayZ, …) on that
+                node need no code. <strong>Email-code accounts:</strong> pick a node →
+                <strong> Send fresh email code</strong> → Steam emails one → enter it in
+                the Guard field above → <strong>Verify &amp; cache</strong>.
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Select value={verifyNode} onValueChange={setVerifyNode}>
@@ -210,6 +239,15 @@ function SteamSettingsCard() {
                   </SelectContent>
                 </Select>
                 <Button
+                  variant="ghost"
+                  loading={sendCode.isPending}
+                  disabled={!verifyNode}
+                  onClick={() => sendCode.mutate()}
+                  title="Make Steam email a fresh Guard code to the account"
+                >
+                  <Mail className="size-4" /> Send fresh email code
+                </Button>
+                <Button
                   variant="outline"
                   loading={verify.isPending}
                   disabled={!verifyNode}
@@ -218,6 +256,11 @@ function SteamSettingsCard() {
                   <ShieldCheck className="size-4" /> Verify &amp; cache
                 </Button>
               </div>
+              {sentMsg && (
+                <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
+                  <Mail className="mr-1 inline size-3 text-primary" /> {sentMsg}
+                </div>
+              )}
               {verifyResult && (
                 <div
                   className={cn(
