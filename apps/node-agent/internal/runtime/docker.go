@@ -298,7 +298,55 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 		RestartPolicy: container.RestartPolicy{Name: "no"},
 		NetworkMode:   container.NetworkMode(d.network),
 	}
+	// Give the container an /etc/passwd + /etc/group entry for the (non-root) uid
+	// it runs as. Steam-API games (Arma 3, DayZ, …) call getpwuid(getuid()) inside
+	// steamclient.so at init and SIGSEGV instantly — no output, no log — when it
+	// returns NULL, which it does for a uid absent from the stock game image's
+	// passwd. The game always runs non-root (uid 1000 under a root agent, or the
+	// agent's own uid otherwise), so without this every Steam game silently crash-
+	// loops on launch. Linux only (Windows uses Docker Desktop path bridging).
+	if goruntime.GOOS != "windows" {
+		if passwdPath, groupPath := d.ensureNSSFiles(s); passwdPath != "" && groupPath != "" {
+			host.Mounts = append(host.Mounts,
+				mount.Mount{Type: mount.TypeBind, Source: passwdPath, Target: "/etc/passwd", ReadOnly: true},
+				mount.Mount{Type: mount.TypeBind, Source: groupPath, Target: "/etc/group", ReadOnly: true},
+			)
+		}
+	}
 	return host, ports, bindings
+}
+
+// ensureNSSFiles writes a minimal /etc/passwd and /etc/group naming the runtime
+// uid/gid the game container runs as, and returns their host paths (best-effort;
+// "" disables the mount). Without a passwd entry for its uid, a game that calls
+// getpwuid()/getgrgid() at startup — notably Steam's steamclient.so — segfaults
+// on the NULL result before printing anything. The files depend only on the
+// node-constant runtime uid/gid, so they live in a node-level ".nss" dir (sibling
+// of the per-server data dirs) and are regenerated idempotently on each launch.
+func (d *DockerRuntime) ensureNSSFiles(s *server.Server) (passwdPath, groupPath string) {
+	uid, gid := d.runtimeIDs()
+	dir := filepath.Join(filepath.Dir(s.DataDir), ".nss")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		d.log.Warn().Err(err).Str("dir", dir).Msg("create nss dir failed")
+		return "", ""
+	}
+	passwd := fmt.Sprintf(
+		"root:x:0:0:root:/root:/bin/sh\n"+
+			"container:x:%d:%d:container:/home/container:/bin/bash\n"+
+			"nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin\n",
+		uid, gid)
+	group := fmt.Sprintf("root:x:0:\ncontainer:x:%d:\nnogroup:x:65534:\n", gid)
+	pPath := filepath.Join(dir, fmt.Sprintf("passwd-%d-%d", uid, gid))
+	gPath := filepath.Join(dir, fmt.Sprintf("group-%d", gid))
+	if err := os.WriteFile(pPath, []byte(passwd), 0o644); err != nil {
+		d.log.Warn().Err(err).Msg("write nss passwd failed")
+		return "", ""
+	}
+	if err := os.WriteFile(gPath, []byte(group), 0o644); err != nil {
+		d.log.Warn().Err(err).Msg("write nss group failed")
+		return "", ""
+	}
+	return pPath, gPath
 }
 
 // ensureSteamHome creates the node-level Steam home directory (owned by the
