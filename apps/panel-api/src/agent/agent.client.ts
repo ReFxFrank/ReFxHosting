@@ -283,6 +283,25 @@ export class NodeAgentClient {
     );
   }
 
+  /** Map a web-app domain to a local upstream in the node's Caddy proxy (auto-TLS). */
+  proxyAddSite(node: Node, domain: string, upstream: string) {
+    return this.request<{ ok: boolean; domain: string }>(
+      node,
+      'POST',
+      `/api/v1/proxy/site`,
+      { domain, upstream },
+    );
+  }
+
+  /** Remove a web-app domain's route from the node's Caddy proxy (idempotent). */
+  proxyRemoveSite(node: Node, domain: string) {
+    return this.request(
+      node,
+      'DELETE',
+      `/api/v1/proxy/site/${encodeURIComponent(domain)}`,
+    );
+  }
+
   /** Push a server's SFTP credential to the agent so a rotation takes effect live. */
   setSftpCredential(
     node: Node,

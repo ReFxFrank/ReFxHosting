@@ -10,6 +10,7 @@ import { WorkshopService } from './workshop.service';
 import { VoiceService } from './voice.service';
 import { ScheduleRunner } from './schedule.runner';
 import { TransfersService } from './transfers.service';
+import { DomainsService } from './domains.service';
 import { ServersController } from './servers.controller';
 import { ServersResolver } from './servers.resolver';
 import { ModpackProcessor } from '../queues/processors/modpack.processor';
@@ -47,6 +48,7 @@ import { QUEUE } from '../queues/queue.constants';
     TransferProcessor,
     TransfersService,
     ScheduleRunner,
+    DomainsService,
     ServersResolver,
   ],
   exports: [ServersService, TransfersService],

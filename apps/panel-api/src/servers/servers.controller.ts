@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ServersService } from './servers.service';
+import { DomainsService } from './domains.service';
 import { ServerResourcesService } from './server-resources.service';
 import { ScheduleRunner } from './schedule.runner';
 import { ModsService } from './mods.service';
@@ -65,6 +66,7 @@ export class ServersController {
     private readonly workshop: WorkshopService,
     private readonly voice: VoiceService,
     private readonly scheduleRunner: ScheduleRunner,
+    private readonly domains: DomainsService,
   ) {}
 
   // ---- collection --------------------------------------------------------
@@ -84,6 +86,40 @@ export class ServersController {
   @RequirePermissions('server.read')
   get(@Param('serverId') id: string) {
     return this.servers.get(id);
+  }
+
+  // ---- web-app domains (WEB_APP servers) ---------------------------------
+
+  @Get(':serverId/domains')
+  @RequirePermissions('settings.read')
+  listDomains(@Param('serverId') id: string) {
+    return this.domains.list(id);
+  }
+
+  @Post(':serverId/domains')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.domain.add', targetType: 'Server', targetParam: 'serverId' })
+  addDomain(@Param('serverId') id: string, @Body() dto: { hostname: string }) {
+    return this.domains.add(id, dto?.hostname ?? '');
+  }
+
+  @Post(':serverId/domains/:domainId/verify')
+  @RequirePermissions('settings.update')
+  verifyDomain(
+    @Param('serverId') id: string,
+    @Param('domainId') domainId: string,
+  ) {
+    return this.domains.verify(id, domainId);
+  }
+
+  @Delete(':serverId/domains/:domainId')
+  @RequirePermissions('settings.update')
+  @Audit({ action: 'server.domain.remove', targetType: 'Server', targetParam: 'serverId' })
+  removeDomain(
+    @Param('serverId') id: string,
+    @Param('domainId') domainId: string,
+  ) {
+    return this.domains.remove(id, domainId);
   }
 
   // ---- lifecycle ---------------------------------------------------------
