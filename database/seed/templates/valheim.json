@@ -20,7 +20,7 @@
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 896660 validate +quit\nmkdir -p /mnt/server/worlds_local\nchmod +x valheim_server.x86_64 || true\necho 'Valheim install complete.'\n"
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd:debian/proton install image ships no\n# `steamcmd` on PATH. Bootstrap SteamCMD and expose it on PATH so the egg's\n# `steamcmd ...` calls resolve (otherwise the game server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 896660 validate +quit\nmkdir -p /mnt/server/worlds_local\nchmod +x valheim_server.x86_64 || true\necho 'Valheim install complete.'\n"
   },
   "configFiles": [
     {

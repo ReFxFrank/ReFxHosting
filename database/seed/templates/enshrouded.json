@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Survival action-RPG voxel sandbox. SteamCMD-installed dedicated server (Windows build via Proton) configured through enshrouded_server.json.",
   "category": "survival",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
@@ -17,10 +20,14 @@
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:proton",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 2278520 validate +quit\necho 'Enshrouded install complete.'\n"
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd:debian/proton install image ships no\n# `steamcmd` on PATH. Bootstrap SteamCMD and expose it on PATH so the egg's\n# `steamcmd ...` calls resolve (otherwise the game server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 2278520 validate +quit\necho 'Enshrouded install complete.'\n"
   },
   "configFiles": [
-    { "path": "enshrouded_server.json", "parser": "json", "find": {} }
+    {
+      "path": "enshrouded_server.json",
+      "parser": "json",
+      "find": {}
+    }
   ],
   "recCpuCores": 4,
   "recMemoryMb": 8192,
@@ -32,7 +39,10 @@
       "description": "Name shown in the in-game server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Enshrouded Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -43,7 +53,11 @@
       "description": "Maximum concurrent player slots (Enshrouded supports up to 16).",
       "type": "NUMBER",
       "defaultValue": "16",
-      "rules": { "required": true, "min": 1, "max": 16 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 16
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -54,7 +68,9 @@
       "description": "Password required to join. Leave blank for an open server.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "maxLength": 64 },
+      "rules": {
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 2
@@ -65,12 +81,22 @@
       "description": "Steam query/browser port.",
       "type": "NUMBER",
       "defaultValue": "15637",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 3
     }
   ],
-  "tags": ["survival", "rpg", "voxel", "co-op", "multiplayer"],
+  "tags": [
+    "survival",
+    "rpg",
+    "voxel",
+    "co-op",
+    "multiplayer"
+  ],
   "longDescription": "Explore, build and battle through the Shroud with up to 16 players on a dedicated Enshrouded server."
 }

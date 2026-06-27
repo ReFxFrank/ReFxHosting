@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Medieval melee combat. SteamCMD-installed dedicated server with frontline, deathmatch and duel modes.",
   "category": "shooter",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -17,10 +20,14 @@
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:debian",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 629800 validate +quit\necho 'Mordhau install complete.'\n"
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd:debian/proton install image ships no\n# `steamcmd` on PATH. Bootstrap SteamCMD and expose it on PATH so the egg's\n# `steamcmd ...` calls resolve (otherwise the game server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 629800 validate +quit\necho 'Mordhau install complete.'\n"
   },
   "configFiles": [
-    { "path": "Mordhau/Saved/Config/LinuxServer/Game.ini", "parser": "ini", "find": {} }
+    {
+      "path": "Mordhau/Saved/Config/LinuxServer/Game.ini",
+      "parser": "ini",
+      "find": {}
+    }
   ],
   "recCpuCores": 3,
   "recMemoryMb": 6144,
@@ -32,7 +39,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "48",
-      "rules": { "required": true, "min": 2, "max": 80 },
+      "rules": {
+        "required": true,
+        "min": 2,
+        "max": 80
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -43,7 +54,11 @@
       "description": "Steam query/browser port.",
       "type": "NUMBER",
       "defaultValue": "27015",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 1
@@ -54,12 +69,21 @@
       "description": "UDP beacon port used for matchmaking.",
       "type": "NUMBER",
       "defaultValue": "15000",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 2
     }
   ],
-  "tags": ["fps", "melee", "pvp", "multiplayer"],
+  "tags": [
+    "fps",
+    "melee",
+    "pvp",
+    "multiplayer"
+  ],
   "longDescription": "Host massive 64-player Frontline battles and duel servers on a dedicated Mordhau server."
 }
