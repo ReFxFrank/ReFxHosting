@@ -490,7 +490,7 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 	host, ports, _ := d.hostConfig(s)
 	cfg := &container.Config{
 		Image:        s.Spec.Image,
-		Cmd:          strings.Fields(renderTemplate(s.Spec.StartupCommand, s.Spec.Env)),
+		Cmd:          splitArgs(renderTemplate(s.Spec.StartupCommand, s.Spec.Env)),
 		Env:          append(envSlice(s.Spec.Env), "HOME=/home/container"),
 		ExposedPorts: ports,
 		WorkingDir:   "/home/container",

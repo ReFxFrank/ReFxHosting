@@ -182,7 +182,7 @@ func (n *NativeRuntime) Start(ctx context.Context, s *server.Server) error {
 	s.SetState(server.StateStarting)
 
 	cmdline := renderTemplate(s.Spec.StartupCommand, s.Spec.Env)
-	fields := strings.Fields(cmdline)
+	fields := splitArgs(cmdline)
 	if len(fields) == 0 {
 		s.SetState(server.StateCrashed)
 		return errors.New("native: empty startup command")

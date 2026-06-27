@@ -15,7 +15,7 @@
     "Proton": "ghcr.io/parkervcp/steamcmd:proton"
   },
   "steamAppId": 2394010,
-  "startupCommand": "./PalServer.sh -port={{SERVER_PORT}} -players={{MAX_PLAYERS}} -servername=\"{{SERVER_NAME}}\" -RCONEnabled={{RCON_ENABLED}} -RCONPort={{RCON_PORT}} -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS",
+  "startupCommand": "./PalServer.sh -port={{SERVER_PORT}} -players={{MAX_PLAYERS}} -servername=\"{{SERVER_NAME}}\" -AdminPassword=\"{{ADMIN_PASS}}\" -RCONEnabled={{RCON_ENABLED}} -RCONPort={{RCON_PORT}} -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS",
   "startupDetect": "Setting breakpad minidump|Running Palworld dedicated server",
   "stopCommand": "^C",
   "installScript": {

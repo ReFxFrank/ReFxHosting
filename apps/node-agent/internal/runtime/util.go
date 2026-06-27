@@ -51,6 +51,60 @@ func renderTemplate(in string, env map[string]string) string {
 	return out
 }
 
+// splitArgs splits a rendered command line into argv, honouring single and double
+// quotes and backslash escapes the way a shell would — so a quoted argument with
+// spaces (e.g. -servername="My Cool Server") survives as ONE token. The previous
+// strings.Fields approach shredded such args on their internal whitespace, which
+// silently mangled server names, passwords, and any other spaced startup value.
+func splitArgs(s string) []string {
+	var args []string
+	var cur strings.Builder
+	inSingle, inDouble, started := false, false, false
+	flush := func() {
+		if started {
+			args = append(args, cur.String())
+			cur.Reset()
+			started = false
+		}
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case inSingle:
+			if c == '\'' {
+				inSingle = false
+			} else {
+				cur.WriteByte(c)
+			}
+		case inDouble:
+			switch {
+			case c == '"':
+				inDouble = false
+			case c == '\\' && i+1 < len(s) && (s[i+1] == '"' || s[i+1] == '\\'):
+				i++
+				cur.WriteByte(s[i])
+			default:
+				cur.WriteByte(c)
+			}
+		case c == '\'':
+			inSingle, started = true, true
+		case c == '"':
+			inDouble, started = true, true
+		case c == '\\' && i+1 < len(s):
+			i++
+			cur.WriteByte(s[i])
+			started = true
+		case c == ' ' || c == '\t' || c == '\n' || c == '\r':
+			flush()
+		default:
+			cur.WriteByte(c)
+			started = true
+		}
+	}
+	flush()
+	return args
+}
+
 // renderConfigFiles writes the spec's config files into the data dir, applying
 // {{VAR}} interpolation. Paths are cleaned and confined to dataDir.
 func renderConfigFiles(dataDir string, s *server.Server) error {
