@@ -278,7 +278,7 @@ export class ServersService {
         // by the TEMPLATE — identical to adminCreate() and the migration backfill —
         // so an order and an admin-create of the same template always agree,
         // independent of how the product's per-slot pricing happens to be set.
-        serverType: this.isVoiceTemplate(template) ? 'VOICE_SERVER' : 'GAME_SERVER',
+        serverType: this.serverTypeForTemplate(template),
         cpuCores: limits.cpuCores,
         memoryMb: limits.memoryMb,
         diskMb: limits.diskMb,
@@ -386,8 +386,8 @@ export class ServersService {
         templateVersion: template.version,
         state: 'INSTALLING',
         deployMethod: (template.deployMethods[0] as any) ?? 'DOCKER',
-        // Authoritative voice/game discriminator, set once at creation.
-        serverType: isVoice ? 'VOICE_SERVER' : 'GAME_SERVER',
+        // Authoritative web/voice/game discriminator, set once at creation.
+        serverType: this.serverTypeForTemplate(template),
         cpuCores,
         memoryMb,
         diskMb,
@@ -1473,6 +1473,18 @@ export class ServersService {
     return (
       template.slug.startsWith('teamspeak') || template.category?.slug === 'voice'
     );
+  }
+
+  /** Authoritative ServerType for a template, set once at creation. WEB templates
+   *  (kind=WEB) provision app-container web apps; voice via slug/category; else a
+   *  game server. Mirrors the create + adminCreate paths so they always agree. */
+  private serverTypeForTemplate(
+    template:
+      | { slug: string; kind?: string | null; category?: { slug: string } | null }
+      | null,
+  ): 'WEB_APP' | 'VOICE_SERVER' | 'GAME_SERVER' {
+    if (template?.kind === 'WEB') return 'WEB_APP';
+    return this.isVoiceTemplate(template) ? 'VOICE_SERVER' : 'GAME_SERVER';
   }
 
   // ---- schedule run-now ---------------------------------------------------

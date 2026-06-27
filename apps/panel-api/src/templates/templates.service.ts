@@ -164,9 +164,14 @@ export class TemplatesService {
    * Active templates for the buy flow. "Active" = has at least one deploy method
    * and (for now) any non-deleted template; returns the buyer-relevant fields.
    */
-  listActive(filter: { categoryId?: string; search?: string }) {
-    // Public catalog: published games only (admins use list() for everything).
-    const where: Prisma.GameTemplateWhereInput = { isPublished: true };
+  listActive(filter: { categoryId?: string; search?: string; kind?: 'GAME' | 'WEB' }) {
+    // Public catalog: published templates only (admins use list() for everything).
+    // Default to GAME so the games grid never shows web-hosting plans; the web
+    // catalog requests kind=WEB explicitly.
+    const where: Prisma.GameTemplateWhereInput = {
+      isPublished: true,
+      kind: filter.kind ?? 'GAME',
+    };
     if (filter.categoryId) where.categoryId = filter.categoryId;
     if (filter.search) {
       where.OR = [

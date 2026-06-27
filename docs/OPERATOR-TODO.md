@@ -50,8 +50,11 @@ Build progress lives in code; these are the env steps only you can do.
       npx prisma migrate dev --name web_hosting --schema database/prisma/schema.prisma
       # prod: npx prisma migrate deploy
       ```
-- [ ] **[panel] Reseed** to load the new web templates (static-nginx, wordpress)
-      once they're in (same reseed command as A).
+- [ ] **[panel] Reseed** to load the web templates (the `static-nginx` template +
+      its `WEB_HOSTING` product/tiers exist now; more to come) — same reseed as A.
+- [ ] **[node] Smoke-test `static-nginx`** once a web node exists — provision it,
+      confirm nginx serves `public/index.html` on the allocated port (not yet
+      node-verified; nginx runs non-root with all paths under the data dir).
 - [ ] **[node] Stand up a web node** — a box (new, or an existing node tagged for
       web) running the agent + **Caddy** as the reverse proxy on :80/:443. Install
       steps will be added to `infra/scripts/` (TBD this build).

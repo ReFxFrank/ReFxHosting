@@ -1,0 +1,36 @@
+{
+  "name": "Static Website (nginx)",
+  "slug": "static-nginx",
+  "author": "ops@refx.example",
+  "description": "Host a static website (HTML/CSS/JS) on nginx — upload your files and go.",
+  "category": "web",
+  "kind": "WEB",
+  "deployMethods": [
+    "DOCKER"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "nginx:alpine"
+  },
+  "startupCommand": "nginx -c /home/container/nginx.conf -g 'daemon off;'",
+  "startupDetect": "",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "nginx:alpine",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\n# Static site (nginx) — serves files the customer uploads to public/. nginx runs\n# as the non-root container user, so ALL writable paths (pid, logs, temp) live\n# under the data dir, and it listens on the server's allocated port.\nmkdir -p /mnt/server/public /mnt/server/tmp/client /mnt/server/tmp/proxy \\\n  /mnt/server/tmp/fastcgi /mnt/server/tmp/uwsgi /mnt/server/tmp/scgi\n\nif [ ! -f /mnt/server/public/index.html ]; then\n  cat > /mnt/server/public/index.html <<'HTML'\n<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n<title>ReFx Hosting</title>\n<style>body{font-family:system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;margin:0;background:#070b12;color:#e6edf3}div{text-align:center;max-width:34rem;padding:2rem}code{background:#11161f;padding:.15rem .4rem;border-radius:.3rem}</style>\n</head><body><div>\n<h1>🚀 Your ReFx site is live</h1>\n<p>Replace this page by uploading your files to <code>public/</code> via SFTP or the file manager.</p>\n</div></body></html>\nHTML\nfi\n\n# nginx config: all temp/pid/log paths under the data dir (writable non-root),\n# document root = public/, listening on the allocated port.\ncat > /mnt/server/nginx.conf <<EOF\npid /home/container/nginx.pid;\nerror_log /dev/stderr warn;\nevents { worker_connections 1024; }\nhttp {\n  include /etc/nginx/mime.types;\n  default_type application/octet-stream;\n  client_body_temp_path /home/container/tmp/client;\n  proxy_temp_path /home/container/tmp/proxy;\n  fastcgi_temp_path /home/container/tmp/fastcgi;\n  uwsgi_temp_path /home/container/tmp/uwsgi;\n  scgi_temp_path /home/container/tmp/scgi;\n  access_log /dev/stdout;\n  sendfile on;\n  server {\n    listen ${SERVER_PORT:-8080};\n    server_name _;\n    root /home/container/public;\n    index index.html index.htm;\n    location / { try_files \\$uri \\$uri/ =404; }\n  }\n}\nEOF\necho 'Static site (nginx) install complete.'\n"
+  },
+  "configFiles": [],
+  "recCpuCores": 1,
+  "recMemoryMb": 512,
+  "recDiskMb": 5120,
+  "variables": [],
+  "tags": [
+    "web",
+    "static",
+    "nginx",
+    "html"
+  ],
+  "longDescription": "A lightweight static-site host: upload your HTML/CSS/JS to the public/ folder over SFTP or the file manager and nginx serves it. Map a custom domain with automatic SSL."
+}

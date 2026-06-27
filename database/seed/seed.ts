@@ -102,6 +102,7 @@ interface TemplateFile {
   longDescription?: string;
   tags?: string[];
   category?: string; // GameCategory slug
+  kind?: 'GAME' | 'WEB'; // GAME (default) or WEB (app-container hosting)
   deployMethods: string[]; // DeployMethod enum strings
   supportsLinux?: boolean;
   supportsWindows?: boolean;
@@ -368,6 +369,7 @@ async function seedGameCategories() {
     { name: 'Roleplay', slug: 'roleplay' },
     { name: 'FPS', slug: 'shooter' },
     { name: 'Voice', slug: 'voice' },
+    { name: 'Web Hosting', slug: 'web' },
   ];
 
   const bySlug: Record<string, string> = {};
@@ -473,6 +475,7 @@ async function seedGameTierProducts() {
       id: true,
       slug: true,
       name: true,
+      kind: true,
       recCpuCores: true,
       recMemoryMb: true,
       recDiskMb: true,
@@ -484,18 +487,24 @@ async function seedGameTierProducts() {
   for (const t of templates) {
     if (SKIP.has(t.slug) || t.category?.slug === 'voice') continue;
 
-    const slug = `gs-${t.slug}`;
+    // WEB templates become WEB_HOSTING products (app-container hosting); everything
+    // else is a GAME_SERVER. Both use the same HARDWARE_TIER engine + tier sizing.
+    const isWeb = t.kind === 'WEB';
+    const pType = isWeb ? 'WEB_HOSTING' : 'GAME_SERVER';
+    const slug = `${isWeb ? 'web' : 'gs'}-${t.slug}`;
     const product = await prisma.product.upsert({
       where: { slug },
-      // Don't clobber admin tuning on re-seed; just keep the game link + model.
-      update: { gameTemplateId: t.id, type: 'GAME_SERVER', billingModel: 'HARDWARE_TIER', perSlot: false },
+      // Don't clobber admin tuning on re-seed; just keep the link + type/model.
+      update: { gameTemplateId: t.id, type: pType, billingModel: 'HARDWARE_TIER', perSlot: false },
       create: {
         id: uuidv7(),
-        type: 'GAME_SERVER',
+        type: pType,
         billingModel: 'HARDWARE_TIER',
         name: t.name,
         slug,
-        description: `${t.name} game server hosting — pick a hardware tier.`,
+        description: isWeb
+          ? `${t.name} web hosting — pick a plan.`
+          : `${t.name} game server hosting — pick a hardware tier.`,
         isActive: true,
         perSlot: false,
         gameTemplateId: t.id,
@@ -838,6 +847,7 @@ async function seedTemplates(
             ...(catId ? { categoryId: catId } : {}),
             deployMethods:
               tpl.deployMethods as Prisma.GameTemplateUpdateInput['deployMethods'],
+            kind: (tpl.kind ?? 'GAME') as Prisma.GameTemplateUpdateInput['kind'],
             supportsLinux: tpl.supportsLinux ?? true,
             supportsWindows: tpl.supportsWindows ?? false,
             dockerImages: tpl.dockerImages as Prisma.InputJsonValue,
@@ -901,6 +911,7 @@ async function seedTemplates(
       author: tpl.author,
       description: tpl.description ?? null,
       deployMethods: tpl.deployMethods as Prisma.GameTemplateCreateInput['deployMethods'],
+      kind: (tpl.kind ?? 'GAME') as Prisma.GameTemplateCreateInput['kind'],
       supportsLinux: tpl.supportsLinux ?? true,
       supportsWindows: tpl.supportsWindows ?? false,
       dockerImages: tpl.dockerImages as Prisma.InputJsonValue,
