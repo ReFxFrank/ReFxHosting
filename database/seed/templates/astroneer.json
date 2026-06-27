@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Space sandbox exploration. SteamCMD-installed dedicated server (Windows build via Proton).",
   "category": "sandbox",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
@@ -20,10 +23,14 @@
     "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 728470 validate +quit\necho 'Astroneer install complete.'\n"
   },
   "configFiles": [
-    { "path": "Astro/Saved/Config/WindowsServer/AstroServerSettings.ini", "parser": "ini", "find": {} }
+    {
+      "path": "Astro/Saved/Config/WindowsServer/AstroServerSettings.ini",
+      "parser": "ini",
+      "find": {}
+    }
   ],
   "recCpuCores": 2,
-  "recMemoryMb": 4096,
+  "recMemoryMb": 3072,
   "recDiskMb": 5120,
   "variables": [
     {
@@ -32,7 +39,10 @@
       "description": "Name shown in the in-game server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Astroneer Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -43,7 +53,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "8",
-      "rules": { "required": true, "min": 1, "max": 24 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 24
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -54,7 +68,9 @@
       "description": "Player name granted server-owner permissions.",
       "type": "STRING",
       "defaultValue": "",
-      "rules": { "maxLength": 64 },
+      "rules": {
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -65,12 +81,19 @@
       "description": "Leave blank for an open server.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "maxLength": 64 },
+      "rules": {
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 3
     }
   ],
-  "tags": ["sandbox", "exploration", "co-op", "multiplayer"],
+  "tags": [
+    "sandbox",
+    "exploration",
+    "co-op",
+    "multiplayer"
+  ],
   "longDescription": "Reshape planets and automate bases with friends on a dedicated Astroneer server."
 }

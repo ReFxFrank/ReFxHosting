@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Open-world survival in the lands of Conan. SteamCMD-installed dedicated server (Windows build via Proton) with PvP/PvE and mod support.",
   "category": "survival",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": true,
   "dockerImages": {
@@ -20,10 +23,14 @@
     "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 443030 validate +quit\necho 'Conan Exiles install complete.'\n"
   },
   "configFiles": [
-    { "path": "ConanSandbox/Saved/Config/WindowsServer/ServerSettings.ini", "parser": "ini", "find": {} }
+    {
+      "path": "ConanSandbox/Saved/Config/WindowsServer/ServerSettings.ini",
+      "parser": "ini",
+      "find": {}
+    }
   ],
   "recCpuCores": 4,
-  "recMemoryMb": 8192,
+  "recMemoryMb": 12288,
   "recDiskMb": 81920,
   "variables": [
     {
@@ -32,7 +39,10 @@
       "description": "Name shown in the in-game server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Conan Exiles Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -43,7 +53,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "40",
-      "rules": { "required": true, "min": 1, "max": 70 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 70
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -54,7 +68,11 @@
       "description": "Steam query/browser port.",
       "type": "NUMBER",
       "defaultValue": "27015",
-      "rules": { "required": true, "min": 1024, "max": 65535 },
+      "rules": {
+        "required": true,
+        "min": 1024,
+        "max": 65535
+      },
       "userEditable": false,
       "userViewable": true,
       "sortOrder": 2
@@ -65,12 +83,20 @@
       "description": "In-game admin password.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "required": true, "minLength": 8 },
+      "rules": {
+        "required": true,
+        "minLength": 8
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 3
     }
   ],
-  "tags": ["survival", "open-world", "pvp", "multiplayer"],
+  "tags": [
+    "survival",
+    "open-world",
+    "pvp",
+    "multiplayer"
+  ],
   "longDescription": "Build, conquer and dominate the Exiled Lands with your clan on a dedicated Conan Exiles server."
 }

@@ -817,16 +817,69 @@ async function seedTemplates(
     const raw = readFileSync(join(TEMPLATES_DIR, file), 'utf8');
     const tpl = JSON.parse(raw) as TemplateFile;
 
-    // Create-only mode (every-deploy egg sync): if a template with this slug
-    // already exists, leave it completely untouched — never clobber admin tuning
-    // (publish state, art, variables) or re-import on each boot. Only brand-new
-    // eggs (new slugs) are added.
+    // Create-only mode (every-deploy egg sync): for an EXISTING template, push the
+    // egg's CODE/spec fixes (install, startup, images, detect/stop, config files,
+    // steam id, recommended specs) + variables so bug-fixes reach already-seeded
+    // games without a manual re-import — but leave admin-tunable fields alone:
+    // storefront (publish/art/tags), pricing/tiers, and the name/description.
     if (opts.createOnly) {
       const existing = await prisma.gameTemplate.findUnique({
         where: { slug: tpl.slug },
         select: { id: true },
       });
-      if (existing) continue;
+      if (existing) {
+        const catId =
+          tpl.category && categorySlugToId[tpl.category]
+            ? categorySlugToId[tpl.category]
+            : undefined;
+        await prisma.gameTemplate.update({
+          where: { id: existing.id },
+          data: {
+            ...(catId ? { categoryId: catId } : {}),
+            deployMethods:
+              tpl.deployMethods as Prisma.GameTemplateUpdateInput['deployMethods'],
+            supportsLinux: tpl.supportsLinux ?? true,
+            supportsWindows: tpl.supportsWindows ?? false,
+            dockerImages: tpl.dockerImages as Prisma.InputJsonValue,
+            steamAppId: tpl.steamAppId ?? null,
+            startupCommand: tpl.startupCommand,
+            startupDetect: tpl.startupDetect ?? null,
+            stopCommand: tpl.stopCommand ?? '^C',
+            installScript: tpl.installScript as Prisma.InputJsonValue,
+            configFiles: (tpl.configFiles ?? []) as Prisma.InputJsonValue,
+            recCpuCores: tpl.recCpuCores ?? 1,
+            recMemoryMb: tpl.recMemoryMb ?? 1024,
+            recDiskMb: tpl.recDiskMb ?? 5120,
+            supportsWorkshop: tpl.supportsWorkshop ?? false,
+            workshopAppId: tpl.workshopAppId ?? null,
+          },
+        });
+        for (const v of tpl.variables ?? []) {
+          const varData = {
+            displayName: v.displayName,
+            description: v.description ?? null,
+            type: (v.type ?? 'STRING') as Prisma.TemplateVariableCreateInput['type'],
+            defaultValue: v.defaultValue ?? null,
+            rules: (v.rules ?? {}) as Prisma.InputJsonValue,
+            userEditable: v.userEditable ?? true,
+            userViewable: v.userViewable ?? true,
+            sortOrder: v.sortOrder ?? 0,
+          };
+          await prisma.templateVariable.upsert({
+            where: {
+              templateId_envName: { templateId: existing.id, envName: v.envName },
+            },
+            update: varData,
+            create: {
+              id: uuidv7(),
+              templateId: existing.id,
+              envName: v.envName,
+              ...varData,
+            },
+          });
+        }
+        continue;
+      }
     }
 
     const categoryId =

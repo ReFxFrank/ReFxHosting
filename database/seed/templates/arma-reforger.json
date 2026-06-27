@@ -31,7 +31,7 @@
   ],
   "recCpuCores": 4,
   "recMemoryMb": 8192,
-  "recDiskMb": 10240,
+  "recDiskMb": 25600,
   "variables": [
     {
       "envName": "SERVER_NAME",

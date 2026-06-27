@@ -4,7 +4,10 @@
   "author": "ops@refx.example",
   "description": "Blocky zombie-survival sandbox. SteamCMD-installed dedicated server driven by a Commands.dat config.",
   "category": "survival",
-  "deployMethods": ["DOCKER", "NATIVE_PROCESS"],
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -20,10 +23,14 @@
     "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 1110390 validate +quit\nchmod +x ServerHelper.sh || true\necho 'Unturned install complete.'\n"
   },
   "configFiles": [
-    { "path": "Servers/refx/Server/Commands.dat", "parser": "file", "find": {} }
+    {
+      "path": "Servers/refx/Server/Commands.dat",
+      "parser": "file",
+      "find": {}
+    }
   ],
   "recCpuCores": 2,
-  "recMemoryMb": 4096,
+  "recMemoryMb": 2048,
   "recDiskMb": 8192,
   "variables": [
     {
@@ -32,7 +39,10 @@
       "description": "Name shown in the in-game server browser.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Unturned Server",
-      "rules": { "required": true, "maxLength": 128 },
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 0
@@ -43,7 +53,11 @@
       "description": "Maximum concurrent player slots.",
       "type": "NUMBER",
       "defaultValue": "24",
-      "rules": { "required": true, "min": 1, "max": 200 },
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 200
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 1
@@ -54,7 +68,10 @@
       "description": "Map to load (e.g. PEI, Washington, Russia, Germany).",
       "type": "STRING",
       "defaultValue": "PEI",
-      "rules": { "required": true, "maxLength": 64 },
+      "rules": {
+        "required": true,
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
@@ -65,7 +82,15 @@
       "description": "Allowed camera perspective.",
       "type": "ENUM",
       "defaultValue": "Both",
-      "rules": { "required": true, "options": ["First", "Third", "Both", "Vehicle"] },
+      "rules": {
+        "required": true,
+        "options": [
+          "First",
+          "Third",
+          "Both",
+          "Vehicle"
+        ]
+      },
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 3
@@ -76,12 +101,19 @@
       "description": "Leave blank for an open server.",
       "type": "SECRET",
       "defaultValue": "",
-      "rules": { "maxLength": 64 },
+      "rules": {
+        "maxLength": 64
+      },
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 4
     }
   ],
-  "tags": ["survival", "sandbox", "zombie", "multiplayer"],
+  "tags": [
+    "survival",
+    "sandbox",
+    "zombie",
+    "multiplayer"
+  ],
   "longDescription": "Survive the zombie apocalypse with friends on a dedicated Unturned server with full map and perspective control."
 }
