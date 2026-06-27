@@ -187,7 +187,13 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 		Cmd:        []string{"-c", s.Spec.Install.Script},
 		Env:        env,
 		WorkingDir: "/mnt/server",
-		Labels:     map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
+		// Run installs as ROOT. They must write the data dir (chowned to the non-root
+		// runtime uid) and some need apt-get, but install image users differ
+		// (eclipse-temurin is root; parkervcp/steamcmd is non-root and otherwise gets
+		// "Permission denied" on /mnt/server). This is the Wings model; the installed
+		// files are handed back to the runtime user right after the script runs.
+		User:   "0:0",
+		Labels: map[string]string{labelManaged: "true", labelServer: s.Spec.ID},
 	}
 	// Make /mnt/server writable by the install image's (non-root) user before it
 	// runs, so `cd /mnt/server` / writes succeed without running as root.
@@ -241,6 +247,9 @@ func (d *DockerRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+	// The root install created the files root-owned; hand them to the non-root
+	// runtime user so the game can read/execute/write them.
+	d.prepareDataDir(ctx, s, image)
 	return nil
 }
 
