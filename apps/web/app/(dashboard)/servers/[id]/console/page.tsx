@@ -68,7 +68,9 @@ export default function ConsolePage() {
           const s = ev.stats;
           setStats(s);
           const now = Date.now();
-          setCpuHist((p) => [...p, { t: now, value: Math.round(s.cpuPct) }].slice(-MAX_POINTS));
+          // s.cpuPct is % of ONE core (Docker convention); store cores-used so the
+          // sparkline and gauge read as a fraction of the server's vCPU allotment.
+          setCpuHist((p) => [...p, { t: now, value: Math.round(s.cpuPct) / 100 }].slice(-MAX_POINTS));
           setMemHist((p) => [...p, { t: now, value: s.memUsedMb }].slice(-MAX_POINTS));
           setDiskHist((p) => [...p, { t: now, value: s.diskUsedMb }].slice(-MAX_POINTS));
           break;
@@ -226,6 +228,13 @@ export default function ConsolePage() {
   // (nullish `??` would keep a 0 and show "/0B" + 0%).
   const memLimit = stats?.memLimitMb || server?.memoryMb || 0;
   const diskLimit = stats?.diskLimitMb || server?.diskMb || 0;
+  // CPU: the agent reports % of a single core, so divide by the server's vCPU
+  // allotment to show utilisation of the plan (100% = using every allotted core),
+  // instead of a "% of one core" number that misleads on multi-core tiers.
+  const cpuLimit = server?.cpuCores || 0;
+  const cpuCoresUsed = (stats?.cpuPct ?? 0) / 100;
+  const cpuPctOfPlan =
+    cpuLimit > 0 ? Math.round((cpuCoresUsed / cpuLimit) * 100) : Math.round(stats?.cpuPct ?? 0);
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
@@ -303,9 +312,9 @@ export default function ConsolePage() {
         <ResourceGauge
           label="CPU"
           icon={Cpu}
-          current={`${Math.round(stats?.cpuPct ?? 0)}`}
-          unit="%"
-          pctValue={Math.round(stats?.cpuPct ?? 0)}
+          current={cpuLimit > 0 ? cpuCoresUsed.toFixed(1) : `${Math.round(stats?.cpuPct ?? 0)}`}
+          unit={cpuLimit > 0 ? `/ ${cpuLimit} vCPU` : "%"}
+          pctValue={cpuPctOfPlan}
           history={cpuHist}
         />
         <ResourceGauge

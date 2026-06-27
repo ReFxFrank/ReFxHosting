@@ -414,12 +414,21 @@ function NodeUsage({ node, compact }: { node: Node; compact?: boolean }) {
       <span className="text-xs text-muted-foreground">No heartbeat</span>
     );
   }
+  // hb.cpuPct is whole-machine utilisation [0,100] (aggregate /proc/stat), NOT
+  // per-core — so show it against the node's core count like MEM/DISK show used
+  // vs capacity, e.g. "0.8 / 16 cores · 5%".
   const cpu = Math.round(hb.cpuPct);
+  const coresUsed = (hb.cpuPct / 100) * (node.cpuCores || 0);
   const memPct = pct(hb.memUsedMb, node.memoryMb);
   const diskPct = pct(hb.diskUsedMb, node.diskMb);
   return (
     <div className={cn("space-y-2", compact ? "w-44" : "w-full")}>
-      <UsageBar icon={Cpu} label="CPU" value={cpu} detail={`${cpu}%`} />
+      <UsageBar
+        icon={Cpu}
+        label="CPU"
+        value={cpu}
+        detail={node.cpuCores ? `${coresUsed.toFixed(1)} / ${node.cpuCores} cores · ${cpu}%` : `${cpu}%`}
+      />
       <UsageBar
         icon={MemoryStick}
         label="MEM"
