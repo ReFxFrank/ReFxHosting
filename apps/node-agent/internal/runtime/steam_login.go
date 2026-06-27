@@ -19,7 +19,7 @@ import (
 // node-level steam home — so a subsequent install with the same account reuses it
 // and needs no further code. Credentials arrive via env (never the argv of the
 // outer container) and are passed to steamcmd's +login.
-const steamLoginScript = `set -u
+const steamLoginScript = `set -uo pipefail
 export HOME="$VHOME"
 mkdir -p "$HOME"
 SC="$HOME/steamcmd"
@@ -132,22 +132,23 @@ func (d *DockerRuntime) RunSteamLogin(
 }
 
 // steamLoginSucceeded interprets steamcmd output. steamcmd's exit code is
-// unreliable, so success is decided primarily from the well-known markers.
-func steamLoginSucceeded(out string, exit int64) bool {
+// unreliable (it can exit 0 having printed a Guard prompt, and the bootstrap can
+// fail before login), so success REQUIRES an explicit positive marker — never the
+// exit code alone. The unused exit param is kept for call-site clarity.
+func steamLoginSucceeded(out string, _ int64) bool {
 	low := strings.ToLower(out)
-	// Hard failures take precedence over any earlier "OK" lines.
+	// Any hard failure / Guard-required / setup failure wins over an earlier "OK".
 	for _, bad := range []string{
 		"failed login", "invalid password", "two-factor code mismatch",
 		"rate limit exceeded", "account logon denied", "invalid login auth code",
 		"steam guard", "set_steam_guard", "two_factor",
+		"permission denied", "failed to fetch steamcmd",
 	} {
 		if strings.Contains(low, bad) {
 			return false
 		}
 	}
-	if strings.Contains(low, "logged in ok") ||
-		strings.Contains(low, "waiting for user info...ok") {
-		return true
-	}
-	return exit == 0
+	// A successful steamcmd login prints one of these.
+	return strings.Contains(low, "logged in ok") ||
+		strings.Contains(low, "waiting for user info...ok")
 }

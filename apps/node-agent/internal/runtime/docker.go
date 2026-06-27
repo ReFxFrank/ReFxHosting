@@ -308,6 +308,16 @@ func (d *DockerRuntime) ensureSteamHome() string {
 		if err := chownTree(d.steamHome, containerUID, containerGID); err != nil {
 			d.log.Warn().Err(err).Str("dir", d.steamHome).Msg("chown steam home failed")
 		}
+		// World-writable: steamcmd install/verify containers run as the image's OWN
+		// user (parkervcp/steamcmd, eclipse-temurin, … differ and aren't always
+		// uid 1000), so a chown alone leaves the home unwritable and the per-node
+		// Steam sentry never persists (installs silently fall back to a per-server
+		// home, so an owned-game Guard code is needed every time). 0777 lets any
+		// image user create its per-account subdir here. Holds machine-auth tokens
+		// only, on a node-internal path mounted solely into steam install containers.
+		if err := os.Chmod(d.steamHome, 0o777); err != nil {
+			d.log.Warn().Err(err).Str("dir", d.steamHome).Msg("chmod steam home failed")
+		}
 	}
 	return d.steamHome
 }
