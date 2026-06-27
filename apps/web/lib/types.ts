@@ -117,7 +117,18 @@ export type PowerSignal = "start" | "stop" | "restart" | "kill";
  * Voice (e.g. TeamSpeak) vs game server. Set once at creation and immutable —
  * the authoritative discriminator the UI uses to keep voice servers separate.
  */
-export type ServerType = "GAME_SERVER" | "VOICE_SERVER";
+export type ServerType = "GAME_SERVER" | "VOICE_SERVER" | "WEB_APP";
+
+/** A custom domain mapped to a web-app server (with its SSL/issuance state). */
+export interface WebDomain {
+  id: string;
+  serverId: string;
+  hostname: string;
+  isPrimary: boolean;
+  sslStatus: "PENDING" | "ACTIVE" | "FAILED";
+  verifiedAt: string | null;
+  createdAt: string;
+}
 
 /** True for a voice server, by the authoritative serverType discriminator. */
 export function isVoiceServer(

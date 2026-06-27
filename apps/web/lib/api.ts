@@ -42,6 +42,7 @@ import type {
   AdminServer,
   ServerTransfer,
   StorefrontGame,
+  WebDomain,
   StorefrontGameDetail,
   TeamMember,
   WorkshopMod,
@@ -393,6 +394,17 @@ export const api = {
     list: (query?: { search?: string; state?: string }) =>
       getList<Server>("/servers", { query }),
     get: (id: string) => http.get<Server>(`/servers/${id}`),
+    // Web-app custom domains.
+    domains: (id: string) => getList<WebDomain>(`/servers/${id}/domains`),
+    addDomain: (id: string, hostname: string) =>
+      http.post<WebDomain & { dnsTarget: string }>(`/servers/${id}/domains`, { hostname }),
+    verifyDomain: (id: string, domainId: string) =>
+      http.post<WebDomain & { dnsTarget: string; verified: boolean }>(
+        `/servers/${id}/domains/${domainId}/verify`,
+        {},
+      ),
+    removeDomain: (id: string, domainId: string) =>
+      http.delete<void>(`/servers/${id}/domains/${domainId}`),
     stats: (id: string) => http.get<ServerStat>(`/servers/${id}/stats`),
     statsHistory: (id: string, range = "1h") =>
       getList<ServerStat>(`/servers/${id}/stats/history`, { query: { range } }),

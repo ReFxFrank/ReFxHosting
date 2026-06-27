@@ -33,11 +33,17 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
   const supportsMods = isMinecraft && loader !== "vanilla";
   const supportsWorkshop = !!server?.template?.supportsWorkshop;
   const isVoice = isVoiceServer(server);
+  const isWeb = server?.serverType === "WEB_APP";
   // Minecraft/Mods/Modpacks tabs are Minecraft-only; Workshop is Steam-only.
   // Voice servers are a separate product line, so the game-oriented sections
   // (console + live compute, switch-game, databases, schedules, upgrade) don't
   // apply and are hidden — leaving Overview, Files, Backups and Settings.
+  // Web apps get Domains + the relevant subset (Console for logs, Files, Backups,
+  // Settings, Upgrade); the game-specific sections are hidden.
+  const WEB_TABS = ["/console", "/files", "/domains", "/backups", "/settings", "/upgrade"];
   const filtered = serverTabs(id).filter((t) => {
+    if (t.href.endsWith("/domains")) return isWeb;
+    if (isWeb) return WEB_TABS.some((s) => t.href.endsWith(s));
     if (t.href.endsWith("/minecraft")) return isMinecraft;
     if (t.href.endsWith("/mods")) return supportsMods;
     if (t.href.endsWith("/modpacks")) return isMinecraft;
