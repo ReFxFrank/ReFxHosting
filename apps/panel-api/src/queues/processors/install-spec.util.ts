@@ -1,5 +1,30 @@
 import { Prisma } from '@prisma/client';
 import { InstallSpec } from '../../agent/agent.client';
+import { isJavaImage, resolveJavaImage } from '../../common/util/java-version.util';
+
+/** First docker image (the "Default") from an egg's dockerImages map. */
+function firstDockerImage(images: unknown): string | undefined {
+  if (images && typeof images === 'object' && !Array.isArray(images)) {
+    const values = Object.values(images as Record<string, unknown>);
+    if (values.length) return String(values[0]);
+  }
+  return undefined;
+}
+
+/**
+ * Resolve the RUNTIME image from the template on every (re)install, so an egg's
+ * image fix (e.g. Arma 3 moving to a purpose-built games image) reaches existing
+ * servers — whose stored dockerImage was set at creation. Minecraft's per-version
+ * JVM is still resolved from MINECRAFT_VERSION; fixed-image games get the Default.
+ */
+function resolveRuntimeImage(
+  images: unknown,
+  env: Record<string, string>,
+): string | undefined {
+  const base = firstDockerImage(images);
+  if (!base || !isJavaImage(base)) return base;
+  return resolveJavaImage(base, env.MINECRAFT_VERSION ?? 'latest', 'jre');
+}
 
 /**
  * Resolves a server + its template + variable overrides into the concrete
@@ -23,6 +48,21 @@ export function steamLogin(cfg: {
   return cfg.username && cfg.password
     ? { username: cfg.username, password: cfg.password }
     : undefined;
+}
+
+/**
+ * Egg templates set the install container under `container`, but the node-agent's
+ * InstallScript reads `image`. Map it through so an install can run in a DIFFERENT
+ * image than the game runtime (e.g. a steamcmd downloader image to fetch the game,
+ * then run it in a purpose-built game-runtime image). Unmapped, the agent falls
+ * back to the runtime image for the install, which breaks games whose runtime
+ * image lacks the install tooling (or vice-versa).
+ */
+function normalizeInstallScript(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const s = raw as Record<string, unknown>;
+  const image = s.image ?? s.container;
+  return image != null ? { ...s, image } : s;
 }
 
 export function buildInstallSpec(
@@ -74,13 +114,16 @@ export function buildInstallSpec(
   return {
     serverId: server.id,
     shortId: server.shortId,
-    dockerImage: server.dockerImage ?? undefined,
+    dockerImage:
+      resolveRuntimeImage(template.dockerImages, env) ??
+      server.dockerImage ??
+      undefined,
     deployMethod: server.deployMethod,
     startupCommand: server.startupCommand ?? template.startupCommand,
     startupDetect: template.startupDetect ?? '',
     stopCommand: template.stopCommand ?? '^C',
     environment: env,
-    installScript: template.installScript,
+    installScript: normalizeInstallScript(template.installScript),
     configFiles: template.configFiles,
     sftp: opts.sftpPassword
       ? { username: server.shortId, password: opts.sftpPassword }

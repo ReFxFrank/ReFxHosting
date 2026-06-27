@@ -11,7 +11,7 @@
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
-    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+    "Default": "ghcr.io/parkervcp/games:arma3"
   },
   "steamAppId": 233780,
   "supportsWorkshop": true,
