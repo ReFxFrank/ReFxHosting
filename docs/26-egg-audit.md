@@ -13,7 +13,39 @@ install or boot for a customer; WARN = boots but a setting is ignored / fragile.
 > **None of this is runnable-verified here** (no game node). Treat the fixes as
 > code-reviewed; **smoke-test each game on a real node before selling it.**
 
-## ✅ Fixed at source (this commit)
+## 🟢 Update — post-audit fixes (2026-06-27, several node-verified)
+
+Live node testing on `refx-ca-east-bhs` surfaced and fixed root causes the static
+audit couldn't see. **Reach servers via:** node update to **agent ≥ v1.1.7** +
+reseed + reinstall.
+
+- **Platform / `getpwuid` SIGSEGV (agent v1.1.6)** — game containers ran as a uid
+  with no `/etc/passwd` entry; `steamclient.so` segfaults on the NULL. This silently
+  broke **every Steam-API game** (mis-attributed as game bugs). Agent now mounts a
+  generated passwd/group. **Verified:** Arma 3, Rust, TF2 boot.
+- **`steamcmd` not on PATH (18 eggs)** — installs failed `steamcmd: command not
+  found`; added a bootstrap shim. **Verified:** Rust, TF2 install.
+- **Quote-aware startup splitting (agent v1.1.7)** — `strings.Fields` shredded
+  quoted args, so spaced server names/passwords never applied. Fixes **ARK,
+  Valheim, Palworld** names/passwords with no per-egg change.
+- **`steamclient.so` SDK setup** — added to **TF2 (BLOCKER, verified), KF2, Mordhau,
+  Satisfactory** (was WARN #1).
+- **Rust** — empty rcon password crashed `Init_Tier0`; `refx-rust.sh` generates one.
+  **Verified live.**
+- **Config templating (WARN #2)** — seeded configs from vars for **7DtD, Unturned,
+  tModLoader, Mordhau, Squad, Project Zomboid, Conan, Astroneer, Enshrouded, ATS**
+  (+ Palworld/ARK/Valheim via the quote fix). *Not yet node-verified — smoke-test.*
+- **Project Zomboid heap (WARN #3)** — `-Xmx` now set from `SERVER_MEMORY`; also
+  fixed `-servername` misuse (stable preset `refx`, display name in `PublicName`).
+- **minecraft-paper** — ported to PaperMC **v3** (v2 retired 2026-07-01).
+- **Seed propagation** — create-only sync now migrates existing servers to launcher
+  startups too.
+
+**Still open:** FiveM dead artifact URL; ATS needs client-exported `server_packages.*`;
+Conan/Astroneer/Enshrouded wine paths + headless Proton; CS2 `LD_LIBRARY_PATH` (test
+first). These remain HOLD until smoke-tested.
+
+## ✅ Fixed at source (original audit)
 
 | Game | Bug | Fix |
 |------|-----|-----|
