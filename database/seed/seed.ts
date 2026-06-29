@@ -80,6 +80,7 @@ const ARGON2_OPTS: argon2.Options = {
 };
 
 const TEMPLATES_DIR = join(__dirname, 'templates');
+const KB_DIR = join(__dirname, 'kb');
 
 /** Shape of a template JSON file in ./templates/*.json */
 interface TemplateVariableFile {
@@ -930,6 +931,54 @@ async function clearLegacySteamLogins() {
   }
 }
 
+/** Shape of a knowledge-base article in ./kb/articles.json */
+interface KbArticleFile {
+  slug: string;
+  title: string;
+  category?: string | null;
+  body: string;
+}
+
+/**
+ * Seed the customer-facing knowledge base from ./kb/articles.json. CREATE-ONLY
+ * and idempotent: an article is created (published) only if its slug doesn't
+ * already exist, so staff edits in the panel are never clobbered on re-seed.
+ * New articles added to the JSON are imported automatically on the next deploy.
+ */
+async function seedKbArticles(): Promise<void> {
+  let raw: string;
+  try {
+    raw = readFileSync(join(KB_DIR, 'articles.json'), 'utf8');
+  } catch {
+    console.log('  • Knowledge base: skipped (no kb/articles.json)');
+    return;
+  }
+  const articles = JSON.parse(raw) as KbArticleFile[];
+  let created = 0;
+  for (const a of articles) {
+    if (!a.slug || !a.title || !a.body) continue;
+    const existing = await prisma.kbArticle.findUnique({
+      where: { slug: a.slug },
+      select: { id: true },
+    });
+    if (existing) continue;
+    await prisma.kbArticle.create({
+      data: {
+        id: uuidv7(),
+        slug: a.slug,
+        title: a.title,
+        body: a.body,
+        category: a.category ?? null,
+        isPublished: true,
+      },
+    });
+    created += 1;
+  }
+  console.log(
+    `  • Knowledge base: ${created} new article(s) created (${articles.length} in catalog)`,
+  );
+}
+
 /** Read existing game categories into a { slug: id } map (no writes). */
 async function loadGameCategoryMap(): Promise<Record<string, string>> {
   const cats = await prisma.gameCategory.findMany({
@@ -1223,6 +1272,14 @@ async function main() {
     await seedVoiceProducts();
   } catch (e) {
     console.error('  ! voice products failed:', (e as Error).message);
+  }
+
+  // Knowledge base: import any new articles from kb/articles.json (create-only).
+  console.log('Knowledge base:');
+  try {
+    await seedKbArticles();
+  } catch (e) {
+    console.error('  ! knowledge base seed failed:', (e as Error).message);
   }
 
   // Curated egg sync is create-only (to preserve admin tuning), so Workshop

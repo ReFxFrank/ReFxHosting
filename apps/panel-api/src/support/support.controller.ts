@@ -20,6 +20,7 @@ import {
   CurrentUser,
 } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
@@ -222,9 +223,12 @@ export class SupportController {
     return this.support.listArticles(user);
   }
 
-  // Web-facing aliases (`/support/kb`) for the knowledge base.
+  // Web-facing aliases (`/support/kb`) for the knowledge base. Public so the
+  // marketing-site Knowledge Base (and logged-out visitors) can browse before
+  // signing up or opening a ticket. Only published articles are ever returned.
+  @Public()
   @Get('kb')
-  listKb(@CurrentUser() user: AuthUser) {
+  listKb(@CurrentUser() user: AuthUser | undefined) {
     return this.support.listArticles(user);
   }
 
@@ -233,8 +237,12 @@ export class SupportController {
     return this.support.getArticle(user, slug);
   }
 
+  @Public()
   @Get('kb/:slug')
-  getKbArticle(@CurrentUser() user: AuthUser, @Param('slug') slug: string) {
+  getKbArticle(
+    @CurrentUser() user: AuthUser | undefined,
+    @Param('slug') slug: string,
+  ) {
     return this.support.getArticle(user, slug);
   }
 

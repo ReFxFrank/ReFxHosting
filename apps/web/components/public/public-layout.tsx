@@ -15,8 +15,8 @@ const NAV = [
   { label: "Voice", href: "/voice" },
   { label: "Web Hosting", href: "/web-hosting" },
   { label: "Features", href: "/#features" },
+  { label: "Help", href: "/knowledge-base" },
   { label: "Team", href: "/team" },
-  { label: "Support", href: "/support" },
   { label: "Status", href: "/status" },
 ];
 
@@ -116,6 +116,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           <FooterCol
             title="Support"
             links={[
+              { label: "Knowledge base", href: "/knowledge-base" },
               { label: "Help center", href: "/support" },
               { label: "System status", href: "/status" },
               { label: "Our team", href: "/team" },

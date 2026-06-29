@@ -48,6 +48,18 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { formatRelative } from "@/lib/utils";
 import type { KbArticle, TicketPriority } from "@/lib/types";
+import { Markdown } from "@/components/shared/markdown";
+
+/** First non-empty body line, stripped of markdown, for a card preview. */
+function kbExcerpt(body: string): string {
+  const first = body.split("\n").find((l) => l.trim()) ?? "";
+  return first
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^#+\s*/, "")
+    .trim();
+}
 
 const PRIORITIES: { value: TicketPriority; label: string }[] = [
   { value: "LOW", label: "Low" },
@@ -239,7 +251,7 @@ function KnowledgeBaseTab() {
                 </span>
               </div>
               <p className="font-medium leading-snug">{article.title}</p>
-              <p className="line-clamp-2 text-sm text-muted-foreground">{article.body}</p>
+              <p className="line-clamp-2 text-sm text-muted-foreground">{kbExcerpt(article.body)}</p>
             </button>
           ))}
         </div>
@@ -265,9 +277,7 @@ function KnowledgeBaseTab() {
               </DialogDescription>
             )}
           </DialogHeader>
-          <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
-            {active?.body}
-          </div>
+          {active && <Markdown content={active.body} />}
           {active && (
             <p className="text-xs text-muted-foreground">
               {active.views} views · updated {formatRelative(active.updatedAt)}

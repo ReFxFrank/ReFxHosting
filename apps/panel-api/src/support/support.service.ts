@@ -52,8 +52,8 @@ export class SupportService {
   ) {}
 
   /** Whether a principal is support staff (SUPPORT / ADMIN / OWNER). */
-  private isStaff(user: AuthUser): boolean {
-    return STAFF_ROLES.has(user.globalRole);
+  private isStaff(user: AuthUser | undefined): boolean {
+    return !!user && STAFF_ROLES.has(user.globalRole);
   }
 
   // ---- Tickets -----------------------------------------------------------
@@ -556,8 +556,8 @@ export class SupportService {
 
   // ---- Knowledge base ----------------------------------------------------
 
-  /** List KB articles. Customers only ever see published articles. */
-  listArticles(user: AuthUser): Promise<KbArticle[]> {
+  /** List KB articles. Customers + the public only ever see published articles. */
+  listArticles(user?: AuthUser): Promise<KbArticle[]> {
     const where: Prisma.KbArticleWhereInput = this.isStaff(user)
       ? {}
       : { isPublished: true };
@@ -568,7 +568,7 @@ export class SupportService {
   }
 
   /** Fetch an article by slug and increment its view counter. */
-  async getArticle(user: AuthUser, slug: string): Promise<KbArticle> {
+  async getArticle(user: AuthUser | undefined, slug: string): Promise<KbArticle> {
     const article = await this.prisma.kbArticle.findUnique({
       where: { slug },
     });
