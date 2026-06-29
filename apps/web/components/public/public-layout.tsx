@@ -7,7 +7,6 @@ import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { LogoWordmark } from "@/components/brand/logo";
 import { AppStoreBadge } from "@/components/public/app-store-badge";
-import { IntroSplash } from "@/components/public/intro-splash";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
@@ -38,7 +37,6 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-svh flex-col">
-      <IntroSplash />
       <header className="refx-beam sticky top-0 z-40 border-b border-white/[0.06] bg-[rgba(7,11,18,0.72)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <Link

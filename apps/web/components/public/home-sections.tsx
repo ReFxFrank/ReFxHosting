@@ -34,7 +34,7 @@ export function HeroBackdrop() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0"
+      className="refx-enter-glow pointer-events-none absolute inset-0"
       style={{
         background:
           "radial-gradient(60% 55% at 50% 0%, rgba(0,114,255,0.18), transparent 70%), radial-gradient(40% 40% at 85% 25%, rgba(34,211,238,0.10), transparent 70%)",
@@ -48,22 +48,22 @@ export function HeroSplash() {
   return (
     <section className="relative">
       <div className="relative mx-auto w-full max-w-6xl px-4 pb-12 pt-12 text-center sm:px-6 sm:pt-20">
-        <p className="refx-eyebrow mx-auto mb-4 inline-flex items-center gap-2">
+        <p className="refx-eyebrow refx-enter refx-enter-1 mx-auto mb-4 inline-flex items-center gap-2">
           <span className="size-1.5 animate-pulse rounded-full bg-primary" />
           Game · Voice · Web — one platform
         </p>
-        <h1 className="mx-auto max-w-3xl text-balance text-4xl font-extrabold tracking-tight sm:text-6xl">
+        <h1 className="refx-enter-hero mx-auto max-w-3xl text-balance text-4xl font-extrabold tracking-tight sm:text-6xl">
           Server hosting for{" "}
           <span className="bg-gradient-to-r from-[#3aa0ff] to-[#22d3ee] bg-clip-text text-transparent">
             games, voice &amp; the web
           </span>
         </h1>
-        <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg text-muted-foreground">
+        <p className="refx-enter refx-enter-3 mx-auto mt-5 max-w-2xl text-pretty text-lg text-muted-foreground">
           Run game servers, TeamSpeak voice, and web hosting from a single
           account. Instant setup, DDoS protection, and NVMe nodes — all managed
           from one clean panel. Switch your game anytime without re-purchasing.
         </p>
-        <div className="mx-auto mt-8 flex w-full max-w-xs flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center">
+        <div className="refx-enter refx-enter-4 mx-auto mt-8 flex w-full max-w-xs flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center">
           <Button size="lg" asChild className="w-full sm:w-auto">
             <Link href="/games">
               Browse hosting <ArrowRight className="size-4" />
@@ -73,7 +73,7 @@ export function HeroSplash() {
             <Link href="/login">Client area</Link>
           </Button>
         </div>
-        <p className="mt-4 text-xs text-muted-foreground">
+        <p className="refx-enter refx-enter-5 mt-4 text-xs text-muted-foreground">
           Instant setup · DDoS protected · {BRAND}
         </p>
       </div>
