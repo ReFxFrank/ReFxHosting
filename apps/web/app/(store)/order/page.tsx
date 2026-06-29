@@ -727,7 +727,13 @@ export default function OrderPage() {
               <Label htmlFor="srv-name">5 · Server name</Label>
               <Input
                 id="srv-name"
-                placeholder={voiceType ? "My community voice" : "My awesome server"}
+                placeholder={
+                  voiceType
+                    ? "My community voice"
+                    : webType
+                      ? "My website"
+                      : "My awesome server"
+                }
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />

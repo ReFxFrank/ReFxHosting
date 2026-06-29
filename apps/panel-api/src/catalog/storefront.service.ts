@@ -137,9 +137,15 @@ export class StorefrontService {
     const plans = products
       .filter((p) => this.productAllows(p, game.id))
       .map((p) => this.toPublicPlan(p));
-    // Only advertise locations we can actually deploy to (regions with a node).
+    // Only advertise locations we can actually deploy to. Web hosting needs a
+    // web-enabled node (Caddy on :80/:443), so scope its regions to those — the
+    // order page enforces the same, and this keeps the advertised set honest.
     const regions = await this.prisma.region.findMany({
-      where: { nodes: { some: { deletedAt: null } } },
+      where: {
+        nodes: {
+          some: { deletedAt: null, ...(kind === 'WEB' ? { supportsWeb: true } : {}) },
+        },
+      },
       orderBy: { name: 'asc' },
       select: { id: true, code: true, name: true, country: true },
     });

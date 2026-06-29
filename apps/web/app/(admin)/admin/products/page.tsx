@@ -47,6 +47,7 @@ import type {
 const TYPE_OPTIONS: { value: ProductType; label: string }[] = [
   { value: "GAME_SERVER", label: "Game server" },
   { value: "VOICE_SERVER", label: "Voice server" },
+  { value: "WEB_HOSTING", label: "Web hosting" },
   { value: "VPS", label: "VPS" },
   { value: "DEDICATED", label: "Dedicated" },
   { value: "ADDON", label: "Add-on" },
@@ -220,7 +221,7 @@ export default function AdminProductsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Products"
-        description="Define what customers can order: game servers with hardware tiers, or voice servers priced per slot."
+        description="Define what customers can order: game and web hosting with tiers, or voice servers (per slot or flat tiers)."
         actions={
           <Button onClick={openNew}>
             <Plus className="size-4" /> New product
