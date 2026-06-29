@@ -498,6 +498,17 @@ model TemplateVariable {
   @@unique([templateId, envName])
 }
 
+// Tombstone for an egg an admin deleted in the panel. The seed re-imports any
+// egg JSON under database/seed/templates whose template row is missing, so a
+// deleted egg would otherwise reappear on the next reseed. The seed skips slugs
+// listed here; re-creating an egg with the same slug in the panel clears it.
+model RetiredEgg {
+  id        String   @id @db.Uuid
+  slug      String   @unique
+  name      String?
+  retiredAt DateTime @default(now())
+}
+
 // ---------------------------------------------------------------------------
 // Servers (the core GPortal-style identity that survives game switching)
 // ---------------------------------------------------------------------------

@@ -39,6 +39,9 @@ export class TemplatesService {
   /** Create a template and its variables in one transaction. */
   async create(dto: CreateTemplateDto): Promise<GameTemplate> {
     const id = uuidv7();
+    // Re-creating an egg with a previously-retired slug revives it: drop the
+    // tombstone so the reseed no longer skips it.
+    await this.prisma.retiredEgg.deleteMany({ where: { slug: dto.slug } });
     return this.prisma.gameTemplate.create({
       data: {
         id,
@@ -144,9 +147,14 @@ export class TemplatesService {
     return this.get(id);
   }
 
-  /** Delete a template (only when no servers still reference it). */
+  /**
+   * Delete a template (only when no servers still reference it). Also writes a
+   * RetiredEgg tombstone keyed on the slug so the every-deploy egg reseed won't
+   * re-import the egg JSON and resurrect it, and deactivates any storefront
+   * products bound to it so an orphaned product can't linger on sale.
+   */
   async delete(id: string): Promise<void> {
-    await this.get(id);
+    const template = await this.get(id);
     const inUse = await this.prisma.server.count({
       where: { templateId: id, deletedAt: null },
     });
@@ -155,7 +163,20 @@ export class TemplatesService {
         'Cannot delete a template still in use by servers',
       );
     }
-    await this.prisma.gameTemplate.delete({ where: { id } });
+    await this.prisma.$transaction([
+      // Retire any products bound to this template (the FK is SetNull on delete,
+      // which would otherwise leave them active but unlinked).
+      this.prisma.product.updateMany({
+        where: { gameTemplateId: id },
+        data: { isActive: false },
+      }),
+      this.prisma.gameTemplate.delete({ where: { id } }),
+      this.prisma.retiredEgg.upsert({
+        where: { slug: template.slug },
+        update: { name: template.name, retiredAt: new Date() },
+        create: { id: uuidv7(), slug: template.slug, name: template.name },
+      }),
+    ]);
   }
 
   // ---- Public catalog ----------------------------------------------------

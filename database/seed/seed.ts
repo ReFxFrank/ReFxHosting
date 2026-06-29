@@ -945,9 +945,20 @@ async function seedTemplates(
   const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.json'));
   let count = 0;
 
+  // Eggs an admin deleted in the panel are tombstoned (RetiredEgg) so this
+  // every-deploy import never resurrects them from their JSON file.
+  const retired = new Set(
+    (await prisma.retiredEgg.findMany({ select: { slug: true } })).map(
+      (r) => r.slug,
+    ),
+  );
+
   for (const file of files) {
     const raw = readFileSync(join(TEMPLATES_DIR, file), 'utf8');
     const tpl = JSON.parse(raw) as TemplateFile;
+
+    // Skip eggs an admin retired in the panel — leave them deleted across reseeds.
+    if (retired.has(tpl.slug)) continue;
 
     // Create-only mode (every-deploy egg sync): for an EXISTING template, push the
     // egg's CODE/spec fixes (install, startup, images, detect/stop, config files,
@@ -1185,9 +1196,9 @@ async function main() {
 
     // Curated game eggs ARE kept in sync every deploy (create-only): brand-new
     // egg JSONs are imported automatically — no SEED_DEMO needed — while existing
-    // templates are left untouched. (A hard-deleted egg whose JSON still exists
-    // will be re-created; remove its file under database/seed/templates to retire
-    // it for good.)
+    // templates are left untouched. Eggs an admin DELETES in the panel are
+    // tombstoned (RetiredEgg) and skipped here, so they stay gone across reseeds
+    // without touching the JSON files.
     console.log('Game eggs (auto-load):');
     // Ensure categories exist (upsert) even on a create-only reseed — loading the
     // map alone meant a newly-added category (e.g. voice/web) never got created, so

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Layers, Plus, Pencil } from "lucide-react";
+import { Layers, Plus, Pencil, Trash2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -90,6 +90,7 @@ export default function AdminTemplatesPage() {
   const queryClient = useQueryClient();
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState<TemplateForm>(emptyForm);
+  const [deleteTarget, setDeleteTarget] = useState<GameTemplate | null>(null);
 
   const { data: templates, isLoading } = useQuery({
     queryKey: ["admin", "templates"],
@@ -117,6 +118,17 @@ export default function AdminTemplatesPage() {
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to update visibility"),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.admin.deleteTemplate(id),
+    onSuccess: () => {
+      toast.success("Egg deleted — it won't return on the next reseed.");
+      queryClient.invalidateQueries({ queryKey: ["admin", "templates"] });
+      setDeleteTarget(null);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to delete egg"),
   });
 
   function openNew() {
@@ -260,13 +272,25 @@ export default function AdminTemplatesPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        onClick={() => openEdit(t)}
-                      >
-                        <Pencil className="size-4" />
-                      </Button>
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => openEdit(t)}
+                          aria-label="Edit egg"
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeleteTarget(t)}
+                          aria-label="Delete egg"
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -602,6 +626,33 @@ export default function AdminTemplatesPage() {
               onClick={handleSave}
             >
               Save template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete egg confirmation */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleteTarget?.name}?</DialogTitle>
+            <DialogDescription>
+              This removes the egg from the panel. It will <strong>not</strong> come
+              back on the next deploy/reseed. Eggs in use by existing servers
+              can&apos;t be deleted. You can re-add it later by creating an egg with the
+              same slug.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              loading={deleteMutation.isPending}
+              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+            >
+              Delete egg
             </Button>
           </DialogFooter>
         </DialogContent>

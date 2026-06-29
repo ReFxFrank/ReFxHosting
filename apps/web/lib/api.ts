@@ -1118,6 +1118,8 @@ export const api = {
       id
         ? http.patch<GameTemplate>(`/admin/templates/${id}`, body)
         : http.post<GameTemplate>("/admin/templates", body),
+    /** Delete an egg. Tombstoned server-side so a reseed won't bring it back. */
+    deleteTemplate: (id: string) => http.delete<void>(`/admin/templates/${id}`),
 
     homepageAlerts: () => getList<HomepageAlert>("/admin/homepage-alerts"),
     saveHomepageAlert: ({ id, ...body }: Partial<HomepageAlert>) =>
