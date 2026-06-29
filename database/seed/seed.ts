@@ -777,6 +777,35 @@ async function fixTeamspeakLicenseEnv() {
 }
 
 /**
+ * One-time rename of the web-hosting egg + its product. The create-only egg sync
+ * deliberately preserves the admin-tunable name/description, so renaming it in the
+ * egg JSON never reaches an already-seeded template. Apply it once, only while it
+ * still carries the original name, so a later admin rename is never clobbered.
+ */
+async function renameWebHostingEgg() {
+  const tpl = await prisma.gameTemplate.findUnique({
+    where: { slug: 'static-nginx' },
+    select: { id: true, name: true },
+  });
+  if (!tpl || tpl.name !== 'Static Website (nginx)') return;
+  await prisma.gameTemplate.update({
+    where: { id: tpl.id },
+    data: {
+      name: 'Web Hosting',
+      description:
+        'Host your website — upload your files and go, with a managed container, SFTP, and automatic SSL on your own domain.',
+      longDescription:
+        'Managed web hosting on a dedicated container. Upload your site (HTML/CSS/JS) to the public/ folder over SFTP or the file manager and it goes live instantly; map your own domain and we issue + renew SSL automatically. Pick a plan that fits your traffic.',
+    },
+  });
+  await prisma.product.updateMany({
+    where: { gameTemplateId: tpl.id, name: 'Static Website (nginx)' },
+    data: { name: 'Web Hosting' },
+  });
+  console.log('  • renamed web-hosting egg → "Web Hosting"');
+}
+
+/**
  * Backfill the unified `minecraft` egg's install script + default startup onto an
  * existing template (the curated egg seed is create-only). This is how install
  * hardening — e.g. the per-loader launch-artifact verification — reaches a
@@ -1129,6 +1158,13 @@ async function main() {
     await fixTeamspeakLicenseEnv();
   } catch (e) {
     console.error('  ! teamspeak license env fix failed:', (e as Error).message);
+  }
+
+  // One-time rename of the web-hosting egg (create-only sync preserves names).
+  try {
+    await renameWebHostingEgg();
+  } catch (e) {
+    console.error('  ! web-hosting egg rename failed:', (e as Error).message);
   }
 
   // Backfill the hardened unified Minecraft install script (per-loader launch

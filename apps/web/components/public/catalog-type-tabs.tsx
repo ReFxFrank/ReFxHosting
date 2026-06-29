@@ -17,7 +17,11 @@ export function CatalogTypeTabs() {
   return (
     <div className="mb-8 flex flex-wrap gap-2">
       {TYPES.map((t) => {
-        const active = pathname === t.href || pathname.startsWith(`${t.href}/`);
+        const active =
+          pathname === t.href ||
+          pathname.startsWith(`${t.href}/`) ||
+          // The home page IS the games catalog.
+          (pathname === "/" && t.href === "/games");
         return (
           <Link
             key={t.href}

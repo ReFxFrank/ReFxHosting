@@ -39,7 +39,11 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-svh flex-col">
       <header className="refx-beam sticky top-0 z-40 border-b border-white/[0.06] bg-[rgba(7,11,18,0.72)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-          <Link href="/" aria-label={BRAND}>
+          <Link
+            href="/"
+            aria-label={`${BRAND} — home`}
+            className="relative z-10 inline-flex items-center"
+          >
             <LogoWordmark height={26} />
           </Link>
 
