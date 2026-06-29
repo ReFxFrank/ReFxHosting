@@ -249,15 +249,18 @@ export class ServersService {
 
     // Node placement: a customer-chosen node is validated for eligibility +
     // capacity; otherwise the scheduler picks the best node in the chosen region.
+    // WEB_APP servers need a web-enabled node (Caddy on :80/:443) — the scheduler
+    // and the eligibility check filter to supportsWeb nodes when this is set.
+    const requiresWeb = this.serverTypeForTemplate(template) === 'WEB_APP';
     let nodeId = dto.nodeId;
     if (nodeId) {
-      await this.nodes.assertEligibleForOrder(nodeId, limits, dto.regionId);
+      await this.nodes.assertEligibleForOrder(nodeId, limits, dto.regionId, requiresWeb);
     } else {
-      const node = await this.nodes.pickNodeFor(limits, dto.regionId);
+      const node = await this.nodes.pickNodeFor(limits, dto.regionId, requiresWeb);
       if (!node) {
         // Surface WHY nothing fit (configured capacity vs. the plan's reserved
         // resources — not host telemetry), so it's actionable.
-        const detail = await this.nodes.capacityShortfall(limits, dto.regionId);
+        const detail = await this.nodes.capacityShortfall(limits, dto.regionId, requiresWeb);
         throw new ConflictException(`No node has capacity for this plan. ${detail}`);
       }
       nodeId = node.id;
@@ -329,7 +332,7 @@ export class ServersService {
 
     const node = await this.prisma.node.findFirst({
       where: { id: dto.nodeId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, supportsWeb: true },
     });
     if (!node) throw new NotFoundException('Node not found');
 
@@ -338,6 +341,14 @@ export class ServersService {
       include: { category: { select: { slug: true } } },
     });
     if (!template) throw new NotFoundException('Template not found');
+
+    // A web app needs a web-enabled node (Caddy on :80/:443); refuse to place one
+    // on a node that can't serve it, so staff get a clear error not a broken site.
+    if (this.serverTypeForTemplate(template) === 'WEB_APP' && !node.supportsWeb) {
+      throw new BadRequestException(
+        'This node is not web-enabled — pick a node with web hosting support.',
+      );
+    }
 
     const environment = await this.resolveMinecraftEnv(
       template.slug,

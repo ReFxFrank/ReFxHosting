@@ -72,6 +72,10 @@ Build progress lives in code; these are the env steps only you can do.
 - [ ] **[dns] (per customer domain)** — customers point their domain's A/AAAA at the
       web node; the panel verifies + Caddy issues SSL automatically.
 - [ ] **[node] Open ports 80 + 443** on the web node's firewall/security group.
+- [ ] **[panel] Toggle "Web hosting enabled" on the web node** — Admin → Nodes →
+      (the web node) → Edit → **Web hosting enabled**. The scheduler only places
+      web servers on web-enabled nodes; until at least one node has this on, the
+      web-hosting order page shows no available locations (by design).
 - [ ] **[panel] Reseed to fix the web-hosting order page** — a template that flipped
       GAME→WEB left stale game tiers (Low/Mid/High) on its product, so Web Hosting
       showed both its Starter→Pro plans AND game tiers. `seedGameTierProducts` now

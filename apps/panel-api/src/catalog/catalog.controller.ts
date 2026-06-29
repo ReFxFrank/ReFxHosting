@@ -32,12 +32,16 @@ export class CatalogController {
     @Query('cpuCores') cpuCores?: string,
     @Query('memoryMb') memoryMb?: string,
     @Query('diskMb') diskMb?: string,
+    @Query('web') web?: string,
   ) {
-    return this.nodes.regionsWithCapacity({
-      cpuCores: Number(cpuCores) || 0,
-      memoryMb: Number(memoryMb) || 0,
-      diskMb: Number(diskMb) || 0,
-    });
+    return this.nodes.regionsWithCapacity(
+      {
+        cpuCores: Number(cpuCores) || 0,
+        memoryMb: Number(memoryMb) || 0,
+        diskMb: Number(diskMb) || 0,
+      },
+      web === 'true' || web === '1',
+    );
   }
 
   /** Nodes in a region with capacity for a given config — storefront node picker. */
@@ -47,13 +51,18 @@ export class CatalogController {
     @Query('cpuCores') cpuCores?: string,
     @Query('memoryMb') memoryMb?: string,
     @Query('diskMb') diskMb?: string,
+    @Query('web') web?: string,
   ) {
     if (!regionId) return [];
-    return this.nodes.nodesWithCapacity(regionId, {
-      cpuCores: Number(cpuCores) || 0,
-      memoryMb: Number(memoryMb) || 0,
-      diskMb: Number(diskMb) || 0,
-    });
+    return this.nodes.nodesWithCapacity(
+      regionId,
+      {
+        cpuCores: Number(cpuCores) || 0,
+        memoryMb: Number(memoryMb) || 0,
+        diskMb: Number(diskMb) || 0,
+      },
+      web === 'true' || web === '1',
+    );
   }
 
   // ---- public storefront --------------------------------------------------

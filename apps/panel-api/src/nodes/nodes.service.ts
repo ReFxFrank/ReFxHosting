@@ -193,6 +193,7 @@ export class NodesService {
         allocationPortStart: portStart,
         allocationPortEnd: portEnd,
         gameDomain: normalizeGameDomain(dto.gameDomain),
+        supportsWeb: dto.supportsWeb ?? false,
         state: 'PROVISIONING',
       },
     });
@@ -566,6 +567,7 @@ export class NodesService {
       diskMb: number;
     },
     regionId?: string,
+    requiresWeb = false,
   ): Promise<Node | null> {
     const candidates = await this.prisma.node.findMany({
       where: {
@@ -573,6 +575,7 @@ export class NodesService {
         state: 'ONLINE',
         maintenance: false,
         ...(regionId ? { regionId } : {}),
+        ...(requiresWeb ? { supportsWeb: true } : {}),
       },
     });
     let best: { node: Node; score: number } | null = null;
@@ -598,9 +601,16 @@ export class NodesService {
   async nodesWithCapacity(
     regionId: string,
     limits: { cpuCores: number; memoryMb: number; diskMb: number },
+    requiresWeb = false,
   ): Promise<Array<{ id: string; name: string }>> {
     const candidates = await this.prisma.node.findMany({
-      where: { deletedAt: null, state: 'ONLINE', maintenance: false, regionId },
+      where: {
+        deletedAt: null,
+        state: 'ONLINE',
+        maintenance: false,
+        regionId,
+        ...(requiresWeb ? { supportsWeb: true } : {}),
+      },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
@@ -627,10 +637,17 @@ export class NodesService {
     nodeId: string,
     limits: { cpuCores: number; memoryMb: number; diskMb: number },
     regionId?: string,
+    requiresWeb = false,
   ): Promise<void> {
     const node = await this.prisma.node.findFirst({
       where: { id: nodeId, deletedAt: null },
-      select: { id: true, state: true, maintenance: true, regionId: true },
+      select: {
+        id: true,
+        state: true,
+        maintenance: true,
+        regionId: true,
+        supportsWeb: true,
+      },
     });
     if (!node) throw new BadRequestException('Selected node is unavailable');
     if (node.state !== 'ONLINE' || node.maintenance) {
@@ -638,6 +655,11 @@ export class NodesService {
     }
     if (regionId && node.regionId !== regionId) {
       throw new BadRequestException('Selected node is not in the chosen region');
+    }
+    if (requiresWeb && !node.supportsWeb) {
+      throw new BadRequestException(
+        'Selected node does not host web servers — pick a web-enabled node.',
+      );
     }
     const cap = await this.capacity(nodeId);
     if (
@@ -654,17 +676,25 @@ export class NodesService {
    * enough free capacity for `limits`. Powers the storefront location picker so
    * customers only see places their order can actually be provisioned.
    */
-  async regionsWithCapacity(limits: {
-    cpuCores: number;
-    memoryMb: number;
-    diskMb: number;
-  }): Promise<Array<{ id: string; code: string; name: string; country: string }>> {
+  async regionsWithCapacity(
+    limits: {
+      cpuCores: number;
+      memoryMb: number;
+      diskMb: number;
+    },
+    requiresWeb = false,
+  ): Promise<Array<{ id: string; code: string; name: string; country: string }>> {
     const regions = await this.prisma.region.findMany({
       orderBy: { name: 'asc' },
       select: { id: true, code: true, name: true, country: true },
     });
     const nodes = await this.prisma.node.findMany({
-      where: { deletedAt: null, state: 'ONLINE', maintenance: false },
+      where: {
+        deletedAt: null,
+        state: 'ONLINE',
+        maintenance: false,
+        ...(requiresWeb ? { supportsWeb: true } : {}),
+      },
       select: { id: true, regionId: true },
     });
 
@@ -701,18 +731,25 @@ export class NodesService {
       diskMb: number;
     },
     regionId?: string,
+    requiresWeb = false,
   ): Promise<string> {
     const candidates = await this.prisma.node.findMany({
-      where: { deletedAt: null, ...(regionId ? { regionId } : {}) },
+      where: {
+        deletedAt: null,
+        ...(regionId ? { regionId } : {}),
+        ...(requiresWeb ? { supportsWeb: true } : {}),
+      },
     });
     const online = candidates.filter(
       (n) => n.state === 'ONLINE' && !n.maintenance,
     );
     const needs = `Plan reserves ${limits.cpuCores} vCPU / ${limits.memoryMb} MB RAM / ${limits.diskMb} MB disk.`;
+    const webNote = requiresWeb ? ' web-enabled' : '';
 
-    if (candidates.length === 0) return `${needs} No nodes exist yet.`;
+    if (candidates.length === 0)
+      return `${needs} No${webNote} nodes exist yet.`;
     if (online.length === 0) {
-      return `${needs} No nodes are ONLINE and out of maintenance.`;
+      return `${needs} No${webNote} nodes are ONLINE and out of maintenance.`;
     }
 
     // Report the most-free node so the operator can see the gap.

@@ -272,13 +272,13 @@ export default function OrderPage() {
     : null;
 
   const locationsQ = useQuery({
-    queryKey: ["catalog", "locations", limits?.cpuCores, limits?.memoryMb, limits?.diskMb],
-    queryFn: () => api.catalog.locations(limits!),
+    queryKey: ["catalog", "locations", limits?.cpuCores, limits?.memoryMb, limits?.diskMb, webType],
+    queryFn: () => api.catalog.locations(limits!, webType),
     enabled: !!limits,
   });
   const nodesQ = useQuery({
-    queryKey: ["catalog", "nodes", regionId, limits?.cpuCores, limits?.memoryMb, limits?.diskMb],
-    queryFn: () => api.catalog.nodes(regionId!, limits!),
+    queryKey: ["catalog", "nodes", regionId, limits?.cpuCores, limits?.memoryMb, limits?.diskMb, webType],
+    queryFn: () => api.catalog.nodes(regionId!, limits!, webType),
     enabled: !!regionId && !!limits,
   });
   useEffect(() => {

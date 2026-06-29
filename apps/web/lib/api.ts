@@ -680,17 +680,22 @@ export const api = {
     products: (query?: { type?: string }) => getList<Product>("/catalog/products", { query }),
     product: (slug: string) => http.get<Product>(`/catalog/products/${slug}`),
     // Regions with an online node that has room for the given config.
-    locations: (limits: { cpuCores: number; memoryMb: number; diskMb: number }) =>
+    locations: (
+      limits: { cpuCores: number; memoryMb: number; diskMb: number },
+      web = false,
+    ) =>
       getList<Region>("/catalog/locations", {
         query: {
           cpuCores: limits.cpuCores,
           memoryMb: limits.memoryMb,
           diskMb: limits.diskMb,
+          ...(web ? { web: "1" } : {}),
         },
       }),
     nodes: (
       regionId: string,
       limits: { cpuCores: number; memoryMb: number; diskMb: number },
+      web = false,
     ) =>
       getList<{ id: string; name: string }>("/catalog/nodes", {
         query: {
@@ -698,6 +703,7 @@ export const api = {
           cpuCores: limits.cpuCores,
           memoryMb: limits.memoryMb,
           diskMb: limits.diskMb,
+          ...(web ? { web: "1" } : {}),
         },
       }),
     categories: () => getList<GameCategory>("/catalog/categories"),
@@ -921,6 +927,7 @@ export const api = {
         memOvercommit: number;
         maintenance: boolean;
         gameDomain: string;
+        supportsWeb: boolean;
       }>,
     ) => http.patch<Node>(`/admin/nodes/${id}`, input),
     deleteNode: (id: string) => http.delete<void>(`/admin/nodes/${id}`),

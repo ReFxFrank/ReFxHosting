@@ -216,6 +216,7 @@ function CapacityForm({
   const [memoryMb, setMemoryMb] = useState(node.memoryMb ?? 1024);
   const [diskMb, setDiskMb] = useState(node.diskMb ?? 10240);
   const [gameDomain, setGameDomain] = useState(node.gameDomain ?? "");
+  const [supportsWeb, setSupportsWeb] = useState(!!node.supportsWeb);
 
   return (
     <div className="space-y-5">
@@ -271,6 +272,20 @@ function CapacityForm({
             the FQDN.
           </p>
         </div>
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-white/[0.08] p-3">
+          <div>
+            <Label htmlFor="node-supports-web-edit">Web hosting enabled</Label>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              This node runs Caddy on :80/:443 and can host web servers. The scheduler
+              only places web hosting on web-enabled nodes.
+            </p>
+          </div>
+          <Switch
+            id="node-supports-web-edit"
+            checked={supportsWeb}
+            onCheckedChange={setSupportsWeb}
+          />
+        </div>
       </div>
 
       <div className="space-y-3">
@@ -322,6 +337,7 @@ function CapacityForm({
               memoryMb,
               diskMb,
               gameDomain: gameDomain.trim(),
+              supportsWeb,
             })
           }
         >
@@ -483,6 +499,7 @@ const emptyForm = {
   allocationPortStart: 25565,
   allocationPortEnd: 25999,
   gameDomain: "",
+  supportsWeb: false,
 };
 
 export default function AdminNodesPage() {
@@ -562,6 +579,7 @@ export default function AdminNodesPage() {
         allocationPortStart: form.allocationPortStart,
         allocationPortEnd: form.allocationPortEnd,
         gameDomain: form.gameDomain.trim() || undefined,
+        supportsWeb: form.supportsWeb,
       }),
     onSuccess: (node) => {
       toast.success("Node created");
@@ -965,6 +983,21 @@ export default function AdminNodesPage() {
                 <span className="font-mono"> &lt;id&gt;.{form.gameDomain.trim() || "fra.refx.gg"}:port </span>
                 instead of the raw IP. Leave blank to use the node FQDN.
               </p>
+            </div>
+
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-white/[0.08] p-3">
+              <div>
+                <Label htmlFor="node-supports-web">Web hosting enabled</Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Turn on if this node runs Caddy on :80/:443 for web servers. The
+                  scheduler only places web hosting on web-enabled nodes.
+                </p>
+              </div>
+              <Switch
+                id="node-supports-web"
+                checked={form.supportsWeb}
+                onCheckedChange={(v) => setForm((f) => ({ ...f, supportsWeb: v }))}
+              />
             </div>
           </div>
 

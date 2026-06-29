@@ -338,6 +338,11 @@ model Node {
   cpuOvercommit Float      @default(1.0)
   memOvercommit Float      @default(1.0)
 
+  // Whether this node can host WEB_APP servers — i.e. it runs Caddy on :80/:443
+  // and has the reverse-proxy wiring the web product needs. The scheduler only
+  // places web servers on supportsWeb nodes; game/voice servers ignore it.
+  supportsWeb   Boolean    @default(false)
+
   servers       Server[]
   allocations   Allocation[]
   heartbeats    NodeHeartbeat[]

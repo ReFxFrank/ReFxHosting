@@ -359,6 +359,8 @@ export interface Node {
   allocationPortEnd?: number;
   /** Optional wildcard game domain for branded per-server addresses. */
   gameDomain?: string | null;
+  /** Whether this node can host web servers (runs Caddy on :80/:443). */
+  supportsWeb?: boolean;
   servers?: number;
   /** Most-recent heartbeat for live gauges (null until the agent reports). */
   latestHeartbeat?: NodeHeartbeat | null;

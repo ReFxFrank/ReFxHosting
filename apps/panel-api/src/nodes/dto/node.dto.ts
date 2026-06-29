@@ -73,6 +73,15 @@ export class CreateNodeDto {
   @IsOptional()
   @IsString()
   gameDomain?: string;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Whether this node can host web servers (runs Caddy on :80/:443). The scheduler only places web hosting on supportsWeb nodes.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  supportsWeb?: boolean;
 }
 
 export class UpdateNodeDto {
@@ -152,6 +161,13 @@ export class UpdateNodeDto {
   @IsOptional()
   @IsString()
   gameDomain?: string;
+
+  @ApiPropertyOptional({
+    description: 'Whether this node can host web servers (runs Caddy on :80/:443).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  supportsWeb?: boolean;
 }
 
 export class HeartbeatDto {
