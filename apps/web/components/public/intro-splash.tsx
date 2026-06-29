@@ -5,7 +5,7 @@ import { LogoWordmark } from "@/components/brand/logo";
 import { cn } from "@/lib/utils";
 
 const SEEN_KEY = "refx-intro-v1";
-const AUTO_MS = 3400;
+const AUTO_MS = 5200;
 
 /**
  * Cinematic, mouse-reactive intro overlay shown ONCE per session before the public
@@ -78,8 +78,8 @@ export function IntroSplash() {
             "radial-gradient(60% 55% at 50% 38%, rgba(0,114,255,0.22), transparent 70%), radial-gradient(40% 40% at 80% 72%, rgba(34,211,238,0.12), transparent 70%)",
         }}
       />
-      {/* cursor-tracked spotlight (the interactive bit) */}
-      <div ref={spotRef} className="refx-intro-spot pointer-events-none absolute inset-0" />
+      {/* cursor-tracked spotlight (the interactive bit) — moved via transform */}
+      <div ref={spotRef} className="refx-intro-spot pointer-events-none absolute" />
 
       <div className="relative flex flex-col items-center gap-6 px-6 text-center">
         <div className="refx-intro-logo">
