@@ -136,6 +136,7 @@ export default function OrderPage() {
   const product = offerings.find((p) => p.id === productId) ?? null;
   // voiceType drives grouping/icon/labels; perSlot drives the configuration UI.
   const voiceType = product ? isVoiceType(product) : false;
+  const webType = product ? isWebType(product) : false;
   const perSlot = product ? isPerSlot(product) : false;
   const tiers = useMemo(
     () =>
@@ -508,6 +509,7 @@ export default function OrderPage() {
                       active={t.id === tierId}
                       currency={currency}
                       interval={interval}
+                      unit={voiceType ? "slots" : "players"}
                       onSelect={() => setTierId(t.id)}
                     />
                   ))}
@@ -736,7 +738,7 @@ export default function OrderPage() {
           <aside className="lg:sticky lg:top-6 h-fit space-y-3 rounded-xl border p-4">
             <h2 className="text-sm font-semibold">Summary</h2>
             <Row label="Product" value={product.name} />
-            <Row label="Type" value={voiceType ? "Voice server" : "Game server"} />
+            <Row label="Type" value={voiceType ? "Voice server" : webType ? "Web hosting" : "Game server"} />
             {perSlot ? (
               <Row label="Slots" value={String(slots)} />
             ) : (
@@ -967,12 +969,14 @@ function TierCard({
   active,
   currency,
   interval,
+  unit = "players",
   onSelect,
 }: {
   tier: HardwareTier;
   active: boolean;
   currency: string;
   interval: BillingInterval | null;
+  unit?: string;
   onSelect: () => void;
 }) {
   // Show the price for the selected interval if present, else the cheapest.
@@ -1001,7 +1005,7 @@ function TierCard({
         <span className="flex items-center gap-1.5"><Cpu className="size-3.5" /> {tier.cpuCores} vCPU</span>
         <span className="flex items-center gap-1.5"><HardDrive className="size-3.5" /> {(tier.diskMb / 1024).toFixed(0)} GB disk</span>
         {tier.recommendedPlayers != null && (
-          <span className="flex items-center gap-1.5"><Users className="size-3.5" /> ~{tier.recommendedPlayers} players</span>
+          <span className="flex items-center gap-1.5"><Users className="size-3.5" /> ~{tier.recommendedPlayers} {unit}</span>
         )}
       </div>
       <div className="mt-auto flex items-center justify-between pt-1">

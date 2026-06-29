@@ -142,16 +142,22 @@ export function GameDetailHero({
 }
 
 /** Plans + locations summary with the order CTA (config happens in /order). */
-export function GameOrderSummaryPanel({ detail }: { detail: StorefrontGameDetail }) {
+export function GameOrderSummaryPanel({
+  detail,
+  planNote = "Pick a plan in the next step — every plan can switch games later.",
+}: {
+  detail: StorefrontGameDetail;
+  planNote?: string;
+}) {
   const { game, plans, regions } = detail;
+  // Voice servers measure capacity in "slots", not "players".
+  const capacityUnit = game.category?.slug === "voice" ? "slots" : "players";
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-bold tracking-tight">Plans</h2>
-        <p className="text-sm text-muted-foreground">
-          Pick a plan in the next step — every plan can switch games later.
-        </p>
+        <p className="text-sm text-muted-foreground">{planNote}</p>
       </div>
 
       {plans.length === 0 ? (
@@ -193,7 +199,7 @@ export function GameOrderSummaryPanel({ detail }: { detail: StorefrontGameDetail
                 </li>
                 {c.recommendedPlayers != null && (
                   <li className="flex items-center gap-2">
-                    <Users className="size-4 text-primary" /> ~{c.recommendedPlayers} players
+                    <Users className="size-4 text-primary" /> ~{c.recommendedPlayers} {capacityUnit}
                   </li>
                 )}
               </ul>

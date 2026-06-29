@@ -72,6 +72,25 @@ Build progress lives in code; these are the env steps only you can do.
 - [ ] **[dns] (per customer domain)** — customers point their domain's A/AAAA at the
       web node; the panel verifies + Caddy issues SSL automatically.
 - [ ] **[node] Open ports 80 + 443** on the web node's firewall/security group.
+- [ ] **[panel] Reseed to fix the web-hosting order page** — a template that flipped
+      GAME→WEB left stale game tiers (Low/Mid/High) on its product, so Web Hosting
+      showed both its Starter→Pro plans AND game tiers. `seedGameTierProducts` now
+      prunes stray tiers + retires the orphan product; a reseed (same command as A)
+      heals it. No migration needed.
+
+---
+
+## C. TeamSpeak / voice pricing (now FLAT, not per-slot)
+
+- [ ] **[panel] Reseed** to apply the new TeamSpeak pricing model — it's now flat
+      monthly plans by slot capacity (Community 32 / Plus 64 / Pro 128) instead of
+      per-slot metering. Same reseed command as A; the seed migrates the existing
+      `voice-teamspeak3` product in place (existing subscriptions keep their prices).
+- [ ] **[panel] (only for 64+ slot tiers) Apply for an Authorized TeamSpeak Host
+      (ATHP) licence** — TeamSpeak's free licence caps a virtual server at **32
+      slots**, so the Plus (64) / Pro (128) tiers need an ATHP licence configured on
+      the node. Until then, sell the **Community (32)** tier (works out of the box),
+      or hide Plus/Pro in Admin → Products. The 32-slot tier needs no licence.
 
 ---
 

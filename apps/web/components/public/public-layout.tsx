@@ -91,8 +91,8 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
           <div className="space-y-4 lg:col-span-1">
             <LogoWordmark height={24} />
             <p className="max-w-xs text-sm text-muted-foreground">
-              Premium multi-game server hosting. Switch games anytime, manage
-              everything from one panel.
+              Premium server hosting for games, voice and the web. Switch games
+              anytime, manage everything from one panel.
             </p>
             <div className="space-y-2">
               <p className="refx-eyebrow">Get the app</p>

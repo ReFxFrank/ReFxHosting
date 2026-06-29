@@ -588,15 +588,55 @@ async function seedGameTierProducts() {
         await upsertTierPrice(product.id, tier.id, interval, amountMinor);
       }
     }
+
+    // Prune tiers no longer in the spec. A template that flipped kind (GAME↔WEB)
+    // keeps its old tiers because tier seeding is add-only on (productId, name) —
+    // that's what made Web Hosting show stale game Low/Mid/High tiers next to its
+    // Starter→Pro plans. Deactivate the strays + their prices (never delete:
+    // subscriptions reference price ids) so the storefront shows only this set.
+    const desiredNames = resolved.map((r) => r.name);
+    const stale = await prisma.hardwareTier.findMany({
+      where: { productId: product.id, isActive: true, name: { notIn: desiredNames } },
+      select: { id: true },
+    });
+    if (stale.length) {
+      const staleIds = stale.map((s) => s.id);
+      await prisma.hardwareTier.updateMany({
+        where: { id: { in: staleIds } },
+        data: { isActive: false },
+      });
+      await prisma.price.updateMany({
+        where: { hardwareTierId: { in: staleIds } },
+        data: { isActive: false },
+      });
+    }
+
+    // Retire the orphan product left under the other slug scheme when a template
+    // flips kind (e.g. a now-WEB template's old `gs-<slug>` GAME_SERVER product).
+    // It carries the wrong type + stale tiers; deactivate it so it can't surface.
+    const orphanSlug = `${isWeb ? 'gs' : 'web'}-${t.slug}`;
+    await prisma.product.updateMany({
+      where: { slug: orphanSlug, isActive: true },
+      data: { isActive: false },
+    });
+
     count += 1;
   }
   console.log(`  • Game tier products: ${count}`);
 }
 
 /**
- * Create a slot-based VOICE_SERVER product for TeamSpeak 3 (the first voice
- * product), bound to the teamspeak3 template. Per-slot pricing/resources;
- * idempotent + create-only on re-seed.
+ * VOICE_SERVER product for TeamSpeak 3, bound to the teamspeak3 template.
+ *
+ * Pricing is FLAT (HARDWARE_TIER, not per-slot): TeamSpeak is RAM-light, so a
+ * simple monthly figure per slot-capacity tier is both inline with the market
+ * (official TS Crew/Team/Faction at $4.99/$8.99/$17.99; budget hosts ~$3–7/mo)
+ * and far simpler than a per-slot slider. The slot count is carried on each tier
+ * as `recommendedPlayers`, which the provisioner injects as TS3SERVER_MAX_CLIENTS.
+ *
+ * NOTE: 32 slots runs on TeamSpeak's free licence; 64+ slot tiers require an
+ * Authorized TeamSpeak Host (ATHP) licence configured on the platform — see
+ * docs/OPERATOR-TODO.md. Idempotent + self-healing on re-seed.
  */
 async function seedVoiceProducts() {
   const tpl = await prisma.gameTemplate.findUnique({
@@ -611,48 +651,85 @@ async function seedVoiceProducts() {
   const slug = 'voice-teamspeak3';
   const product = await prisma.product.upsert({
     where: { slug },
-    update: { gameTemplateId: tpl.id, type: 'VOICE_SERVER', billingModel: 'PER_SLOT', perSlot: true },
+    // Migrate the original per-slot product to the flat tier model in place
+    // (existing subscriptions keep their own price ids and are unaffected).
+    update: { gameTemplateId: tpl.id, type: 'VOICE_SERVER', billingModel: 'HARDWARE_TIER', perSlot: false },
     create: {
       id: uuidv7(),
       type: 'VOICE_SERVER',
-      billingModel: 'PER_SLOT',
+      billingModel: 'HARDWARE_TIER',
       name: 'TeamSpeak 3',
       slug,
-      description: 'TeamSpeak 3 voice hosting — billed per slot. Lightweight, low-latency VoIP.',
+      description: 'TeamSpeak 3 voice hosting — flat monthly plans by slot capacity. Lightweight, low-latency VoIP.',
       isActive: true,
-      perSlot: true,
+      perSlot: false,
       gameTemplateId: tpl.id,
       allowedTemplateIds: [tpl.id],
-      minSlots: 10,
-      maxSlots: 512,
-      slotStep: 10,
-      // Voice is light: a few MB RAM/slot, negligible CPU/disk.
-      cpuPerSlot: 0.01,
-      memoryMbPerSlot: 8,
-      diskMbPerSlot: 4,
     },
   });
 
-  // ~$0.10 per slot per month, across all six durations (per-slot price).
-  for (const [interval, amountMinor] of intervalPrices(10)) {
-    const prismaInterval = interval as Prisma.PriceCreateInput['interval'];
-    const existing = await prisma.price.findFirst({
-      where: { productId: product.id, hardwareTierId: null, interval: prismaInterval, currency: 'USD' },
+  // Retire the legacy per-slot, product-level prices so only flat tier prices are
+  // active on the storefront (subscriptions reference price ids, so this is safe).
+  await prisma.price.updateMany({
+    where: { productId: product.id, hardwareTierId: null, isActive: true },
+    data: { isActive: false },
+  });
+
+  // Flat slot-capacity tiers. `players` = the TeamSpeak max-client cap (stored as
+  // recommendedPlayers → TS3SERVER_MAX_CLIENTS). CPU/RAM/disk stay tiny — voice is
+  // light — but are sized so the capacity scheduler still places them sensibly.
+  const tiers = [
+    { name: 'Community', description: 'Up to 32 slots — ideal for a clan or friend group.', players: 32, monthly: 399, cpuCores: 0.5, memoryMb: 512, diskMb: 1024, recommended: true, sortOrder: 0 },
+    { name: 'Plus', description: 'Up to 64 slots — for an active community (licence required).', players: 64, monthly: 699, cpuCores: 1, memoryMb: 768, diskMb: 2048, recommended: false, sortOrder: 1 },
+    { name: 'Pro', description: 'Up to 128 slots — large communities & networks (licence required).', players: 128, monthly: 1199, cpuCores: 1, memoryMb: 1024, diskMb: 4096, recommended: false, sortOrder: 2 },
+  ];
+  const desiredNames = tiers.map((t) => t.name);
+
+  for (const spec of tiers) {
+    const existing = await prisma.hardwareTier.findFirst({
+      where: { productId: product.id, name: spec.name },
       select: { id: true },
     });
-    if (existing) continue;
-    await prisma.price.create({
-      data: {
-        id: uuidv7(),
-        productId: product.id,
-        interval: prismaInterval,
-        currency: 'USD',
-        amountMinor,
-        isActive: true,
-      },
+    const tier = existing
+      ? await prisma.hardwareTier.findUniqueOrThrow({ where: { id: existing.id } })
+      : await prisma.hardwareTier.create({
+          data: {
+            id: uuidv7(),
+            productId: product.id,
+            name: spec.name,
+            description: spec.description,
+            cpuCores: spec.cpuCores,
+            memoryMb: spec.memoryMb,
+            diskMb: spec.diskMb,
+            recommendedPlayers: spec.players,
+            isRecommended: spec.recommended,
+            isActive: true,
+            sortOrder: spec.sortOrder,
+          },
+        });
+    for (const [interval, amountMinor] of intervalPrices(spec.monthly)) {
+      await upsertTierPrice(product.id, tier.id, interval, amountMinor);
+    }
+  }
+
+  // Prune any tiers not in the current set (e.g. left from an earlier scheme).
+  const stale = await prisma.hardwareTier.findMany({
+    where: { productId: product.id, isActive: true, name: { notIn: desiredNames } },
+    select: { id: true },
+  });
+  if (stale.length) {
+    const staleIds = stale.map((s) => s.id);
+    await prisma.hardwareTier.updateMany({
+      where: { id: { in: staleIds } },
+      data: { isActive: false },
+    });
+    await prisma.price.updateMany({
+      where: { hardwareTierId: { in: staleIds } },
+      data: { isActive: false },
     });
   }
-  console.log('  • Voice products: TeamSpeak 3 (per-slot)');
+
+  console.log('  • Voice products: TeamSpeak 3 (flat slot-capped tiers)');
 }
 
 /**

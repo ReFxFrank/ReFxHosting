@@ -7,6 +7,8 @@ import {
   HeroSplash,
   HeroBackdrop,
   HostingFeatureCards,
+  ServicesSection,
+  SupportSection,
 } from "@/components/public/home-sections";
 import { HomepageAlertBanner } from "@/components/public/homepage-alert-banner";
 import { AppPromo } from "@/components/public/app-promo";
@@ -69,6 +71,10 @@ export default function HomePage() {
         </div>
       </div>
 
+      <Reveal>
+        <ServicesSection />
+      </Reveal>
+
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
         <CatalogTypeTabs />
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -96,6 +102,10 @@ export default function HomePage() {
 
       <Reveal>
         <HostingFeatureCards />
+      </Reveal>
+
+      <Reveal>
+        <SupportSection />
       </Reveal>
 
       <Reveal>

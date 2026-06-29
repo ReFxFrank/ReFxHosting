@@ -231,15 +231,19 @@ export class ServersService {
           diskMb: prod.diskMb ?? template.recDiskMb,
         };
 
-    // Voice / per-slot servers: record the purchased slot count in the container
-    // environment so the runtime (and TeamSpeak's ServerQuery, where used) can
-    // apply the slot cap. SLOTS is generic; TS3SERVER_MAX_CLIENTS is the
-    // TeamSpeak-specific knob the egg consumes.
-    if (prod.perSlot) {
+    // Voice servers need a slot cap regardless of billing model: a per-slot
+    // product uses the purchased count; a flat-tier voice product (TeamSpeak's
+    // new model) carries it as the tier's recommendedPlayers. Record it in the
+    // container env so the runtime (and TeamSpeak's ServerQuery) can apply it.
+    // SLOTS is generic; TS3SERVER_MAX_CLIENTS is the TeamSpeak-specific knob.
+    const voiceSlots = prod.perSlot
+      ? slots
+      : (tier?.recommendedPlayers ?? prod.slots ?? null);
+    if (voiceSlots && (prod.perSlot || template.slug.startsWith('teamspeak'))) {
       const env = environment as Record<string, string>;
-      env.SLOTS = String(slots);
+      env.SLOTS = String(voiceSlots);
       if (template.slug.startsWith('teamspeak')) {
-        env.TS3SERVER_MAX_CLIENTS = String(slots);
+        env.TS3SERVER_MAX_CLIENTS = String(voiceSlots);
       }
     }
 

@@ -53,7 +53,10 @@ export default function WebHostingDetailPage() {
     <div className="pb-16">
       <GameDetailHero game={detail.data.game} backHref="/web-hosting" backLabel="Web hosting" />
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
-        <GameOrderSummaryPanel detail={detail.data} />
+        <GameOrderSummaryPanel
+          detail={detail.data}
+          planNote="Pick a plan in the next step — upgrade or downgrade anytime."
+        />
         <GameAbout game={detail.data.game} />
       </div>
     </div>

@@ -8,6 +8,17 @@ import {
   Puzzle,
   CreditCard,
   Repeat,
+  Gamepad2,
+  Mic,
+  Globe,
+  Terminal,
+  FolderTree,
+  Database,
+  Clock,
+  Users,
+  LifeBuoy,
+  Activity,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -39,23 +50,23 @@ export function HeroSplash() {
       <div className="relative mx-auto w-full max-w-6xl px-4 pb-12 pt-12 text-center sm:px-6 sm:pt-20">
         <p className="refx-eyebrow mx-auto mb-4 inline-flex items-center gap-2">
           <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-          Multi-game hosting, one platform
+          Game · Voice · Web — one platform
         </p>
         <h1 className="mx-auto max-w-3xl text-balance text-4xl font-extrabold tracking-tight sm:text-6xl">
-          Game server hosting that{" "}
+          Server hosting for{" "}
           <span className="bg-gradient-to-r from-[#3aa0ff] to-[#22d3ee] bg-clip-text text-transparent">
-            switches games on demand
+            games, voice &amp; the web
           </span>
         </h1>
         <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg text-muted-foreground">
-          Buy a server once and swap between Minecraft, Rust, Valheim and more —
-          no re-purchase. Instant setup, DDoS protection, and one clean panel for
-          servers and billing.
+          Run game servers, TeamSpeak voice, and web hosting from a single
+          account. Instant setup, DDoS protection, and NVMe nodes — all managed
+          from one clean panel. Switch your game anytime without re-purchasing.
         </p>
         <div className="mx-auto mt-8 flex w-full max-w-xs flex-col gap-3 sm:max-w-none sm:flex-row sm:justify-center">
           <Button size="lg" asChild className="w-full sm:w-auto">
             <Link href="/games">
-              Browse games <ArrowRight className="size-4" />
+              Browse hosting <ArrowRight className="size-4" />
             </Link>
           </Button>
           <Button size="lg" variant="outline" asChild className="w-full sm:w-auto">
@@ -63,32 +74,110 @@ export function HeroSplash() {
           </Button>
         </div>
         <p className="mt-4 text-xs text-muted-foreground">
-          Trusted infrastructure · {BRAND}
+          Instant setup · DDoS protected · {BRAND}
         </p>
       </div>
     </section>
   );
 }
 
-const FEATURES = [
-  { icon: Zap, title: "Instant setup", body: "Servers provision automatically the moment you order." },
-  { icon: ShieldCheck, title: "DDoS protection", body: "Always-on mitigation keeps your community online." },
-  { icon: Server, title: "Powerful nodes", body: "Modern CPUs and NVMe storage for low-latency play." },
-  { icon: SlidersHorizontal, title: "Simple control panel", body: "Console, files, backups and databases in one place." },
-  { icon: Puzzle, title: "Mod & plugin support", body: "Fabric, Forge, NeoForge and plugins where supported." },
-  { icon: Repeat, title: "Switch games anytime", body: "Keep your server identity — change the game underneath." },
-  { icon: CreditCard, title: "Unified billing", body: "One account for billing and every game server you run." },
+const SERVICES = [
+  {
+    icon: Gamepad2,
+    title: "Game servers",
+    href: "/games",
+    cta: "Browse games",
+    body: "30+ titles — Minecraft, Rust, ARK, Valheim, Palworld and more. Provision in minutes, then switch the game on a server anytime while keeping its identity, backups and subscription.",
+    accent: "text-[#3aa0ff]",
+  },
+  {
+    icon: Mic,
+    title: "Voice servers",
+    href: "/voice",
+    cta: "Browse voice",
+    body: "Crystal-clear, low-latency TeamSpeak voice servers priced per slot. Always-on, DDoS-protected, and managed from the same panel as the rest of your servers.",
+    accent: "text-[#22d3ee]",
+  },
+  {
+    icon: Globe,
+    title: "Web hosting",
+    href: "/web-hosting",
+    cta: "Browse web hosting",
+    body: "Host websites and apps with automatic SSL, custom domains and fast NVMe storage. Starter through Pro tiers that scale CPU, memory and disk as you grow.",
+    accent: "text-emerald-400",
+  },
 ];
 
+/** "What we host" — the three product lines, with a route into each catalog. */
+export function ServicesSection() {
+  return (
+    <section className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
+      <div className="mb-8 text-center">
+        <p className="refx-eyebrow">What we host</p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight">
+          One platform, every kind of server
+        </h2>
+        <p className="mx-auto mt-3 max-w-2xl text-pretty text-muted-foreground">
+          Whatever you&apos;re running, it lives in the same account with unified
+          billing and a single panel — no juggling providers.
+        </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        {SERVICES.map((s) => (
+          <div
+            key={s.title}
+            className="refx-card group flex flex-col rounded-2xl p-6"
+          >
+            <div className="mb-4 inline-flex size-11 items-center justify-center rounded-xl bg-white/[0.04]">
+              <s.icon className={`size-6 ${s.accent}`} />
+            </div>
+            <h3 className="text-lg font-semibold">{s.title}</h3>
+            <p className="mt-2 flex-1 text-sm text-muted-foreground">{s.body}</p>
+            <Link
+              href={s.href}
+              className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-primary transition-colors hover:text-foreground"
+            >
+              {s.cta}
+              <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+const PANEL_FEATURES = [
+  { icon: Terminal, title: "Live console", body: "Real-time console with command input and full server output streaming." },
+  { icon: FolderTree, title: "File manager + SFTP", body: "Browse, edit and upload files in-browser, or connect over secure SFTP." },
+  { icon: Server, title: "One-click backups", body: "Snapshot your server on demand or on a schedule, and restore in seconds." },
+  { icon: Database, title: "Databases", body: "Spin up managed databases for your server with credentials handled for you." },
+  { icon: Clock, title: "Scheduled tasks", body: "Automate restarts, backups and commands with cron-style schedules." },
+  { icon: Users, title: "Sub-users & permissions", body: "Invite staff with fine-grained, per-server access — no shared logins." },
+  { icon: Puzzle, title: "Mods, plugins & modpacks", body: "Fabric, Forge, NeoForge, plugins and one-click modpack installs where supported." },
+  { icon: Repeat, title: "Switch games anytime", body: "Keep your server's identity, SFTP and backups — change the game underneath." },
+  { icon: Zap, title: "Instant setup", body: "Servers provision automatically the moment your order completes." },
+];
+
+/** Panel capabilities — what you actually get inside the control panel. */
 export function HostingFeatureCards() {
   return (
-    <section id="features" className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6">
+    <section
+      id="features"
+      className="mx-auto w-full max-w-6xl scroll-mt-20 px-4 py-16 sm:px-6"
+    >
       <div className="mb-8 text-center">
-        <p className="refx-eyebrow">Why ReFx</p>
-        <h2 className="mt-2 text-3xl font-bold tracking-tight">Everything you need to host</h2>
+        <p className="refx-eyebrow">Your control panel</p>
+        <h2 className="mt-2 text-3xl font-bold tracking-tight">
+          Everything to run a server, in one place
+        </h2>
+        <p className="mx-auto mt-3 max-w-2xl text-pretty text-muted-foreground">
+          A fast, modern panel that puts your console, files, backups, databases
+          and automation a click away — on every server you host.
+        </p>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {FEATURES.map((f) => (
+        {PANEL_FEATURES.map((f) => (
           <div key={f.title} className="refx-card rounded-2xl p-5">
             <div className="mb-3 inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <f.icon className="size-5" />
@@ -97,6 +186,56 @@ export function HostingFeatureCards() {
             <p className="mt-1 text-sm text-muted-foreground">{f.body}</p>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+const SUPPORT = [
+  { icon: LifeBuoy, title: "Real support, fast", body: "Open a ticket from your dashboard and reach our team — we follow every issue through to a fix." },
+  { icon: ShieldCheck, title: "DDoS protection", body: "Always-on mitigation across every node keeps your community and sites online under attack." },
+  { icon: Activity, title: "Status & incidents", body: "A live status page with incident history so you always know exactly what's happening." },
+  { icon: Lock, title: "Secure by default", body: "Two-factor and WebAuthn logins, scoped API keys, and encrypted secrets at rest." },
+  { icon: Server, title: "Modern NVMe nodes", body: "High-clock CPUs and NVMe storage tuned for low latency and quick installs." },
+  { icon: CreditCard, title: "Unified billing", body: "One account and one invoice for every game, voice and web server you run." },
+];
+
+/** Support + reliability — services and guarantees beyond raw hosting. */
+export function SupportSection() {
+  return (
+    <section className="border-y border-white/[0.06] bg-white/[0.015]">
+      <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
+        <div className="mb-8 text-center">
+          <p className="refx-eyebrow">Support &amp; reliability</p>
+          <h2 className="mt-2 text-3xl font-bold tracking-tight">
+            We keep you online and looked after
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-pretty text-muted-foreground">
+            Hosting is more than a box — it&apos;s the protection, monitoring and
+            help behind it. Here&apos;s what backs every plan.
+          </p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {SUPPORT.map((s) => (
+            <div key={s.title} className="refx-card rounded-2xl p-5">
+              <div className="mb-3 inline-flex size-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <s.icon className="size-5" />
+              </div>
+              <h3 className="font-semibold">{s.title}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Button size="lg" asChild>
+            <Link href="/games">
+              Get started <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+          <Button size="lg" variant="outline" asChild>
+            <Link href="/support">Contact support</Link>
+          </Button>
+        </div>
       </div>
     </section>
   );
