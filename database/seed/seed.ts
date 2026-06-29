@@ -1112,7 +1112,10 @@ async function main() {
     // will be re-created; remove its file under database/seed/templates to retire
     // it for good.)
     console.log('Game eggs (auto-load):');
-    const categorySlugToId = await loadGameCategoryMap();
+    // Ensure categories exist (upsert) even on a create-only reseed — loading the
+    // map alone meant a newly-added category (e.g. voice/web) never got created, so
+    // templates referencing it kept a NULL categoryId and never moved out of Games.
+    const categorySlugToId = await seedGameCategories();
     await seedTemplates(categorySlugToId, { createOnly: true });
   }
 
