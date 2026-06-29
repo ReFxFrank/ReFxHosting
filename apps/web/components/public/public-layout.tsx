@@ -12,6 +12,7 @@ const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
 const NAV = [
   { label: "Games", href: "/games" },
+  { label: "Voice", href: "/voice" },
   { label: "Web Hosting", href: "/web-hosting" },
   { label: "Features", href: "/#features" },
   { label: "Team", href: "/team" },

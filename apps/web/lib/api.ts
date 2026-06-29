@@ -717,6 +717,10 @@ export const api = {
     games: () => getList<StorefrontGame>("/catalog/games", { anonymous: true }),
     game: (slug: string) =>
       http.get<StorefrontGameDetail>(`/catalog/games/${slug}`, { anonymous: true }),
+    // Public voice catalog (TeamSpeak etc.).
+    voiceApps: () => getList<StorefrontGame>("/catalog/voice", { anonymous: true }),
+    voiceApp: (slug: string) =>
+      http.get<StorefrontGameDetail>(`/catalog/voice/${slug}`, { anonymous: true }),
     // Public web-hosting catalog (same shape as games).
     webApps: () => getList<StorefrontGame>("/catalog/web", { anonymous: true }),
     webApp: (slug: string) =>

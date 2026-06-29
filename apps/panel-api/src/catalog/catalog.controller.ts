@@ -70,6 +70,18 @@ export class CatalogController {
     return this.storefront.getGame(slug);
   }
 
+  /** Published voice servers for the public voice catalog. */
+  @Get('voice')
+  voice() {
+    return this.storefront.listVoice();
+  }
+
+  /** One published voice server with its per-slot plans + locations. */
+  @Get('voice/:slug')
+  voiceServer(@Param('slug') slug: string) {
+    return this.storefront.getVoiceServer(slug);
+  }
+
   /** Published web-hosting plans for the public web catalog. */
   @Get('web')
   web() {

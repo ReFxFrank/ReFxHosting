@@ -10,6 +10,7 @@ import {
   ALL,
   FEATURED,
 } from "@/components/public/game-grid";
+import { CatalogTypeTabs } from "@/components/public/catalog-type-tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function GamesCatalogPage() {
@@ -40,6 +41,7 @@ export default function GamesCatalogPage() {
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
+      <CatalogTypeTabs />
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="refx-eyebrow">All games</p>

@@ -47,9 +47,18 @@ export class StorefrontService {
     category: { select: { id: true, name: true, slug: true, iconUrl: true } },
   } satisfies Prisma.GameTemplateSelect;
 
-  /** All published games for the homepage/catalog, with a starting price. */
+  /** Published games (excludes voice — that's its own line), with starting price. */
   async listGames() {
-    return this.listCatalog('GAME', 'GAME_SERVER');
+    return this.listCatalog('GAME', 'GAME_SERVER', {
+      NOT: { category: { slug: 'voice' } },
+    });
+  }
+
+  /** Published voice servers (TeamSpeak etc.), with a per-slot starting price. */
+  async listVoice() {
+    return this.listCatalog('GAME', 'VOICE_SERVER', {
+      category: { slug: 'voice' },
+    });
   }
 
   /** All published web-hosting plans for the web catalog, with a starting price. */
@@ -59,11 +68,12 @@ export class StorefrontService {
 
   private async listCatalog(
     kind: 'GAME' | 'WEB',
-    productType: 'GAME_SERVER' | 'WEB_HOSTING',
+    productType: 'GAME_SERVER' | 'WEB_HOSTING' | 'VOICE_SERVER',
+    extraWhere: Prisma.GameTemplateWhereInput = {},
   ) {
     const [items, products] = await Promise.all([
       this.prisma.gameTemplate.findMany({
-        where: { isPublished: true, kind },
+        where: { isPublished: true, kind, ...extraWhere },
         orderBy: [{ featured: 'desc' }, { sortOrder: 'asc' }, { name: 'asc' }],
         select: StorefrontService.CARD_SELECT,
       }),
@@ -89,10 +99,15 @@ export class StorefrontService {
     return this.getDetail(slug, 'WEB', 'WEB_HOSTING');
   }
 
+  /** One published voice server by slug, with its per-slot plans + locations. */
+  async getVoiceServer(slug: string) {
+    return this.getDetail(slug, 'GAME', 'VOICE_SERVER');
+  }
+
   private async getDetail(
     slug: string,
     kind: 'GAME' | 'WEB',
-    productType: 'GAME_SERVER' | 'WEB_HOSTING',
+    productType: 'GAME_SERVER' | 'WEB_HOSTING' | 'VOICE_SERVER',
   ) {
     const game = await this.prisma.gameTemplate.findFirst({
       where: { slug, isPublished: true, kind },
@@ -139,7 +154,7 @@ export class StorefrontService {
   // ---- helpers ------------------------------------------------------------
 
   private activeProducts(
-    type: 'GAME_SERVER' | 'WEB_HOSTING' = 'GAME_SERVER',
+    type: 'GAME_SERVER' | 'WEB_HOSTING' | 'VOICE_SERVER' = 'GAME_SERVER',
   ): Promise<PricedProduct[]> {
     return this.prisma.product.findMany({
       where: { isActive: true, type },

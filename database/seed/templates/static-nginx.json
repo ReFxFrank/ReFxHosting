@@ -1,8 +1,8 @@
 {
-  "name": "Static Website (nginx)",
+  "name": "Web Hosting",
   "slug": "static-nginx",
   "author": "ops@refx.example",
-  "description": "Host a static website (HTML/CSS/JS) on nginx — upload your files and go.",
+  "description": "Host your website — upload your files and go, with a managed container, SFTP, and automatic SSL on your own domain.",
   "category": "web",
   "kind": "WEB",
   "deployMethods": [
@@ -32,5 +32,5 @@
     "nginx",
     "html"
   ],
-  "longDescription": "A lightweight static-site host: upload your HTML/CSS/JS to the public/ folder over SFTP or the file manager and nginx serves it. Map a custom domain with automatic SSL."
+  "longDescription": "Managed web hosting on a dedicated container. Upload your site (HTML/CSS/JS) to the public/ folder over SFTP or the file manager and it goes live instantly; map your own domain and we issue + renew SSL automatically. Pick a plan that fits your traffic."
 }
