@@ -44,7 +44,11 @@ export function TopNav() {
         <Menu className="size-5" />
       </Button>
 
-      <Link href="/dashboard" className="flex items-center gap-2 md:hidden">
+      <Link
+        href="/"
+        aria-label={`${BRAND} — home`}
+        className="flex items-center gap-2 md:hidden"
+      >
         <LogoMark size={24} />
         <span className="font-semibold tracking-tight">{BRAND}</span>
       </Link>

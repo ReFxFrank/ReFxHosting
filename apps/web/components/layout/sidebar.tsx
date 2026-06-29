@@ -57,9 +57,11 @@ export function Sidebar() {
         sidebarCollapsed ? "w-[64px]" : "w-60",
       )}
     >
-      <div
+      <Link
+        href="/"
+        aria-label={`${BRAND} — home`}
         className={cn(
-          "flex h-14 items-center gap-2 border-b border-white/[0.06] px-4",
+          "flex h-14 items-center gap-2 border-b border-white/[0.06] px-4 transition-opacity hover:opacity-80",
           sidebarCollapsed && "justify-center px-2",
         )}
       >
@@ -69,7 +71,7 @@ export function Sidebar() {
             {BRAND}
           </span>
         )}
-      </div>
+      </Link>
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-2">
         {customerNav.map((item) => (
