@@ -520,24 +520,41 @@ async function seedGameTierProducts() {
       data: { isActive: false },
     });
 
-    // Tier definitions scaled around the template's recommended specs.
-    const tiers: Array<{
+    // Tiers: WEB hosting gets storage-forward named plans (Starter→Pro) sized to
+    // real website growth stages; games get Low/Mid/High scaled off rec specs.
+    const resolved: Array<{
       name: string;
       description: string;
-      mult: number;
-      players: number;
+      cpuCores: number;
+      memoryMb: number;
+      diskMb: number;
+      players: number | null;
       recommended: boolean;
       sortOrder: number;
-    }> = [
-      { name: 'Low Tier', description: 'Entry-level — small communities & lightweight servers.', mult: 0.5, players: 10, recommended: false, sortOrder: 0 },
-      { name: 'Mid Tier', description: 'Balanced — the recommended default for most servers.', mult: 1, players: 25, recommended: true, sortOrder: 1 },
-      { name: 'High Tier', description: 'Premium — large communities & heavy/modded servers.', mult: 2, players: 60, recommended: false, sortOrder: 2 },
-    ];
+    }> = isWeb
+      ? [
+          { name: 'Starter', description: 'Blogs, portfolios & small personal sites.', cpuCores: 1, memoryMb: 1024, diskMb: 10240, players: null, recommended: false, sortOrder: 0 },
+          { name: 'Personal', description: 'Growing sites & small businesses.', cpuCores: 1, memoryMb: 2048, diskMb: 25600, players: null, recommended: true, sortOrder: 1 },
+          { name: 'Business', description: 'Business sites & light e-commerce (WooCommerce).', cpuCores: 2, memoryMb: 4096, diskMb: 51200, players: null, recommended: false, sortOrder: 2 },
+          { name: 'Pro', description: 'High-traffic sites & e-commerce.', cpuCores: 4, memoryMb: 8192, diskMb: 102400, players: null, recommended: false, sortOrder: 3 },
+        ]
+      : [
+          { name: 'Low Tier', description: 'Entry-level — small communities & lightweight servers.', mult: 0.5, players: 10, recommended: false, sortOrder: 0 },
+          { name: 'Mid Tier', description: 'Balanced — the recommended default for most servers.', mult: 1, players: 25, recommended: true, sortOrder: 1 },
+          { name: 'High Tier', description: 'Premium — large communities & heavy/modded servers.', mult: 2, players: 60, recommended: false, sortOrder: 2 },
+        ].map((s) => ({
+          name: s.name,
+          description: s.description,
+          cpuCores: Math.max(1, Math.round(t.recCpuCores * s.mult * 2) / 2),
+          memoryMb: Math.max(1024, Math.round((t.recMemoryMb * s.mult) / 512) * 512),
+          diskMb: Math.max(5120, Math.round((t.recDiskMb * s.mult) / 1024) * 1024),
+          players: s.players as number | null,
+          recommended: s.recommended,
+          sortOrder: s.sortOrder,
+        }));
 
-    for (const spec of tiers) {
-      const cpuCores = Math.max(1, Math.round(t.recCpuCores * spec.mult * 2) / 2);
-      const memoryMb = Math.max(1024, Math.round((t.recMemoryMb * spec.mult) / 512) * 512);
-      const diskMb = Math.max(5120, Math.round((t.recDiskMb * spec.mult) / 1024) * 1024);
+    for (const spec of resolved) {
+      const { cpuCores, memoryMb, diskMb } = spec;
       // Price = tier RAM (GB) × PRICE_PER_GB_CENTS, floored at $5.
       const monthly = Math.max(
         500,

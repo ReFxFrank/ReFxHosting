@@ -754,7 +754,8 @@ export type ProductType =
   | "VOICE_SERVER"
   | "VPS"
   | "DEDICATED"
-  | "ADDON";
+  | "ADDON"
+  | "WEB_HOSTING";
 
 export type BillingModel = "HARDWARE_TIER" | "PER_SLOT";
 

@@ -11,6 +11,7 @@ import {
   Server as ServerIcon,
   Gamepad2,
   Mic,
+  Globe,
   Users,
   Check,
   Mail,
@@ -59,6 +60,8 @@ const INTERVAL_ORDER: BillingInterval[] = [
 // Its CONFIGURATION model (tier cards vs slot slider) is independent: that's the
 // billing model. A game can still be per-slot (legacy) and stays a game server.
 const isVoiceType = (p: Product) => p.type === "VOICE_SERVER";
+// Web hosting is its own product line (like voice) — grouped separately in the picker.
+const isWebType = (p: Product) => p.type === "WEB_HOSTING";
 const isPerSlot = (p: Product) => p.billingModel === "PER_SLOT" || p.perSlot;
 const hasActiveTiers = (p: Product) =>
   (p.hardwareTiers ?? []).some((t) => t.isActive !== false);
@@ -108,8 +111,12 @@ export default function OrderPage() {
       ),
     [productsQ.data],
   );
-  const gameOfferings = useMemo(() => offerings.filter((p) => !isVoiceType(p)), [offerings]);
+  const gameOfferings = useMemo(
+    () => offerings.filter((p) => !isVoiceType(p) && !isWebType(p)),
+    [offerings],
+  );
   const voiceOfferings = useMemo(() => offerings.filter((p) => isVoiceType(p)), [offerings]);
+  const webOfferings = useMemo(() => offerings.filter((p) => isWebType(p)), [offerings]);
 
   const [productId, setProductId] = useState<string | null>(null);
   const [tierId, setTierId] = useState<string | null>(null);
@@ -459,6 +466,25 @@ export default function OrderPage() {
                   product={g}
                   active={g.id === productId}
                   icon={templatesById[g.gameTemplateId ?? ""]?.iconUrl}
+                  onSelect={() => setProductId(g.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {webOfferings.length > 0 && (
+          <div className="space-y-2">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Globe className="size-3.5" /> Web hosting
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {webOfferings.map((g) => (
+                <OfferingCard
+                  key={g.id}
+                  product={g}
+                  active={g.id === productId}
+                  icon={templatesById[g.gameTemplateId ?? ""]?.iconUrl || templatesById[g.gameTemplateId ?? ""]?.cardImageUrl}
                   onSelect={() => setProductId(g.id)}
                 />
               ))}
