@@ -37,7 +37,7 @@ jobs:
       # fails with a getConfig validation error on every run.
       DATABASE_URL: postgresql://user:pass@localhost:5432/db
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 20
@@ -66,7 +66,7 @@ jobs:
           - app: shared
             dir: packages/shared
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: 20
@@ -107,7 +107,7 @@ jobs:
       run:
         working-directory: apps/node-agent
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
         with:
           go-version: "1.25"
@@ -145,7 +145,7 @@ jobs:
             context: apps/node-agent
             dockerfile: apps/node-agent/Dockerfile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
       - name: Build (no push)
         uses: docker/build-push-action@v7
