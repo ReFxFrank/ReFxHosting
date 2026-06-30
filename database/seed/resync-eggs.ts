@@ -21,15 +21,23 @@
  * command is never clobbered.
  *
  * SAFE BY DEFAULT (dry run). Pass --apply to write.
- *   # preview every egg:
- *   npm run db:resync-eggs
- *   # preview one egg + its live servers:
- *   npm run db:resync-eggs -- --slug=discord-bot --migrate-servers
- *   # write it:
- *   npm run db:resync-eggs -- --slug=discord-bot --migrate-servers --apply
- * In the stack (prod), run inside the migrate container:
+ *
+ * Local dev checkout (repo root, deps installed):
+ *   npm run db:resync-eggs -- --slug=discord-bot --migrate-servers          # preview
+ *   npm run db:resync-eggs -- --slug=discord-bot --migrate-servers --apply  # write
+ *
+ * In the stack (prod) it runs inside the `migrate` container, the same way the
+ * seed does (ts-node + /repo/tsconfig.seed.json — NOT npm). That container bakes
+ * in a snapshot of database/seed at build time, so REBUILD it from the latest
+ * code first:
+ *   git pull
+ *   infra/scripts/dc build migrate
+ *   # preview:
  *   infra/scripts/dc run --rm --entrypoint sh migrate -c \
- *     "cd /repo && npm run db:resync-eggs -- --slug=discord-bot --migrate-servers --apply"
+ *     "npx ts-node --transpile-only --project /repo/tsconfig.seed.json database/seed/resync-eggs.ts --slug=discord-bot --migrate-servers"
+ *   # write:
+ *   infra/scripts/dc run --rm --entrypoint sh migrate -c \
+ *     "npx ts-node --transpile-only --project /repo/tsconfig.seed.json database/seed/resync-eggs.ts --slug=discord-bot --migrate-servers --apply"
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
