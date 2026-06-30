@@ -86,8 +86,8 @@ export class StripeGateway implements PaymentGateway {
         // `npm install` without a lockfile, so a caret range pulls a newer SDK
         // whose required apiVersion literal no longer matches and fails the build.
         // Bump the SDK and this string together, deliberately
-        // (stripe-node 22.2.3 → 2026-05-27.dahlia).
-        apiVersion: '2026-05-27.dahlia',
+        // (stripe-node 22.3.0 → 2026-06-24.dahlia).
+        apiVersion: '2026-06-24.dahlia',
         typescript: true,
       });
       this.cachedKey = key;
