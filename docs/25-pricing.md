@@ -72,12 +72,12 @@ biweekly are pro-rated (same per-day rate as monthly), not discounted.
 
 | Recommended RAM → games | Low (0.5×) | Mid ⭐ (1×) | High (2×) |
 |---|---|---|---|
-| **2 GB** — Terraria, TF2 | 1 GB → $6 | 2 GB → $12 | 4 GB → $24 |
-| **4 GB** — Minecraft, Paper, Fabric, CS2, Valheim, Garry's Mod, Killing Floor 2, Astroneer, Unturned, ATS | 2 GB → $12 | 4 GB → $24 | 8 GB → $48 |
-| **6 GB** — MC Forge/NeoForge, FiveM, Project Zomboid, 7 Days to Die, Arma 3, Mordhau, V Rising | 3 GB → $18 | 6 GB → $36 | 12 GB → $72 |
-| **8 GB** — Rust, DayZ, Conan Exiles, Enshrouded, Arma Reforger, Squad | 4 GB → $24 | 8 GB → $48 | 16 GB → $96 |
-| **12 GB** — ARK, Satisfactory | 6 GB → $36 | 12 GB → $72 | 24 GB → $144 |
-| **16 GB** — Palworld | 8 GB → $48 | 16 GB → $96 | 32 GB → $192 |
+| **2 GB** — Terraria, TF2, Unturned, ATS | 1 GB → $6 | 2 GB → $12 | 4 GB → $24 |
+| **3 GB** — CS2, Killing Floor 2, Astroneer, tModLoader | 1.5 GB → $9 | 3 GB → $18 | 6 GB → $36 |
+| **4 GB** — Minecraft, Paper, Fabric, Valheim, Garry's Mod, Project Zomboid, Arma 3, Mordhau | 2 GB → $12 | 4 GB → $24 | 8 GB → $48 |
+| **6 GB** — MC Forge/NeoForge, FiveM, 7 Days to Die, V Rising | 3 GB → $18 | 6 GB → $36 | 12 GB → $72 |
+| **8 GB** — Rust, DayZ, Conan Exiles, Enshrouded, Arma Reforger, Squad, Satisfactory | 4 GB → $24 | 8 GB → $48 | 16 GB → $96 |
+| **12 GB** — ARK, Palworld | 6 GB → $36 | 12 GB → $72 | 24 GB → $144 |
 
 _(Voice/TeamSpeak is a separate PER_SLOT product, priced per slot — not on this rate.)_
 
@@ -117,7 +117,7 @@ npm run db:reprice -- --apply
 ### Re-sync tier SPECS to the egg (after a recommended-spec change)
 
 `db:reprice` only changes *prices*. If you change an egg's recommended specs
-(e.g. ARK 12→16 GB), existing tiers keep their original RAM/CPU/disk (they were
+(e.g. ARK 16→12 GB), existing tiers keep their original RAM/CPU/disk (they were
 sized when first seeded). To resize the standard Low/Mid/High tiers from the egg's
 recommended specs **and** reprice them in one pass:
 
@@ -143,4 +143,12 @@ you re-run reprice with `--apply`.
 
 ---
 
-_Last updated: 2026-06-26. Rate: $6/GB/mo USD. Keep the cost-basis table current._
+_Last updated: 2026-06-30. Rate: $6/GB/mo USD. Keep the cost-basis table current._
+
+> **2026-06-30 right-sizing.** Recommended RAM was recalibrated against what each
+> title actually uses in practice (not the publishers' generous headline numbers),
+> trimming over-provisioned eggs so their **Low** tier still boots comfortably:
+> ARK & Palworld 16→12 GB, Satisfactory & Conan Exiles 12→8 GB, Arma 3 / Mordhau /
+> Project Zomboid 6→4 GB, CS2 & Killing Floor 2 4→3 GB. Games whose RAM is a genuine
+> floor (Rust, DayZ, Squad, Enshrouded, V Rising, 7DtD, modded MC, FiveM) were left
+> as-is. Run `npm run db:resync-tiers -- --apply` after deploy to move existing tiers.
