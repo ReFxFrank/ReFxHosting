@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/image"
@@ -668,7 +667,8 @@ func (d *DockerRuntime) Stats(ctx context.Context, s *server.Server) (Stats, err
 	}
 	defer raw.Body.Close()
 
-	var ds types.StatsJSON
+	// Docker SDK v28 renamed types.StatsJSON → container.StatsResponse (same shape).
+	var ds container.StatsResponse
 	if err := decodeJSON(raw.Body, &ds); err != nil {
 		return st, fmt.Errorf("docker: decode stats: %w", err)
 	}
