@@ -3,18 +3,17 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { uuidv7 } from '../common/util/uuid';
-import { isValidCron, nextCronRun } from './cron.util';
+} from "@nestjs/common";
+import { Prisma } from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { uuidv7 } from "../common/util/uuid";
+import { isValidCron, nextCronRun } from "./cron.util";
 import {
   AddSubUserDto,
   CreateAllocationDto,
   CreateScheduleDto,
-  SetVariableDto,
   UpdateScheduleDto,
-} from './dto/server.dto';
+} from "./dto/server.dto";
 
 /**
  * Sub-resource operations scoped to a single server: variables, allocations,
@@ -27,20 +26,167 @@ export class ServerResourcesService {
 
   // ---- variables ---------------------------------------------------------
 
-  listVariables(serverId: string) {
-    return this.prisma.serverVariable.findMany({ where: { serverId } });
+  /**
+   * The server's editable environment variables, for the customer Settings UI.
+   *
+   * The schema (which variables exist, their labels, types and rules) lives on
+   * the GameTemplate; a per-server ServerVariable row only exists once the
+   * customer overrides a value. We therefore MERGE the template's variables with
+   * any override rows so every configurable variable shows up — even on a server
+   * that has never had a row written (previously this returned `[]`, so e.g. a
+   * Discord bot's BOT_TOKEN field never appeared). A variable the template marks
+   * neither viewable nor editable is internal plumbing and is hidden.
+   *
+   * Write-only secrets (userViewable=false, e.g. BOT_TOKEN) never return their
+   * stored value — only an `isSet` flag — so the token isn't shipped to the
+   * browser; the field still accepts a new value.
+   */
+  async listVariables(serverId: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: {
+        variables: { select: { envName: true, value: true } },
+        template: {
+          select: {
+            variables: {
+              orderBy: { sortOrder: "asc" },
+              select: {
+                envName: true,
+                displayName: true,
+                description: true,
+                type: true,
+                defaultValue: true,
+                rules: true,
+                userEditable: true,
+                userViewable: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+
+    const overrides = new Map(
+      server.variables.map((v) => [v.envName, v.value]),
+    );
+
+    return (server.template?.variables ?? [])
+      .filter((v) => v.userViewable || v.userEditable)
+      .map((v) => {
+        const stored = overrides.has(v.envName)
+          ? overrides.get(v.envName)!
+          : (v.defaultValue ?? "");
+        const writeOnly = !v.userViewable;
+        return {
+          envName: v.envName,
+          displayName: v.displayName,
+          description: v.description,
+          type: v.type,
+          rules: v.rules,
+          userEditable: v.userEditable,
+          userViewable: v.userViewable,
+          // Hide the value of write-only secrets; expose only whether it's set.
+          value: writeOnly ? "" : stored,
+          isSet: writeOnly ? stored !== "" : undefined,
+        };
+      });
   }
 
-  setVariable(serverId: string, dto: SetVariableDto) {
+  /**
+   * Set/override an environment variable's value. For a variable the template
+   * defines, we enforce `userEditable` and validate the value against the
+   * template's rules (required/min/max/options). An envName NOT defined by the
+   * template is allowed through as a custom variable (the customer already
+   * controls the startup command, so arbitrary env is within their trust scope).
+   */
+  async setVariable(serverId: string, envName: string, value: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: {
+        id: true,
+        template: {
+          select: {
+            variables: {
+              where: { envName },
+              select: {
+                displayName: true,
+                userEditable: true,
+                rules: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+
+    const def = server.template?.variables[0];
+    if (def) {
+      if (!def.userEditable) {
+        throw new BadRequestException(`"${envName}" can't be edited`);
+      }
+      this.validateVariable(def.displayName || envName, def.rules, value);
+    }
+
     return this.prisma.serverVariable.upsert({
-      where: { serverId_envName: { serverId, envName: dto.envName } },
-      create: { id: uuidv7(), serverId, envName: dto.envName, value: dto.value },
-      update: { value: dto.value },
+      where: { serverId_envName: { serverId, envName } },
+      create: { id: uuidv7(), serverId, envName, value },
+      update: { value },
     });
   }
 
+  /** Validate a value against a template variable's JSON rules. */
+  private validateVariable(label: string, rules: unknown, value: string): void {
+    const r = (rules ?? {}) as {
+      required?: boolean;
+      minLength?: number;
+      maxLength?: number;
+      options?: unknown[];
+      regex?: string;
+    };
+    const trimmed = value.trim();
+    if (r.required && trimmed === "") {
+      throw new BadRequestException(`${label} is required`);
+    }
+    // An empty optional value clears the override — skip the rest.
+    if (trimmed === "" && !r.required) return;
+    if (typeof r.minLength === "number" && value.length < r.minLength) {
+      throw new BadRequestException(
+        `${label} must be at least ${r.minLength} characters`,
+      );
+    }
+    if (typeof r.maxLength === "number" && value.length > r.maxLength) {
+      throw new BadRequestException(
+        `${label} must be at most ${r.maxLength} characters`,
+      );
+    }
+    if (
+      Array.isArray(r.options) &&
+      r.options.length &&
+      !r.options.includes(value)
+    ) {
+      throw new BadRequestException(
+        `${label} must be one of the allowed values`,
+      );
+    }
+    if (typeof r.regex === "string" && r.regex) {
+      let re: RegExp | null = null;
+      try {
+        re = new RegExp(r.regex);
+      } catch {
+        re = null; // a bad pattern in the egg shouldn't block the customer
+      }
+      if (re && !re.test(value)) {
+        throw new BadRequestException(`${label} is not in the expected format`);
+      }
+    }
+  }
+
   async deleteVariable(serverId: string, envName: string) {
-    await this.prisma.serverVariable.deleteMany({ where: { serverId, envName } });
+    await this.prisma.serverVariable.deleteMany({
+      where: { serverId, envName },
+    });
   }
 
   // ---- allocations -------------------------------------------------------
@@ -55,7 +201,7 @@ export class ServerResourcesService {
       where: { id: serverId, deletedAt: null },
       select: { nodeId: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
 
     const existing = await this.prisma.allocation.findUnique({
       where: {
@@ -63,7 +209,7 @@ export class ServerResourcesService {
       },
     });
     if (existing?.serverId && existing.serverId !== serverId) {
-      throw new ConflictException('Allocation already assigned');
+      throw new ConflictException("Allocation already assigned");
     }
 
     if (dto.isPrimary) {
@@ -95,9 +241,9 @@ export class ServerResourcesService {
     const alloc = await this.prisma.allocation.findFirst({
       where: { id: allocationId, serverId },
     });
-    if (!alloc) throw new NotFoundException('Allocation not found');
+    if (!alloc) throw new NotFoundException("Allocation not found");
     if (alloc.isPrimary) {
-      throw new ConflictException('Cannot remove the primary allocation');
+      throw new ConflictException("Cannot remove the primary allocation");
     }
     await this.prisma.allocation.update({
       where: { id: allocationId },
@@ -119,7 +265,7 @@ export class ServerResourcesService {
       where: { email: dto.email.toLowerCase(), deletedAt: null },
       select: { id: true },
     });
-    if (!user) throw new NotFoundException('No user with that email');
+    if (!user) throw new NotFoundException("No user with that email");
 
     const existing = await this.prisma.subUser.findUnique({
       where: { serverId_userId: { serverId, userId: user.id } },
@@ -127,7 +273,7 @@ export class ServerResourcesService {
     if (existing) {
       return this.prisma.subUser.update({
         where: { id: existing.id },
-        data: { permissions: dto.permissions, state: 'ACTIVE' },
+        data: { permissions: dto.permissions, state: "ACTIVE" },
       });
     }
     return this.prisma.subUser.create({
@@ -136,16 +282,20 @@ export class ServerResourcesService {
         serverId,
         userId: user.id,
         permissions: dto.permissions,
-        state: 'ACTIVE',
+        state: "ACTIVE",
       },
     });
   }
 
-  async updateSubUser(serverId: string, subUserId: string, permissions: string[]) {
+  async updateSubUser(
+    serverId: string,
+    subUserId: string,
+    permissions: string[],
+  ) {
     const sub = await this.prisma.subUser.findFirst({
       where: { id: subUserId, serverId },
     });
-    if (!sub) throw new NotFoundException('Sub-user not found');
+    if (!sub) throw new NotFoundException("Sub-user not found");
     return this.prisma.subUser.update({
       where: { id: subUserId },
       data: { permissions },
@@ -155,7 +305,7 @@ export class ServerResourcesService {
   async revokeSubUser(serverId: string, subUserId: string) {
     await this.prisma.subUser.updateMany({
       where: { id: subUserId, serverId },
-      data: { state: 'REVOKED' },
+      data: { state: "REVOKED" },
     });
   }
 
@@ -164,7 +314,7 @@ export class ServerResourcesService {
   listSchedules(serverId: string) {
     return this.prisma.schedule.findMany({
       where: { serverId },
-      include: { tasks: { orderBy: { sortOrder: 'asc' } } },
+      include: { tasks: { orderBy: { sortOrder: "asc" } } },
     });
   }
 
@@ -174,12 +324,12 @@ export class ServerResourcesService {
       where: { id: serverId, deletedAt: null },
       select: { owner: { select: { timezone: true } } },
     });
-    return server?.owner?.timezone || 'UTC';
+    return server?.owner?.timezone || "UTC";
   }
 
   async createSchedule(serverId: string, dto: CreateScheduleDto) {
     if (!isValidCron(dto.cron)) {
-      throw new BadRequestException('Invalid cron expression');
+      throw new BadRequestException("Invalid cron expression");
     }
     const isActive = dto.isActive ?? true;
     const tz = await this.ownerTimezone(serverId);
@@ -205,7 +355,7 @@ export class ServerResourcesService {
           })),
         },
       },
-      include: { tasks: { orderBy: { sortOrder: 'asc' } } },
+      include: { tasks: { orderBy: { sortOrder: "asc" } } },
     });
   }
 
@@ -217,9 +367,9 @@ export class ServerResourcesService {
     const existing = await this.prisma.schedule.findFirst({
       where: { id: scheduleId, serverId },
     });
-    if (!existing) throw new NotFoundException('Schedule not found');
+    if (!existing) throw new NotFoundException("Schedule not found");
     if (dto.cron !== undefined && !isValidCron(dto.cron)) {
-      throw new BadRequestException('Invalid cron expression');
+      throw new BadRequestException("Invalid cron expression");
     }
     const cron = dto.cron ?? existing.cron;
     const isActive = dto.isActive ?? existing.isActive;
@@ -231,7 +381,8 @@ export class ServerResourcesService {
     };
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.cron !== undefined) data.cron = dto.cron;
-    if (dto.onlyWhenOnline !== undefined) data.onlyWhenOnline = dto.onlyWhenOnline;
+    if (dto.onlyWhenOnline !== undefined)
+      data.onlyWhenOnline = dto.onlyWhenOnline;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     if (dto.tasks !== undefined) {
       data.tasks = {
@@ -249,7 +400,7 @@ export class ServerResourcesService {
     return this.prisma.schedule.update({
       where: { id: scheduleId },
       data,
-      include: { tasks: { orderBy: { sortOrder: 'asc' } } },
+      include: { tasks: { orderBy: { sortOrder: "asc" } } },
     });
   }
 

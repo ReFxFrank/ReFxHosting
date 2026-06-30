@@ -26,6 +26,7 @@ import type {
   Server,
   ServerDatabase,
   ServerStat,
+  ServerVariableField,
   Session,
   ApiKey,
   Subscription,
@@ -92,7 +93,12 @@ export class ApiError extends Error {
   status: number;
   code?: string;
   details?: unknown;
-  constructor(status: number, message: string, code?: string, details?: unknown) {
+  constructor(
+    status: number,
+    message: string,
+    code?: string,
+    details?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -124,9 +130,7 @@ async function doRefresh(): Promise<AuthTokens | null> {
     });
     if (res.ok) {
       const json = (await res.json().catch(() => null)) as
-        | { success?: boolean; data?: AuthTokens }
-        | AuthTokens
-        | null;
+        { success?: boolean; data?: AuthTokens } | AuthTokens | null;
       const data = ((json as { data?: AuthTokens } | null)?.data ??
         json) as AuthTokens | null;
       if (data?.accessToken) {
@@ -245,7 +249,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
       res.status,
       Array.isArray(message) ? message.join(", ") : message,
       isJson ? data?.code : undefined,
-      isJson ? data?.details ?? data?.errors : undefined,
+      isJson ? (data?.details ?? data?.errors) : undefined,
     );
   }
 
@@ -260,9 +264,9 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     "data" in (data as object)
   ) {
     const env = data as { success: true; data: unknown; meta?: unknown };
-    return (env.meta !== undefined
-      ? { data: env.data, meta: env.meta }
-      : env.data) as T;
+    return (
+      env.meta !== undefined ? { data: env.data, meta: env.meta } : env.data
+    ) as T;
   }
 
   return data as T;
@@ -318,8 +322,16 @@ export const api = {
       country: string;
     }) =>
       http.post<LoginResponse>("/auth/register", input, { anonymous: true }),
-    verifyMfa: (mfaToken: string, code: string, method: "totp" | "recovery" = "totp") =>
-      http.post<LoginResponse>("/auth/mfa/verify", { mfaToken, code, method }, { anonymous: true }),
+    verifyMfa: (
+      mfaToken: string,
+      code: string,
+      method: "totp" | "recovery" = "totp",
+    ) =>
+      http.post<LoginResponse>(
+        "/auth/mfa/verify",
+        { mfaToken, code, method },
+        { anonymous: true },
+      ),
     // Passkey (WebAuthn) sign-in: fetch assertion options for the challenge, then
     // exchange the browser assertion for a session.
     webauthnLoginOptions: (mfaToken: string) =>
@@ -339,7 +351,11 @@ export const api = {
     forgotPassword: (email: string) =>
       http.post<void>("/auth/forgot-password", { email }, { anonymous: true }),
     resetPassword: (token: string, newPassword: string) =>
-      http.post<void>("/auth/reset-password", { token, newPassword }, { anonymous: true }),
+      http.post<void>(
+        "/auth/reset-password",
+        { token, newPassword },
+        { anonymous: true },
+      ),
     resetTokenValid: (token: string) =>
       http.get<{ valid: boolean }>("/auth/reset-password/valid", {
         anonymous: true,
@@ -348,7 +364,11 @@ export const api = {
     verifyEmail: (token: string) =>
       http.post<void>("/auth/verify-email", { token }, { anonymous: true }),
     resendVerification: (email: string) =>
-      http.post<void>("/auth/resend-verification", { email }, { anonymous: true }),
+      http.post<void>(
+        "/auth/resend-verification",
+        { email },
+        { anonymous: true },
+      ),
   },
 
   account: {
@@ -356,7 +376,8 @@ export const api = {
     changePassword: (currentPassword: string, newPassword: string) =>
       http.post<void>("/account/password", { currentPassword, newPassword }),
     // Avatar upload (browser-downscaled data URL).
-    uploadAvatar: (dataUrl: string) => http.post<User>("/account/avatar", { dataUrl }),
+    uploadAvatar: (dataUrl: string) =>
+      http.post<User>("/account/avatar", { dataUrl }),
     // GDPR: export everything we hold, or delete the account.
     exportData: () => http.get<Record<string, unknown>>("/account/export"),
     deleteAccount: () => http.delete<void>("/account"),
@@ -367,17 +388,30 @@ export const api = {
       http.post<ApiKey>("/account/api-keys", input),
     revokeApiKey: (id: string) => http.delete<void>(`/account/api-keys/${id}`),
     // TOTP (authenticator app) management.
-    totpSetup: () => http.post<{ secret: string; otpauthUrl: string }>("/account/mfa/totp/setup"),
+    totpSetup: () =>
+      http.post<{ secret: string; otpauthUrl: string }>(
+        "/account/mfa/totp/setup",
+      ),
     totpEnable: (code: string) =>
-      http.post<{ recoveryCodes: string[] }>("/account/mfa/totp/enable", { code }),
-    totpDisable: (code: string) => http.post<void>("/account/mfa/totp/disable", { code }),
+      http.post<{ recoveryCodes: string[] }>("/account/mfa/totp/enable", {
+        code,
+      }),
+    totpDisable: (code: string) =>
+      http.post<void>("/account/mfa/totp/disable", { code }),
     // Passkey (WebAuthn) management — uses the authenticated /auth endpoints.
-    passkeys: () => http.get<WebAuthnCredential[]>("/auth/mfa/webauthn/credentials"),
+    passkeys: () =>
+      http.get<WebAuthnCredential[]>("/auth/mfa/webauthn/credentials"),
     passkeyRegisterOptions: () =>
-      http.post<PublicKeyCredentialCreationOptionsJSON>("/auth/mfa/webauthn/register/options"),
+      http.post<PublicKeyCredentialCreationOptionsJSON>(
+        "/auth/mfa/webauthn/register/options",
+      ),
     passkeyRegisterVerify: (response: unknown, label?: string) =>
-      http.post<{ verified: boolean }>("/auth/mfa/webauthn/register/verify", { response, label }),
-    deletePasskey: (id: string) => http.delete<void>(`/auth/mfa/webauthn/credentials/${id}`),
+      http.post<{ verified: boolean }>("/auth/mfa/webauthn/register/verify", {
+        response,
+        label,
+      }),
+    deletePasskey: (id: string) =>
+      http.delete<void>(`/auth/mfa/webauthn/credentials/${id}`),
     notifications: () => getList<Notification>("/account/notifications"),
     notificationsUnreadCount: () =>
       http.get<{ unread: number }>("/account/notifications/unread-count"),
@@ -398,7 +432,9 @@ export const api = {
     // Web-app custom domains.
     domains: (id: string) => getList<WebDomain>(`/servers/${id}/domains`),
     addDomain: (id: string, hostname: string) =>
-      http.post<WebDomain & { dnsTarget: string }>(`/servers/${id}/domains`, { hostname }),
+      http.post<WebDomain & { dnsTarget: string }>(`/servers/${id}/domains`, {
+        hostname,
+      }),
     verifyDomain: (id: string, domainId: string) =>
       http.post<WebDomain & { dnsTarget: string; verified: boolean }>(
         `/servers/${id}/domains/${domainId}/verify`,
@@ -415,12 +451,21 @@ export const api = {
       http.post<void>(`/servers/${id}/command`, { command }),
     rename: (id: string, name: string, description?: string) =>
       http.patch<Server>(`/servers/${id}`, { name, description }),
-    updateStartup: (id: string, input: { startupCommand?: string; dockerImage?: string }) =>
-      http.patch<Server>(`/servers/${id}/startup`, input),
+    updateStartup: (
+      id: string,
+      input: { startupCommand?: string; dockerImage?: string },
+    ) => http.patch<Server>(`/servers/${id}/startup`, input),
     variables: (id: string) =>
-      http.get<{ envName: string; value: string }[]>(`/servers/${id}/variables`),
+      http.get<ServerVariableField[]>(`/servers/${id}/variables`),
     setVariable: (id: string, envName: string, value: string) =>
-      http.put<void>(`/servers/${id}/variables/${envName}`, { value }),
+      http.put<void>(
+        `/servers/${id}/variables/${encodeURIComponent(envName)}`,
+        { value },
+      ),
+    deleteVariable: (id: string, envName: string) =>
+      http.delete<void>(
+        `/servers/${id}/variables/${encodeURIComponent(envName)}`,
+      ),
     reinstall: (id: string) => http.post<void>(`/servers/${id}/reinstall`),
     changeMinecraftVersion: (id: string, version: string) =>
       http.patch<{ accepted: true; version: string }>(
@@ -437,20 +482,29 @@ export const api = {
       ),
     mods: {
       context: (id: string) =>
-        http.get<{ loader: string; kind: "mod" | "plugin"; directory: string; gameVersion: string }>(
-          `/servers/${id}/mods/context`,
-        ),
+        http.get<{
+          loader: string;
+          kind: "mod" | "plugin";
+          directory: string;
+          gameVersion: string;
+        }>(`/servers/${id}/mods/context`),
       search: (id: string, q: string) =>
-        getList<ModrinthProject>(`/servers/${id}/mods/search`, { query: { q } }),
+        getList<ModrinthProject>(`/servers/${id}/mods/search`, {
+          query: { q },
+        }),
       versions: (id: string, projectId: string) =>
         getList<ModrinthVersion>(`/servers/${id}/mods/versions`, {
           query: { projectId },
         }),
       installed: (id: string) =>
-        http.get<{ directory: string; files: { name: string; size: number }[] }>(
-          `/servers/${id}/mods/installed`,
-        ),
-      install: (id: string, input: { projectId?: string; versionId?: string }) =>
+        http.get<{
+          directory: string;
+          files: { name: string; size: number }[];
+        }>(`/servers/${id}/mods/installed`),
+      install: (
+        id: string,
+        input: { projectId?: string; versionId?: string },
+      ) =>
         http.post<{ installed: true; filename: string; directory: string }>(
           `/servers/${id}/mods/install`,
           input,
@@ -464,13 +518,17 @@ export const api = {
     // version + loader automatically, then provisions the pack's mods/config.
     modpacks: {
       search: (id: string, q: string) =>
-        getList<ModrinthProject>(`/servers/${id}/modpacks/search`, { query: { q } }),
+        getList<ModrinthProject>(`/servers/${id}/modpacks/search`, {
+          query: { q },
+        }),
       versions: (id: string, projectId: string) =>
         getList<ModrinthVersion>(`/servers/${id}/modpacks/versions`, {
           query: { projectId },
         }),
       install: (id: string, versionId: string) =>
-        http.post<{ accepted: true }>(`/servers/${id}/modpacks/install`, { versionId }),
+        http.post<{ accepted: true }>(`/servers/${id}/modpacks/install`, {
+          versionId,
+        }),
       installed: (id: string) =>
         http.get<{ installed: InstalledModpack | null }>(
           `/servers/${id}/modpacks/installed`,
@@ -479,15 +537,19 @@ export const api = {
         http.post<{ accepted: true }>(`/servers/${id}/modpacks/uninstall`),
     },
     sftp: (id: string) =>
-      http.get<{ host: string; port: number; username: string }>(`/servers/${id}/sftp`),
+      http.get<{ host: string; port: number; username: string }>(
+        `/servers/${id}/sftp`,
+      ),
     rotateSftp: (id: string) =>
       http.post<{ password: string }>(`/servers/${id}/sftp/rotate`),
 
     // Game switching — the signature flow.
     switchableTemplates: (id: string) =>
       getList<GameTemplate>(`/servers/${id}/switch-game/templates`),
-    switchGame: (id: string, input: { templateId: string; preserveData: boolean }) =>
-      http.post<void>(`/servers/${id}/switch-game`, input),
+    switchGame: (
+      id: string,
+      input: { templateId: string; preserveData: boolean },
+    ) => http.post<void>(`/servers/${id}/switch-game`, input),
 
     // Resource upgrade/downgrade.
     upgradeOptions: (id: string) =>
@@ -527,19 +589,38 @@ export const api = {
       }>(`/servers/${id}/upgrade/options`),
     upgradePreview: (
       id: string,
-      input: Partial<{ hardwareTierId: string; slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
+      input: Partial<{
+        hardwareTierId: string;
+        slots: number;
+        cpuCores: number;
+        memoryMb: number;
+        diskMb: number;
+      }>,
     ) =>
-      http.post<{ amountMinor: number; currency: string; interval: string; deltaMinor: number }>(
-        `/servers/${id}/upgrade/preview`,
-        input,
-      ),
+      http.post<{
+        amountMinor: number;
+        currency: string;
+        interval: string;
+        deltaMinor: number;
+      }>(`/servers/${id}/upgrade/preview`, input),
     upgrade: (
       id: string,
-      input: Partial<{ hardwareTierId: string; slots: number; cpuCores: number; memoryMb: number; diskMb: number }>,
+      input: Partial<{
+        hardwareTierId: string;
+        slots: number;
+        cpuCores: number;
+        memoryMb: number;
+        diskMb: number;
+      }>,
     ) =>
       http.post<
         | { status: "applied" }
-        | { status: "invoiced"; invoiceId: string; amountMinor: number; currency: string }
+        | {
+            status: "invoiced";
+            invoiceId: string;
+            amountMinor: number;
+            currency: string;
+          }
         | { status: "scheduled"; effectiveAt: string }
       >(`/servers/${id}/upgrade`, input),
     cancelPlanChange: (id: string) =>
@@ -569,7 +650,11 @@ export const api = {
     voiceRename: (id: string, name: string) =>
       http.post<{ accepted: true }>(`/servers/${id}/voice/rename`, { name }),
     voiceKick: (id: string, clid: string, reason?: string, label?: string) =>
-      http.post<{ accepted: true }>(`/servers/${id}/voice/kick`, { clid, reason, label }),
+      http.post<{ accepted: true }>(`/servers/${id}/voice/kick`, {
+        clid,
+        reason,
+        label,
+      }),
     voiceBan: (
       id: string,
       clid: string,
@@ -584,7 +669,11 @@ export const api = {
         label,
       }),
     voiceMove: (id: string, clid: string, cid: string, label?: string) =>
-      http.post<{ accepted: true }>(`/servers/${id}/voice/move`, { clid, cid, label }),
+      http.post<{ accepted: true }>(`/servers/${id}/voice/move`, {
+        clid,
+        cid,
+        label,
+      }),
     voiceUnban: (id: string, banid: string) =>
       http.post<{ accepted: true }>(`/servers/${id}/voice/unban`, { banid }),
     voiceAudit: (id: string) =>
@@ -634,7 +723,9 @@ export const api = {
       uploadUrl: (id: string, path: string) =>
         http.post<{ url: string }>(`/servers/${id}/files/upload-url`, { path }),
       downloadUrl: (id: string, path: string) =>
-        http.get<{ url: string }>(`/servers/${id}/files/download-url`, { query: { path } }),
+        http.get<{ url: string }>(`/servers/${id}/files/download-url`, {
+          query: { path },
+        }),
     },
 
     // Backups
@@ -645,20 +736,32 @@ export const api = {
       restore: (id: string, backupId: string) =>
         http.post<void>(`/servers/${id}/backups/${backupId}/restore`),
       lock: (id: string, backupId: string, locked: boolean) =>
-        http.patch<Backup>(`/servers/${id}/backups/${backupId}`, { isLocked: locked }),
+        http.patch<Backup>(`/servers/${id}/backups/${backupId}`, {
+          isLocked: locked,
+        }),
       delete: (id: string, backupId: string) =>
         http.delete<void>(`/servers/${id}/backups/${backupId}`),
       downloadUrl: (id: string, backupId: string) =>
-        http.get<{ url: string }>(`/servers/${id}/backups/${backupId}/download`),
+        http.get<{ url: string }>(
+          `/servers/${id}/backups/${backupId}/download`,
+        ),
     },
 
     // Databases
     databases: {
       list: (id: string) => getList<ServerDatabase>(`/servers/${id}/databases`),
-      create: (id: string, input: { engine: ServerDatabase["engine"]; name: string; remoteAccess?: string }) =>
-        http.post<ServerDatabase>(`/servers/${id}/databases`, input),
+      create: (
+        id: string,
+        input: {
+          engine: ServerDatabase["engine"];
+          name: string;
+          remoteAccess?: string;
+        },
+      ) => http.post<ServerDatabase>(`/servers/${id}/databases`, input),
       rotatePassword: (id: string, dbId: string) =>
-        http.post<{ password: string }>(`/servers/${id}/databases/${dbId}/rotate`),
+        http.post<{ password: string }>(
+          `/servers/${id}/databases/${dbId}/rotate`,
+        ),
       delete: (id: string, dbId: string) =>
         http.delete<void>(`/servers/${id}/databases/${dbId}`),
     },
@@ -678,7 +781,8 @@ export const api = {
   },
 
   catalog: {
-    products: (query?: { type?: string }) => getList<Product>("/catalog/products", { query }),
+    products: (query?: { type?: string }) =>
+      getList<Product>("/catalog/products", { query }),
     product: (slug: string) => http.get<Product>(`/catalog/products/${slug}`),
     // Regions with an online node that has room for the given config.
     locations: (
@@ -723,19 +827,29 @@ export const api = {
     // Public storefront (unauthenticated).
     games: () => getList<StorefrontGame>("/catalog/games", { anonymous: true }),
     game: (slug: string) =>
-      http.get<StorefrontGameDetail>(`/catalog/games/${slug}`, { anonymous: true }),
+      http.get<StorefrontGameDetail>(`/catalog/games/${slug}`, {
+        anonymous: true,
+      }),
     // Public voice catalog (TeamSpeak etc.).
-    voiceApps: () => getList<StorefrontGame>("/catalog/voice", { anonymous: true }),
+    voiceApps: () =>
+      getList<StorefrontGame>("/catalog/voice", { anonymous: true }),
     voiceApp: (slug: string) =>
-      http.get<StorefrontGameDetail>(`/catalog/voice/${slug}`, { anonymous: true }),
+      http.get<StorefrontGameDetail>(`/catalog/voice/${slug}`, {
+        anonymous: true,
+      }),
     // Public web-hosting catalog (same shape as games).
     webApps: () => getList<StorefrontGame>("/catalog/web", { anonymous: true }),
     webApp: (slug: string) =>
-      http.get<StorefrontGameDetail>(`/catalog/web/${slug}`, { anonymous: true }),
+      http.get<StorefrontGameDetail>(`/catalog/web/${slug}`, {
+        anonymous: true,
+      }),
     // Public Discord/app bot-hosting catalog (surfaced under web hosting).
-    botApps: () => getList<StorefrontGame>("/catalog/bots", { anonymous: true }),
+    botApps: () =>
+      getList<StorefrontGame>("/catalog/bots", { anonymous: true }),
     botApp: (slug: string) =>
-      http.get<StorefrontGameDetail>(`/catalog/bots/${slug}`, { anonymous: true }),
+      http.get<StorefrontGameDetail>(`/catalog/bots/${slug}`, {
+        anonymous: true,
+      }),
     homepageAlerts: () =>
       getList<HomepageAlert>("/catalog/homepage-alerts", { anonymous: true }),
     team: () => getList<TeamMember>("/catalog/team", { anonymous: true }),
@@ -760,17 +874,26 @@ export const api = {
       couponCode?: string;
       giftCardCode?: string;
       useCredit?: boolean;
-    }) => http.post<{ checkoutUrl?: string; serverId?: string; invoiceId?: string; paid?: boolean }>("/orders", input),
+    }) =>
+      http.post<{
+        checkoutUrl?: string;
+        serverId?: string;
+        invoiceId?: string;
+        paid?: boolean;
+      }>("/orders", input),
   },
 
   billing: {
     /** Public-safe gateway config for the checkout button (Stripe publishable key). */
     config: () => http.get<GatewayStatus>("/billing/config"),
     validateCoupon: (code: string, subtotalMinor: number) =>
-      http.post<{ valid: boolean; code: string; kind: CouponKind; value: number; discountMinor: number }>(
-        "/billing/coupons/validate",
-        { code, subtotalMinor },
-      ),
+      http.post<{
+        valid: boolean;
+        code: string;
+        kind: CouponKind;
+        value: number;
+        discountMinor: number;
+      }>("/billing/coupons/validate", { code, subtotalMinor }),
     lookupGiftCard: (code: string) =>
       http.post<{ code: string; balanceMinor: number; currency: string }>(
         "/billing/gift-cards/lookup",
@@ -799,7 +922,9 @@ export const api = {
       }),
     subscriptions: () => getList<Subscription>("/billing/subscriptions"),
     cancelSubscription: (id: string, atPeriodEnd = true) =>
-      http.post<Subscription>(`/billing/subscriptions/${id}/cancel`, { atPeriodEnd }),
+      http.post<Subscription>(`/billing/subscriptions/${id}/cancel`, {
+        atPeriodEnd,
+      }),
     resumeSubscription: (id: string) =>
       http.post<Subscription>(`/billing/subscriptions/${id}/resume`),
     paymentMethods: () => getList<PaymentMethod>("/billing/payment-methods"),
@@ -810,7 +935,9 @@ export const api = {
         "/billing/payment-methods/setup",
       ),
     confirmCard: (setupIntentId: string) =>
-      http.post<PaymentMethod>("/billing/payment-methods/confirm", { setupIntentId }),
+      http.post<PaymentMethod>("/billing/payment-methods/confirm", {
+        setupIntentId,
+      }),
     setDefaultPaymentMethod: (id: string) =>
       http.post<void>(`/billing/payment-methods/${id}/default`),
     removePaymentMethod: (id: string) =>
@@ -818,14 +945,28 @@ export const api = {
   },
 
   support: {
-    tickets: (query?: { state?: string; priority?: string; q?: string; page?: number; mine?: boolean }) =>
-      http.get<Paginated<Ticket>>("/support/tickets", { query }),
+    tickets: (query?: {
+      state?: string;
+      priority?: string;
+      q?: string;
+      page?: number;
+      mine?: boolean;
+    }) => http.get<Paginated<Ticket>>("/support/tickets", { query }),
     ticket: (id: string) =>
-      http.get<Ticket & { messages: TicketMessage[] }>(`/support/tickets/${id}`),
-    createTicket: (input: { subject: string; body: string; priority?: string; categoryId?: string }) =>
-      http.post<Ticket>("/support/tickets", input),
+      http.get<Ticket & { messages: TicketMessage[] }>(
+        `/support/tickets/${id}`,
+      ),
+    createTicket: (input: {
+      subject: string;
+      body: string;
+      priority?: string;
+      categoryId?: string;
+    }) => http.post<Ticket>("/support/tickets", input),
     reply: (id: string, body: string, isInternal = false) =>
-      http.post<TicketMessage>(`/support/tickets/${id}/messages`, { body, isInternal }),
+      http.post<TicketMessage>(`/support/tickets/${id}/messages`, {
+        body,
+        isInternal,
+      }),
     // Staff workflow: state / priority / category / assignee.
     updateTicket: (
       id: string,
@@ -849,16 +990,29 @@ export const api = {
     deleteTicket: (id: string) => http.delete<void>(`/support/tickets/${id}`),
     staff: () => getList<StaffMember>("/support/staff"),
     categories: () => getList<TicketCategory>("/support/categories"),
-    createCategory: (input: { name: string; slug: string; slaFirstResponseMin?: number; slaResolutionMin?: number }) =>
-      http.post<TicketCategory>("/support/categories", input),
+    createCategory: (input: {
+      name: string;
+      slug: string;
+      slaFirstResponseMin?: number;
+      slaResolutionMin?: number;
+    }) => http.post<TicketCategory>("/support/categories", input),
     updateCategory: (
       id: string,
-      input: Partial<{ name: string; slug: string; slaFirstResponseMin: number; slaResolutionMin: number }>,
+      input: Partial<{
+        name: string;
+        slug: string;
+        slaFirstResponseMin: number;
+        slaResolutionMin: number;
+      }>,
     ) => http.patch<TicketCategory>(`/support/categories/${id}`, input),
-    deleteCategory: (id: string) => http.delete<void>(`/support/categories/${id}`),
+    deleteCategory: (id: string) =>
+      http.delete<void>(`/support/categories/${id}`),
     cannedResponses: () => getList<CannedResponse>("/support/canned-responses"),
-    createCannedResponse: (input: { title: string; body: string; tags?: string[] }) =>
-      http.post<CannedResponse>("/support/canned-responses", input),
+    createCannedResponse: (input: {
+      title: string;
+      body: string;
+      tags?: string[];
+    }) => http.post<CannedResponse>("/support/canned-responses", input),
     updateCannedResponse: (
       id: string,
       input: Partial<{ title: string; body: string; tags: string[] }>,
@@ -874,8 +1028,19 @@ export const api = {
     summary: () =>
       http.get<{
         servers: Server[];
-        usage: { cpuPct: number; memUsedMb: number; memTotalMb: number; diskUsedMb: number; diskTotalMb: number };
-        billing: { nextInvoiceMinor: number; currency: string; nextDueAt: string | null; openInvoices: number };
+        usage: {
+          cpuPct: number;
+          memUsedMb: number;
+          memTotalMb: number;
+          diskUsedMb: number;
+          diskTotalMb: number;
+        };
+        billing: {
+          nextInvoiceMinor: number;
+          currency: string;
+          nextDueAt: string | null;
+          openInvoices: number;
+        };
         activity: AuditLog[];
         alerts: GlobalAlert[];
       }>("/dashboard"),
@@ -889,7 +1054,9 @@ export const api = {
     regions: () => getList<Region>("/admin/nodes/regions"),
     node: (id: string) => http.get<Node>(`/admin/nodes/${id}`),
     nodeHeartbeats: (id: string, range = "1h") =>
-      getList<NodeHeartbeat>(`/admin/nodes/${id}/heartbeats`, { query: { range } }),
+      getList<NodeHeartbeat>(`/admin/nodes/${id}/heartbeats`, {
+        query: { range },
+      }),
     nodePing: (id: string) => http.get<NodePing>(`/admin/nodes/${id}/ping`),
     restartNodeAgent: (id: string) =>
       http.post<{ restarting: true }>(`/admin/nodes/${id}/restart-agent`),
@@ -900,13 +1067,14 @@ export const api = {
     agentLatestVersion: () =>
       http.get<{ latest: string | null }>(`/admin/nodes/agent-latest`),
     updateAllNodeAgents: (ids?: string[]) =>
-      http.post<{ updated: string[]; failed: { id: string; name: string; reason: string }[] }>(
-        `/admin/nodes/update-all-agents`,
-        ids && ids.length ? { ids } : {},
-      ),
+      http.post<{
+        updated: string[];
+        failed: { id: string; name: string; reason: string }[];
+      }>(`/admin/nodes/update-all-agents`, ids && ids.length ? { ids } : {}),
     pinNodeCert: (id: string) =>
       http.post<{ sha256: string }>(`/admin/nodes/${id}/pin-cert`),
-    unpinNodeCert: (id: string) => http.delete<void>(`/admin/nodes/${id}/pin-cert`),
+    unpinNodeCert: (id: string) =>
+      http.delete<void>(`/admin/nodes/${id}/pin-cert`),
     createNode: (input: Partial<Node> & { regionId: string }) =>
       http.post<Node & { bootstrapToken: string }>("/admin/nodes", input),
     /** Rotate a node's single-use, time-boxed bootstrap token. Returns the new
@@ -960,65 +1128,89 @@ export const api = {
       http.patch<User>(`/admin/users/${id}`, { state }),
     verifyUserEmail: (id: string) =>
       http.post<User>(`/admin/users/${id}/verify-email`),
-    setUserRole: (id: string, input: { role?: User["globalRole"]; roleId?: string }) =>
-      http.patch<User>(`/admin/users/${id}/role`, input),
+    setUserRole: (
+      id: string,
+      input: { role?: User["globalRole"]; roleId?: string },
+    ) => http.patch<User>(`/admin/users/${id}/role`, input),
     deleteUser: (id: string) => http.delete<void>(`/admin/users/${id}`),
     purgeUser: (id: string) => http.post<void>(`/admin/users/${id}/purge`),
     sendUserPasswordReset: (id: string) =>
       http.post<{ sent: true }>(`/admin/users/${id}/send-password-reset`),
     setUserPassword: (id: string, password?: string) =>
-      http.post<{ password: string }>(`/admin/users/${id}/set-password`, password ? { password } : {}),
+      http.post<{ password: string }>(
+        `/admin/users/${id}/set-password`,
+        password ? { password } : {},
+      ),
 
     // Store credit (account balance) — view ledger + grant/deduct.
-    userCredit: (id: string) => http.get<CreditLedger>(`/admin/users/${id}/credit`),
+    userCredit: (id: string) =>
+      http.get<CreditLedger>(`/admin/users/${id}/credit`),
     grantCredit: (
       id: string,
       input: { amountMinor: number; reason?: CreditReason; note?: string },
-    ) => http.post<{ balanceMinor: number }>(`/admin/users/${id}/credit`, input),
+    ) =>
+      http.post<{ balanceMinor: number }>(`/admin/users/${id}/credit`, input),
 
     // Roles & permissions (RBAC)
     roles: () => getList<AdminRole>("/admin/roles"),
     rolePermissions: () =>
-      http.get<{ wildcard: string; permissions: string[] }>("/admin/roles/permissions"),
-    createRole: (input: { key: string; name: string; description?: string; permissions: string[] }) =>
-      http.post<AdminRole>("/admin/roles", input),
-    updateRole: (id: string, input: Partial<{ name: string; description: string; permissions: string[] }>) =>
-      http.patch<AdminRole>(`/admin/roles/${id}`, input),
+      http.get<{ wildcard: string; permissions: string[] }>(
+        "/admin/roles/permissions",
+      ),
+    createRole: (input: {
+      key: string;
+      name: string;
+      description?: string;
+      permissions: string[];
+    }) => http.post<AdminRole>("/admin/roles", input),
+    updateRole: (
+      id: string,
+      input: Partial<{
+        name: string;
+        description: string;
+        permissions: string[];
+      }>,
+    ) => http.patch<AdminRole>(`/admin/roles/${id}`, input),
     deleteRole: (id: string) => http.delete<void>(`/admin/roles/${id}`),
 
     // Locations (regions) — full CRUD; new locations feed the node-create picker.
     locations: () => getList<Region>("/admin/locations"),
     createLocation: (input: { code: string; name: string; country: string }) =>
       http.post<Region>("/admin/locations", input),
-    updateLocation: (id: string, input: Partial<{ code: string; name: string; country: string }>) =>
-      http.patch<Region>(`/admin/locations/${id}`, input),
+    updateLocation: (
+      id: string,
+      input: Partial<{ code: string; name: string; country: string }>,
+    ) => http.patch<Region>(`/admin/locations/${id}`, input),
     deleteLocation: (id: string) => http.delete<void>(`/admin/locations/${id}`),
 
     // Billing / orders / invoices / payments (payments are OWNER-only).
-    billingSummary: () => http.get<AdminBillingSummary>("/admin/billing/summary"),
+    billingSummary: () =>
+      http.get<AdminBillingSummary>("/admin/billing/summary"),
     orders: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminSubscription>>("/admin/orders", { query }),
     deleteOrder: (id: string) => http.delete<void>(`/admin/orders/${id}`),
     bulkDeleteOrders: (ids: string[]) =>
-      http.post<{ deleted: string[]; skipped: { id: string; reason: string }[] }>(
-        "/admin/orders/bulk-delete",
-        { ids },
-      ),
+      http.post<{
+        deleted: string[];
+        skipped: { id: string; reason: string }[];
+      }>("/admin/orders/bulk-delete", { ids }),
     invoices: (query?: { page?: number; q?: string; state?: string }) =>
       http.get<Paginated<AdminInvoice>>("/admin/invoices", { query }),
-    voidInvoice: (id: string) => http.post<AdminInvoice>(`/admin/invoices/${id}/void`),
+    voidInvoice: (id: string) =>
+      http.post<AdminInvoice>(`/admin/invoices/${id}/void`),
     markInvoicePaid: (id: string) =>
       http.post<AdminInvoice>(`/admin/invoices/${id}/mark-paid`),
     deleteInvoice: (id: string) => http.delete<void>(`/admin/invoices/${id}`),
     bulkDeleteInvoices: (ids: string[]) =>
-      http.post<{ deleted: string[]; skipped: { id: string; reason: string }[] }>(
-        "/admin/invoices/bulk-delete",
-        { ids },
-      ),
+      http.post<{
+        deleted: string[];
+        skipped: { id: string; reason: string }[];
+      }>("/admin/invoices/bulk-delete", { ids }),
     payments: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminPayment>>("/admin/payments", { query }),
     paymentGateways: () => http.get<GatewayStatus>("/admin/payments/gateways"),
-    gatewayConfig: () => http.get<GatewayConfigDetail>("/admin/payments/gateways/config"),
+    gatewayConfig: () =>
+      http.get<GatewayConfigDetail>("/admin/payments/gateways/config"),
     setGatewayConfig: (input: {
       stripeSecretKey?: string;
       stripeWebhookSecret?: string;
@@ -1054,10 +1246,17 @@ export const api = {
 
     // Gift cards (billing.manage)
     giftCards: () => getList<GiftCard>("/admin/gift-cards"),
-    createGiftCard: (input: { code?: string; initialBalanceMinor: number; currency?: string; note?: string; expiresAt?: string }) =>
-      http.post<GiftCard>("/admin/gift-cards", input),
-    updateGiftCard: (id: string, input: Partial<{ isActive: boolean; note: string; expiresAt: string }>) =>
-      http.patch<GiftCard>(`/admin/gift-cards/${id}`, input),
+    createGiftCard: (input: {
+      code?: string;
+      initialBalanceMinor: number;
+      currency?: string;
+      note?: string;
+      expiresAt?: string;
+    }) => http.post<GiftCard>("/admin/gift-cards", input),
+    updateGiftCard: (
+      id: string,
+      input: Partial<{ isActive: boolean; note: string; expiresAt: string }>,
+    ) => http.patch<GiftCard>(`/admin/gift-cards/${id}`, input),
 
     products: () => getList<Product>("/admin/products"),
     // Strip `id` from the body — it's in the URL on update, and the API rejects
@@ -1071,13 +1270,26 @@ export const api = {
     // Per-product, per-interval pricing.
     createPrice: (
       productId: string,
-      input: { interval: BillingInterval; currency?: string; amountMinor: number; stripePriceId?: string; isActive?: boolean },
+      input: {
+        interval: BillingInterval;
+        currency?: string;
+        amountMinor: number;
+        stripePriceId?: string;
+        isActive?: boolean;
+      },
     ) => http.post<Price>(`/admin/products/${productId}/prices`, input),
     updatePrice: (
       priceId: string,
-      input: Partial<{ interval: BillingInterval; currency: string; amountMinor: number; stripePriceId: string; isActive: boolean }>,
+      input: Partial<{
+        interval: BillingInterval;
+        currency: string;
+        amountMinor: number;
+        stripePriceId: string;
+        isActive: boolean;
+      }>,
     ) => http.patch<Price>(`/admin/prices/${priceId}`, input),
-    deletePrice: (priceId: string) => http.delete<void>(`/admin/prices/${priceId}`),
+    deletePrice: (priceId: string) =>
+      http.delete<void>(`/admin/prices/${priceId}`),
 
     // Hardware tiers (Low/Mid/High) for HARDWARE_TIER game products.
     createTier: (
@@ -1092,8 +1304,18 @@ export const api = {
     createTierPrice: (
       productId: string,
       tierId: string,
-      input: { interval: BillingInterval; currency?: string; amountMinor: number; stripePriceId?: string; isActive?: boolean },
-    ) => http.post<Price>(`/admin/products/${productId}/tiers/${tierId}/prices`, input),
+      input: {
+        interval: BillingInterval;
+        currency?: string;
+        amountMinor: number;
+        stripePriceId?: string;
+        isActive?: boolean;
+      },
+    ) =>
+      http.post<Price>(
+        `/admin/products/${productId}/tiers/${tierId}/prices`,
+        input,
+      ),
 
     servers: () => getList<AdminServer>("/admin/servers"),
     createServer: (input: {
@@ -1147,7 +1369,8 @@ export const api = {
     addIncidentUpdate: (
       id: string,
       body: { status: IncidentStatusStage; body: string },
-    ) => http.post<StatusIncident>(`/admin/status/incidents/${id}/updates`, body),
+    ) =>
+      http.post<StatusIncident>(`/admin/status/incidents/${id}/updates`, body),
     updateIncident: (
       id: string,
       body: Partial<{
@@ -1173,7 +1396,12 @@ export const api = {
       ),
     updateStatusWebhook: (
       id: string,
-      body: Partial<{ url: string; events: string[]; isActive: boolean; description: string }>,
+      body: Partial<{
+        url: string;
+        events: string[];
+        isActive: boolean;
+        description: string;
+      }>,
     ) => http.patch<StatusWebhook>(`/admin/status/webhooks/${id}`, body),
     deleteStatusWebhook: (id: string) =>
       http.delete<void>(`/admin/status/webhooks/${id}`),
@@ -1202,8 +1430,11 @@ export const api = {
         guardCode ? { nodeId, guardCode } : { nodeId },
       ),
 
-    auditLogs: (query?: { actorId?: string; targetType?: string; page?: number }) =>
-      http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),
+    auditLogs: (query?: {
+      actorId?: string;
+      targetType?: string;
+      page?: number;
+    }) => http.get<Paginated<AuditLog>>("/admin/audit-logs", { query }),
 
     alerts: () => getList<GlobalAlert>("/admin/alerts"),
     saveAlert: ({ id, ...body }: Partial<GlobalAlert>) =>
@@ -1214,8 +1445,19 @@ export const api = {
 
     metrics: () =>
       http.get<{
-        nodes: { id: string; name: string; cpuPct: number; memPct: number; diskPct: number }[];
-        totals: { servers: number; users: number; revenueMinor: number; openTickets: number };
+        nodes: {
+          id: string;
+          name: string;
+          cpuPct: number;
+          memPct: number;
+          diskPct: number;
+        }[];
+        totals: {
+          servers: number;
+          users: number;
+          revenueMinor: number;
+          openTickets: number;
+        };
       }>("/admin/metrics"),
   },
 };

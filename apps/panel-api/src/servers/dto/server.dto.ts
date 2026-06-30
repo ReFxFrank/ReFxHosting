@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { Type } from "class-transformer";
 import {
   ArrayMaxSize,
   IsArray,
@@ -14,8 +14,8 @@ import {
   MaxLength,
   Min,
   ValidateNested,
-} from 'class-validator';
-import { ScheduleAction } from '@prisma/client';
+} from "class-validator";
+import { ScheduleAction } from "@prisma/client";
 
 export class CreateServerDto {
   @ApiProperty()
@@ -27,7 +27,7 @@ export class CreateServerDto {
   @IsString()
   description?: string;
 
-  @ApiProperty({ description: 'Subscription that funds this server' })
+  @ApiProperty({ description: "Subscription that funds this server" })
   @IsString()
   subscriptionId!: string;
 
@@ -35,36 +35,41 @@ export class CreateServerDto {
   @IsString()
   templateId!: string;
 
-  @ApiPropertyOptional({ description: 'Pin a specific node; otherwise scheduled' })
+  @ApiPropertyOptional({
+    description: "Pin a specific node; otherwise scheduled",
+  })
   @IsOptional()
   @IsString()
   nodeId?: string;
 
-  @ApiPropertyOptional({ description: 'Preferred region/location for scheduling' })
+  @ApiPropertyOptional({
+    description: "Preferred region/location for scheduling",
+  })
   @IsOptional()
   @IsString()
   regionId?: string;
 
-  @ApiPropertyOptional({ description: 'Initial env var overrides' })
+  @ApiPropertyOptional({ description: "Initial env var overrides" })
   @IsOptional()
   @IsObject()
   environment?: Record<string, string>;
 }
 
 export class PowerActionDto {
-  @ApiProperty({ enum: ['start', 'stop', 'restart', 'kill'] })
+  @ApiProperty({ enum: ["start", "stop", "restart", "kill"] })
   @IsString()
-  signal!: 'start' | 'stop' | 'restart' | 'kill';
+  signal!: "start" | "stop" | "restart" | "kill";
 }
 
 export class SwitchGameDto {
-  @ApiProperty({ description: 'Target GameTemplate id' })
+  @ApiProperty({ description: "Target GameTemplate id" })
   @IsString()
   templateId!: string;
 
   @ApiPropertyOptional({
     default: false,
-    description: 'Keep the existing data volume (false wipes for a clean install)',
+    description:
+      "Keep the existing data volume (false wipes for a clean install)",
   })
   @IsOptional()
   @IsBoolean()
@@ -103,12 +108,11 @@ export class ResizeServerDto {
 }
 
 export class SetVariableDto {
+  // envName is taken from the URL (PUT /servers/:id/variables/:envName); only the
+  // value rides in the body.
   @ApiProperty()
   @IsString()
-  envName!: string;
-
-  @ApiProperty()
-  @IsString()
+  @MaxLength(8192)
   value!: string;
 }
 
@@ -132,12 +136,15 @@ export class ScheduleTaskDto {
   @IsEnum(ScheduleAction)
   action!: ScheduleAction;
 
-  @ApiProperty({ description: 'Command text, power signal (start/stop/restart/kill), or backup name' })
+  @ApiProperty({
+    description:
+      "Command text, power signal (start/stop/restart/kill), or backup name",
+  })
   @IsString()
   @MaxLength(2000)
   payload!: string;
 
-  @ApiPropertyOptional({ description: 'Delay after the previous task (ms)' })
+  @ApiPropertyOptional({ description: "Delay after the previous task (ms)" })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -161,7 +168,7 @@ export class CreateScheduleDto {
   @MaxLength(120)
   name!: string;
 
-  @ApiProperty({ description: '5-field cron' })
+  @ApiProperty({ description: "5-field cron" })
   @IsString()
   @MaxLength(120)
   cron!: string;
@@ -188,7 +195,7 @@ export class CreateScheduleDto {
 export class UpdateScheduleDto extends PartialType(CreateScheduleDto) {}
 
 export class SendCommandDto {
-  @ApiProperty({ description: 'Console command to run once' })
+  @ApiProperty({ description: "Console command to run once" })
   @IsString()
   command!: string;
 }
@@ -202,35 +209,45 @@ export class ChangeMinecraftVersionDto {
 }
 
 export class SetMinecraftConfigDto {
-  @ApiProperty({ description: 'vanilla | paper | fabric | forge | neoforge' })
+  @ApiProperty({ description: "vanilla | paper | fabric | forge | neoforge" })
   @IsString()
   loader!: string;
 
-  @ApiPropertyOptional({ description: "Minecraft version ('latest' or e.g. '1.21.1')." })
+  @ApiPropertyOptional({
+    description: "Minecraft version ('latest' or e.g. '1.21.1').",
+  })
   @IsOptional()
   @IsString()
   version?: string;
 
-  @ApiPropertyOptional({ description: "Loader build ('latest'/'recommended' or explicit)." })
+  @ApiPropertyOptional({
+    description: "Loader build ('latest'/'recommended' or explicit).",
+  })
   @IsOptional()
   @IsString()
   loaderVersion?: string;
 }
 
 export class ModInstallDto {
-  @ApiPropertyOptional({ description: 'Modrinth project id/slug (installs latest compatible).' })
+  @ApiPropertyOptional({
+    description: "Modrinth project id/slug (installs latest compatible).",
+  })
   @IsOptional()
   @IsString()
   projectId?: string;
 
-  @ApiPropertyOptional({ description: 'Modrinth version id (installs that exact version).' })
+  @ApiPropertyOptional({
+    description: "Modrinth version id (installs that exact version).",
+  })
   @IsOptional()
   @IsString()
   versionId?: string;
 }
 
 export class ModpackInstallDto {
-  @ApiProperty({ description: 'Modrinth modpack version id (the .mrpack to install).' })
+  @ApiProperty({
+    description: "Modrinth modpack version id (the .mrpack to install).",
+  })
   @IsString()
   versionId!: string;
 }
@@ -248,12 +265,14 @@ export class UpdateStartupDto {
 }
 
 export class UpgradeServerDto {
-  @ApiPropertyOptional({ description: 'Target hardware tier (tiered game products).' })
+  @ApiPropertyOptional({
+    description: "Target hardware tier (tiered game products).",
+  })
   @IsOptional()
   @IsUUID()
   hardwareTierId?: string;
 
-  @ApiPropertyOptional({ description: 'New slot count (per-slot products).' })
+  @ApiPropertyOptional({ description: "New slot count (per-slot products)." })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -288,7 +307,9 @@ export class AddSubUserDto {
 }
 
 export class AddWorkshopDto {
-  @ApiProperty({ description: 'Workshop item/collection ID or Steam Workshop URL.' })
+  @ApiProperty({
+    description: "Workshop item/collection ID or Steam Workshop URL.",
+  })
   @IsString()
   input!: string;
 }
@@ -300,37 +321,46 @@ export class ToggleWorkshopDto {
 }
 
 export class ReorderWorkshopDto {
-  @ApiProperty({ type: [String], description: 'WorkshopMod ids in display order.' })
+  @ApiProperty({
+    type: [String],
+    description: "WorkshopMod ids in display order.",
+  })
   @IsArray()
   @IsString({ each: true })
   ids!: string[];
 }
 
 export class VoiceRenameDto {
-  @ApiProperty({ description: 'New TeamSpeak virtual server name (1–64 chars).' })
+  @ApiProperty({
+    description: "New TeamSpeak virtual server name (1–64 chars).",
+  })
   @IsString()
   @MaxLength(64)
   name!: string;
 }
 
 export class VoiceModerateDto {
-  @ApiProperty({ description: 'Client id (clid) from the live monitoring list.' })
+  @ApiProperty({
+    description: "Client id (clid) from the live monitoring list.",
+  })
   @IsString()
   clid!: string;
 
-  @ApiPropertyOptional({ description: 'Reason shown to the user.' })
+  @ApiPropertyOptional({ description: "Reason shown to the user." })
   @IsOptional()
   @IsString()
   @MaxLength(80)
   reason?: string;
 
-  @ApiPropertyOptional({ description: 'Ban duration in seconds (0 = permanent).' })
+  @ApiPropertyOptional({
+    description: "Ban duration in seconds (0 = permanent).",
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
   seconds?: number;
 
-  @ApiPropertyOptional({ description: 'Display label for the audit log only.' })
+  @ApiPropertyOptional({ description: "Display label for the audit log only." })
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -338,15 +368,15 @@ export class VoiceModerateDto {
 }
 
 export class VoiceMoveDto {
-  @ApiProperty({ description: 'Client id (clid) from the monitoring list.' })
+  @ApiProperty({ description: "Client id (clid) from the monitoring list." })
   @IsString()
   clid!: string;
 
-  @ApiProperty({ description: 'Target channel id (cid).' })
+  @ApiProperty({ description: "Target channel id (cid)." })
   @IsString()
   cid!: string;
 
-  @ApiPropertyOptional({ description: 'Display label for the audit log only.' })
+  @ApiPropertyOptional({ description: "Display label for the audit log only." })
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -354,17 +384,17 @@ export class VoiceMoveDto {
 }
 
 export class VoiceUnbanDto {
-  @ApiProperty({ description: 'Ban id (banid) from the ban list.' })
+  @ApiProperty({ description: "Ban id (banid) from the ban list." })
   @IsString()
   banid!: string;
 }
 
 export class VoiceChannelLimitDto {
-  @ApiProperty({ description: 'Channel id (cid).' })
+  @ApiProperty({ description: "Channel id (cid)." })
   @IsString()
   cid!: string;
 
-  @ApiPropertyOptional({ description: 'Max clients; 0/omitted = unlimited.' })
+  @ApiPropertyOptional({ description: "Max clients; 0/omitted = unlimited." })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -375,8 +405,8 @@ export class VoiceLicenseDto {
   @ApiProperty({
     description:
       "TeamSpeak licensekey.dat contents, base64-encoded. Unlocks more than " +
-      '32 slots / multiple virtual servers (the free license cap). Takes effect ' +
-      'on the next server restart.',
+      "32 slots / multiple virtual servers (the free license cap). Takes effect " +
+      "on the next server restart.",
   })
   @IsString()
   @MaxLength(700_000) // ~512 KiB of binary; real keys are only a few KB

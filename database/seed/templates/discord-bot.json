@@ -70,6 +70,34 @@
       "userEditable": true,
       "userViewable": true,
       "sortOrder": 2
+    },
+    {
+      "envName": "CLIENT_ID",
+      "displayName": "Application (client) ID (optional)",
+      "description": "Your bot's Application ID from the Discord Developer Portal. Many bots use it to register slash commands. Injected as CLIENT_ID — read it as process.env.CLIENT_ID / os.environ[\"CLIENT_ID\"]. Leave blank if your bot doesn't need it.",
+      "type": "STRING",
+      "defaultValue": "",
+      "rules": {
+        "required": false,
+        "maxLength": 40
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "GUILD_ID",
+      "displayName": "Server (guild) ID (optional)",
+      "description": "A Discord server ID, handy for registering slash commands to a single server during development. Injected as GUILD_ID. Leave blank for global commands or if unused.",
+      "type": "STRING",
+      "defaultValue": "",
+      "rules": {
+        "required": false,
+        "maxLength": 40
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
     }
   ]
 }

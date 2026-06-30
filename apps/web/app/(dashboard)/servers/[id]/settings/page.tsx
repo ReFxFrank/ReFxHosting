@@ -66,7 +66,13 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     }
   };
   return (
-    <Button type="button" variant="outline" size="icon" onClick={copy} aria-label={`Copy ${label}`}>
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      onClick={copy}
+      aria-label={`Copy ${label}`}
+    >
       {copied ? <Check className="text-success" /> : <Copy />}
     </Button>
   );
@@ -148,18 +154,25 @@ function GeneralTab({ server }: { server: Server }) {
       toast.error(e instanceof ApiError ? e.message : "Failed to save details"),
   });
 
-  const dirty = name !== server.name || description !== (server.description ?? "");
+  const dirty =
+    name !== server.name || description !== (server.description ?? "");
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>General</CardTitle>
-        <CardDescription>Display name and description for your server.</CardDescription>
+        <CardDescription>
+          Display name and description for your server.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">
           <Label htmlFor="srv-name">Name</Label>
-          <Input id="srv-name" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input
+            id="srv-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="srv-desc">Description</Label>
@@ -189,11 +202,14 @@ function GeneralTab({ server }: { server: Server }) {
 // ---------------------------------------------------------------------------
 function StartupTab({ server }: { server: Server }) {
   const queryClient = useQueryClient();
-  const [startupCommand, setStartupCommand] = useState(server.startupCommand ?? "");
+  const [startupCommand, setStartupCommand] = useState(
+    server.startupCommand ?? "",
+  );
   const [dockerImage, setDockerImage] = useState(server.dockerImage ?? "");
 
   const startupMutation = useMutation({
-    mutationFn: () => api.servers.updateStartup(server.id, { startupCommand, dockerImage }),
+    mutationFn: () =>
+      api.servers.updateStartup(server.id, { startupCommand, dockerImage }),
     onSuccess: () => {
       toast.success("Startup configuration saved");
       queryClient.invalidateQueries({ queryKey: ["server", server.id] });
@@ -253,7 +269,6 @@ function StartupTab({ server }: { server: Server }) {
   );
 }
 
-
 function VariablesCard({ id }: { id: string }) {
   const { data: variables, isLoading } = useQuery({
     queryKey: ["server-variables", id],
@@ -266,10 +281,12 @@ function VariablesCard({ id }: { id: string }) {
   // Minecraft card above (it resolves + reinstalls), so don't surface them as
   // raw, no-op variables here.
   const HIDDEN = ["MINECRAFT_VERSION", "LOADER", "LOADER_VERSION"];
-  const editableVariables = variables?.filter((v) => !HIDDEN.includes(v.envName));
+  const shownVariables = variables?.filter((v) => !HIDDEN.includes(v.envName));
 
   useEffect(() => {
     if (variables) {
+      // Seed inputs with current values; write-only secrets stay empty (their
+      // value isn't sent to the browser) and show a "saved" placeholder instead.
       setValues(
         Object.fromEntries(
           variables
@@ -282,51 +299,147 @@ function VariablesCard({ id }: { id: string }) {
   }, [variables]);
 
   const queryClient = useQueryClient();
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: ["server-variables", id] });
+
   const saveMutation = useMutation({
     mutationFn: (envName: string) =>
       api.servers.setVariable(id, envName, values[envName] ?? ""),
     onSuccess: () => {
       toast.success("Variable saved");
-      queryClient.invalidateQueries({ queryKey: ["server-variables", id] });
+      invalidate();
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to save variable"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to save variable",
+      ),
+  });
+
+  // Add a custom env var (e.g. a bot's CLIENT_ID, a DATABASE_URL) not defined by
+  // the egg. Reuses the same set-variable endpoint.
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const addMutation = useMutation({
+    mutationFn: () =>
+      api.servers.setVariable(id, newName.trim().toUpperCase(), newValue),
+    onSuccess: () => {
+      toast.success("Variable added");
+      setAdding(false);
+      setNewName("");
+      setNewValue("");
+      invalidate();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to add variable"),
   });
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Server variables</CardTitle>
-        <CardDescription>Environment values passed to your server on boot.</CardDescription>
+      <CardHeader className="flex-row items-start justify-between space-y-0">
+        <div className="space-y-1.5">
+          <CardTitle>Server variables</CardTitle>
+          <CardDescription>
+            Environment values passed to your server on boot.
+          </CardDescription>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setAdding((a) => !a)}
+        >
+          <Plus className="size-4" /> Add variable
+        </Button>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
+        {adding && (
+          <div className="grid gap-2 rounded-lg border border-dashed p-3 sm:grid-cols-[12rem_1fr_auto] sm:items-center">
+            <Input
+              placeholder="ENV_NAME"
+              className="font-mono text-xs uppercase"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+            <Input
+              placeholder="value"
+              value={newValue}
+              onChange={(e) => setNewValue(e.target.value)}
+            />
+            <Button
+              size="sm"
+              disabled={!newName.trim()}
+              loading={addMutation.isPending}
+              onClick={() => addMutation.mutate()}
+            >
+              Add
+            </Button>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-9 w-full" />
             ))}
           </div>
-        ) : editableVariables?.length ? (
-          editableVariables.map((v) => {
-            const dirty = (values[v.envName] ?? "") !== v.value;
+        ) : shownVariables?.length ? (
+          shownVariables.map((v) => {
+            const isSecret = v.type === "SECRET" || !v.userViewable;
+            const dirty =
+              (values[v.envName] ?? "") !== (isSecret ? "" : v.value);
+            const required =
+              (v.rules?.required as boolean | undefined) ?? false;
             return (
-              <div key={v.envName} className="grid gap-2 sm:grid-cols-[12rem_1fr_auto] sm:items-center">
-                <Label className="font-mono text-xs">{v.envName}</Label>
-                <Input
-                  value={values[v.envName] ?? ""}
-                  onChange={(e) =>
-                    setValues((s) => ({ ...s, [v.envName]: e.target.value }))
-                  }
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!dirty}
-                  loading={saveMutation.isPending && saveMutation.variables === v.envName}
-                  onClick={() => saveMutation.mutate(v.envName)}
-                >
-                  Save
-                </Button>
+              <div key={v.envName} className="space-y-1.5">
+                <div className="flex flex-wrap items-baseline gap-x-2">
+                  <Label className="text-sm">
+                    {v.displayName || v.envName}
+                  </Label>
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {v.envName}
+                  </span>
+                  {required && (
+                    <span className="text-xs text-destructive">required</span>
+                  )}
+                  {!v.userEditable && (
+                    <span className="text-xs text-muted-foreground">
+                      read-only
+                    </span>
+                  )}
+                </div>
+                {v.description && (
+                  <p className="text-xs text-muted-foreground">
+                    {v.description}
+                  </p>
+                )}
+                <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+                  <Input
+                    type={isSecret ? "password" : "text"}
+                    autoComplete={isSecret ? "new-password" : "off"}
+                    disabled={!v.userEditable}
+                    placeholder={
+                      isSecret && v.isSet
+                        ? "•••••••• (saved — enter to replace)"
+                        : undefined
+                    }
+                    value={values[v.envName] ?? ""}
+                    onChange={(e) =>
+                      setValues((s) => ({ ...s, [v.envName]: e.target.value }))
+                    }
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!v.userEditable || !dirty}
+                    loading={
+                      saveMutation.isPending &&
+                      saveMutation.variables === v.envName
+                    }
+                    onClick={() => saveMutation.mutate(v.envName)}
+                  >
+                    Save
+                  </Button>
+                </div>
               </div>
             );
           })
@@ -359,7 +472,9 @@ function SftpTab({ id }: { id: string }) {
       setRevealed(res.password);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to rotate password"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to rotate password",
+      ),
   });
 
   const copyPw = async () => {
@@ -401,7 +516,11 @@ function SftpTab({ id }: { id: string }) {
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Port</Label>
               <div className="flex items-center gap-2">
-                <Input readOnly value={String(sftp.port)} className="font-mono" />
+                <Input
+                  readOnly
+                  value={String(sftp.port)}
+                  className="font-mono"
+                />
                 <CopyButton value={String(sftp.port)} label="port" />
               </div>
             </div>
@@ -435,7 +554,13 @@ function SftpTab({ id }: { id: string }) {
           </DialogHeader>
           <div className="flex items-center gap-2">
             <Input readOnly value={revealed ?? ""} className="font-mono" />
-            <Button type="button" variant="outline" size="icon" onClick={copyPw} aria-label="Copy password">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={copyPw}
+              aria-label="Copy password"
+            >
               {pwCopied ? <Check className="text-success" /> : <Copy />}
             </Button>
           </div>
@@ -472,7 +597,9 @@ function SubUsersTab({ id }: { id: string }) {
   const [removeTarget, setRemoveTarget] = useState<SubUser | null>(null);
 
   const togglePerm = (perm: string) =>
-    setPerms((p) => (p.includes(perm) ? p.filter((x) => x !== perm) : [...p, perm]));
+    setPerms((p) =>
+      p.includes(perm) ? p.filter((x) => x !== perm) : [...p, perm],
+    );
 
   const inviteMutation = useMutation({
     mutationFn: () => api.servers.addSubUser(id, { email, permissions: perms }),
@@ -484,7 +611,9 @@ function SubUsersTab({ id }: { id: string }) {
       setPerms([]);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to invite sub-user"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to invite sub-user",
+      ),
   });
 
   const updateMutation = useMutation({
@@ -496,7 +625,9 @@ function SubUsersTab({ id }: { id: string }) {
       setPerms([]);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to update permissions"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to update permissions",
+      ),
   });
 
   const removeMutation = useMutation({
@@ -507,7 +638,9 @@ function SubUsersTab({ id }: { id: string }) {
       setRemoveTarget(null);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to remove sub-user"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to remove sub-user",
+      ),
   });
 
   const openEdit = (su: SubUser) => {
@@ -542,7 +675,9 @@ function SubUsersTab({ id }: { id: string }) {
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <div className="space-y-1.5">
           <CardTitle>Sub-users</CardTitle>
-          <CardDescription>Grant scoped access to other people.</CardDescription>
+          <CardDescription>
+            Grant scoped access to other people.
+          </CardDescription>
         </div>
         <Button
           onClick={() => {
@@ -570,14 +705,19 @@ function SubUsersTab({ id }: { id: string }) {
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">{su.email}</p>
                 <p className="text-xs text-muted-foreground">
-                  {su.permissions.length} permission{su.permissions.length === 1 ? "" : "s"}
+                  {su.permissions.length} permission
+                  {su.permissions.length === 1 ? "" : "s"}
                 </p>
               </div>
               <div className="flex items-center gap-2">
                 <Badge variant={su.state === "ACTIVE" ? "success" : "muted"}>
                   {su.state === "ACTIVE" ? "Active" : "Revoked"}
                 </Badge>
-                <Button variant="outline" size="sm" onClick={() => openEdit(su)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openEdit(su)}
+                >
                   <Pencil className="size-4" /> Edit
                 </Button>
                 <Button
@@ -654,7 +794,10 @@ function SubUsersTab({ id }: { id: string }) {
             <Button variant="ghost" onClick={() => setEditing(null)}>
               Cancel
             </Button>
-            <Button loading={updateMutation.isPending} onClick={() => updateMutation.mutate()}>
+            <Button
+              loading={updateMutation.isPending}
+              onClick={() => updateMutation.mutate()}
+            >
               Save permissions
             </Button>
           </DialogFooter>
@@ -662,12 +805,16 @@ function SubUsersTab({ id }: { id: string }) {
       </Dialog>
 
       {/* Remove confirm */}
-      <Dialog open={!!removeTarget} onOpenChange={(o) => !o && setRemoveTarget(null)}>
+      <Dialog
+        open={!!removeTarget}
+        onOpenChange={(o) => !o && setRemoveTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove sub-user</DialogTitle>
             <DialogDescription>
-              Revoke access for <span className="font-medium">{removeTarget?.email}</span>?
+              Revoke access for{" "}
+              <span className="font-medium">{removeTarget?.email}</span>?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -677,7 +824,9 @@ function SubUsersTab({ id }: { id: string }) {
             <Button
               variant="destructive"
               loading={removeMutation.isPending}
-              onClick={() => removeTarget && removeMutation.mutate(removeTarget.id)}
+              onClick={() =>
+                removeTarget && removeMutation.mutate(removeTarget.id)
+              }
             >
               Remove
             </Button>
@@ -703,7 +852,9 @@ function DangerTab({ id }: { id: string }) {
       setConfirmOpen(false);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to start reinstall"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to start reinstall",
+      ),
   });
 
   return (
@@ -731,13 +882,15 @@ function DangerTab({ id }: { id: string }) {
           <DialogHeader>
             <DialogTitle>Reinstall server</DialogTitle>
             <DialogDescription>
-              This reinstalls the game and may overwrite existing files. The server will be offline
-              during the process. This cannot be undone.
+              This reinstalls the game and may overwrite existing files. The
+              server will be offline during the process. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-xs text-muted-foreground">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
-            <span>Create a backup first if you need to preserve any current data.</span>
+            <span>
+              Create a backup first if you need to preserve any current data.
+            </span>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)}>

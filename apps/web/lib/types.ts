@@ -5,7 +5,8 @@
 // TODO(impl): replace hand-written types with generated @refx/shared client.
 
 export type GlobalRole = "CUSTOMER" | "SUPPORT" | "ADMIN" | "OWNER";
-export type UserState = "ACTIVE" | "SUSPENDED" | "BANNED" | "PENDING_VERIFICATION";
+export type UserState =
+  "ACTIVE" | "SUSPENDED" | "BANNED" | "PENDING_VERIFICATION";
 
 export interface User {
   id: string;
@@ -38,11 +39,7 @@ export interface User {
 }
 
 export type CreditReason =
-  | "ADMIN_GRANT"
-  | "REFUND"
-  | "GIFT_CARD"
-  | "INVOICE_PAYMENT"
-  | "ADJUSTMENT";
+  "ADMIN_GRANT" | "REFUND" | "GIFT_CARD" | "INVOICE_PAYMENT" | "ADJUSTMENT";
 
 export interface CreditTransaction {
   id: string;
@@ -146,7 +143,10 @@ export interface Server {
   nodeId: string;
   node?: Pick<Node, "id" | "name" | "fqdn" | "regionId">;
   templateId: string | null;
-  template?: Pick<GameTemplate, "id" | "name" | "slug" | "supportsWorkshop" | "workshopAppId"> | null;
+  template?: Pick<
+    GameTemplate,
+    "id" | "name" | "slug" | "supportsWorkshop" | "workshopAppId"
+  > | null;
   templateVersion: number | null;
   state: ServerState;
   deployMethod: DeployMethod;
@@ -197,7 +197,10 @@ export interface ServerTransfer {
 }
 
 /** Minimal customer reference embedded in admin billing rows. */
-export type AdminUserRef = Pick<User, "id" | "email" | "firstName" | "lastName">;
+export type AdminUserRef = Pick<
+  User,
+  "id" | "email" | "firstName" | "lastName"
+>;
 
 export type PaymentState = "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
 
@@ -276,7 +279,9 @@ export interface EmailConfigDetail {
 /** Full account view for the admin user-detail page. */
 export interface AdminUserDetail extends User {
   ownedServers?: Array<
-    Pick<Server, "id" | "shortId" | "name" | "state"> & { node?: { name: string } }
+    Pick<Server, "id" | "shortId" | "name" | "state"> & {
+      node?: { name: string };
+    }
   >;
   subscriptions?: AdminSubscription[];
   invoices?: AdminInvoice[];
@@ -316,7 +321,8 @@ export interface ServerStat {
   recordedAt: string;
 }
 
-export type DeployMethod = "DOCKER" | "NATIVE_PROCESS" | "WINDOWS_CONTAINER" | "SANDBOX";
+export type DeployMethod =
+  "DOCKER" | "NATIVE_PROCESS" | "WINDOWS_CONTAINER" | "SANDBOX";
 
 export interface Allocation {
   id: string;
@@ -326,7 +332,8 @@ export interface Allocation {
   isPrimary: boolean;
 }
 
-export type NodeState = "PROVISIONING" | "ONLINE" | "OFFLINE" | "MAINTENANCE" | "DEGRADED";
+export type NodeState =
+  "PROVISIONING" | "ONLINE" | "OFFLINE" | "MAINTENANCE" | "DEGRADED";
 export type NodeOs = "LINUX" | "WINDOWS";
 
 export interface Region {
@@ -405,6 +412,24 @@ export interface TemplateVariable {
   userEditable: boolean;
   userViewable: boolean;
   sortOrder: number;
+}
+
+/**
+ * A server's editable environment variable as returned by
+ * GET /servers/:id/variables — the template's variable schema merged with the
+ * server's current value. Write-only secrets (userViewable=false) return an
+ * empty `value` and an `isSet` flag instead of the stored secret.
+ */
+export interface ServerVariableField {
+  envName: string;
+  displayName: string;
+  description: string | null;
+  type: VariableType;
+  rules: Record<string, unknown>;
+  userEditable: boolean;
+  userViewable: boolean;
+  value: string;
+  isSet?: boolean;
 }
 
 export interface GameTemplate {
@@ -565,7 +590,12 @@ export interface StorefrontGame {
   recCpuCores: number;
   recMemoryMb: number;
   recDiskMb: number;
-  category: { id: string; name: string; slug: string; iconUrl: string | null } | null;
+  category: {
+    id: string;
+    name: string;
+    slug: string;
+    iconUrl: string | null;
+  } | null;
   startingPrice: StartingPrice | null;
 }
 
@@ -585,7 +615,12 @@ export interface StorefrontPlan {
   minSlots?: number;
   maxSlots?: number;
   slotStep?: number;
-  prices: { id: string; interval: BillingInterval; currency: string; amountMinor: number }[];
+  prices: {
+    id: string;
+    interval: BillingInterval;
+    currency: string;
+    amountMinor: number;
+  }[];
   hardwareTiers?: Array<{
     id: string;
     name: string;
@@ -596,7 +631,12 @@ export interface StorefrontPlan {
     recommendedPlayers: number | null;
     isRecommended: boolean;
     sortOrder: number;
-    prices: { id: string; interval: BillingInterval; currency: string; amountMinor: number }[];
+    prices: {
+      id: string;
+      interval: BillingInterval;
+      currency: string;
+      amountMinor: number;
+    }[];
   }>;
 }
 
@@ -606,7 +646,13 @@ export interface StorefrontGameDetail {
     deployMethods: DeployMethod[];
     variables: Pick<
       TemplateVariable,
-      "envName" | "displayName" | "description" | "type" | "defaultValue" | "rules" | "sortOrder"
+      | "envName"
+      | "displayName"
+      | "description"
+      | "type"
+      | "defaultValue"
+      | "rules"
+      | "sortOrder"
     >[];
   };
   plans: StorefrontPlan[];
@@ -654,7 +700,8 @@ export interface InstalledModpack {
   installedAt?: string;
 }
 
-export type HomepageAlertType = "INFO" | "SUCCESS" | "WARNING" | "DANGER" | "PROMO";
+export type HomepageAlertType =
+  "INFO" | "SUCCESS" | "WARNING" | "DANGER" | "PROMO";
 
 export interface HomepageAlert {
   id: string;
@@ -745,12 +792,7 @@ export interface FileEntry {
 
 // Billing
 export type BillingInterval =
-  | "WEEKLY"
-  | "BIWEEKLY"
-  | "MONTHLY"
-  | "QUARTERLY"
-  | "SEMIANNUAL"
-  | "ANNUAL";
+  "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";
 export type ProductType =
   | "GAME_SERVER"
   | "VOICE_SERVER"
@@ -815,12 +857,7 @@ export interface Product {
 }
 
 export type SubscriptionState =
-  | "TRIALING"
-  | "ACTIVE"
-  | "PAST_DUE"
-  | "CANCELED"
-  | "SUSPENDED"
-  | "EXPIRED";
+  "TRIALING" | "ACTIVE" | "PAST_DUE" | "CANCELED" | "SUSPENDED" | "EXPIRED";
 
 export interface Subscription {
   id: string;
@@ -850,10 +887,16 @@ export interface Subscription {
   renewalAmountMinor?: number;
   currency?: string;
   /** Servers this subscription funds. */
-  servers?: Array<{ id: string; shortId: string; name: string; state: ServerState }>;
+  servers?: Array<{
+    id: string;
+    shortId: string;
+    name: string;
+    state: ServerState;
+  }>;
 }
 
-export type InvoiceState = "DRAFT" | "OPEN" | "PAID" | "VOID" | "UNCOLLECTIBLE" | "REFUNDED";
+export type InvoiceState =
+  "DRAFT" | "OPEN" | "PAID" | "VOID" | "UNCOLLECTIBLE" | "REFUNDED";
 
 export interface InvoiceLineItem {
   id: string;
@@ -923,7 +966,13 @@ export interface PaymentMethod {
 }
 
 // Support
-export type TicketState = "OPEN" | "PENDING_CUSTOMER" | "PENDING_AGENT" | "RESOLVED" | "CLOSED" | "ARCHIVED";
+export type TicketState =
+  | "OPEN"
+  | "PENDING_CUSTOMER"
+  | "PENDING_AGENT"
+  | "RESOLVED"
+  | "CLOSED"
+  | "ARCHIVED";
 export type TicketPriority = "LOW" | "NORMAL" | "HIGH" | "URGENT";
 
 export interface Ticket {
@@ -970,7 +1019,10 @@ export interface TicketMessage {
   id: string;
   ticketId: string;
   authorId: string;
-  author?: Pick<User, "id" | "email" | "firstName" | "lastName" | "avatarUrl" | "globalRole">;
+  author?: Pick<
+    User,
+    "id" | "email" | "firstName" | "lastName" | "avatarUrl" | "globalRole"
+  >;
   body: string;
   isInternal: boolean;
   createdAt: string;
@@ -1085,10 +1137,7 @@ export interface StatusRegion {
 
 export type IncidentImpact = "MAINTENANCE" | "DEGRADED" | "OUTAGE";
 export type IncidentStatusStage =
-  | "INVESTIGATING"
-  | "IDENTIFIED"
-  | "MONITORING"
-  | "RESOLVED";
+  "INVESTIGATING" | "IDENTIFIED" | "MONITORING" | "RESOLVED";
 
 export interface IncidentUpdate {
   id?: string;
