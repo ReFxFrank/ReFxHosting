@@ -55,5 +55,12 @@ api.example.com {
 		max_size 64MB
 	}
 
+	# Keep internal/observability surfaces off the public internet. Prometheus
+	# scrapes panel-api directly over the internal network (not through here), so
+	# this doesn't break metrics. /metrics is @Public in-app; /docs (Swagger) is
+	# only mounted when ENABLE_API_DOCS=true — block both regardless.
+	@internal path /metrics /metrics/* /docs /docs/*
+	respond @internal 404
+
 	reverse_proxy 127.0.0.1:4000
 }

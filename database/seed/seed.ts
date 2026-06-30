@@ -21,14 +21,14 @@
  *   - Passwords / tokens are stored as argon2id PHC strings.
  */
 
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { randomFillSync } from 'node:crypto';
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { randomFillSync, randomBytes } from "node:crypto";
 
-import { PrismaClient, Prisma } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
-import * as argon2 from 'argon2';
-import { playerCapFor, clampPlayers } from './game-caps';
+import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+import * as argon2 from "argon2";
+import { playerCapFor, clampPlayers } from "./game-caps";
 
 // Prisma 7 connects via a driver adapter (no bundled engine). DATABASE_URL is
 // set by the migrate container at run time.
@@ -62,7 +62,9 @@ function uuidv7(): string {
   // RFC 4122 variant (10xx)
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
 
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
+    "",
+  );
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(
     16,
     20,
@@ -80,8 +82,8 @@ const ARGON2_OPTS: argon2.Options = {
   parallelism: 1,
 };
 
-const TEMPLATES_DIR = join(__dirname, 'templates');
-const KB_DIR = join(__dirname, 'kb');
+const TEMPLATES_DIR = join(__dirname, "templates");
+const KB_DIR = join(__dirname, "kb");
 
 /** Shape of a template JSON file in ./templates/*.json */
 interface TemplateVariableFile {
@@ -104,7 +106,7 @@ interface TemplateFile {
   longDescription?: string;
   tags?: string[];
   category?: string; // GameCategory slug
-  kind?: 'GAME' | 'WEB' | 'BOT'; // GAME (default), WEB (app container), or BOT (Discord bot)
+  kind?: "GAME" | "WEB" | "BOT"; // GAME (default), WEB (app container), or BOT (Discord bot)
   deployMethods: string[]; // DeployMethod enum strings
   supportsLinux?: boolean;
   supportsWindows?: boolean;
@@ -128,8 +130,8 @@ interface TemplateFile {
 // ---------------------------------------------------------------------------
 
 async function seedOwner() {
-  const email = 'owner@refx.example';
-  const password = process.env.SEED_OWNER_PASSWORD || 'ChangeMe!123';
+  const email = process.env.SEED_OWNER_EMAIL || "owner@refx.example";
+  const isProd = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
 
   // Only bootstrap an owner when the platform has NO active owner at all. This
   // is a safety net so a fresh install (or one where every owner was removed)
@@ -137,12 +139,41 @@ async function seedOwner() {
   // deploy. Once you have any active owner (this one kept, or your own), a
   // deleted account stays deleted across rebuilds.
   const existingOwner = await prisma.user.findFirst({
-    where: { globalRole: 'OWNER', deletedAt: null },
+    where: { globalRole: "OWNER", deletedAt: null },
     select: { id: true, email: true },
   });
   if (existingOwner) {
-    console.log(`  • OWNER user: ${existingOwner.email} (exists — not reseeded)`);
+    console.log(
+      `  • OWNER user: ${existingOwner.email} (exists — not reseeded)`,
+    );
     return existingOwner;
+  }
+
+  // Choose the bootstrap password without ever shipping a KNOWN default to a
+  // public deploy:
+  //   - SEED_OWNER_PASSWORD set  → use it as-is (operator's choice; no forced change).
+  //   - unset, production        → generate a RANDOM password, print it ONCE, and
+  //                                force a change on first login.
+  //   - unset, non-production    → keep the convenient static dev password, still
+  //                                forcing a change so it can't linger.
+  const provided = process.env.SEED_OWNER_PASSWORD;
+  let password = provided ?? "";
+  let mustChangePassword = false;
+  if (!password) {
+    mustChangePassword = true;
+    if (isProd) {
+      password = randomBytes(18).toString("base64url");
+      console.log(
+        "  ┌──────────────────────────────────────────────────────────────┐\n" +
+          "  │ OWNER bootstrap password (shown ONCE — save it now):         │\n" +
+          `  │   ${password.padEnd(58)}│\n` +
+          "  │ Log in, then change it immediately (you will be prompted).   │\n" +
+          "  │ Set SEED_OWNER_PASSWORD to choose your own instead.          │\n" +
+          "  └──────────────────────────────────────────────────────────────┘",
+      );
+    } else {
+      password = "ChangeMe!123";
+    }
   }
 
   const passwordHash = await argon2.hash(password, ARGON2_OPTS);
@@ -151,13 +182,14 @@ async function seedOwner() {
       id: uuidv7(),
       email,
       passwordHash,
-      firstName: 'ReFx',
-      lastName: 'Owner',
-      globalRole: 'OWNER',
-      state: 'ACTIVE',
+      firstName: "ReFx",
+      lastName: "Owner",
+      globalRole: "OWNER",
+      state: "ACTIVE",
       emailVerifiedAt: new Date(),
-      locale: 'en',
-      timezone: 'UTC',
+      locale: "en",
+      timezone: "UTC",
+      mustChangePassword,
     },
   });
 
@@ -167,26 +199,65 @@ async function seedOwner() {
 
 // System RBAC roles (mirror apps/panel-api/src/common/permissions.ts).
 const SYSTEM_ROLES = [
-  { key: 'owner', name: 'Owner', description: 'Full access, including payments and roles.', permissions: ['*'] },
   {
-    key: 'admin',
-    name: 'Admin',
-    description: 'Full management except owner-only financials.',
+    key: "owner",
+    name: "Owner",
+    description: "Full access, including payments and roles.",
+    permissions: ["*"],
+  },
+  {
+    key: "admin",
+    name: "Admin",
+    description: "Full management except owner-only financials.",
     permissions: [
-      'dashboard.read', 'servers.read', 'servers.manage', 'nodes.read', 'nodes.manage',
-      'locations.manage', 'users.read', 'users.manage', 'billing.read', 'billing.manage',
-      'catalog.manage', 'content.manage', 'support.read', 'support.manage', 'audit.read', 'settings.manage',
+      "dashboard.read",
+      "servers.read",
+      "servers.manage",
+      "nodes.read",
+      "nodes.manage",
+      "locations.manage",
+      "users.read",
+      "users.manage",
+      "billing.read",
+      "billing.manage",
+      "catalog.manage",
+      "content.manage",
+      "support.read",
+      "support.manage",
+      "audit.read",
+      "settings.manage",
     ],
   },
-  { key: 'support', name: 'Support', description: 'Tickets, plus read access to customers and servers.', permissions: ['dashboard.read', 'support.read', 'support.manage', 'users.read', 'servers.read'] },
-  { key: 'customer', name: 'Customer', description: 'Client area only — no admin access.', permissions: [] },
+  {
+    key: "support",
+    name: "Support",
+    description: "Tickets, plus read access to customers and servers.",
+    permissions: [
+      "dashboard.read",
+      "support.read",
+      "support.manage",
+      "users.read",
+      "servers.read",
+    ],
+  },
+  {
+    key: "customer",
+    name: "Customer",
+    description: "Client area only — no admin access.",
+    permissions: [],
+  },
 ];
 
 async function seedRoles() {
   for (const r of SYSTEM_ROLES) {
     await prisma.role.upsert({
       where: { key: r.key },
-      update: { name: r.name, description: r.description, permissions: r.permissions, isSystem: true },
+      update: {
+        name: r.name,
+        description: r.description,
+        permissions: r.permissions,
+        isSystem: true,
+      },
       create: {
         id: uuidv7(),
         key: r.key,
@@ -203,24 +274,24 @@ async function seedRoles() {
     select: { id: true, key: true },
   });
   const byKey = Object.fromEntries(roles.map((r) => [r.key, r.id]));
-  for (const key of ['owner', 'admin', 'support', 'customer']) {
+  for (const key of ["owner", "admin", "support", "customer"]) {
     await prisma.user.updateMany({
       where: {
         roleId: null,
-        globalRole: key.toUpperCase() as Prisma.UserWhereInput['globalRole'],
+        globalRole: key.toUpperCase() as Prisma.UserWhereInput["globalRole"],
       },
       data: { roleId: byKey[key] },
     });
   }
-  console.log(`  • Roles: ${SYSTEM_ROLES.map((r) => r.key).join(', ')}`);
+  console.log(`  • Roles: ${SYSTEM_ROLES.map((r) => r.key).join(", ")}`);
 }
 
 async function seedRegionAndNode() {
   // A few common regions so nodes can be placed/labelled accurately.
   const regions = [
-    { code: 'us-east', name: 'US East', country: 'US' },
-    { code: 'us-west', name: 'US West', country: 'US' },
-    { code: 'eu-central', name: 'EU Central', country: 'DE' },
+    { code: "us-east", name: "US East", country: "US" },
+    { code: "us-west", name: "US West", country: "US" },
+    { code: "eu-central", name: "EU Central", country: "DE" },
   ];
   for (const r of regions) {
     await prisma.region.upsert({
@@ -230,36 +301,37 @@ async function seedRegionAndNode() {
     });
   }
   const region = await prisma.region.findUniqueOrThrow({
-    where: { code: 'eu-central' },
+    where: { code: "eu-central" },
   });
-  console.log(`  • Regions: ${regions.map((r) => r.code).join(', ')}`);
+  console.log(`  • Regions: ${regions.map((r) => r.code).join(", ")}`);
 
   // The node bootstrap token would normally be generated and shown once in the
   // panel UI; here we hash a well-known sample so the seed is deterministic.
   // TODO(impl): emit a freshly generated token for real deployments.
-  const sampleToken = process.env.SEED_NODE_TOKEN || 'refx_node_sample_bootstrap_token';
+  const sampleToken =
+    process.env.SEED_NODE_TOKEN || "refx_node_sample_bootstrap_token";
   const tokenHash = await argon2.hash(sampleToken, ARGON2_OPTS);
 
   const node = await prisma.node.upsert({
-    where: { fqdn: 'node-fra-01.refx.example' },
+    where: { fqdn: "node-fra-01.refx.example" },
     update: {
-      state: 'ONLINE',
-      os: 'LINUX',
+      state: "ONLINE",
+      os: "LINUX",
       regionId: region.id,
     },
     create: {
       id: uuidv7(),
-      name: 'fra-01',
-      fqdn: 'node-fra-01.refx.example',
+      name: "fra-01",
+      fqdn: "node-fra-01.refx.example",
       regionId: region.id,
-      os: 'LINUX',
-      state: 'ONLINE',
+      os: "LINUX",
+      state: "ONLINE",
       maintenance: false,
-      agentVersion: '0.1.0',
+      agentVersion: "0.1.0",
       tokenHash,
       daemonPort: 8443,
       sftpPort: 2022,
-      scheme: 'https',
+      scheme: "https",
       cpuCores: 32,
       memoryMb: 131072, // 128 GiB
       diskMb: 4194304, // 4 TiB
@@ -271,7 +343,7 @@ async function seedRegionAndNode() {
 
   // A small block of allocations on the node's public IP. Upsert on the
   // composite unique key (nodeId, ip, port) keeps this idempotent.
-  const ip = '203.0.113.10';
+  const ip = "203.0.113.10";
   const ports = [25565, 25566, 25567, 28015, 28016, 2456, 2457, 2458];
   for (const port of ports) {
     await prisma.allocation.upsert({
@@ -298,9 +370,9 @@ async function seedRegionAndNode() {
  * maintenance window.
  */
 async function seedDemoIncidents() {
-  const id = '01900000-0000-7000-8000-00000000d001';
+  const id = "01900000-0000-7000-8000-00000000d001";
   if (await prisma.statusIncident.findUnique({ where: { id } })) {
-    console.log('  • Status incidents: sample present');
+    console.log("  • Status incidents: sample present");
     return;
   }
   const started = new Date(Date.now() - 6 * 24 * 60 * 60 * 1000);
@@ -308,31 +380,31 @@ async function seedDemoIncidents() {
   await prisma.statusIncident.create({
     data: {
       id,
-      title: 'Scheduled network maintenance — CA-East',
-      impact: 'MAINTENANCE',
-      status: 'RESOLVED',
-      components: ['nodes'],
+      title: "Scheduled network maintenance — CA-East",
+      impact: "MAINTENANCE",
+      status: "RESOLVED",
+      components: ["nodes"],
       startedAt: started,
       resolvedAt: resolved,
       updates: {
         create: [
           {
             id: uuidv7(),
-            status: 'MONITORING',
-            body: 'Maintenance window has started. Brief connectivity blips are possible while we upgrade network links.',
+            status: "MONITORING",
+            body: "Maintenance window has started. Brief connectivity blips are possible while we upgrade network links.",
             createdAt: started,
           },
           {
             id: uuidv7(),
-            status: 'RESOLVED',
-            body: 'Maintenance complete — all nodes healthy and accepting connections.',
+            status: "RESOLVED",
+            body: "Maintenance complete — all nodes healthy and accepting connections.",
             createdAt: resolved,
           },
         ],
       },
     },
   });
-  console.log('  • Status incidents: 1 sample (resolved) created');
+  console.log("  • Status incidents: 1 sample (resolved) created");
 }
 
 async function seedTicketCategories() {
@@ -342,10 +414,30 @@ async function seedTicketCategories() {
     slaFirstResponseMin: number;
     slaResolutionMin: number;
   }> = [
-    { name: 'Billing', slug: 'billing', slaFirstResponseMin: 240, slaResolutionMin: 2880 },
-    { name: 'Technical', slug: 'technical', slaFirstResponseMin: 120, slaResolutionMin: 1440 },
-    { name: 'Abuse', slug: 'abuse', slaFirstResponseMin: 60, slaResolutionMin: 720 },
-    { name: 'General', slug: 'general', slaFirstResponseMin: 480, slaResolutionMin: 4320 },
+    {
+      name: "Billing",
+      slug: "billing",
+      slaFirstResponseMin: 240,
+      slaResolutionMin: 2880,
+    },
+    {
+      name: "Technical",
+      slug: "technical",
+      slaFirstResponseMin: 120,
+      slaResolutionMin: 1440,
+    },
+    {
+      name: "Abuse",
+      slug: "abuse",
+      slaFirstResponseMin: 60,
+      slaResolutionMin: 720,
+    },
+    {
+      name: "General",
+      slug: "general",
+      slaFirstResponseMin: 480,
+      slaResolutionMin: 4320,
+    },
   ];
 
   for (const c of categories) {
@@ -359,20 +451,22 @@ async function seedTicketCategories() {
       create: { id: uuidv7(), ...c },
     });
   }
-  console.log(`  • Ticket categories: ${categories.map((c) => c.name).join(', ')}`);
+  console.log(
+    `  • Ticket categories: ${categories.map((c) => c.name).join(", ")}`,
+  );
 }
 
 async function seedGameCategories() {
   const categories: Array<{ name: string; slug: string }> = [
-    { name: 'Survival', slug: 'survival' },
-    { name: 'Modded', slug: 'modded' },
-    { name: 'Sandbox', slug: 'sandbox' },
-    { name: 'Simulation', slug: 'simulation' },
-    { name: 'Roleplay', slug: 'roleplay' },
-    { name: 'FPS', slug: 'shooter' },
-    { name: 'Voice', slug: 'voice' },
-    { name: 'Web Hosting', slug: 'web' },
-    { name: 'Bot Hosting', slug: 'bots' },
+    { name: "Survival", slug: "survival" },
+    { name: "Modded", slug: "modded" },
+    { name: "Sandbox", slug: "sandbox" },
+    { name: "Simulation", slug: "simulation" },
+    { name: "Roleplay", slug: "roleplay" },
+    { name: "FPS", slug: "shooter" },
+    { name: "Voice", slug: "voice" },
+    { name: "Web Hosting", slug: "web" },
+    { name: "Bot Hosting", slug: "bots" },
   ];
 
   const bySlug: Record<string, string> = {};
@@ -384,17 +478,14 @@ async function seedGameCategories() {
     });
     bySlug[c.slug] = row.id;
   }
-  console.log(`  • Game categories: ${categories.map((c) => c.name).join(', ')}`);
+  console.log(
+    `  • Game categories: ${categories.map((c) => c.name).join(", ")}`,
+  );
   return bySlug;
 }
 
 type SeedInterval =
-  | 'WEEKLY'
-  | 'BIWEEKLY'
-  | 'MONTHLY'
-  | 'QUARTERLY'
-  | 'SEMIANNUAL'
-  | 'ANNUAL';
+  "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";
 
 /**
  * Storefront pricing rate: USD **cents per GB of RAM per month**. Every game
@@ -403,7 +494,7 @@ type SeedInterval =
  * Override per-deploy with SEED_PRICE_PER_GB_CENTS.
  */
 const PRICE_PER_GB_CENTS =
-  Number.parseInt(process.env.SEED_PRICE_PER_GB_CENTS ?? '', 10) || 500;
+  Number.parseInt(process.env.SEED_PRICE_PER_GB_CENTS ?? "", 10) || 500;
 
 /**
  * Hard ceiling on any single tier's RAM, so the High tier (2× recommended) can't
@@ -422,12 +513,12 @@ const MAX_TIER_MEMORY_MB = 14336;
  */
 function intervalPrices(monthly: number): Array<[SeedInterval, number]> {
   return [
-    ['WEEKLY', Math.max(1, Math.round((monthly * 7) / 30))],
-    ['BIWEEKLY', Math.max(1, Math.round((monthly * 14) / 30))],
-    ['MONTHLY', monthly],
-    ['QUARTERLY', Math.round(monthly * 3 * 0.9)],
-    ['SEMIANNUAL', Math.round(monthly * 6 * 0.85)],
-    ['ANNUAL', Math.round(monthly * 12 * 0.8)],
+    ["WEEKLY", Math.max(1, Math.round((monthly * 7) / 30))],
+    ["BIWEEKLY", Math.max(1, Math.round((monthly * 14) / 30))],
+    ["MONTHLY", monthly],
+    ["QUARTERLY", Math.round(monthly * 3 * 0.9)],
+    ["SEMIANNUAL", Math.round(monthly * 6 * 0.85)],
+    ["ANNUAL", Math.round(monthly * 12 * 0.8)],
   ];
 }
 
@@ -438,9 +529,14 @@ async function upsertTierPrice(
   interval: SeedInterval,
   amountMinor: number,
 ) {
-  const prismaInterval = interval as Prisma.PriceCreateInput['interval'];
+  const prismaInterval = interval as Prisma.PriceCreateInput["interval"];
   const existing = await prisma.price.findFirst({
-    where: { productId, hardwareTierId: tierId, interval: prismaInterval, currency: 'USD' },
+    where: {
+      productId,
+      hardwareTierId: tierId,
+      interval: prismaInterval,
+      currency: "USD",
+    },
     select: { id: true },
   });
   if (existing) return;
@@ -451,7 +547,7 @@ async function upsertTierPrice(
         productId,
         hardwareTierId: tierId,
         interval: prismaInterval,
-        currency: 'USD',
+        currency: "USD",
         amountMinor,
         isActive: true,
       },
@@ -460,8 +556,13 @@ async function upsertTierPrice(
     // Tolerate a lingering legacy unique constraint or a concurrent insert so a
     // single price hiccup doesn't abort the whole seed (the corrective migration
     // 20260616130000_price_unique_fix removes the offending constraint).
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-      console.warn(`    ! skipped tier price (${interval}) — unique constraint`);
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2002"
+    ) {
+      console.warn(
+        `    ! skipped tier price (${interval}) — unique constraint`,
+      );
       return;
     }
     throw e;
@@ -477,11 +578,11 @@ async function upsertTierPrice(
  */
 async function seedGameTierProducts() {
   const SKIP = new Set([
-    'minecraft-paper',
-    'minecraft-fabric',
-    'minecraft-forge',
-    'minecraft-neoforge',
-    'teamspeak3', // voice — handled by seedVoiceProducts
+    "minecraft-paper",
+    "minecraft-fabric",
+    "minecraft-forge",
+    "minecraft-neoforge",
+    "teamspeak3", // voice — handled by seedVoiceProducts
   ]);
   const templates = await prisma.gameTemplate.findMany({
     select: {
@@ -501,23 +602,28 @@ async function seedGameTierProducts() {
 
   let count = 0;
   for (const t of templates) {
-    if (SKIP.has(t.slug) || t.category?.slug === 'voice') continue;
+    if (SKIP.has(t.slug) || t.category?.slug === "voice") continue;
 
     // WEB templates become WEB_HOSTING products, BOT templates become BOT_HOSTING
     // (Discord/app bot containers), everything else a GAME_SERVER. All three use
     // the same HARDWARE_TIER engine + tier sizing.
-    const isWeb = t.kind === 'WEB';
-    const isBot = t.kind === 'BOT';
-    const pType = isBot ? 'BOT_HOSTING' : isWeb ? 'WEB_HOSTING' : 'GAME_SERVER';
-    const slug = `${isBot ? 'bot' : isWeb ? 'web' : 'gs'}-${t.slug}`;
+    const isWeb = t.kind === "WEB";
+    const isBot = t.kind === "BOT";
+    const pType = isBot ? "BOT_HOSTING" : isWeb ? "WEB_HOSTING" : "GAME_SERVER";
+    const slug = `${isBot ? "bot" : isWeb ? "web" : "gs"}-${t.slug}`;
     const product = await prisma.product.upsert({
       where: { slug },
       // Don't clobber admin tuning on re-seed; just keep the link + type/model.
-      update: { gameTemplateId: t.id, type: pType, billingModel: 'HARDWARE_TIER', perSlot: false },
+      update: {
+        gameTemplateId: t.id,
+        type: pType,
+        billingModel: "HARDWARE_TIER",
+        perSlot: false,
+      },
       create: {
         id: uuidv7(),
         type: pType,
-        billingModel: 'HARDWARE_TIER',
+        billingModel: "HARDWARE_TIER",
         name: t.name,
         slug,
         description: isBot
@@ -561,35 +667,138 @@ async function seedGameTierProducts() {
       priceMonthly?: number;
     }> = isBot
       ? [
-          { name: 'Micro', description: 'Small bots, testing & development.', cpuCores: 0.5, memoryMb: 256, diskMb: 5120, players: null, recommended: false, sortOrder: 0, priceMonthly: 150 },
-          { name: 'Small', description: 'Active bots for small/mid communities.', cpuCores: 1, memoryMb: 512, diskMb: 10240, players: null, recommended: true, sortOrder: 1, priceMonthly: 250 },
-          { name: 'Medium', description: 'Bots with a database, caching or many guilds.', cpuCores: 1.5, memoryMb: 1024, diskMb: 15360, players: null, recommended: false, sortOrder: 2, priceMonthly: 450 },
-          { name: 'Large', description: 'Heavy bots, or several bots on one instance.', cpuCores: 2, memoryMb: 2048, diskMb: 25600, players: null, recommended: false, sortOrder: 3, priceMonthly: 800 },
+          {
+            name: "Micro",
+            description: "Small bots, testing & development.",
+            cpuCores: 0.5,
+            memoryMb: 256,
+            diskMb: 5120,
+            players: null,
+            recommended: false,
+            sortOrder: 0,
+            priceMonthly: 150,
+          },
+          {
+            name: "Small",
+            description: "Active bots for small/mid communities.",
+            cpuCores: 1,
+            memoryMb: 512,
+            diskMb: 10240,
+            players: null,
+            recommended: true,
+            sortOrder: 1,
+            priceMonthly: 250,
+          },
+          {
+            name: "Medium",
+            description: "Bots with a database, caching or many guilds.",
+            cpuCores: 1.5,
+            memoryMb: 1024,
+            diskMb: 15360,
+            players: null,
+            recommended: false,
+            sortOrder: 2,
+            priceMonthly: 450,
+          },
+          {
+            name: "Large",
+            description: "Heavy bots, or several bots on one instance.",
+            cpuCores: 2,
+            memoryMb: 2048,
+            diskMb: 25600,
+            players: null,
+            recommended: false,
+            sortOrder: 3,
+            priceMonthly: 800,
+          },
         ]
       : isWeb
-      ? [
-          { name: 'Starter', description: 'Blogs, portfolios & small personal sites.', cpuCores: 1, memoryMb: 1024, diskMb: 10240, players: null, recommended: false, sortOrder: 0 },
-          { name: 'Personal', description: 'Growing sites & small businesses.', cpuCores: 1, memoryMb: 2048, diskMb: 25600, players: null, recommended: true, sortOrder: 1 },
-          { name: 'Business', description: 'Business sites & light e-commerce (WooCommerce).', cpuCores: 2, memoryMb: 4096, diskMb: 51200, players: null, recommended: false, sortOrder: 2 },
-          { name: 'Pro', description: 'High-traffic sites & e-commerce.', cpuCores: 4, memoryMb: 8192, diskMb: 102400, players: null, recommended: false, sortOrder: 3 },
-        ]
-      : [
-          { name: 'Low Tier', description: 'Entry-level — small communities & lightweight servers.', mult: 0.5, players: 10, recommended: false, sortOrder: 0 },
-          { name: 'Mid Tier', description: 'Balanced — the recommended default for most servers.', mult: 1, players: 25, recommended: true, sortOrder: 1 },
-          { name: 'High Tier', description: 'Premium — large communities & heavy/modded servers.', mult: 2, players: 60, recommended: false, sortOrder: 2 },
-        ].map((s) => ({
-          name: s.name,
-          description: s.description,
-          cpuCores: Math.max(1, Math.round(t.recCpuCores * s.mult * 2) / 2),
-          memoryMb: Math.min(
-            MAX_TIER_MEMORY_MB,
-            Math.max(1024, Math.round((t.recMemoryMb * s.mult) / 512) * 512),
-          ),
-          diskMb: Math.max(5120, Math.round((t.recDiskMb * s.mult) / 1024) * 1024),
-          players: clampPlayers(s.players as number | null, playerCap),
-          recommended: s.recommended,
-          sortOrder: s.sortOrder,
-        }));
+        ? [
+            {
+              name: "Starter",
+              description: "Blogs, portfolios & small personal sites.",
+              cpuCores: 1,
+              memoryMb: 1024,
+              diskMb: 10240,
+              players: null,
+              recommended: false,
+              sortOrder: 0,
+            },
+            {
+              name: "Personal",
+              description: "Growing sites & small businesses.",
+              cpuCores: 1,
+              memoryMb: 2048,
+              diskMb: 25600,
+              players: null,
+              recommended: true,
+              sortOrder: 1,
+            },
+            {
+              name: "Business",
+              description: "Business sites & light e-commerce (WooCommerce).",
+              cpuCores: 2,
+              memoryMb: 4096,
+              diskMb: 51200,
+              players: null,
+              recommended: false,
+              sortOrder: 2,
+            },
+            {
+              name: "Pro",
+              description: "High-traffic sites & e-commerce.",
+              cpuCores: 4,
+              memoryMb: 8192,
+              diskMb: 102400,
+              players: null,
+              recommended: false,
+              sortOrder: 3,
+            },
+          ]
+        : [
+            {
+              name: "Low Tier",
+              description:
+                "Entry-level — small communities & lightweight servers.",
+              mult: 0.5,
+              players: 10,
+              recommended: false,
+              sortOrder: 0,
+            },
+            {
+              name: "Mid Tier",
+              description:
+                "Balanced — the recommended default for most servers.",
+              mult: 1,
+              players: 25,
+              recommended: true,
+              sortOrder: 1,
+            },
+            {
+              name: "High Tier",
+              description:
+                "Premium — large communities & heavy/modded servers.",
+              mult: 2,
+              players: 60,
+              recommended: false,
+              sortOrder: 2,
+            },
+          ].map((s) => ({
+            name: s.name,
+            description: s.description,
+            cpuCores: Math.max(1, Math.round(t.recCpuCores * s.mult * 2) / 2),
+            memoryMb: Math.min(
+              MAX_TIER_MEMORY_MB,
+              Math.max(1024, Math.round((t.recMemoryMb * s.mult) / 512) * 512),
+            ),
+            diskMb: Math.max(
+              5120,
+              Math.round((t.recDiskMb * s.mult) / 1024) * 1024,
+            ),
+            players: clampPlayers(s.players as number | null, playerCap),
+            recommended: s.recommended,
+            sortOrder: s.sortOrder,
+          }));
 
     for (const spec of resolved) {
       const { cpuCores, memoryMb, diskMb } = spec;
@@ -605,7 +814,9 @@ async function seedGameTierProducts() {
         select: { id: true },
       });
       const tier = existing
-        ? await prisma.hardwareTier.findUniqueOrThrow({ where: { id: existing.id } })
+        ? await prisma.hardwareTier.findUniqueOrThrow({
+            where: { id: existing.id },
+          })
         : await prisma.hardwareTier.create({
             data: {
               id: uuidv7(),
@@ -634,7 +845,11 @@ async function seedGameTierProducts() {
     // subscriptions reference price ids) so the storefront shows only this set.
     const desiredNames = resolved.map((r) => r.name);
     const stale = await prisma.hardwareTier.findMany({
-      where: { productId: product.id, isActive: true, name: { notIn: desiredNames } },
+      where: {
+        productId: product.id,
+        isActive: true,
+        name: { notIn: desiredNames },
+      },
       select: { id: true },
     });
     if (stale.length) {
@@ -652,7 +867,7 @@ async function seedGameTierProducts() {
     // Retire the orphan product left under the other slug scheme when a template
     // flips kind (e.g. a now-WEB template's old `gs-<slug>` GAME_SERVER product).
     // It carries the wrong type + stale tiers; deactivate it so it can't surface.
-    const orphanSlug = `${isWeb ? 'gs' : 'web'}-${t.slug}`;
+    const orphanSlug = `${isWeb ? "gs" : "web"}-${t.slug}`;
     await prisma.product.updateMany({
       where: { slug: orphanSlug, isActive: true },
       data: { isActive: false },
@@ -678,27 +893,33 @@ async function seedGameTierProducts() {
  */
 async function seedVoiceProducts() {
   const tpl = await prisma.gameTemplate.findUnique({
-    where: { slug: 'teamspeak3' },
+    where: { slug: "teamspeak3" },
     select: { id: true, name: true },
   });
   if (!tpl) {
-    console.log('  • Voice products: skipped (teamspeak3 template missing)');
+    console.log("  • Voice products: skipped (teamspeak3 template missing)");
     return;
   }
 
-  const slug = 'voice-teamspeak3';
+  const slug = "voice-teamspeak3";
   const product = await prisma.product.upsert({
     where: { slug },
     // Migrate the original per-slot product to the flat tier model in place
     // (existing subscriptions keep their own price ids and are unaffected).
-    update: { gameTemplateId: tpl.id, type: 'VOICE_SERVER', billingModel: 'HARDWARE_TIER', perSlot: false },
+    update: {
+      gameTemplateId: tpl.id,
+      type: "VOICE_SERVER",
+      billingModel: "HARDWARE_TIER",
+      perSlot: false,
+    },
     create: {
       id: uuidv7(),
-      type: 'VOICE_SERVER',
-      billingModel: 'HARDWARE_TIER',
-      name: 'TeamSpeak 3',
+      type: "VOICE_SERVER",
+      billingModel: "HARDWARE_TIER",
+      name: "TeamSpeak 3",
       slug,
-      description: 'TeamSpeak 3 voice hosting — flat monthly plans by slot capacity. Lightweight, low-latency VoIP.',
+      description:
+        "TeamSpeak 3 voice hosting — flat monthly plans by slot capacity. Lightweight, low-latency VoIP.",
       isActive: true,
       perSlot: false,
       gameTemplateId: tpl.id,
@@ -717,9 +938,41 @@ async function seedVoiceProducts() {
   // recommendedPlayers → TS3SERVER_MAX_CLIENTS). CPU/RAM/disk stay tiny — voice is
   // light — but are sized so the capacity scheduler still places them sensibly.
   const tiers = [
-    { name: 'Community', description: 'Up to 32 slots — ideal for a clan or friend group.', players: 32, monthly: 399, cpuCores: 0.5, memoryMb: 512, diskMb: 1024, recommended: true, sortOrder: 0 },
-    { name: 'Plus', description: 'Up to 64 slots — for an active community (licence required).', players: 64, monthly: 699, cpuCores: 1, memoryMb: 768, diskMb: 2048, recommended: false, sortOrder: 1 },
-    { name: 'Pro', description: 'Up to 128 slots — large communities & networks (licence required).', players: 128, monthly: 1199, cpuCores: 1, memoryMb: 1024, diskMb: 4096, recommended: false, sortOrder: 2 },
+    {
+      name: "Community",
+      description: "Up to 32 slots — ideal for a clan or friend group.",
+      players: 32,
+      monthly: 399,
+      cpuCores: 0.5,
+      memoryMb: 512,
+      diskMb: 1024,
+      recommended: true,
+      sortOrder: 0,
+    },
+    {
+      name: "Plus",
+      description:
+        "Up to 64 slots — for an active community (licence required).",
+      players: 64,
+      monthly: 699,
+      cpuCores: 1,
+      memoryMb: 768,
+      diskMb: 2048,
+      recommended: false,
+      sortOrder: 1,
+    },
+    {
+      name: "Pro",
+      description:
+        "Up to 128 slots — large communities & networks (licence required).",
+      players: 128,
+      monthly: 1199,
+      cpuCores: 1,
+      memoryMb: 1024,
+      diskMb: 4096,
+      recommended: false,
+      sortOrder: 2,
+    },
   ];
   const desiredNames = tiers.map((t) => t.name);
 
@@ -729,7 +982,9 @@ async function seedVoiceProducts() {
       select: { id: true },
     });
     const tier = existing
-      ? await prisma.hardwareTier.findUniqueOrThrow({ where: { id: existing.id } })
+      ? await prisma.hardwareTier.findUniqueOrThrow({
+          where: { id: existing.id },
+        })
       : await prisma.hardwareTier.create({
           data: {
             id: uuidv7(),
@@ -752,7 +1007,11 @@ async function seedVoiceProducts() {
 
   // Prune any tiers not in the current set (e.g. left from an earlier scheme).
   const stale = await prisma.hardwareTier.findMany({
-    where: { productId: product.id, isActive: true, name: { notIn: desiredNames } },
+    where: {
+      productId: product.id,
+      isActive: true,
+      name: { notIn: desiredNames },
+    },
     select: { id: true },
   });
   if (stale.length) {
@@ -767,7 +1026,7 @@ async function seedVoiceProducts() {
     });
   }
 
-  console.log('  • Voice products: TeamSpeak 3 (flat slot-capped tiers)');
+  console.log("  • Voice products: TeamSpeak 3 (flat slot-capped tiers)");
 }
 
 /**
@@ -788,7 +1047,10 @@ async function seedVoiceProducts() {
  * user's custom startup on a normal egg. Idempotent (the NOT clause skips rows
  * already on the launcher).
  */
-async function migrateLauncherStartup(templateId: string, startupCommand: string) {
+async function migrateLauncherStartup(
+  templateId: string,
+  startupCommand: string,
+) {
   // Launcher startups are "bash refx-…" or "sh refx-…" (the TS3 egg moved to sh
   // because the Alpine image has no bash). Only migrate launcher commands.
   if (!/^(bash|sh) refx-/.test(startupCommand)) return;
@@ -803,10 +1065,12 @@ async function migrateLauncherStartup(templateId: string, startupCommand: string
 }
 
 async function syncWorkshopEggs() {
-  const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.json'));
+  const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith(".json"));
   let count = 0;
   for (const file of files) {
-    const tpl = JSON.parse(readFileSync(join(TEMPLATES_DIR, file), 'utf8')) as TemplateFile;
+    const tpl = JSON.parse(
+      readFileSync(join(TEMPLATES_DIR, file), "utf8"),
+    ) as TemplateFile;
     if (!tpl.supportsWorkshop) continue;
     const existing = await prisma.gameTemplate.findUnique({
       where: { slug: tpl.slug },
@@ -836,11 +1100,13 @@ async function syncWorkshopEggs() {
  * script + startup only; idempotent; runs every deploy.
  */
 async function syncVoiceEggs() {
-  const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.json'));
+  const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith(".json"));
   let count = 0;
   for (const file of files) {
-    const tpl = JSON.parse(readFileSync(join(TEMPLATES_DIR, file), 'utf8')) as TemplateFile;
-    if (!tpl.slug.startsWith('teamspeak')) continue;
+    const tpl = JSON.parse(
+      readFileSync(join(TEMPLATES_DIR, file), "utf8"),
+    ) as TemplateFile;
+    if (!tpl.slug.startsWith("teamspeak")) continue;
     const existing = await prisma.gameTemplate.findUnique({
       where: { slug: tpl.slug },
       select: { id: true },
@@ -868,7 +1134,7 @@ async function syncVoiceEggs() {
  */
 async function fixTeamspeakLicenseEnv() {
   const tpl = await prisma.gameTemplate.findUnique({
-    where: { slug: 'teamspeak3' },
+    where: { slug: "teamspeak3" },
     select: { id: true },
   });
   if (!tpl) return;
@@ -879,16 +1145,20 @@ async function fixTeamspeakLicenseEnv() {
   let fixed = 0;
   for (const s of servers) {
     const env = (s.environment ?? {}) as Record<string, unknown>;
-    if (env.TS3SERVER_LICENSE === 'accept') continue;
+    if (env.TS3SERVER_LICENSE === "accept") continue;
     await prisma.server.update({
       where: { id: s.id },
       data: {
-        environment: { ...env, TS3SERVER_LICENSE: 'accept' } as Prisma.InputJsonObject,
+        environment: {
+          ...env,
+          TS3SERVER_LICENSE: "accept",
+        } as Prisma.InputJsonObject,
       },
     });
     fixed += 1;
   }
-  if (fixed) console.log(`  • TeamSpeak license env fixed on ${fixed} server(s)`);
+  if (fixed)
+    console.log(`  • TeamSpeak license env fixed on ${fixed} server(s)`);
 }
 
 /**
@@ -899,23 +1169,23 @@ async function fixTeamspeakLicenseEnv() {
  */
 async function renameWebHostingEgg() {
   const tpl = await prisma.gameTemplate.findUnique({
-    where: { slug: 'static-nginx' },
+    where: { slug: "static-nginx" },
     select: { id: true, name: true },
   });
-  if (!tpl || tpl.name !== 'Static Website (nginx)') return;
+  if (!tpl || tpl.name !== "Static Website (nginx)") return;
   await prisma.gameTemplate.update({
     where: { id: tpl.id },
     data: {
-      name: 'Web Hosting',
+      name: "Web Hosting",
       description:
-        'Host your website — upload your files and go, with a managed container, SFTP, and automatic SSL on your own domain.',
+        "Host your website — upload your files and go, with a managed container, SFTP, and automatic SSL on your own domain.",
       longDescription:
-        'Managed web hosting on a dedicated container. Upload your site (HTML/CSS/JS) to the public/ folder over SFTP or the file manager and it goes live instantly; map your own domain and we issue + renew SSL automatically. Pick a plan that fits your traffic.',
+        "Managed web hosting on a dedicated container. Upload your site (HTML/CSS/JS) to the public/ folder over SFTP or the file manager and it goes live instantly; map your own domain and we issue + renew SSL automatically. Pick a plan that fits your traffic.",
     },
   });
   await prisma.product.updateMany({
-    where: { gameTemplateId: tpl.id, name: 'Static Website (nginx)' },
-    data: { name: 'Web Hosting' },
+    where: { gameTemplateId: tpl.id, name: "Static Website (nginx)" },
+    data: { name: "Web Hosting" },
   });
   console.log('  • renamed web-hosting egg → "Web Hosting"');
 }
@@ -929,12 +1199,12 @@ async function renameWebHostingEgg() {
  */
 async function syncMinecraftEgg() {
   const existing = await prisma.gameTemplate.findUnique({
-    where: { slug: 'minecraft' },
+    where: { slug: "minecraft" },
     select: { id: true },
   });
   if (!existing) return; // a brand-new install is created by seedTemplates
   const tpl = JSON.parse(
-    readFileSync(join(TEMPLATES_DIR, 'minecraft.json'), 'utf8'),
+    readFileSync(join(TEMPLATES_DIR, "minecraft.json"), "utf8"),
   ) as TemplateFile;
   await prisma.gameTemplate.update({
     where: { id: existing.id },
@@ -943,7 +1213,7 @@ async function syncMinecraftEgg() {
       startupCommand: tpl.startupCommand,
     },
   });
-  console.log('  • Minecraft egg synced');
+  console.log("  • Minecraft egg synced");
 }
 
 /**
@@ -985,9 +1255,9 @@ interface KbArticleFile {
 async function seedKbArticles(): Promise<void> {
   let raw: string;
   try {
-    raw = readFileSync(join(KB_DIR, 'articles.json'), 'utf8');
+    raw = readFileSync(join(KB_DIR, "articles.json"), "utf8");
   } catch {
-    console.log('  • Knowledge base: skipped (no kb/articles.json)');
+    console.log("  • Knowledge base: skipped (no kb/articles.json)");
     return;
   }
   const articles = JSON.parse(raw) as KbArticleFile[];
@@ -1028,7 +1298,7 @@ async function seedTemplates(
   categorySlugToId: Record<string, string>,
   opts: { createOnly?: boolean } = {},
 ) {
-  const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith('.json'));
+  const files = readdirSync(TEMPLATES_DIR).filter((f) => f.endsWith(".json"));
   let count = 0;
 
   // Eggs an admin deleted in the panel are tombstoned (RetiredEgg) so this
@@ -1040,7 +1310,7 @@ async function seedTemplates(
   );
 
   for (const file of files) {
-    const raw = readFileSync(join(TEMPLATES_DIR, file), 'utf8');
+    const raw = readFileSync(join(TEMPLATES_DIR, file), "utf8");
     const tpl = JSON.parse(raw) as TemplateFile;
 
     // Skip eggs an admin retired in the panel — leave them deleted across reseeds.
@@ -1066,15 +1336,16 @@ async function seedTemplates(
           data: {
             ...(catId ? { categoryId: catId } : {}),
             deployMethods:
-              tpl.deployMethods as Prisma.GameTemplateUpdateInput['deployMethods'],
-            kind: (tpl.kind ?? 'GAME') as Prisma.GameTemplateUpdateInput['kind'],
+              tpl.deployMethods as Prisma.GameTemplateUpdateInput["deployMethods"],
+            kind: (tpl.kind ??
+              "GAME") as Prisma.GameTemplateUpdateInput["kind"],
             supportsLinux: tpl.supportsLinux ?? true,
             supportsWindows: tpl.supportsWindows ?? false,
             dockerImages: tpl.dockerImages as Prisma.InputJsonValue,
             steamAppId: tpl.steamAppId ?? null,
             startupCommand: tpl.startupCommand,
             startupDetect: tpl.startupDetect ?? null,
-            stopCommand: tpl.stopCommand ?? '^C',
+            stopCommand: tpl.stopCommand ?? "^C",
             installScript: tpl.installScript as Prisma.InputJsonValue,
             configFiles: (tpl.configFiles ?? []) as Prisma.InputJsonValue,
             recCpuCores: tpl.recCpuCores ?? 1,
@@ -1088,7 +1359,8 @@ async function seedTemplates(
           const varData = {
             displayName: v.displayName,
             description: v.description ?? null,
-            type: (v.type ?? 'STRING') as Prisma.TemplateVariableCreateInput['type'],
+            type: (v.type ??
+              "STRING") as Prisma.TemplateVariableCreateInput["type"],
             defaultValue: v.defaultValue ?? null,
             rules: (v.rules ?? {}) as Prisma.InputJsonValue,
             userEditable: v.userEditable ?? true,
@@ -1097,7 +1369,10 @@ async function seedTemplates(
           };
           await prisma.templateVariable.upsert({
             where: {
-              templateId_envName: { templateId: existing.id, envName: v.envName },
+              templateId_envName: {
+                templateId: existing.id,
+                envName: v.envName,
+              },
             },
             update: varData,
             create: {
@@ -1118,7 +1393,9 @@ async function seedTemplates(
     }
 
     const categoryId =
-      tpl.category && categorySlugToId[tpl.category] ? categorySlugToId[tpl.category] : null;
+      tpl.category && categorySlugToId[tpl.category]
+        ? categorySlugToId[tpl.category]
+        : null;
     if (tpl.category && !categoryId) {
       console.warn(
         `    ! template "${tpl.slug}" references unknown category "${tpl.category}" — leaving uncategorized`,
@@ -1130,15 +1407,16 @@ async function seedTemplates(
       name: tpl.name,
       author: tpl.author,
       description: tpl.description ?? null,
-      deployMethods: tpl.deployMethods as Prisma.GameTemplateCreateInput['deployMethods'],
-      kind: (tpl.kind ?? 'GAME') as Prisma.GameTemplateCreateInput['kind'],
+      deployMethods:
+        tpl.deployMethods as Prisma.GameTemplateCreateInput["deployMethods"],
+      kind: (tpl.kind ?? "GAME") as Prisma.GameTemplateCreateInput["kind"],
       supportsLinux: tpl.supportsLinux ?? true,
       supportsWindows: tpl.supportsWindows ?? false,
       dockerImages: tpl.dockerImages as Prisma.InputJsonValue,
       steamAppId: tpl.steamAppId ?? null,
       startupCommand: tpl.startupCommand,
       startupDetect: tpl.startupDetect ?? null,
-      stopCommand: tpl.stopCommand ?? '^C',
+      stopCommand: tpl.stopCommand ?? "^C",
       installScript: tpl.installScript as Prisma.InputJsonValue,
       configFiles: (tpl.configFiles ?? []) as Prisma.InputJsonValue,
       recCpuCores: tpl.recCpuCores ?? 1,
@@ -1152,15 +1430,15 @@ async function seedTemplates(
     // so the storefront has content out of the box. These are applied on CREATE
     // and backfilled onto pre-storefront rows below — but never on plain UPDATE,
     // so admin edits (publish toggles, custom art) made in the panel persist.
-    const FEATURED = new Set(['minecraft', 'rust', 'valheim', 'palworld']);
+    const FEATURED = new Set(["minecraft", "rust", "valheim", "palworld"]);
     // Old per-loader Minecraft eggs are superseded by the unified `minecraft`
     // egg (loader chosen per-server). Keep them for existing servers but hide
     // them from the public storefront.
     const DEPRECATED = new Set([
-      'minecraft-paper',
-      'minecraft-fabric',
-      'minecraft-forge',
-      'minecraft-neoforge',
+      "minecraft-paper",
+      "minecraft-fabric",
+      "minecraft-forge",
+      "minecraft-neoforge",
     ]);
     // Per-game art (apps/web/public/games/<slug>.svg); the web GameImage falls
     // back to a default placeholder if a file is missing.
@@ -1189,13 +1467,17 @@ async function seedTemplates(
         where: { id: template.id },
         data: storefront,
       });
-    } else if (template.cardImageUrl.startsWith('/games/')) {
+    } else if (template.cardImageUrl.startsWith("/games/")) {
       // Seed-managed art (bundled /games/* — not an admin custom URL): keep it in
       // sync with the current per-game art + tags so re-seeds reflect taxonomy/art
       // changes without overwriting admin customisation or publish state.
       await prisma.gameTemplate.update({
         where: { id: template.id },
-        data: { cardImageUrl: preset, heroImageUrl: preset, tags: storefront.tags },
+        data: {
+          cardImageUrl: preset,
+          heroImageUrl: preset,
+          tags: storefront.tags,
+        },
       });
     }
 
@@ -1212,7 +1494,8 @@ async function seedTemplates(
       const varData = {
         displayName: v.displayName,
         description: v.description ?? null,
-        type: (v.type ?? 'STRING') as Prisma.TemplateVariableCreateInput['type'],
+        type: (v.type ??
+          "STRING") as Prisma.TemplateVariableCreateInput["type"],
         defaultValue: v.defaultValue ?? null,
         rules: (v.rules ?? {}) as Prisma.InputJsonValue,
         userEditable: v.userEditable ?? true,
@@ -1221,9 +1504,16 @@ async function seedTemplates(
       };
 
       await prisma.templateVariable.upsert({
-        where: { templateId_envName: { templateId: template.id, envName: v.envName } },
+        where: {
+          templateId_envName: { templateId: template.id, envName: v.envName },
+        },
         update: varData,
-        create: { id: uuidv7(), templateId: template.id, envName: v.envName, ...varData },
+        create: {
+          id: uuidv7(),
+          templateId: template.id,
+          envName: v.envName,
+          ...varData,
+        },
       });
     }
 
@@ -1232,7 +1522,7 @@ async function seedTemplates(
   }
 
   console.log(
-    `  • Game templates: ${count} ${opts.createOnly ? 'new egg(s) created' : 'loaded'} from ${TEMPLATES_DIR}`,
+    `  • Game templates: ${count} ${opts.createOnly ? "new egg(s) created" : "loaded"} from ${TEMPLATES_DIR}`,
   );
 }
 
@@ -1241,13 +1531,13 @@ async function seedTemplates(
 // ---------------------------------------------------------------------------
 
 async function main() {
-  console.log('Seeding ReFx Hosting database…');
+  console.log("Seeding ReFx Hosting database…");
 
   // Essential bootstrap — always applied so the platform is operable and the
   // RBAC permission sets stay current. These never resurrect deleted data:
   // seedOwner only creates an owner when none exists, and seedRoles upserts the
   // fixed system roles (which are not user-deletable anyway).
-  console.log('Identity:');
+  console.log("Identity:");
   await seedOwner();
   await seedRoles();
 
@@ -1257,27 +1547,27 @@ async function main() {
   // anything an operator deleted. So it only runs when SEED_DEMO is enabled, or
   // automatically on a first run (no regions yet). Set SEED_DEMO=false to keep
   // it off; SEED_DEMO=true to force it.
-  const demoFlag = (process.env.SEED_DEMO ?? '').toLowerCase();
+  const demoFlag = (process.env.SEED_DEMO ?? "").toLowerCase();
   const firstRun = (await prisma.region.count()) === 0;
   const seedDemo =
-    demoFlag === 'true' || demoFlag === '1' || (demoFlag === '' && firstRun);
+    demoFlag === "true" || demoFlag === "1" || (demoFlag === "" && firstRun);
 
   if (seedDemo) {
-    console.log('Infrastructure:');
+    console.log("Infrastructure:");
     await seedRegionAndNode();
 
-    console.log('Support:');
+    console.log("Support:");
     await seedTicketCategories();
 
-    console.log('Catalog:');
+    console.log("Catalog:");
     const categorySlugToId = await seedGameCategories();
     await seedTemplates(categorySlugToId);
 
-    console.log('Status:');
+    console.log("Status:");
     await seedDemoIncidents();
   } else {
     console.log(
-      'Demo content: skipped (already initialised; set SEED_DEMO=true to force).',
+      "Demo content: skipped (already initialised; set SEED_DEMO=true to force).",
     );
 
     // Curated game eggs ARE kept in sync every deploy (create-only): brand-new
@@ -1285,7 +1575,7 @@ async function main() {
     // templates are left untouched. Eggs an admin DELETES in the panel are
     // tombstoned (RetiredEgg) and skipped here, so they stay gone across reseeds
     // without touching the JSON files.
-    console.log('Game eggs (auto-load):');
+    console.log("Game eggs (auto-load):");
     // Ensure categories exist (upsert) even on a create-only reseed — loading the
     // map alone meant a newly-added category (e.g. voice/web) never got created, so
     // templates referencing it kept a NULL categoryId and never moved out of Games.
@@ -1297,26 +1587,26 @@ async function main() {
   // every deploy (create-only — never clobbers admin tuning and respects
   // deactivation): game templates get a HARDWARE_TIER product with Low/Mid/High
   // tiers; TeamSpeak 3 gets a slot-based VOICE_SERVER product.
-  console.log('Storefront plans:');
+  console.log("Storefront plans:");
   // Isolate the two seeders so a hiccup in one (e.g. a lingering constraint on a
   // legacy product) never blocks the other from running.
   try {
     await seedGameTierProducts();
   } catch (e) {
-    console.error('  ! game tier products failed:', (e as Error).message);
+    console.error("  ! game tier products failed:", (e as Error).message);
   }
   try {
     await seedVoiceProducts();
   } catch (e) {
-    console.error('  ! voice products failed:', (e as Error).message);
+    console.error("  ! voice products failed:", (e as Error).message);
   }
 
   // Knowledge base: import any new articles from kb/articles.json (create-only).
-  console.log('Knowledge base:');
+  console.log("Knowledge base:");
   try {
     await seedKbArticles();
   } catch (e) {
-    console.error('  ! knowledge base seed failed:', (e as Error).message);
+    console.error("  ! knowledge base seed failed:", (e as Error).message);
   }
 
   // Curated egg sync is create-only (to preserve admin tuning), so Workshop
@@ -1326,7 +1616,7 @@ async function main() {
   try {
     await syncWorkshopEggs();
   } catch (e) {
-    console.error('  ! workshop egg sync failed:', (e as Error).message);
+    console.error("  ! workshop egg sync failed:", (e as Error).message);
   }
 
   // Same rationale for voice (TeamSpeak): backfill the slot-enforcing launcher
@@ -1334,7 +1624,7 @@ async function main() {
   try {
     await syncVoiceEggs();
   } catch (e) {
-    console.error('  ! voice egg sync failed:', (e as Error).message);
+    console.error("  ! voice egg sync failed:", (e as Error).message);
   }
 
   // Ensure existing TeamSpeak servers keep TS3SERVER_LICENSE=accept so the image
@@ -1342,14 +1632,17 @@ async function main() {
   try {
     await fixTeamspeakLicenseEnv();
   } catch (e) {
-    console.error('  ! teamspeak license env fix failed:', (e as Error).message);
+    console.error(
+      "  ! teamspeak license env fix failed:",
+      (e as Error).message,
+    );
   }
 
   // One-time rename of the web-hosting egg (create-only sync preserves names).
   try {
     await renameWebHostingEgg();
   } catch (e) {
-    console.error('  ! web-hosting egg rename failed:', (e as Error).message);
+    console.error("  ! web-hosting egg rename failed:", (e as Error).message);
   }
 
   // Backfill the hardened unified Minecraft install script (per-loader launch
@@ -1358,21 +1651,24 @@ async function main() {
   try {
     await syncMinecraftEgg();
   } catch (e) {
-    console.error('  ! minecraft egg sync failed:', (e as Error).message);
+    console.error("  ! minecraft egg sync failed:", (e as Error).message);
   }
 
   try {
     await clearLegacySteamLogins();
   } catch (e) {
-    console.error('  ! legacy steam-login cleanup failed:', (e as Error).message);
+    console.error(
+      "  ! legacy steam-login cleanup failed:",
+      (e as Error).message,
+    );
   }
 
-  console.log('Seed complete.');
+  console.log("Seed complete.");
 }
 
 main()
   .catch((err) => {
-    console.error('Seed failed:', err);
+    console.error("Seed failed:", err);
     process.exitCode = 1;
   })
   .finally(async () => {

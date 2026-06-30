@@ -77,6 +77,13 @@ server {
     gzip on;
     gzip_types application/json text/plain;
 
+    # Keep internal/observability surfaces off the public internet. Prometheus
+    # scrapes panel-api directly over the internal network (not through here), so
+    # this doesn't break metrics. /metrics is @Public in-app; /docs (Swagger) is
+    # only mounted when ENABLE_API_DOCS=true — block both regardless.
+    location /metrics { return 404; }
+    location /docs    { return 404; }
+
     location / {
         proxy_pass http://refx_api;
         proxy_http_version 1.1;
