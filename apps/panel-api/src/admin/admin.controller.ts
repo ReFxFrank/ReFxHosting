@@ -12,13 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import {
-  BillingInterval,
-  CreditReason,
-  GlobalRole,
-  InvoiceState,
-  UserState,
-} from '@prisma/client';
+import { BillingInterval, CreditReason } from '@prisma/client';
 import { AdminService } from './admin.service';
 import { NodesService } from '../nodes/nodes.service';
 import { UsersService } from '../users/users.service';
@@ -66,6 +60,8 @@ import { RequirePerm } from '../common/decorators/require-permission.decorator';
 import { CurrentUser, AuthUser } from '../common/decorators/current-user.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { ListUsersQueryDto } from '../users/dto/list-users-query.dto';
+import { ListInvoicesQueryDto } from '../billing/dto/list-invoices-query.dto';
 import { CreateNodeDto, UpdateNodeDto, UpdateAgentsDto } from '../nodes/dto/node.dto';
 import { CreateLocationDto, UpdateLocationDto } from '../nodes/dto/location.dto';
 import { CreateProductDto } from '../billing/dto/create-product.dto';
@@ -354,14 +350,10 @@ export class AdminController {
 
   @Get('users')
   @RequirePerm('users.read')
-  listUsers(
-    @Query() pagination: PaginationDto,
-    @Query('role') role?: string,
-    @Query('state') state?: string,
-  ) {
-    return this.users.listUsers(pagination, {
-      role: role as GlobalRole | undefined,
-      state: state as UserState | undefined,
+  listUsers(@Query() query: ListUsersQueryDto) {
+    return this.users.listUsers(query, {
+      role: query.role,
+      state: query.state,
     });
   }
 
@@ -566,8 +558,8 @@ export class AdminController {
 
   @Get('invoices')
   @RequirePerm('billing.read')
-  listInvoices(@Query() pagination: PaginationDto, @Query('state') state?: string) {
-    return this.billing.listAllInvoices(pagination, state as InvoiceState | undefined);
+  listInvoices(@Query() query: ListInvoicesQueryDto) {
+    return this.billing.listAllInvoices(query, query.state);
   }
 
   /** Bulk-delete invoices (must precede `invoices/:id` routes). */

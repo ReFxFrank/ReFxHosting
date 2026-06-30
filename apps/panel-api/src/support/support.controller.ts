@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { GlobalRole, TicketPriority, TicketState } from '@prisma/client';
+import { GlobalRole } from '@prisma/client';
 import { SupportService } from './support.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -22,7 +22,7 @@ import {
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { ListTicketsQueryDto } from './dto/list-tickets-query.dto';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { AddMessageDto } from './dto/add-message.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
@@ -50,15 +50,12 @@ export class SupportController {
   @Get('tickets')
   listTickets(
     @CurrentUser() user: AuthUser,
-    @Query() pagination: PaginationDto,
-    @Query('state') state?: TicketState,
-    @Query('priority') priority?: TicketPriority,
-    @Query('mine') mine?: string,
+    @Query() query: ListTicketsQueryDto,
   ) {
-    return this.support.listTickets(user, pagination, {
-      state,
-      priority,
-      mine: mine === 'true',
+    return this.support.listTickets(user, query, {
+      state: query.state,
+      priority: query.priority,
+      mine: query.mine === 'true',
     });
   }
 
