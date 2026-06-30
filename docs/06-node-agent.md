@@ -266,8 +266,15 @@ Each running server exposes its **stdout/stderr multiplexed** over the runtime's
   when the template defines it — issues them via **RCON** (e.g. Minecraft/Source
   servers), which is also how graceful `stopCommand`s like `stop`/`save` are
   delivered.
-- Watches output against the template `startupDetect` regex to promote
-  `ServerState` from `STARTING` to `RUNNING`.
+- Watches output against the template `startupDetect` marker to promote
+  `ServerState` from `STARTING` to `RUNNING`. Both runtimes honor it: when a
+  server has a marker (the egg's `startupDetect`, or a per-server `READY_LINE`
+  env variable as a fallback), the Docker runtime holds it in `STARTING` and
+  streams the container logs, flipping to `RUNNING` on the first matching line —
+  or after a 90s grace period, so a mistyped marker or a program that never
+  prints a recognizable ready line still goes green instead of being stuck.
+  With no marker (the default for every game egg) a server goes `RUNNING` as
+  soon as its container/process starts.
 
 ---
 

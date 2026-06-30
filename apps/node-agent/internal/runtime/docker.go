@@ -539,9 +539,19 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 		s.SetState(server.StateCrashed)
 		return fmt.Errorf("docker: start: %w", err)
 	}
-	s.SetState(server.StateRunning)
 	d.log.Info().Str("server", s.ID()).Msg("container started")
 	go d.watchExit(s, created.ID)
+	// Startup detection: when the egg (or the server's READY_LINE variable) names a
+	// "ready" marker, hold the server in STARTING and only flip it to RUNNING once
+	// that line appears in the container logs — mirroring Wings. With no marker (the
+	// default for every game egg) we go RUNNING immediately on container start, as
+	// before. This makes the long-existing StartupDetect field finally take effect
+	// on the Docker runtime (previously only the native runtime honored it).
+	if detect := startupMarker(s.Spec); detect != "" {
+		go d.watchStartup(s, created.ID, detect)
+	} else {
+		s.SetState(server.StateRunning)
+	}
 	return nil
 }
 
@@ -570,6 +580,68 @@ func (d *DockerRuntime) watchExit(s *server.Server, id string) {
 		s.SetState(server.StateCrashed)
 		d.log.Warn().Str("server", s.ID()).Int64("exit", code).Msg("container exited")
 	}
+}
+
+// startupRunningGrace caps how long a server that has a startup marker stays in
+// STARTING before we promote it to RUNNING anyway — so a mistyped marker, or a
+// program (e.g. a Discord bot) that simply never prints a recognizable ready
+// line, still goes green instead of being stuck amber forever. A real crash is
+// caught independently and immediately by watchExit.
+const startupRunningGrace = 90 * time.Second
+
+// startupMarker returns the substring whose appearance in the logs marks a server
+// "ready". It prefers the egg's StartupDetect, then the server's READY_LINE env
+// variable — letting a customer set a ready line per-server (e.g. a Discord bot's
+// login message) without an egg change. Empty means "ready as soon as it starts".
+func startupMarker(spec server.Spec) string {
+	if d := strings.TrimSpace(spec.StartupDetect); d != "" {
+		return d
+	}
+	return strings.TrimSpace(spec.Env["READY_LINE"])
+}
+
+// watchStartup streams a freshly-started container's logs and flips it from
+// STARTING to RUNNING when a line contains the ready marker (or the grace period
+// elapses). It stops as soon as the server leaves STARTING for any reason — a
+// crash handled by watchExit, a stop, or a replacement container — so it never
+// clobbers a later state.
+func (d *DockerRuntime) watchStartup(s *server.Server, id, detect string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	promote := func(reason string) {
+		if s.RuntimeRef == id && s.State() == server.StateStarting {
+			s.SetState(server.StateRunning)
+			d.log.Info().Str("server", s.ID()).Str("via", reason).Msg("startup detected")
+		}
+	}
+
+	timer := time.AfterFunc(startupRunningGrace, func() {
+		promote("grace")
+		cancel()
+	})
+	defer timer.Stop()
+
+	logs, err := d.cli.ContainerLogs(ctx, id, container.LogsOptions{
+		ShowStdout: true, ShowStderr: true, Follow: true, Tail: "all",
+	})
+	if err != nil {
+		promote("logs-unavailable")
+		return
+	}
+	defer logs.Close()
+
+	streamDockerLogs(logs, func(line []byte) {
+		// Stop watching the moment we (or watchExit) leave STARTING.
+		if s.RuntimeRef != id || s.State() != server.StateStarting {
+			cancel()
+			return
+		}
+		if strings.Contains(string(line), detect) {
+			promote("marker")
+			cancel()
+		}
+	})
 }
 
 // Stop sends the configured stop command (a console command) or SIGTERM, waiting

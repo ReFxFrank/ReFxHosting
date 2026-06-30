@@ -6,9 +6,7 @@
   "longDescription": "Run any Discord bot on a managed container with full console access, a file manager, and SFTP. Choose your runtime image (Node.js 20/22 or Python 3.11/3.12), set a Startup Command (e.g. \"npm install && node index.js\" or \"pip install -r requirements.txt && python bot.py\"), and store your token securely as the BOT_TOKEN environment variable. The bot starts on boot and restarts automatically if it crashes.",
   "category": "bots",
   "kind": "BOT",
-  "deployMethods": [
-    "DOCKER"
-  ],
+  "deployMethods": ["DOCKER"],
   "supportsLinux": true,
   "supportsWindows": false,
   "dockerImages": {
@@ -58,6 +56,20 @@
       "userEditable": true,
       "userViewable": false,
       "sortOrder": 1
+    },
+    {
+      "envName": "READY_LINE",
+      "displayName": "Ready log line (optional)",
+      "description": "If your bot prints a line when it finishes logging in (e.g. \"Logged in as\" or \"Ready!\"), enter a snippet of it here. The panel will then show \"Starting\" until that line appears in the console, then flip to \"Running\". Leave blank to show \"Running\" as soon as the container starts.",
+      "type": "STRING",
+      "defaultValue": "",
+      "rules": {
+        "required": false,
+        "maxLength": 200
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
     }
   ]
 }
