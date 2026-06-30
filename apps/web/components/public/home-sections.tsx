@@ -21,6 +21,7 @@ import {
   Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HeroKbSearch } from "@/components/public/hero-kb-search";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
@@ -76,6 +77,7 @@ export function HeroSplash() {
         <p className="refx-enter refx-enter-5 mt-4 text-xs text-muted-foreground">
           Instant setup · DDoS protected · {BRAND}
         </p>
+        <HeroKbSearch />
       </div>
     </section>
   );

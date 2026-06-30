@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Search, BookOpen, ArrowRight, LifeBuoy } from "lucide-react";
@@ -34,6 +34,14 @@ function excerpt(body: string): string {
 
 export default function KnowledgeBasePage() {
   const [search, setSearch] = useState("");
+
+  // Seed the search from a ?q= param (e.g. arriving from the homepage hero
+  // search). Read from the URL directly so this static page stays static.
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("q");
+    if (q) setSearch(q);
+  }, []);
+
   const { data, isLoading } = useQuery({
     queryKey: ["kb", "all"],
     queryFn: () => api.support.kb(),
