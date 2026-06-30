@@ -372,6 +372,7 @@ async function seedGameCategories() {
     { name: 'FPS', slug: 'shooter' },
     { name: 'Voice', slug: 'voice' },
     { name: 'Web Hosting', slug: 'web' },
+    { name: 'Bot Hosting', slug: 'bots' },
   ];
 
   const bySlug: Record<string, string> = {};
@@ -502,11 +503,13 @@ async function seedGameTierProducts() {
   for (const t of templates) {
     if (SKIP.has(t.slug) || t.category?.slug === 'voice') continue;
 
-    // WEB templates become WEB_HOSTING products (app-container hosting); everything
-    // else is a GAME_SERVER. Both use the same HARDWARE_TIER engine + tier sizing.
+    // WEB templates become WEB_HOSTING products, BOT templates become BOT_HOSTING
+    // (Discord/app bot containers), everything else a GAME_SERVER. All three use
+    // the same HARDWARE_TIER engine + tier sizing.
     const isWeb = t.kind === 'WEB';
-    const pType = isWeb ? 'WEB_HOSTING' : 'GAME_SERVER';
-    const slug = `${isWeb ? 'web' : 'gs'}-${t.slug}`;
+    const isBot = t.kind === 'BOT';
+    const pType = isBot ? 'BOT_HOSTING' : isWeb ? 'WEB_HOSTING' : 'GAME_SERVER';
+    const slug = `${isBot ? 'bot' : isWeb ? 'web' : 'gs'}-${t.slug}`;
     const product = await prisma.product.upsert({
       where: { slug },
       // Don't clobber admin tuning on re-seed; just keep the link + type/model.
@@ -517,9 +520,11 @@ async function seedGameTierProducts() {
         billingModel: 'HARDWARE_TIER',
         name: t.name,
         slug,
-        description: isWeb
-          ? `${t.name} web hosting — pick a plan.`
-          : `${t.name} game server hosting — pick a hardware tier.`,
+        description: isBot
+          ? `${t.name} hosting — pick a plan, then upload your bot code.`
+          : isWeb
+            ? `${t.name} web hosting — pick a plan.`
+            : `${t.name} game server hosting — pick a hardware tier.`,
         isActive: true,
         perSlot: false,
         gameTemplateId: t.id,
@@ -551,7 +556,17 @@ async function seedGameTierProducts() {
       players: number | null;
       recommended: boolean;
       sortOrder: number;
-    }> = isWeb
+      // Explicit monthly price (cents). Bot tiers set this to bypass the $5/GB
+      // rule + $5 floor — Discord bots are tiny, so they're priced to market.
+      priceMonthly?: number;
+    }> = isBot
+      ? [
+          { name: 'Micro', description: 'Small bots, testing & development.', cpuCores: 0.5, memoryMb: 256, diskMb: 5120, players: null, recommended: false, sortOrder: 0, priceMonthly: 150 },
+          { name: 'Small', description: 'Active bots for small/mid communities.', cpuCores: 1, memoryMb: 512, diskMb: 10240, players: null, recommended: true, sortOrder: 1, priceMonthly: 250 },
+          { name: 'Medium', description: 'Bots with a database, caching or many guilds.', cpuCores: 1.5, memoryMb: 1024, diskMb: 15360, players: null, recommended: false, sortOrder: 2, priceMonthly: 450 },
+          { name: 'Large', description: 'Heavy bots, or several bots on one instance.', cpuCores: 2, memoryMb: 2048, diskMb: 25600, players: null, recommended: false, sortOrder: 3, priceMonthly: 800 },
+        ]
+      : isWeb
       ? [
           { name: 'Starter', description: 'Blogs, portfolios & small personal sites.', cpuCores: 1, memoryMb: 1024, diskMb: 10240, players: null, recommended: false, sortOrder: 0 },
           { name: 'Personal', description: 'Growing sites & small businesses.', cpuCores: 1, memoryMb: 2048, diskMb: 25600, players: null, recommended: true, sortOrder: 1 },
@@ -578,11 +593,11 @@ async function seedGameTierProducts() {
 
     for (const spec of resolved) {
       const { cpuCores, memoryMb, diskMb } = spec;
-      // Price = tier RAM (GB) × PRICE_PER_GB_CENTS, floored at $5.
-      const monthly = Math.max(
-        500,
-        Math.round((memoryMb / 1024) * PRICE_PER_GB_CENTS),
-      );
+      // Bot tiers carry an explicit price; everything else is tier RAM (GB) ×
+      // PRICE_PER_GB_CENTS, floored at $5.
+      const monthly =
+        spec.priceMonthly ??
+        Math.max(500, Math.round((memoryMb / 1024) * PRICE_PER_GB_CENTS));
 
       // Idempotent on (productId, name): reuse the existing tier if present.
       const existing = await prisma.hardwareTier.findFirst({

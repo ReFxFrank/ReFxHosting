@@ -12,6 +12,7 @@ import {
   Gamepad2,
   Mic,
   Globe,
+  Bot,
   Users,
   Check,
   Mail,
@@ -62,6 +63,8 @@ const INTERVAL_ORDER: BillingInterval[] = [
 const isVoiceType = (p: Product) => p.type === "VOICE_SERVER";
 // Web hosting is its own product line (like voice) — grouped separately in the picker.
 const isWebType = (p: Product) => p.type === "WEB_HOSTING";
+// Discord/app bot hosting — its own product line, surfaced under web hosting.
+const isBotType = (p: Product) => p.type === "BOT_HOSTING";
 const isPerSlot = (p: Product) => p.billingModel === "PER_SLOT" || p.perSlot;
 const hasActiveTiers = (p: Product) =>
   (p.hardwareTiers ?? []).some((t) => t.isActive !== false);
@@ -112,11 +115,12 @@ export default function OrderPage() {
     [productsQ.data],
   );
   const gameOfferings = useMemo(
-    () => offerings.filter((p) => !isVoiceType(p) && !isWebType(p)),
+    () => offerings.filter((p) => !isVoiceType(p) && !isWebType(p) && !isBotType(p)),
     [offerings],
   );
   const voiceOfferings = useMemo(() => offerings.filter((p) => isVoiceType(p)), [offerings]);
   const webOfferings = useMemo(() => offerings.filter((p) => isWebType(p)), [offerings]);
+  const botOfferings = useMemo(() => offerings.filter((p) => isBotType(p)), [offerings]);
 
   const [productId, setProductId] = useState<string | null>(null);
   const [tierId, setTierId] = useState<string | null>(null);
@@ -137,6 +141,7 @@ export default function OrderPage() {
   // voiceType drives grouping/icon/labels; perSlot drives the configuration UI.
   const voiceType = product ? isVoiceType(product) : false;
   const webType = product ? isWebType(product) : false;
+  const botType = product ? isBotType(product) : false;
   const perSlot = product ? isPerSlot(product) : false;
   const tiers = useMemo(
     () =>
@@ -492,6 +497,25 @@ export default function OrderPage() {
             </div>
           </div>
         )}
+
+        {botOfferings.length > 0 && (
+          <div className="space-y-2">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+              <Bot className="size-3.5" /> Bot hosting
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {botOfferings.map((g) => (
+                <OfferingCard
+                  key={g.id}
+                  product={g}
+                  active={g.id === productId}
+                  icon={templatesById[g.gameTemplateId ?? ""]?.iconUrl || templatesById[g.gameTemplateId ?? ""]?.cardImageUrl}
+                  onSelect={() => setProductId(g.id)}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {product && (
@@ -732,7 +756,9 @@ export default function OrderPage() {
                     ? "My community voice"
                     : webType
                       ? "My website"
-                      : "My awesome server"
+                      : botType
+                        ? "My Discord bot"
+                        : "My awesome server"
                 }
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -744,7 +770,7 @@ export default function OrderPage() {
           <aside className="lg:sticky lg:top-6 h-fit space-y-3 rounded-xl border p-4">
             <h2 className="text-sm font-semibold">Summary</h2>
             <Row label="Product" value={product.name} />
-            <Row label="Type" value={voiceType ? "Voice server" : webType ? "Web hosting" : "Game server"} />
+            <Row label="Type" value={voiceType ? "Voice server" : webType ? "Web hosting" : botType ? "Bot hosting" : "Game server"} />
             {perSlot ? (
               <Row label="Slots" value={String(slots)} />
             ) : (

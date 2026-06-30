@@ -732,6 +732,10 @@ export const api = {
     webApps: () => getList<StorefrontGame>("/catalog/web", { anonymous: true }),
     webApp: (slug: string) =>
       http.get<StorefrontGameDetail>(`/catalog/web/${slug}`, { anonymous: true }),
+    // Public Discord/app bot-hosting catalog (surfaced under web hosting).
+    botApps: () => getList<StorefrontGame>("/catalog/bots", { anonymous: true }),
+    botApp: (slug: string) =>
+      http.get<StorefrontGameDetail>(`/catalog/bots/${slug}`, { anonymous: true }),
     homepageAlerts: () =>
       getList<HomepageAlert>("/catalog/homepage-alerts", { anonymous: true }),
     team: () => getList<TeamMember>("/catalog/team", { anonymous: true }),

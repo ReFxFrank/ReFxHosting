@@ -103,6 +103,18 @@ export class CatalogController {
     return this.storefront.getWebApp(slug);
   }
 
+  /** Published Discord/app bot-hosting plans (surfaced under the web catalog). */
+  @Get('bots')
+  bots() {
+    return this.storefront.listBot();
+  }
+
+  /** One published bot-hosting plan with its orderable plans + locations. */
+  @Get('bots/:slug')
+  botApp(@Param('slug') slug: string) {
+    return this.storefront.getBotApp(slug);
+  }
+
   /** Active, in-window public homepage notices (separate from dashboard alerts). */
   @Get('homepage-alerts')
   homepageAlertsList() {

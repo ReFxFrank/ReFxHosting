@@ -1,0 +1,63 @@
+{
+  "name": "Discord Bot",
+  "slug": "discord-bot",
+  "author": "ops@refx.example",
+  "description": "Host your own Discord bot 24/7. Pick a runtime (Node.js or Python), upload your code via SFTP or the file manager, set your bot token, and go. Auto-restarts on crash.",
+  "longDescription": "Run any Discord bot on a managed container with full console access, a file manager, and SFTP. Choose your runtime image (Node.js 20/22 or Python 3.11/3.12), set a Startup Command (e.g. \"npm install && node index.js\" or \"pip install -r requirements.txt && python bot.py\"), and store your token securely as the BOT_TOKEN environment variable. The bot starts on boot and restarts automatically if it crashes.",
+  "category": "bots",
+  "kind": "BOT",
+  "deployMethods": [
+    "DOCKER"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Node.js 22": "ghcr.io/parkervcp/yolks:nodejs_22",
+    "Node.js 20": "ghcr.io/parkervcp/yolks:nodejs_20",
+    "Python 3.12": "ghcr.io/parkervcp/yolks:python_3.12",
+    "Python 3.11": "ghcr.io/parkervcp/yolks:python_3.11"
+  },
+  "startupCommand": "bash -c \"{{STARTUP_CMD}}\"",
+  "startupDetect": "",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/yolks:nodejs_22",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\n# Seed a placeholder so a fresh server boots and prints instructions until the\n# customer uploads their own bot code (via SFTP on port 2022 or the file manager).\nif [ ! -e index.js ] && [ ! -e bot.py ] && [ ! -e package.json ] && [ ! -e requirements.txt ]; then\n  cat > index.js <<'EOF'\nconsole.log('ReFx bot host is ready. Upload your bot code (index.js + package.json, or bot.py + requirements.txt) via SFTP or the file manager, set your Startup Command + BOT_TOKEN under the server settings, then restart.');\nsetInterval(function () {}, 1 << 30);\nEOF\nfi\necho 'Discord bot environment ready.'\n"
+  },
+  "configFiles": [],
+  "recCpuCores": 1,
+  "recMemoryMb": 512,
+  "recDiskMb": 5120,
+  "variables": [
+    {
+      "envName": "STARTUP_CMD",
+      "displayName": "Startup command",
+      "description": "Command that installs deps + runs your bot. Node default shown; Python: \"pip install -r requirements.txt && python bot.py\".",
+      "type": "STRING",
+      "defaultValue": "npm install --omit=dev && node index.js",
+      "rules": {
+        "required": true,
+        "minLength": 1,
+        "maxLength": 512
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "BOT_TOKEN",
+      "displayName": "Bot token",
+      "description": "Your Discord bot token. Injected as the BOT_TOKEN environment variable — read it in code (process.env.BOT_TOKEN / os.environ[\"BOT_TOKEN\"]).",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": {
+        "required": true,
+        "minLength": 10
+      },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 1
+    }
+  ]
+}

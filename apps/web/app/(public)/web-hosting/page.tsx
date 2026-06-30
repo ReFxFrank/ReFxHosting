@@ -14,6 +14,10 @@ export default function WebHostingCatalogPage() {
     queryKey: ["storefront", "web"],
     queryFn: () => api.catalog.webApps(),
   });
+  const bots = useQuery({
+    queryKey: ["storefront", "bots"],
+    queryFn: () => api.catalog.botApps(),
+  });
 
   const all = plans.data ?? [];
   const filtered = useMemo(() => {
@@ -54,6 +58,30 @@ export default function WebHostingCatalogPage() {
           basePath="/web-hosting"
           emptyLabel="No web hosting plans available yet — check back soon."
         />
+      )}
+
+      {(bots.isLoading || (bots.data?.length ?? 0) > 0) && (
+        <section className="mt-14">
+          <div className="mb-6">
+            <p className="refx-eyebrow">Bot hosting</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight">
+              Host your Discord bot
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Run your bot 24/7 — pick a runtime (Node.js or Python), upload your
+              code via SFTP or the file manager, set your token, and go.
+            </p>
+          </div>
+          {bots.isLoading ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-72 rounded-2xl" />
+              ))}
+            </div>
+          ) : (
+            <GameGrid games={bots.data ?? []} basePath="/bots" />
+          )}
+        </section>
       )}
     </div>
   );

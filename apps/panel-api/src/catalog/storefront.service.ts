@@ -66,9 +66,14 @@ export class StorefrontService {
     return this.listCatalog('WEB', 'WEB_HOSTING');
   }
 
+  /** Published Discord/app bot-hosting plans (shown under the web catalog). */
+  async listBot() {
+    return this.listCatalog('BOT', 'BOT_HOSTING');
+  }
+
   private async listCatalog(
-    kind: 'GAME' | 'WEB',
-    productType: 'GAME_SERVER' | 'WEB_HOSTING' | 'VOICE_SERVER',
+    kind: 'GAME' | 'WEB' | 'BOT',
+    productType: 'GAME_SERVER' | 'WEB_HOSTING' | 'VOICE_SERVER' | 'BOT_HOSTING',
     extraWhere: Prisma.GameTemplateWhereInput = {},
   ) {
     const [items, products] = await Promise.all([
@@ -104,10 +109,15 @@ export class StorefrontService {
     return this.getDetail(slug, 'GAME', 'VOICE_SERVER');
   }
 
+  /** One published bot-hosting plan by slug, with its plans + locations. */
+  async getBotApp(slug: string) {
+    return this.getDetail(slug, 'BOT', 'BOT_HOSTING');
+  }
+
   private async getDetail(
     slug: string,
-    kind: 'GAME' | 'WEB',
-    productType: 'GAME_SERVER' | 'WEB_HOSTING' | 'VOICE_SERVER',
+    kind: 'GAME' | 'WEB' | 'BOT',
+    productType: 'GAME_SERVER' | 'WEB_HOSTING' | 'VOICE_SERVER' | 'BOT_HOSTING',
   ) {
     const game = await this.prisma.gameTemplate.findFirst({
       where: { slug, isPublished: true, kind },
@@ -160,7 +170,11 @@ export class StorefrontService {
   // ---- helpers ------------------------------------------------------------
 
   private activeProducts(
-    type: 'GAME_SERVER' | 'WEB_HOSTING' | 'VOICE_SERVER' = 'GAME_SERVER',
+    type:
+      | 'GAME_SERVER'
+      | 'WEB_HOSTING'
+      | 'VOICE_SERVER'
+      | 'BOT_HOSTING' = 'GAME_SERVER',
   ): Promise<PricedProduct[]> {
     return this.prisma.product.findMany({
       where: { isActive: true, type },

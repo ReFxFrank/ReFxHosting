@@ -1497,8 +1497,11 @@ export class ServersService {
     template:
       | { slug: string; kind?: string | null; category?: { slug: string } | null }
       | null,
-  ): 'WEB_APP' | 'VOICE_SERVER' | 'GAME_SERVER' {
+  ): 'WEB_APP' | 'VOICE_SERVER' | 'GAME_SERVER' | 'BOT_APP' {
     if (template?.kind === 'WEB') return 'WEB_APP';
+    // Bot containers don't need the HTTP reverse proxy, so they're NOT WEB_APP
+    // (which gates onto web-enabled nodes) — they schedule on any node.
+    if (template?.kind === 'BOT') return 'BOT_APP';
     return this.isVoiceTemplate(template) ? 'VOICE_SERVER' : 'GAME_SERVER';
   }
 

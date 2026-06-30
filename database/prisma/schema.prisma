@@ -542,6 +542,8 @@ enum ServerType {
   GAME_SERVER
   VOICE_SERVER
   WEB_APP
+  // Discord/application bot container (runs user-supplied bot code).
+  BOT_APP
 }
 
 /// GameTemplate kind — splits the storefront/dashboard into games vs web hosting.
@@ -550,6 +552,9 @@ enum ServerType {
 enum TemplateKind {
   GAME
   WEB
+  // Application/bot hosting (e.g. a Discord bot): runs user code in a chosen
+  // runtime image. Surfaced under the web-hosting catalog.
+  BOT
 }
 
 /// SSL/issuance state for a custom Domain mapped to a web app.
@@ -876,6 +881,8 @@ enum ProductType {
   DEDICATED
   ADDON
   WEB_HOSTING
+  // Discord/application bot hosting (runtime container for user bot code).
+  BOT_HOSTING
 }
 
 /// How a product is configured + priced at order time.

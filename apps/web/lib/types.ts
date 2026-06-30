@@ -757,7 +757,8 @@ export type ProductType =
   | "VPS"
   | "DEDICATED"
   | "ADDON"
-  | "WEB_HOSTING";
+  | "WEB_HOSTING"
+  | "BOT_HOSTING";
 
 export type BillingModel = "HARDWARE_TIER" | "PER_SLOT";
 
