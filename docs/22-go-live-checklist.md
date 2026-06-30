@@ -107,6 +107,24 @@ See **[docs/19-production-deployment.md](19-production-deployment.md)** and the
       secret is weak/default, CORS is `*`, or `NEXT_PUBLIC_API_URL` is http on an
       https site. *(to build — Track J)*
 
+**Web hosting (only if selling the Web Hosting line):**
+- [ ] 🤝 Stand up at least one **web node**: install the agent + run **Caddy** on
+      `:80`/`:443` (admin API on `localhost:2019`, http server `srv0`), and open
+      ports **80 + 443** on its firewall. See **[docs/27-web-hosting.md](27-web-hosting.md)**
+      and OPERATOR-TODO § B.
+- [ ] 🤝 Toggle **"Web hosting enabled"** on that node (Admin → Nodes → Edit). The
+      scheduler only places web servers on web-enabled nodes — until one exists,
+      the web catalog shows **no available locations** by design.
+- [ ] 🤝 **Wildcard DNS** `*.apps.<brand>` → the web node IP, so each site gets an
+      instant `https://<id>.apps.<brand>` address before a custom domain is added.
+
+**Voice / TeamSpeak (only if selling >32-slot plans):**
+- [ ] 🤝 The free TeamSpeak licence caps a server at **32 slots**. To sell the
+      **Plus (64) / Pro (128)** tiers, apply for an **Authorized TeamSpeak Host
+      (ATHP)** licence and configure it on the voice node; otherwise sell only the
+      32-slot **Community** tier (works out of the box) or hide the others in
+      Admin → Products. See OPERATOR-TODO § C.
+
 ---
 
 ## Track E — Data safety & disaster recovery 🛠️
@@ -212,7 +230,20 @@ customer lifecycle and watch every side effect:
 7. Cancel → refund → suspension/expiry behaves; confirm audit-log entries.
 8. Delete account → data export + deletion works.
 
-If all eight pass cleanly on prod, you're ready to take customers.
+Then exercise the other two product lines (skip a line you aren't selling):
+
+9. **Voice** — buy a TeamSpeak plan → accept the licence on the Voice tab →
+   server starts → connect on the voice port → claim admin via the Voice-tab
+   token. Confirm the slot cap matches the tier.
+10. **Web hosting** — buy a web plan (a web-enabled node must exist) → upload a
+    file to `public/` over SFTP/the file manager → it serves on the panel
+    address → add a custom domain → DNS verifies → SSL issues automatically.
+11. **Knowledge base** — `/knowledge-base` lists the seeded articles (search +
+    categories), an article opens with rendered formatting, and the homepage
+    hero search routes into it. (The Support tab should no longer say "No
+    articles found".)
+
+If all of these pass cleanly on prod, you're ready to take customers.
 
 ---
 
@@ -235,7 +266,13 @@ Concrete engineering items from the tracks above that need no external accounts:
    web + api split (Track D). *Done: `infra/reverse-proxy/`.*
 6. **Redis-backed rate limiter** — when multi-replica scaling is on the roadmap
    (Track G). *Still open.*
+7. ✅ **Voice + Web Hosting product lines** — TeamSpeak (flat slot-capped tiers)
+   and web hosting (catalog → order → provision → custom domain + auto-SSL), with
+   web-aware node scheduling (`Node.supportsWeb`). *Done — see web/voice items in
+   Track D + the smoke test.*
+8. ✅ **Customer knowledge base** — 40 published articles + a public
+   `/knowledge-base` and a homepage hero search. *Done.*
 
 ---
 
-_Last updated: 2026-06-26. Keep this file current as items land._
+_Last updated: 2026-06-30. Keep this file current as items land._
