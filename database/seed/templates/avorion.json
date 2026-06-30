@@ -1,0 +1,69 @@
+{
+  "name": "Avorion",
+  "slug": "avorion",
+  "author": "ops@refx.example",
+  "description": "Procedural co-op space sandbox — build block-ships and explore a galaxy. SteamCMD-installed native Linux dedicated server.",
+  "category": "sandbox",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 565060,
+  "startupCommand": "./bin/AvorionServer --galaxy-name Avorion --datapath galaxy --port {{SERVER_PORT}} --query-port {{QUERY_PORT}} --steam-master-port 27021 --steam-query-port 27020 --max-players {{MAX_PLAYERS}} --server-name \"{{SERVER_NAME}}\" --listed false",
+  "startupDetect": "Server startup complete",
+  "stopCommand": "/stop",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd image ships no `steamcmd` on PATH; bootstrap\n# it so the egg's steamcmd calls resolve (otherwise the server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server/steamapps\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 565060 validate +quit\n# steamclient.so so the native Linux dedicated server registers with Steam.\nmkdir -p \"${HOME:-/root}/.steam/sdk32\" \"${HOME:-/root}/.steam/sdk64\"\ncp -f /mnt/server/steamcmd/linux32/steamclient.so \"${HOME:-/root}/.steam/sdk32/steamclient.so\" 2>/dev/null || true\ncp -f /mnt/server/steamcmd/linux64/steamclient.so \"${HOME:-/root}/.steam/sdk64/steamclient.so\" 2>/dev/null || true\nchmod +x /mnt/server/bin/AvorionServer 2>/dev/null || true\necho 'Avorion install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 3,
+  "recMemoryMb": 4096,
+  "recDiskMb": 8192,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server name",
+      "type": "STRING",
+      "defaultValue": "A ReFx Avorion Server",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "type": "NUMBER",
+      "defaultValue": "10",
+      "rules": {
+        "min": 1,
+        "max": 100
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query port",
+      "type": "NUMBER",
+      "defaultValue": "27003",
+      "rules": {
+        "min": 1024,
+        "max": 65535
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    }
+  ]
+}

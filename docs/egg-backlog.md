@@ -32,6 +32,9 @@ publish state and art are preserved).
 | ICARUS | `icarus` | 2089300 | Windows build via Wine; players set in ServerSettings.ini |
 | Sons of the Forest | `sons-of-the-forest` | 2465200 | Windows build via Wine; needs a 3rd (BlobSync) port |
 | Abiotic Factor | `abiotic-factor` | 2857200 | Windows build via Wine; logs to file (startup tails it for detect) |
+| Avorion | `avorion` | 565060 | SteamCMD, native Linux; all-CLI (no config render needed) |
+| The Forest | `the-forest` | 556450 | Windows build via Wine; ports/slots written into `config.cfg` on install |
+| Factorio | `factorio` | — (non-Steam) | Official free headless tarball; name/players set in `server-settings.json` via `jq` on install |
 
 > Vanilla Terraria already shipped as `terraria` (`terraria.json`); `tmodloader`
 > is the modded variant.
@@ -53,9 +56,12 @@ done yet.
 
 | Game | Likely approach | Blocker / to verify |
 |------|-----------------|---------------------|
-| Barotrauma | SteamCMD native Linux, app `1026340` | App id + startup (`./DedicatedServer -batchmode`) verified, but **port/maxplayers/name are config-only** (`serversettings.xml` attributes) — needs an install-time render (XML attrs, like 7DtD's sed step) before shipping, or the allocated port won't match. |
-| The Forest | SteamCMD Windows via Wine, app `556450` | Verified Windows-only (no native Linux server). **Port/slots are config-only** (`config.cfg`) — needs install-time render of the allocated port; also wants a Steam GSLT for the public browser. |
+| The Isle (Evrima) | SteamCMD native Linux, app `412680` `-beta evrima` | Verified native Linux + `Game.ini` render (`ServerName`/`MaxPlayerCount`). Blocker: needs the egg's exact `Engine.ini` (`[Core.System]` Paths block + public EOS creds) written at install or content won't load — grab the raw egg's `Engine.ini` when shipping. Very popular dino game. |
+| Barotrauma | SteamCMD native Linux, app `1026340` | App id + startup (`./DedicatedServer -batchmode`) + done-string verified, but **port/maxplayers/name are config-only** in `serversettings.xml` (XML attrs), which the server **regenerates on shutdown** — needs a robust full-file render (our tooling has no XML-attr parser; the official egg punts and uses default port 27015). |
+| Necesse | SteamCMD native Linux, app `1169370` | Native Linux (bundled JRE + `Server.jar`) verified; **port/slots are config-only** in `cfg/server.cfg` (comma-terminated `key=value,`) — needs a reliable install-time render that survives the server's own rewrite. |
+| Vintage Story | non-Steam (`cdn.vintagestory.at`) | Native Linux .NET server; CLI port/maxclients (clean). Blocker: the **.NET runtime image must match the VS version** (1.22 needs .NET 10, 1.21 .NET 8) — pin `RELEASE_VERSION` to a version whose runtime image we actually ship, or provisioning crashes on boot. |
 | SCUM | SteamCMD Windows via Wine, app `3792580` | Server app id is recent — verify it installs anonymously on first run; Windows-only + BattlEye + heavy RAM (12–16 GB). |
+| Hell Let Loose | — | **Not self-hostable.** Verified: no anonymous dedicated-server app and no public server files — Team17 licenses the binaries only to approved GSPs. Cannot build an egg unless they publish server files. |
 | Space Engineers / Empyrion | Windows via Wine | Wine + .NET/child-playfield processes are finicky; both spin up best on real Windows nodes. |
 | Don't Starve Together | SteamCMD native Linux, app `343050` | Wants a **two-process** master+caves shard model (one server = two processes sharing a cluster dir) + a Klei cluster token for public listing — needs a multi-process launch wrapper. |
 | Raft | `RaftDedicatedServer.exe` via Proton | Confirm the dedicated-server Steam app id + startup args before shipping (didn't want to ship a wrong app id). |

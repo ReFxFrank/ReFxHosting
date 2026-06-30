@@ -1,0 +1,82 @@
+{
+  "name": "Factorio",
+  "slug": "factorio",
+  "author": "ops@refx.example",
+  "description": "Build and automate a sprawling factory. Official free headless dedicated server (no Steam required).",
+  "category": "simulation",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": null,
+  "startupCommand": "if [ ! -e ./saves/{{SAVE_NAME}}.zip ]; then ./bin/x64/factorio --create ./saves/{{SAVE_NAME}}.zip; fi; ./bin/x64/factorio --start-server ./saves/{{SAVE_NAME}}.zip --server-settings ./data/server-settings.json --port {{SERVER_PORT}}",
+  "startupDetect": "Hosting game at",
+  "stopCommand": "/quit",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/installers:debian",
+    "entrypoint": "bash",
+    "script": "set -euo pipefail\ncd /mnt/server\necho 'Downloading Factorio headless (stable)...'\ncurl -fsSL \"https://www.factorio.com/get-download/stable/headless/linux64\" -o factorio.tar.xz\ntar xJf factorio.tar.xz --strip-components=1 -C /mnt/server\nrm -f factorio.tar.xz\nmkdir -p saves\n[ -f data/server-settings.json ] || cp data/server-settings.example.json data/server-settings.json\nchmod +x bin/x64/factorio 2>/dev/null || true\n# Render server name + description into server-settings.json (config lives in the\n# install script — the agent renders only its own {path,content} files).\nif command -v jq >/dev/null 2>&1; then\n  tmp=$(mktemp)\n  jq --arg n \"${SERVER_NAME}\" --arg d \"${SERVER_DESCRIPTION}\" --argjson m \"${MAX_PLAYERS:-0}\" \\\n    '.name=$n | .description=$d | .max_players=$m' data/server-settings.json > \"$tmp\" && mv \"$tmp\" data/server-settings.json\nfi\necho 'Factorio install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 5120,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server name",
+      "type": "STRING",
+      "defaultValue": "A ReFx Factorio Server",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "SERVER_DESCRIPTION",
+      "displayName": "Description",
+      "type": "STRING",
+      "defaultValue": "Automate everything.",
+      "rules": {
+        "maxLength": 128
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SAVE_NAME",
+      "displayName": "Save name",
+      "description": "Save file name (created on first boot).",
+      "type": "STRING",
+      "defaultValue": "world",
+      "rules": {
+        "regex": "^[A-Za-z0-9_-]{1,32}$"
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "description": "Set max_players in data/server-settings.json (0 = unlimited).",
+      "type": "NUMBER",
+      "defaultValue": "16",
+      "rules": {
+        "min": 0,
+        "max": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    }
+  ]
+}

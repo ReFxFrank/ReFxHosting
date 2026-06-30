@@ -1,0 +1,97 @@
+{
+  "name": "The Forest",
+  "slug": "the-forest",
+  "author": "ops@refx.example",
+  "description": "Co-op open-world survival horror. SteamCMD Windows dedicated server run via Wine; port and slots are written into config.cfg on install.",
+  "category": "survival",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:proton"
+  },
+  "steamAppId": 556450,
+  "startupCommand": "xvfb-run -a wine ./TheForestDedicatedServer.exe -batchmode -nographics -serverPasswordAdmin \"{{ADMIN_PASS}}\" -inittype {{INIT_TYPE}} -savefolderpath /mnt/server/TheForestDedicatedServer_Data -configfilepath /mnt/server/TheForestDedicatedServer_Data/forest/config/config.cfg",
+  "startupDetect": "Game autosave started",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:proton",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd image ships no `steamcmd` on PATH; bootstrap\n# it so the egg's steamcmd calls resolve (otherwise the server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server/steamapps\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 556450 validate +quit\nmkdir -p /mnt/server/TheForestDedicatedServer_Data/forest/config\ncat > /mnt/server/TheForestDedicatedServer_Data/forest/config/config.cfg <<EOFCFG\nserverName ${SERVER_NAME}\nserverIP 0.0.0.0\nserverSteamPort 8766\nserverGamePort ${SERVER_PORT}\nserverQueryPort ${QUERY_PORT}\nserverPlayers ${MAX_PLAYERS}\nenableVAC on\ndifficulty Normal\ninitType ${INIT_TYPE}\nslot 1\nEOFCFG\necho 'The Forest install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 3,
+  "recMemoryMb": 4096,
+  "recDiskMb": 10240,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server name",
+      "type": "STRING",
+      "defaultValue": "A ReFx The Forest Server",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "type": "NUMBER",
+      "defaultValue": "8",
+      "rules": {
+        "min": 1,
+        "max": 8
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query port",
+      "type": "NUMBER",
+      "defaultValue": "27016",
+      "rules": {
+        "min": 1024,
+        "max": 65535
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "INIT_TYPE",
+      "displayName": "World init",
+      "description": "New wipes the save; Continue resumes it.",
+      "type": "ENUM",
+      "defaultValue": "Continue",
+      "rules": {
+        "options": [
+          "New",
+          "Continue"
+        ]
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "ADMIN_PASS",
+      "displayName": "Admin password",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": {
+        "minLength": 0
+      },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 4
+    }
+  ]
+}
