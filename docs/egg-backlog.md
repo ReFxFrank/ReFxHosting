@@ -35,6 +35,7 @@ publish state and art are preserved).
 | Avorion | `avorion` | 565060 | SteamCMD, native Linux; all-CLI (no config render needed) |
 | The Forest | `the-forest` | 556450 | Windows build via Wine; ports/slots written into `config.cfg` on install |
 | Factorio | `factorio` | — (non-Steam) | Official free headless tarball; name/players set in `server-settings.json` via `jq` on install |
+| The Isle (Evrima) | `the-isle` | 412680 | SteamCMD native Linux on the `-beta evrima` branch; `Game.ini` + full `Engine.ini` (UE Paths + public EOS creds) written at install |
 
 > Vanilla Terraria already shipped as `terraria` (`terraria.json`); `tmodloader`
 > is the modded variant.
@@ -56,7 +57,6 @@ done yet.
 
 | Game | Likely approach | Blocker / to verify |
 |------|-----------------|---------------------|
-| The Isle (Evrima) | SteamCMD native Linux, app `412680` `-beta evrima` | Verified native Linux + `Game.ini` render (`ServerName`/`MaxPlayerCount`). Blocker: needs the egg's exact `Engine.ini` (`[Core.System]` Paths block + public EOS creds) written at install or content won't load — grab the raw egg's `Engine.ini` when shipping. Very popular dino game. |
 | Barotrauma | SteamCMD native Linux, app `1026340` | App id + startup (`./DedicatedServer -batchmode`) + done-string verified, but **port/maxplayers/name are config-only** in `serversettings.xml` (XML attrs), which the server **regenerates on shutdown** — needs a robust full-file render (our tooling has no XML-attr parser; the official egg punts and uses default port 27015). |
 | Necesse | SteamCMD native Linux, app `1169370` | Native Linux (bundled JRE + `Server.jar`) verified; **port/slots are config-only** in `cfg/server.cfg` (comma-terminated `key=value,`) — needs a reliable install-time render that survives the server's own rewrite. |
 | Vintage Story | non-Steam (`cdn.vintagestory.at`) | Native Linux .NET server; CLI port/maxclients (clean). Blocker: the **.NET runtime image must match the VS version** (1.22 needs .NET 10, 1.21 .NET 8) — pin `RELEASE_VERSION` to a version whose runtime image we actually ship, or provisioning crashes on boot. |

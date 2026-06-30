@@ -1,0 +1,104 @@
+{
+  "name": "The Isle",
+  "slug": "the-isle",
+  "author": "ops@refx.example",
+  "description": "Brutal dinosaur survival (Evrima build). SteamCMD-installed native Linux dedicated server.",
+  "category": "survival",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 412680,
+  "startupCommand": "./TheIsle/Binaries/Linux/TheIsleServer-Linux-Shipping -Port={{SERVER_PORT}} -ini:Engine:[EpicOnlineServices]:DedicatedServerClientId=xyza7891gk5PRo3J7G9puCJGFJjmEguW -ini:Engine:[EpicOnlineServices]:DedicatedServerClientSecret=pKWl6t5i9NJK8gTpVlAxzENZ65P8hYzodV8Dqe5Rlc8",
+  "startupDetect": "Session started succesfully!",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — bootstrap steamcmd onto PATH.\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nexport HOME=/mnt/server\nmkdir -p /mnt/server/steamapps\ncd /mnt/server\n# Evrima lives ONLY on the -beta evrima branch (default branch is abandoned Legacy).\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 412680 -beta evrima validate +quit\n# steamclient.so (EOS/Steam registration)\nmkdir -p /mnt/server/.steam/sdk32 /mnt/server/.steam/sdk64\ncp -f /mnt/server/steamcmd/linux32/steamclient.so /mnt/server/.steam/sdk32/steamclient.so 2>/dev/null || true\ncp -f /mnt/server/steamcmd/linux64/steamclient.so /mnt/server/.steam/sdk64/steamclient.so 2>/dev/null || true\nmkdir -p /mnt/server/TheIsle/Saved/Config/LinuxServer\ncat > /mnt/server/TheIsle/Saved/Config/LinuxServer/Game.ini << ENDOFFILE\n[/Script/TheIsle.TIGameSession]\nServerName=${SERVER_NAME}\nMaxPlayerCount=${MAX_PLAYERS}\nMapName=Gateway\nbRconEnabled=false\nRconPort=8888\nRconPassword=\nbServerPassword=${SERVER_PASSWORD_ENABLED}\nServerPassword=${SERVER_PASSWORD}\nbServerDynamicWeather=true\nbAllowReplay=true\nbEnableHumans=false\nbQueueEnabled=true\nQueuePort=${QUEUE_PORT}\n-\n[/Script/TheIsle.TIGameStateBase]\nAdminsSteamIDs=${ADMIN_STEAMID}\nENDOFFILE\ncat > /mnt/server/TheIsle/Saved/Config/LinuxServer/Engine.ini << ENDOFFILE\n[Core.System]\nPaths=../../../Engine/Content\nPaths=%GAMEDIR%Content\nPaths=../../../Engine/Plugins/Runtime/SoundUtilities/Content\nPaths=../../../Engine/Plugins/Runtime/Synthesis/Content\nPaths=../../../Engine/Plugins/Runtime/AudioSynesthesia/Content\nPaths=../../../Engine/Plugins/Runtime/WebBrowserWidget/Content\nPaths=../../../Engine/Plugins/FX/Niagara/Content\nPaths=../../../Engine/Plugins/Experimental/PythonScriptPlugin/Content\nPaths=../../../TheIsle/Plugins/SteamCore/Content\nPaths=../../../TheIsle/Plugins/RVTObjectLandscapeBlending/Content\nPaths=../../../Engine/Plugins/Runtime/Nvidia/DLSS/Content\nPaths=../../../TheIsle/Plugins/DonMeshPainting/Content\nPaths=../../../TheIsle/Plugins/UIPF/Content\nPaths=../../../TheIsle/Plugins/EOSCore/Content\nPaths=../../../Engine/Plugins/Experimental/ControlRig/Content\nPaths=../../../Engine/Plugins/Runtime/Nvidia/DLSSMoviePipelineSupport/Content\nPaths=../../../Engine/Plugins/MovieScene/MovieRenderPipeline/Content\nPaths=../../../Engine/Plugins/Compositing/OpenColorIO/Content\nPaths=../../../Engine/Plugins/MovieScene/SequencerScripting/Content\nPaths=../../../TheIsle/Plugins/ImpostorBaker/Content\nPaths=../../../Engine/Plugins/2D/Paper2D/Content\nPaths=../../../Engine/Plugins/Developer/AnimationSharing/Content\nPaths=../../../Engine/Plugins/Editor/GeometryMode/Content\nPaths=../../../Engine/Plugins/Editor/SpeedTreeImporter/Content\nPaths=../../../Engine/Plugins/Enterprise/DatasmithContent/Content\nPaths=../../../Engine/Plugins/Experimental/ChaosClothEditor/Content\nPaths=../../../Engine/Plugins/Experimental/GeometryProcessing/Content\nPaths=../../../Engine/Plugins/Experimental/GeometryCollectionPlugin/Content\nPaths=../../../Engine/Plugins/Experimental/ChaosSolverPlugin/Content\nPaths=../../../Engine/Plugins/Experimental/ChaosNiagara/Content\nPaths=../../../Engine/Plugins/Experimental/MotoSynth/Content\nPaths=../../../Engine/Plugins/Media/MediaCompositing/Content\nPaths=../../../Engine/Plugins/Runtime/OpenXREyeTracker/Content\nPaths=../../../Engine/Plugins/Runtime/OpenXR/Content\nPaths=../../../Engine/Plugins/Runtime/OpenXRHandTracking/Content\nPaths=../../../Engine/Plugins/VirtualProduction/Takes/Content\n\n[EpicOnlineServices]\nDedicatedServerClientId=xyza7891gk5PRo3J7G9puCJGFJjmEguW\nDedicatedServerClientSecret=pKWl6t5i9NJK8gTpVlAxzENZ65P8hYzodV8Dqe5Rlc8\nENDOFFILE\nchmod -R 777 /mnt/server/TheIsle/Saved/Config/LinuxServer\necho 'The Isle install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 4,
+  "recMemoryMb": 8192,
+  "recDiskMb": 20480,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server name",
+      "type": "STRING",
+      "defaultValue": "A ReFx The Isle Server",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "type": "NUMBER",
+      "defaultValue": "50",
+      "rules": {
+        "min": 1,
+        "max": 100
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "SERVER_PASSWORD_ENABLED",
+      "displayName": "Password protected",
+      "type": "BOOLEAN",
+      "defaultValue": "false",
+      "rules": {},
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "SERVER_PASSWORD",
+      "displayName": "Server password",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": {
+        "minLength": 0
+      },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 3
+    },
+    {
+      "envName": "QUEUE_PORT",
+      "displayName": "Queue port",
+      "type": "NUMBER",
+      "defaultValue": "44000",
+      "rules": {
+        "min": 1024,
+        "max": 65535
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    },
+    {
+      "envName": "ADMIN_STEAMID",
+      "displayName": "Admin SteamID64s",
+      "description": "Comma-separated SteamID64s granted admin.",
+      "type": "STRING",
+      "defaultValue": "",
+      "rules": {
+        "maxLength": 256
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 5
+    }
+  ]
+}

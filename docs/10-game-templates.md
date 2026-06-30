@@ -435,7 +435,8 @@ Palworld, CS2, FiveM, Satisfactory, Terraria (+ tModLoader), Project Zomboid,
 7 Days to Die, Arma 3, Arma Reforger, Squad, Garry's Mod, Team Fortress 2,
 Mordhau, Killing Floor 2, V Rising, Enshrouded, Conan Exiles, Astroneer,
 Unturned, American Truck Simulator, Soulmask, Insurgency: Sandstorm, Core Keeper,
-ICARUS, Sons of the Forest, Abiotic Factor, Avorion, The Forest and Factorio.
+ICARUS, Sons of the Forest, Abiotic Factor, Avorion, The Forest, Factorio and
+The Isle.
 
 ## Cross-references
 
