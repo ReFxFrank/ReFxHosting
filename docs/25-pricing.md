@@ -8,7 +8,9 @@ truth; update it whenever the rate or cost basis changes.
 
 - Each game is a **HARDWARE_TIER** product with **Low / Mid / High** tiers, sized
   at **0.5× / 1× / 2×** the game's *recommended* RAM (set per egg in
-  `database/seed/templates/*.json` as `recMemoryMb`).
+  `database/seed/templates/*.json` as `recMemoryMb`), **capped at 14 GB / tier**
+  (`MAX_TIER_MEMORY_MB`) so the High tier can't exceed **$70/mo** — past that,
+  player-capped games can't use the RAM and no host sells those packages.
 - **RAM is the binding constraint** for game servers, so price is driven by it:
 
   ```
@@ -78,14 +80,14 @@ pro-rated (same per-day rate as monthly), not discounted.
 
 ## Per-game prices @ $5/GB (monthly)
 
-| Recommended RAM → games | Low (0.5×) | Mid ⭐ (1×) | High (2×) |
+| Recommended RAM → games | Low (0.5×) | Mid ⭐ (1×) | High (2×, ≤14 GB) |
 |---|---|---|---|
 | **2 GB** — Terraria, TF2, Unturned, ATS | 1 GB → $5 | 2 GB → $10 | 4 GB → $20 |
 | **3 GB** — CS2, Killing Floor 2, Astroneer, tModLoader | 1.5 GB → $7.50 | 3 GB → $15 | 6 GB → $30 |
 | **4 GB** — Minecraft, Paper, Fabric, Valheim, Garry's Mod, Project Zomboid, Arma 3, Mordhau, V Rising, 7 Days to Die | 2 GB → $10 | 4 GB → $20 | 8 GB → $40 |
 | **6 GB** — MC Forge/NeoForge, FiveM | 3 GB → $15 | 6 GB → $30 | 12 GB → $60 |
-| **8 GB** — Rust, DayZ, Conan Exiles, Enshrouded, Arma Reforger, Squad, Satisfactory | 4 GB → $20 | 8 GB → $40 | 16 GB → $80 |
-| **12 GB** — ARK, Palworld | 6 GB → $30 | 12 GB → $60 | 24 GB → $120 |
+| **8 GB** — Rust, DayZ, Conan Exiles, Enshrouded, Arma Reforger, Squad, Satisfactory, Palworld | 4 GB → $20 | 8 GB → $40 | 14 GB → $70 _(capped from 16)_ |
+| **12 GB** — ARK | 6 GB → $30 | 12 GB → $60 | 14 GB → $70 _(capped from 24)_ |
 
 _(Voice/TeamSpeak is a separate PER_SLOT product, priced per slot — not on this rate.)_
 
@@ -167,7 +169,17 @@ _Last updated: 2026-06-30. Rate: $5/GB/mo USD. Keep the cost-basis table current
 >    4→3 GB. Genuine-floor games (Rust, DayZ, Squad, Enshrouded, Arma Reforger,
 >    modded MC, FiveM) were left as-is.
 >
-> Combined effect on "from" prices, e.g. ARK/Palworld $48→$30, Satisfactory/Conan
+> Combined effect on "from" prices, e.g. ARK $48→$30, Satisfactory/Conan
 > $36→$20, V Rising/7DtD $18→$10, Minecraft $12→$10, CS2/KF2 $12→$7.50. Run
 > `npm run db:resync-tiers -- --apply` after deploy to move existing tiers onto the
 > new rate + specs in one pass.
+
+> **2026-06-30 tier ceiling + Palworld.** A second pass after eyeballing real
+> storefronts (e.g. GPortal's *max* Palworld plan — 32 slots, the game's cap — is
+> **$36.80/mo**): the old High tier (2× recommended) produced packages nobody buys.
+> Two fixes: **(1)** a hard **14 GB / $70 cap** on any tier (`MAX_TIER_MEMORY_MB`),
+> so ARK/Palworld High drops 24 GB/$120 → 14 GB/$70 and the 8 GB games' High drops
+> 16 GB/$80 → 14 GB/$70 (Low/Mid untouched; modded MC keeps its 8 GB High). **(2)**
+> **Palworld 12→8 GB** recommended — it hard-caps at 32 players, so 12 GB Mid ($60)
+> overshot a market that tops out ~$37; now Low 4 GB/$20, Mid 8 GB/$40, High 14 GB/
+> $70, bracketing GPortal's $17–37 range. Re-run `db:resync-tiers -- --apply`.

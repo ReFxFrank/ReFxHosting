@@ -404,6 +404,16 @@ const PRICE_PER_GB_CENTS =
   Number.parseInt(process.env.SEED_PRICE_PER_GB_CENTS ?? '', 10) || 500;
 
 /**
+ * Hard ceiling on any single tier's RAM, so the High tier (2× recommended) can't
+ * balloon into packages nobody buys. At 14 GB × $5/GB that caps the most expensive
+ * plan at **$70/mo** — above this, player-capped games (Palworld 32p, Satisfactory,
+ * Enshrouded 16p) literally can't use the memory, and no host sells those packages.
+ * The Low/Mid (0.5×/1×) tiers are well under this; it only bites the High tier of
+ * the largest eggs (e.g. ARK/Palworld 2×12 GB = 24 GB → capped to 14 GB).
+ */
+const MAX_TIER_MEMORY_MB = 14336;
+
+/**
  * Interval price points derived from a monthly base. Short terms are charged
  * proportionally; longer terms discount progressively. Covers all six durations
  * offered on the order page (weekly → annual).
@@ -547,7 +557,10 @@ async function seedGameTierProducts() {
           name: s.name,
           description: s.description,
           cpuCores: Math.max(1, Math.round(t.recCpuCores * s.mult * 2) / 2),
-          memoryMb: Math.max(1024, Math.round((t.recMemoryMb * s.mult) / 512) * 512),
+          memoryMb: Math.min(
+            MAX_TIER_MEMORY_MB,
+            Math.max(1024, Math.round((t.recMemoryMb * s.mult) / 512) * 512),
+          ),
           diskMb: Math.max(5120, Math.round((t.recDiskMb * s.mult) / 1024) * 1024),
           players: s.players as number | null,
           recommended: s.recommended,

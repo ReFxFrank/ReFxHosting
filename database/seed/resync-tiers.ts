@@ -36,6 +36,9 @@ const RATE =
     10,
   ) || 500;
 const CURRENCY = 'USD';
+// Cap any tier at 14 GB → $70/mo max at $5/GB (mirrors seed.ts MAX_TIER_MEMORY_MB).
+// Only bites the High tier of the largest eggs; player-capped games can't use more.
+const MAX_TIER_MEMORY_MB = 14336;
 
 type Interval =
   | 'WEEKLY'
@@ -88,7 +91,10 @@ async function main(): Promise<void> {
     if (!tpl || mult == null) continue; // skip custom tiers / non-game products
 
     const cpuCores = Math.max(1, Math.round(tpl.recCpuCores * mult * 2) / 2);
-    const memoryMb = Math.max(1024, Math.round((tpl.recMemoryMb * mult) / 512) * 512);
+    const memoryMb = Math.min(
+      MAX_TIER_MEMORY_MB,
+      Math.max(1024, Math.round((tpl.recMemoryMb * mult) / 512) * 512),
+    );
     const diskMb = Math.max(5120, Math.round((tpl.recDiskMb * mult) / 1024) * 1024);
     const monthly = Math.max(500, Math.round((memoryMb / 1024) * RATE));
 
