@@ -76,9 +76,14 @@ describe('Catalog storefront (e2e)', () => {
       // cheapest of 500/1500
       expect(res.body.data[0].startingPrice).toEqual({ amountMinor: 500, currency: 'USD' });
 
-      // Only published games are queried.
+      // Only published GAME-kind templates are queried, excluding the voice
+      // category (voice is its own catalog line).
       const where = h.prisma.gameTemplate.findMany.mock.calls[0][0].where;
-      expect(where).toEqual({ isPublished: true });
+      expect(where).toEqual({
+        isPublished: true,
+        kind: 'GAME',
+        NOT: { category: { slug: 'voice' } },
+      });
     });
   });
 
@@ -140,7 +145,11 @@ describe('Catalog storefront (e2e)', () => {
 
       // Queried published-only, with a SAFE field whitelist (no install internals).
       const args = h.prisma.gameTemplate.findFirst.mock.calls[0][0];
-      expect(args.where).toEqual({ slug: 'minecraft-paper', isPublished: true });
+      expect(args.where).toEqual({
+        slug: 'minecraft-paper',
+        isPublished: true,
+        kind: 'GAME',
+      });
       expect(args.select).toBeDefined();
       expect(args.select.installScript).toBeUndefined();
       expect(args.select.startupCommand).toBeUndefined();
