@@ -21,6 +21,7 @@
 import { randomUUID } from 'node:crypto';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { playerCapFor, clampPlayers, basePlayersForTier } from './game-caps';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
@@ -80,7 +81,16 @@ async function main(): Promise<void> {
   );
 
   const tiers = await prisma.hardwareTier.findMany({
-    include: { product: { include: { gameTemplate: true } } },
+    include: {
+      product: {
+        include: {
+          // variables carry MAX_PLAYERS rules.max → the game's real player cap.
+          gameTemplate: {
+            include: { variables: { select: { envName: true, rules: true } } },
+          },
+        },
+      },
+    },
     orderBy: [{ product: { name: 'asc' } }, { sortOrder: 'asc' }],
   });
 
@@ -97,9 +107,17 @@ async function main(): Promise<void> {
     );
     const diskMb = Math.max(5120, Math.round((tpl.recDiskMb * mult) / 1024) * 1024);
     const monthly = Math.max(500, Math.round((memoryMb / 1024) * RATE));
+    // Clamp the "~N players" estimate to the game's real cap (Palworld 32, etc.).
+    const players = clampPlayers(
+      basePlayersForTier(t.name),
+      playerCapFor(tpl.slug, tpl.variables),
+    );
 
     const specChanged =
-      cpuCores !== t.cpuCores || memoryMb !== t.memoryMb || diskMb !== t.diskMb;
+      cpuCores !== t.cpuCores ||
+      memoryMb !== t.memoryMb ||
+      diskMb !== t.diskMb ||
+      players !== t.recommendedPlayers;
     const current = await prisma.price.findFirst({
       where: {
         productId: t.productId,
@@ -117,14 +135,15 @@ async function main(): Promise<void> {
       `  ${t.product.name} · ${t.name}: ` +
         `${gb(t.memoryMb)}/${t.cpuCores}cpu/${gb(t.diskMb)} → ` +
         `${gb(memoryMb)}/${cpuCores}cpu/${gb(diskMb)}  ` +
-        `${current ? fmt(current.amountMinor) : '—'} → ${fmt(monthly)}/mo`,
+        `${current ? fmt(current.amountMinor) : '—'} → ${fmt(monthly)}/mo` +
+        `  ${t.recommendedPlayers ?? '—'}→${players ?? '—'}p`,
     );
 
     if (!APPLY) continue;
 
     await prisma.hardwareTier.update({
       where: { id: t.id },
-      data: { cpuCores, memoryMb, diskMb },
+      data: { cpuCores, memoryMb, diskMb, recommendedPlayers: players },
     });
     for (const [interval, amountMinor] of intervalPrices(monthly)) {
       const prismaInterval = interval as Prisma.PriceCreateInput['interval'];

@@ -28,6 +28,7 @@ import { randomFillSync } from 'node:crypto';
 import { PrismaClient, Prisma } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as argon2 from 'argon2';
+import { playerCapFor, clampPlayers } from './game-caps';
 
 // Prisma 7 connects via a driver adapter (no bundled engine). DATABASE_URL is
 // set by the migrate container at run time.
@@ -491,6 +492,9 @@ async function seedGameTierProducts() {
       recMemoryMb: true,
       recDiskMb: true,
       category: { select: { slug: true } },
+      // Variables carry the egg's MAX_PLAYERS rules.max — the game's real player
+      // cap, used to clamp the per-tier "~N players" estimate below.
+      variables: { select: { envName: true, rules: true } },
     },
   });
 
@@ -531,6 +535,11 @@ async function seedGameTierProducts() {
       data: { isActive: false },
     });
 
+    // The game's real player ceiling (null = uncapped), used to clamp each
+    // tier's "~N players" estimate so e.g. a Palworld High tier doesn't read
+    // "~60 players" on a server the game caps at 32.
+    const playerCap = playerCapFor(t.slug, t.variables);
+
     // Tiers: WEB hosting gets storage-forward named plans (Starter→Pro) sized to
     // real website growth stages; games get Low/Mid/High scaled off rec specs.
     const resolved: Array<{
@@ -562,7 +571,7 @@ async function seedGameTierProducts() {
             Math.max(1024, Math.round((t.recMemoryMb * s.mult) / 512) * 512),
           ),
           diskMb: Math.max(5120, Math.round((t.recDiskMb * s.mult) / 1024) * 1024),
-          players: s.players as number | null,
+          players: clampPlayers(s.players as number | null, playerCap),
           recommended: s.recommended,
           sortOrder: s.sortOrder,
         }));
