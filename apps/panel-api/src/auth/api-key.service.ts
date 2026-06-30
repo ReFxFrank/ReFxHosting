@@ -49,10 +49,10 @@ export class ApiKeyService {
     return { plaintext, record };
   }
 
-  /** List a user's API keys (never exposes the hash). */
+  /** List a user's ACTIVE API keys (revoked keys are hidden — revoke = delete). */
   async list(userId: string) {
     return this.prisma.apiKey.findMany({
-      where: { userId },
+      where: { userId, revokedAt: null },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,

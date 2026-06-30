@@ -109,7 +109,8 @@ export class AccountController {
       scopes: record.scopes,
       expiresAt: record.expiresAt,
       // Plaintext is shown ONCE here; it is never stored or retrievable again.
-      key: plaintext,
+      // Field name MUST match the web client's ApiKey.token (the copy-once UI).
+      token: plaintext,
     };
   }
 
