@@ -49,6 +49,24 @@ export class ApiKeyWriteScopeInterceptor implements NestInterceptor {
     const user: AuthUser | undefined = req?.user;
 
     if (user?.apiKeyScopes) {
+      // STATUS_READ is a narrow capability for the status feed only. A key that
+      // carries it but NONE of the general scopes (READ/WRITE/ADMIN) is isolated
+      // to status routes — those are @Public() + StatusReadGuard, so they never
+      // populate req.user and never reach here. Seeing such a key on any other
+      // (JwtAuthGuard) route means it's being used outside its remit: deny it
+      // before the handler runs, so a status token can't read customer/billing/
+      // admin data even though it's owned by a user.
+      const statusOnly =
+        user.apiKeyScopes.includes('STATUS_READ') &&
+        !user.apiKeyScopes.some(
+          (s) => s === 'READ' || s === 'WRITE' || s === 'ADMIN',
+        );
+      if (statusOnly) {
+        throw new ForbiddenException(
+          'This token is scoped to the status feed only',
+        );
+      }
+
       const method = (req?.method ?? 'GET').toUpperCase();
       if (MUTATING.has(method)) {
         const hasWrite = user.apiKeyScopes.some(

@@ -68,7 +68,14 @@ import { cn, formatRelative, formatDate, initials, copyToClipboard } from "@/lib
 import { useAuthStore } from "@/store/auth";
 import type { ApiKey, User } from "@/lib/types";
 
-const SCOPES: ApiKey["scopes"] = ["READ", "WRITE", "ADMIN"];
+const SCOPES: ApiKey["scopes"] = ["READ", "WRITE", "ADMIN", "STATUS_READ"];
+const SCOPE_HINTS: Record<ApiKey["scopes"][number], string> = {
+  READ: "Read your account, servers and billing.",
+  WRITE: "Read plus mutating actions on your servers.",
+  ADMIN: "Full access at your account's permission level.",
+  STATUS_READ:
+    "Status feed only (GET /status/nodes) — no account, billing or server access. For bots/monitors.",
+};
 
 export default function AccountPage() {
   return (
@@ -1168,7 +1175,9 @@ function ApiKeysCard() {
 
 const apiKeySchema = z.object({
   name: z.string().min(1, "Give the key a name"),
-  scopes: z.array(z.enum(["READ", "WRITE", "ADMIN"])).min(1, "Select at least one scope"),
+  scopes: z
+    .array(z.enum(["READ", "WRITE", "ADMIN", "STATUS_READ"]))
+    .min(1, "Select at least one scope"),
 });
 type ApiKeyValues = z.infer<typeof apiKeySchema>;
 
@@ -1249,15 +1258,20 @@ function CreateApiKeyDialog({
               {SCOPES.map((scope) => (
                 <label
                   key={scope}
-                  className="flex cursor-pointer items-center gap-2 text-sm"
+                  className="flex cursor-pointer items-start gap-2 text-sm"
                 >
                   <input
                     type="checkbox"
-                    className="size-4 rounded border-input accent-primary"
+                    className="mt-0.5 size-4 rounded border-input accent-primary"
                     checked={scopes.includes(scope)}
                     onChange={(e) => toggleScope(scope, e.target.checked)}
                   />
-                  <span className="font-medium">{scope}</span>
+                  <span>
+                    <span className="font-medium">{scope}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {SCOPE_HINTS[scope]}
+                    </span>
+                  </span>
                 </label>
               ))}
             </div>

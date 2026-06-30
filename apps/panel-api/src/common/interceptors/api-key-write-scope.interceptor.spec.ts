@@ -85,6 +85,30 @@ describe('ApiKeyWriteScopeInterceptor', () => {
     expect(handled).toBe(true);
   });
 
+  it('isolates a status-only (STATUS_READ) key from any non-status route (even GET)', () => {
+    // A STATUS_READ-only key may only reach @Public status routes (via
+    // StatusReadGuard, which never sets req.user). Reaching this interceptor at
+    // all means it's being used outside its remit → 403, even on a safe GET.
+    expect(() =>
+      interceptor.intercept(
+        ctx('GET', { id: 'u1', apiKeyScopes: ['STATUS_READ'] }),
+        next,
+      ),
+    ).toThrow(/status feed only/);
+    expect(handled).toBe(false);
+  });
+
+  it('does NOT isolate a key that also carries a general scope (READ + STATUS_READ)', async () => {
+    const result = await lastValueFrom(
+      interceptor.intercept(
+        ctx('GET', { id: 'u1', apiKeyScopes: ['READ', 'STATUS_READ'] }),
+        next,
+      ),
+    );
+    expect(result).toBe('ok');
+    expect(handled).toBe(true);
+  });
+
   it('passes through GraphQL contexts untouched', async () => {
     const gqlCtx = {
       getType: () => 'graphql',

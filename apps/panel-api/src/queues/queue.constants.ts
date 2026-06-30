@@ -12,6 +12,7 @@ export const QUEUE = {
   SUSPENSION: 'suspension',
   MODPACK: 'modpack',
   TRANSFER: 'transfer',
+  WEBHOOK_DELIVERY: 'webhook-delivery',
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
@@ -73,6 +74,32 @@ export interface TransferJob {
   transferId: string;
 }
 
+/** Status-event webhook types pushed to subscribers (Helios, etc.). */
+export type StatusWebhookEvent =
+  | 'incident.created'
+  | 'incident.updated'
+  | 'incident.resolved'
+  | 'component.status_changed';
+
+export const STATUS_WEBHOOK_EVENTS: StatusWebhookEvent[] = [
+  'incident.created',
+  'incident.updated',
+  'incident.resolved',
+  'component.status_changed',
+];
+
+/**
+ * One signed delivery attempt of an outbound status webhook. The raw `body` is
+ * carried verbatim (built once at dispatch) so the SAME bytes are HMAC-signed
+ * and sent; `deliveryId` is stable across BullMQ retries → idempotent.
+ */
+export interface WebhookDeliveryJob {
+  webhookId: string;
+  event: StatusWebhookEvent;
+  deliveryId: string;
+  body: string;
+}
+
 export const JOB = {
   PROVISION: 'provision',
   RECONFIGURE: 'reconfigure',
@@ -84,4 +111,5 @@ export const JOB = {
   INSTALL_MODPACK: 'install-modpack',
   UNINSTALL_MODPACK: 'uninstall-modpack',
   TRANSFER: 'transfer',
+  DELIVER_WEBHOOK: 'deliver-webhook',
 } as const;

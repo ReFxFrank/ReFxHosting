@@ -1024,7 +1024,7 @@ export interface ApiKey {
   id: string;
   name: string;
   prefix: string;
-  scopes: ("READ" | "WRITE" | "ADMIN")[];
+  scopes: ("READ" | "WRITE" | "ADMIN" | "STATUS_READ")[];
   lastUsedAt: string | null;
   expiresAt: string | null;
   createdAt: string;
@@ -1113,4 +1113,15 @@ export interface SystemStatus {
   components: StatusComponent[];
   regions: StatusRegion[];
   incidents: { active: StatusIncident[]; recent: StatusIncident[] };
+}
+
+export interface StatusWebhook {
+  id: string;
+  url: string;
+  events: string[];
+  isActive: boolean;
+  description: string | null;
+  lastDeliveryAt: string | null;
+  lastStatus: number | null;
+  createdAt: string;
 }

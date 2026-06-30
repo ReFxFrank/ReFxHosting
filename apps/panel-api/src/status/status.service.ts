@@ -43,6 +43,38 @@ export interface SystemStatus {
   incidents: { active: IncidentView[]; recent: IncidentView[] };
 }
 
+/**
+ * Per-node live metrics for the bot-scoped `GET /status/nodes` feed. Every
+ * metric field is OPTIONAL so partial data (e.g. a node that hasn't reported a
+ * heartbeat yet) degrades gracefully.
+ */
+export interface NodeMetrics {
+  name: string;
+  status: StatusLevel;
+  cpuPercent?: number;
+  memoryUsedMb?: number;
+  memoryTotalMb?: number;
+  memoryPercent?: number;
+  diskUsedGb?: number;
+  diskTotalGb?: number;
+  diskPercent?: number;
+  serversOnline?: number;
+  serversMax?: number;
+  uptimeSeconds?: number;
+}
+export interface RegionMetrics {
+  code: string;
+  name: string;
+  status: StatusLevel;
+  nodesUp: number;
+  nodesTotal: number;
+  nodes: NodeMetrics[];
+}
+export interface NodeStatusResponse {
+  updatedAt: string;
+  regions: RegionMetrics[];
+}
+
 /** A node heartbeat older than this counts as stale (node not reporting). */
 const STALE_HEARTBEAT_MS = 3 * 60 * 1000;
 /** Public status is cached briefly so the endpoint can't hammer the DB. */
@@ -61,9 +93,13 @@ const SEVERITY: Record<StatusLevel, number> = {
  * Aggregated, PUBLIC-SAFE platform status derived from node health. Exposes only
  * region-level rollups — never fqdns, IPs, tokens, or per-node detail.
  */
+/** Per-token-feed cache for the enriched node metrics (protects the nodes). */
+const NODE_CACHE_TTL_MS = 10 * 1000;
+
 @Injectable()
 export class StatusService {
   private cache: { value: SystemStatus; at: number } | null = null;
+  private nodeCache: { value: NodeStatusResponse; at: number } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -158,6 +194,118 @@ export class StatusService {
     };
     this.cache = { value, at: now };
     return value;
+  }
+
+  /**
+   * Enriched per-node live metrics for an authenticated bot (status:read scope).
+   * Reuses the SAME heartbeat collector that feeds /admin/metrics (the latest
+   * NodeHeartbeat row per node) — no new collector — and the same node-status
+   * derivation as the public feed, so the two never disagree. Cached ~10s.
+   */
+  async getNodes(): Promise<NodeStatusResponse> {
+    const now = Date.now();
+    if (this.nodeCache && now - this.nodeCache.at < NODE_CACHE_TTL_MS) {
+      return this.nodeCache.value;
+    }
+
+    const [nodes, serversByNode] = await Promise.all([
+      this.loadNodeMetrics(),
+      this.runningServersByNode(),
+    ]);
+
+    const pct1 = (used: number, total: number) =>
+      total > 0 ? Math.round((used / total) * 1000) / 10 : 0;
+    const round1 = (v: number) => Math.round(v * 10) / 10;
+
+    const byRegion = new Map<string, { name: string; nodes: NodeMetrics[] }>();
+    for (const n of nodes) {
+      if (!n.region) continue;
+      const hb = n.heartbeats[0];
+      const fresh =
+        hb != null && now - new Date(hb.recordedAt).getTime() < STALE_HEARTBEAT_MS;
+      const node: NodeMetrics = {
+        name: n.name,
+        status: this.nodeStatus(n.state, n.maintenance, fresh),
+        serversOnline: serversByNode.get(n.id) ?? 0,
+      };
+      // Metric fields are only set when the node has actually reported, so a
+      // never-reported node degrades to just { name, status, serversOnline }.
+      if (hb) {
+        node.cpuPercent = round1(Math.min(100, hb.cpuPct));
+        node.memoryUsedMb = hb.memUsedMb;
+        node.memoryTotalMb = n.memoryMb;
+        node.memoryPercent = Math.min(100, pct1(hb.memUsedMb, n.memoryMb));
+        node.diskUsedGb = Math.round(hb.diskUsedMb / 1024);
+        node.diskTotalGb = Math.round(n.diskMb / 1024);
+        node.diskPercent = Math.min(100, pct1(hb.diskUsedMb, n.diskMb));
+      }
+      const entry = byRegion.get(n.region.code) ?? { name: n.region.name, nodes: [] };
+      entry.nodes.push(node);
+      byRegion.set(n.region.code, entry);
+    }
+
+    const regions: RegionMetrics[] = [...byRegion.entries()]
+      .map(([code, { name, nodes: rNodes }]) => {
+        const statuses = rNodes.map((n) => n.status);
+        return {
+          code,
+          name,
+          status: this.rollup(statuses),
+          nodesUp: statuses.filter((s) => s === 'operational').length,
+          nodesTotal: rNodes.length,
+          nodes: rNodes.sort((a, b) => a.name.localeCompare(b.name)),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    const value: NodeStatusResponse = {
+      updatedAt: new Date(now).toISOString(),
+      regions,
+    };
+    this.nodeCache = { value, at: now };
+    return value;
+  }
+
+  /** Latest heartbeat + advertised capacity per node (the metrics collector). */
+  private loadNodeMetrics() {
+    return this.prisma.node
+      .findMany({
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          name: true,
+          state: true,
+          maintenance: true,
+          memoryMb: true,
+          diskMb: true,
+          region: { select: { code: true, name: true } },
+          heartbeats: {
+            orderBy: { recordedAt: 'desc' },
+            take: 1,
+            select: {
+              cpuPct: true,
+              memUsedMb: true,
+              diskUsedMb: true,
+              recordedAt: true,
+            },
+          },
+        },
+      })
+      .catch(() => []);
+  }
+
+  /** Count of currently-running servers per node id (for serversOnline). */
+  private async runningServersByNode(): Promise<Map<string, number>> {
+    const rows = await this.prisma.server
+      .groupBy({
+        by: ['nodeId'],
+        where: { deletedAt: null, state: 'RUNNING' },
+        _count: { _all: true },
+      })
+      .catch(() => [] as Array<{ nodeId: string | null; _count: { _all: number } }>);
+    const m = new Map<string, number>();
+    for (const r of rows) if (r.nodeId) m.set(r.nodeId, r._count._all);
+    return m;
   }
 
   private loadNodes() {

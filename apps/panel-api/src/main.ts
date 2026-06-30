@@ -121,6 +121,12 @@ async function bootstrap(): Promise<void> {
     .setVersion('1.0')
     .addBearerAuth()
     .addApiKey({ type: 'apiKey', name: 'X-Api-Key', in: 'header' }, 'apiKey')
+    // Narrow status:read token for machine clients (Helios bot) — accepted as a
+    // bearer token on GET /status/nodes. See ApiKeyScope.STATUS_READ.
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', description: 'status:read API token' },
+      'status-token',
+    )
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document, {

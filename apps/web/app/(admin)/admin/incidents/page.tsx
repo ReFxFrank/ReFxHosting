@@ -205,6 +205,8 @@ export default function AdminIncidentsPage() {
         />
       )}
 
+      <StatusWebhooksCard />
+
       {/* Create */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-h-[90svh] overflow-y-auto">
@@ -380,5 +382,136 @@ export default function AdminIncidentsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+const WEBHOOK_EVENTS = [
+  "incident.created",
+  "incident.updated",
+  "incident.resolved",
+  "component.status_changed",
+];
+
+/**
+ * Manage outbound status webhooks (real-time pushes to bots/monitors like
+ * Helios). Creating one returns a one-time signing secret — shown once.
+ */
+function StatusWebhooksCard() {
+  const qc = useQueryClient();
+  const { data: hooks } = useQuery({
+    queryKey: ["admin", "status-webhooks"],
+    queryFn: () => api.admin.statusWebhooks(),
+  });
+  const [url, setUrl] = useState("");
+  const [description, setDescription] = useState("");
+  const [newSecret, setNewSecret] = useState<string | null>(null);
+
+  const createMut = useMutation({
+    mutationFn: () =>
+      api.admin.createStatusWebhook({ url: url.trim(), description: description.trim() || undefined }),
+    onSuccess: (res) => {
+      setNewSecret(res.secret);
+      setUrl("");
+      setDescription("");
+      qc.invalidateQueries({ queryKey: ["admin", "status-webhooks"] });
+    },
+    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to add webhook"),
+  });
+  const toggleMut = useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive: boolean }) =>
+      api.admin.updateStatusWebhook(id, { isActive }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "status-webhooks"] }),
+  });
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.admin.deleteStatusWebhook(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "status-webhooks"] }),
+  });
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 pt-6">
+        <div>
+          <h3 className="font-semibold">Status webhooks</h3>
+          <p className="text-sm text-muted-foreground">
+            Push a signed POST on component status changes and incident
+            create/update/resolve. Verify the{" "}
+            <code className="text-xs">X-ReFx-Signature</code> HMAC against the
+            secret. Events: {WEBHOOK_EVENTS.join(", ")}.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            placeholder="https://bot.example.com/refx/webhook"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+          />
+          <Input
+            placeholder="Description (optional)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="sm:max-w-[14rem]"
+          />
+          <Button
+            disabled={!url.trim()}
+            loading={createMut.isPending}
+            onClick={() => createMut.mutate()}
+          >
+            <Plus className="size-4" /> Add
+          </Button>
+        </div>
+
+        {newSecret && (
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm">
+            <p className="font-medium text-amber-100">
+              Signing secret — copy it now, it won&apos;t be shown again:
+            </p>
+            <code className="mt-1 block break-all font-mono text-xs">{newSecret}</code>
+            <button
+              className="mt-2 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => setNewSecret(null)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        {hooks?.length ? (
+          <div className="space-y-2">
+            {hooks.map((h) => (
+              <div
+                key={h.id}
+                className="flex items-center justify-between gap-3 rounded-lg border p-3 text-sm"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs">{h.url}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {h.description ? `${h.description} · ` : ""}
+                    {h.lastDeliveryAt
+                      ? `last ${h.lastStatus ?? "—"} at ${formatDateTime(h.lastDeliveryAt)}`
+                      : "no deliveries yet"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                  <Switch
+                    checked={h.isActive}
+                    onCheckedChange={(v) => toggleMut.mutate({ id: h.id, isActive: v })}
+                  />
+                  <button
+                    className="text-muted-foreground hover:text-destructive"
+                    onClick={() => deleteMut.mutate(h.id)}
+                    aria-label="Delete webhook"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No webhooks configured.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

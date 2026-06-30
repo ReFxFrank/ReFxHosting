@@ -240,6 +240,12 @@ enum ApiKeyScope {
   READ
   WRITE
   ADMIN
+  // Narrow, read-only capability for the public status feed + /status/nodes
+  // metrics (machine clients like the Helios Discord bot). A key bearing this
+  // scope is ISOLATED to status routes — it cannot reach customer, billing or
+  // admin data even though it is owned by a user. Enforced in
+  // ApiKeyWriteScopeInterceptor + StatusReadGuard.
+  STATUS_READ
 }
 
 model ApiKey {
@@ -1475,6 +1481,30 @@ model StatusIncidentUpdate {
   createdAt  DateTime       @default(now())
 
   @@index([incidentId])
+}
+
+/// Outbound webhook subscription for real-time status pushes (e.g. the Helios
+/// Discord bot). The panel POSTs a signed payload on component status changes and
+/// incident create/update/resolve. `secret` is the HMAC signing key, AES-256-GCM
+/// encrypted at rest (decrypted only to sign). Payloads carry ONLY public
+/// status/incident fields — never customer/billing/server data.
+model StatusWebhook {
+  id             String   @id @db.Uuid
+  url            String
+  /// AES-256-GCM ciphertext of the shared signing secret.
+  secretEnc      String
+  /// Event types to deliver; empty = all status events.
+  events         String[]
+  isActive       Boolean  @default(true)
+  description    String?
+  lastDeliveryAt DateTime?
+  /// HTTP status of the most recent delivery attempt (null until first send).
+  lastStatus     Int?
+  createdById    String?  @db.Uuid
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isActive])
 }
 
 /// Admin-curated team member for the public "Meet the team" page. Not tied to a

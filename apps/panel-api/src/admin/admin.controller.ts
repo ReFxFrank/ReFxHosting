@@ -29,6 +29,11 @@ import { TransfersService } from '../servers/transfers.service';
 import { AlertsService } from '../platform/alerts.service';
 import { HomepageAlertsService } from '../platform/homepage-alerts.service';
 import { IncidentsService } from '../platform/incidents.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
+import {
+  CreateStatusWebhookDto,
+  UpdateStatusWebhookDto,
+} from '../webhooks/dto/webhook.dto';
 import { AuthService } from '../auth/auth.service';
 import {
   CreateIncidentDto,
@@ -124,6 +129,7 @@ export class AdminController {
     private readonly alerts: AlertsService,
     private readonly homepageAlerts: HomepageAlertsService,
     private readonly incidents: IncidentsService,
+    private readonly webhooks: WebhooksService,
     private readonly auth: AuthService,
     private readonly staff: StaffService,
     private readonly audit: AuditService,
@@ -989,6 +995,43 @@ export class AdminController {
   @Audit({ action: 'admin.incident.delete', targetType: 'StatusIncident', targetParam: 'id' })
   deleteIncident(@Param('id') id: string) {
     return this.incidents.remove(id);
+  }
+
+  // ---- Status webhooks (outbound real-time pushes; e.g. the Helios bot) ----
+
+  @Get('status/webhooks')
+  @RequirePerm('content.manage')
+  listStatusWebhooks() {
+    return this.webhooks.list();
+  }
+
+  @Post('status/webhooks')
+  @RequirePerm('content.manage')
+  @Audit({ action: 'admin.status.webhook.create', targetType: 'StatusWebhook' })
+  createStatusWebhook(
+    @Body() dto: CreateStatusWebhookDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    // Returns the one-time plaintext signing secret — shown once, never stored.
+    return this.webhooks.create(dto.url, dto.events, user.id, dto.description);
+  }
+
+  @Patch('status/webhooks/:id')
+  @RequirePerm('content.manage')
+  @Audit({ action: 'admin.status.webhook.update', targetType: 'StatusWebhook', targetParam: 'id' })
+  updateStatusWebhook(
+    @Param('id') id: string,
+    @Body() dto: UpdateStatusWebhookDto,
+  ) {
+    return this.webhooks.update(id, dto);
+  }
+
+  @Delete('status/webhooks/:id')
+  @RequirePerm('content.manage')
+  @HttpCode(204)
+  @Audit({ action: 'admin.status.webhook.delete', targetType: 'StatusWebhook', targetParam: 'id' })
+  deleteStatusWebhook(@Param('id') id: string) {
+    return this.webhooks.remove(id);
   }
 
   // ---- Staff (public "Meet the team") ------------------------------------

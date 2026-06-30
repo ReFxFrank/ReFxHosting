@@ -5,6 +5,8 @@ import { uuidv7 } from '../common/util/uuid';
 import { NotificationsService } from './notifications.service';
 import { PushService } from '../push/push.service';
 import { EmailService } from '../email/email.service';
+import { WebhooksService } from '../webhooks/webhooks.service';
+import { StatusWebhookEvent } from '../queues/queue.constants';
 import {
   CreateIncidentDto,
   UpdateIncidentDto,
@@ -32,7 +34,42 @@ export class IncidentsService {
     private readonly notifications: NotificationsService,
     private readonly push: PushService,
     private readonly email: EmailService,
+    private readonly webhooks: WebhooksService,
   ) {}
+
+  /**
+   * Push a status webhook for an incident lifecycle event (best-effort; never
+   * blocks or fails the admin request). Re-loads the incident with its update
+   * timeline and sends only the public-safe fields.
+   */
+  private async emitIncidentEvent(
+    event: StatusWebhookEvent,
+    id: string,
+  ): Promise<void> {
+    try {
+      const inc = await this.prisma.statusIncident.findUnique({
+        where: { id },
+        include: incidentInclude,
+      });
+      if (!inc) return;
+      await this.webhooks.dispatch(event, {
+        id: inc.id,
+        title: inc.title,
+        status: inc.status,
+        impact: inc.impact,
+        components: inc.components,
+        startedAt: inc.startedAt.toISOString(),
+        resolvedAt: inc.resolvedAt ? inc.resolvedAt.toISOString() : null,
+        updates: inc.updates.map((u) => ({
+          status: u.status,
+          body: u.body,
+          createdAt: u.createdAt.toISOString(),
+        })),
+      });
+    } catch (e) {
+      this.logger.warn(`incident webhook (${event}) failed: ${String(e)}`);
+    }
+  }
 
   /** Admin: every incident, newest first, with its update timeline. */
   listAll() {
@@ -92,6 +129,7 @@ export class IncidentsService {
         this.logger.warn(`incident broadcast failed: ${String(e)}`),
       );
     }
+    void this.emitIncidentEvent('incident.created', incident.id);
     return incident;
   }
 
@@ -154,6 +192,10 @@ export class IncidentsService {
         },
       }),
     ]);
+    void this.emitIncidentEvent(
+      resolving ? 'incident.resolved' : 'incident.updated',
+      id,
+    );
     return this.get(id);
   }
 
@@ -168,11 +210,18 @@ export class IncidentsService {
       data.status = dto.status;
       data.resolvedAt = dto.status === IncidentStatus.RESOLVED ? new Date() : null;
     }
-    return this.prisma.statusIncident.update({
+    const updated = await this.prisma.statusIncident.update({
       where: { id },
       data,
       include: incidentInclude,
     });
+    void this.emitIncidentEvent(
+      dto.status === IncidentStatus.RESOLVED
+        ? 'incident.resolved'
+        : 'incident.updated',
+      id,
+    );
+    return updated;
   }
 
   async remove(id: string) {

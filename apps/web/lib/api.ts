@@ -74,6 +74,7 @@ import type {
   WebAuthnCredential,
   SystemStatus,
   StatusIncident,
+  StatusWebhook,
   IncidentImpact,
   IncidentStatusStage,
 } from "@/lib/types";
@@ -1154,6 +1155,24 @@ export const api = {
     ) => http.patch<StatusIncident>(`/admin/status/incidents/${id}`, body),
     deleteIncident: (id: string) =>
       http.delete<void>(`/admin/status/incidents/${id}`),
+
+    // Outbound status webhooks (real-time pushes; e.g. the Helios bot).
+    statusWebhooks: () => getList<StatusWebhook>("/admin/status/webhooks"),
+    createStatusWebhook: (body: {
+      url: string;
+      events?: string[];
+      description?: string;
+    }) =>
+      http.post<StatusWebhook & { secret: string }>(
+        "/admin/status/webhooks",
+        body,
+      ),
+    updateStatusWebhook: (
+      id: string,
+      body: Partial<{ url: string; events: string[]; isActive: boolean; description: string }>,
+    ) => http.patch<StatusWebhook>(`/admin/status/webhooks/${id}`, body),
+    deleteStatusWebhook: (id: string) =>
+      http.delete<void>(`/admin/status/webhooks/${id}`),
 
     // Staff / "Meet the team" (public page content).
     staff: () => getList<TeamMember>("/admin/staff"),
