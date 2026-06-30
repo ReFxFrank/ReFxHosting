@@ -30,7 +30,7 @@ const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
 export function TopNav() {
   const router = useRouter();
-  const { user, logout, isAdmin } = useAuthStore();
+  const { user, logout, isStaff } = useAuthStore();
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
 
   async function handleLogout() {
@@ -80,7 +80,7 @@ export function TopNav() {
             <DropdownMenuItem onClick={() => router.push("/billing")}>
               <CreditCard className="size-4" /> Billing
             </DropdownMenuItem>
-            {isAdmin() && (
+            {isStaff() && (
               <DropdownMenuItem onClick={() => router.push("/admin")}>
                 <Shield className="size-4" /> Staff panel
               </DropdownMenuItem>

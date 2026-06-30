@@ -52,10 +52,9 @@ function LoginForm() {
       if (res.accessToken && res.refreshToken) {
         // User is loaded by setSession -> refreshUser() via /auth/me.
         await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, remember);
-        // Staff with no explicit target land in the admin panel; anyone who came
-        // from a deep link goes where they were headed.
-        const role = useAuthStore.getState().user?.globalRole;
-        const staff = role === "ADMIN" || role === "OWNER";
+        // Staff (SUPPORT and up) with no explicit target land in the admin panel;
+        // anyone who came from a deep link goes where they were headed.
+        const staff = useAuthStore.getState().isStaff();
         router.replace(next !== "/dashboard" ? next : staff ? "/admin" : "/dashboard");
       }
     } catch (e) {

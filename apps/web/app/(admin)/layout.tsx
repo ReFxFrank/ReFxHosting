@@ -8,9 +8,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Dedicated staff/admin shell — its own sidebar, top bar and accent (the
- * `admin-scope` class re-tints the primary accent). Access is gated to
- * ADMIN/OWNER here (client) and again server-side by the admin controller's
- * RolesGuard; non-admins are redirected to /dashboard by the hook.
+ * `admin-scope` class re-tints the primary accent). Access is gated to staff
+ * (SUPPORT/ADMIN/OWNER) here (client) and again server-side by the admin
+ * controllers' guards; customers are redirected to /dashboard by the hook. The
+ * sidebar is permission-filtered, so SUPPORT sees only what it can act on.
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   // SUPPORT staff get a read-only subset (nav is role-gated; write endpoints stay

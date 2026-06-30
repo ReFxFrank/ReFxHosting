@@ -28,6 +28,8 @@ interface AuthState {
   hasRole: (...roles: GlobalRole[]) => boolean;
   hasPermission: (perm: string) => boolean;
   isAdmin: () => boolean;
+  /** Any staff member (SUPPORT/ADMIN/OWNER) — i.e. can reach the admin panel. */
+  isStaff: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -101,5 +103,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   isAdmin() {
     return get().hasRole("ADMIN", "OWNER");
+  },
+
+  // The admin panel is permission-gated end to end, and SUPPORT carries admin
+  // permissions (dashboard.read, support.*, users.read, servers.read). So any
+  // staff role — SUPPORT and up — may reach it; individual pages still gate by
+  // permission. (CUSTOMER is rank 0 and excluded.)
+  isStaff() {
+    return get().hasRole("SUPPORT");
   },
 }));

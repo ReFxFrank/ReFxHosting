@@ -43,8 +43,7 @@ export default function TwoFactorPage() {
         sessionStorage.removeItem("refx.mfa");
         await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, mfa?.remember ?? true);
         {
-          const role = useAuthStore.getState().user?.globalRole;
-          const staff = role === "ADMIN" || role === "OWNER";
+          const staff = useAuthStore.getState().isStaff();
           router.replace(
             mfa.next && mfa.next !== "/dashboard" ? mfa.next : staff ? "/admin" : "/dashboard",
           );
@@ -73,8 +72,7 @@ export default function TwoFactorPage() {
           undefined,
           mfa?.remember ?? true,
         );
-        const role = useAuthStore.getState().user?.globalRole;
-        const staff = role === "ADMIN" || role === "OWNER";
+        const staff = useAuthStore.getState().isStaff();
         router.replace(
           mfa.next && mfa.next !== "/dashboard" ? mfa.next : staff ? "/admin" : "/dashboard",
         );
