@@ -104,7 +104,7 @@ interface TemplateFile {
   longDescription?: string;
   tags?: string[];
   category?: string; // GameCategory slug
-  kind?: 'GAME' | 'WEB'; // GAME (default) or WEB (app-container hosting)
+  kind?: 'GAME' | 'WEB' | 'BOT'; // GAME (default), WEB (app container), or BOT (Discord bot)
   deployMethods: string[]; // DeployMethod enum strings
   supportsLinux?: boolean;
   supportsWindows?: boolean;
