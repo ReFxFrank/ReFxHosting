@@ -17,7 +17,7 @@
     "Python 3.12": "ghcr.io/parkervcp/yolks:python_3.12",
     "Python 3.11": "ghcr.io/parkervcp/yolks:python_3.11"
   },
-  "startupCommand": "bash -c \"{{STARTUP_CMD}}\"",
+  "startupCommand": "bash -c \"if [ -f package.json ] && command -v npm >/dev/null 2>&1; then npm install --omit=dev; fi; if [ -f requirements.txt ] && command -v pip >/dev/null 2>&1; then pip install -r requirements.txt; fi; {{STARTUP_CMD}}\"",
   "startupDetect": "",
   "stopCommand": "^C",
   "installScript": {
@@ -33,9 +33,9 @@
     {
       "envName": "STARTUP_CMD",
       "displayName": "Startup command",
-      "description": "Command that installs deps + runs your bot. Node default shown; Python: \"pip install -r requirements.txt && python bot.py\".",
+      "description": "Command that runs your bot, e.g. \"node index.js\" or \"python bot.py\". Dependencies (package.json / requirements.txt) are installed automatically before it runs.",
       "type": "STRING",
-      "defaultValue": "npm install --omit=dev && node index.js",
+      "defaultValue": "node index.js",
       "rules": {
         "required": true,
         "minLength": 1,
