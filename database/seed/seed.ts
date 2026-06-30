@@ -401,7 +401,7 @@ type SeedInterval =
  * Override per-deploy with SEED_PRICE_PER_GB_CENTS.
  */
 const PRICE_PER_GB_CENTS =
-  Number.parseInt(process.env.SEED_PRICE_PER_GB_CENTS ?? '', 10) || 600;
+  Number.parseInt(process.env.SEED_PRICE_PER_GB_CENTS ?? '', 10) || 500;
 
 /**
  * Interval price points derived from a monthly base. Short terms are charged

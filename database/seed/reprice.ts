@@ -7,7 +7,7 @@
  * prices — it's the tool for applying a new pricing basis to the live storefront.
  *
  * Rate (USD cents per GB / month) resolves from: --rate=NNN  >  env
- * SEED_PRICE_PER_GB_CENTS  >  600 ($6/GB). See docs/25-pricing.md for the basis.
+ * SEED_PRICE_PER_GB_CENTS  >  500 ($5/GB). See docs/25-pricing.md for the basis.
  *
  * SAFE BY DEFAULT: prints what would change (dry run). Pass --apply to write.
  *
@@ -33,7 +33,7 @@ const APPLY = args.includes('--apply');
 const rateArg = args.find((a) => a.startsWith('--rate='))?.split('=')[1];
 const RATE =
   Number.parseInt(rateArg ?? process.env.SEED_PRICE_PER_GB_CENTS ?? '', 10) ||
-  600;
+  500;
 const CURRENCY = 'USD';
 const FLOOR = 500; // never price a tier below $5/mo
 

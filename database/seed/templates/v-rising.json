@@ -30,7 +30,7 @@
     }
   ],
   "recCpuCores": 4,
-  "recMemoryMb": 6144,
+  "recMemoryMb": 4096,
   "recDiskMb": 10240,
   "variables": [
     {

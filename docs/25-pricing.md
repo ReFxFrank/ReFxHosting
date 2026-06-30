@@ -22,12 +22,18 @@ truth; update it whenever the rate or cost basis changes.
 
 ## Current rate
 
-**`RATE_PER_GB = $6.00 / GB / month (USD)`** — stored as `PRICE_PER_GB_CENTS = 600`
+**`RATE_PER_GB = $5.00 / GB / month (USD)`** — stored as `PRICE_PER_GB_CENTS = 500`
 in `database/seed/seed.ts` (override per-deploy with `SEED_PRICE_PER_GB_CENTS`).
 
-Chosen as **~2.75× blended hardware cost** (see below): healthy margin, profitable
-on every node, and competitive enough to actually fill nodes. (Strict 4× landed at
-~$8.70/GB — above typical game-host pricing — so we priced for occupancy.)
+Chosen as **~2.3× blended hardware cost** (see below): healthy margin, profitable
+on every node, and priced to sit at the **top of the premium, no-overcommit band**
+of the market rather than chase budget hosts. A 2026 competitor sweep (~15 hosts)
+found RAM-priced hosts cluster at **$2.65–3/GB** when they oversell RAM, and
+**$5–6/GB** when they sell honest, dedicated RAM (Nodecraft Pro ~$5/GB, GGServers
+Premium $6/GB). At $5/GB with **no overcommit**, our RAM is genuinely dedicated —
+we match the premium-tier rate while the headline still drops ~17% from the old
+$6/GB. (Floor: the guardrail below keeps us ≥ 1.5× the priciest node, i.e. ≥ $4.20;
+drop `PRICE_PER_GB_CENTS` toward 450 if you want to undercut more aggressively.)
 
 ## Cost basis (snapshot — keep current)
 
@@ -38,10 +44,10 @@ on every node, and competitive enough to actually fill nodes. (Strict 4× landed
 | panel control box | — | — | $14.50 | shared overhead |
 | **Total** | | **128 GB** | **$278.50** | **$2.18 blended** |
 
-Margin at $6/GB, conservative **1:1** (no overcommit), fully sold:
+Margin at $5/GB, conservative **1:1** (no overcommit), fully sold:
 
-- Revenue 128 GB × $6 = **$768/mo** → cost $278.50 → **~$490/mo profit (~2.75×, ~64% gross)**.
-- Worst-case node (`bhs`, $2.80/GB): $6 still = **2.1×** — profitable everywhere.
+- Revenue 128 GB × $5 = **$640/mo** → cost $278.50 → **~$361/mo profit (~2.30×, ~57% gross)**.
+- Worst-case node (`bhs`, $2.80/GB): $5 still = **1.79×** — profitable everywhere.
 - Any RAM **overcommit** you run (1.5–2× is normal for game hosting) is pure
   upside not baked into the price, so you stay safe at full face-value sell-out.
 
@@ -52,32 +58,34 @@ Longer terms discount, but never below cost. Effective **$/GB** and margin vs th
 
 | Term | Discount | Effective $/GB | × worst node | × blended |
 |------|----------|----------------|--------------|-----------|
-| Weekly / Biweekly | none (pro-rated) | $6.00 | 2.14× | 2.75× |
-| Monthly | — | $6.00 | 2.14× | 2.75× |
-| Quarterly | −10% | $5.40 | 1.93× | 2.48× |
-| Semi-annual | −15% | $5.10 | 1.82× | 2.34× |
-| **Annual** | **−20%** | **$4.80** | **1.71×** | **2.20×** |
+| Weekly / Biweekly | none (pro-rated) | $5.00 | 1.79× | 2.29× |
+| Monthly | — | $5.00 | 1.79× | 2.29× |
+| Quarterly | −10% | $4.50 | 1.61× | 2.06× |
+| Semi-annual | −15% | $4.25 | 1.52× | 1.95× |
+| **Annual** | **−20%** | **$4.00** | **1.43×** | **1.83×** |
 
-So even the deepest term (annual) earns **1.71× on the priciest node** and **2.2×
-blended** — profitable everywhere. The reprice script writes all six terms from
-this curve, so they stay in lock-step with the monthly base automatically. Weekly/
-biweekly are pro-rated (same per-day rate as monthly), not discounted.
+So even the deepest term (annual) earns **1.83× blended** and **1.43× on the single
+priciest node** — still profitable in every cell, with the worst case being a
+full-annual prepay on the premium `bhs` box (~43% gross there; any overcommit erases
+even that thinness). The reprice script writes all six terms from this curve, so
+they stay in lock-step with the monthly base automatically. Weekly/biweekly are
+pro-rated (same per-day rate as monthly), not discounted.
 
 > Display note: the storefront "from $X/mo" and tier cards show the **monthly**
 > price (`storefront.service.startingPrice` + `monthlyPrice()` in
 > `game-detail.tsx`). The customer picks the actual term at checkout, which
 > charges that term's stored price.
 
-## Per-game prices @ $6/GB (monthly)
+## Per-game prices @ $5/GB (monthly)
 
 | Recommended RAM → games | Low (0.5×) | Mid ⭐ (1×) | High (2×) |
 |---|---|---|---|
-| **2 GB** — Terraria, TF2, Unturned, ATS | 1 GB → $6 | 2 GB → $12 | 4 GB → $24 |
-| **3 GB** — CS2, Killing Floor 2, Astroneer, tModLoader | 1.5 GB → $9 | 3 GB → $18 | 6 GB → $36 |
-| **4 GB** — Minecraft, Paper, Fabric, Valheim, Garry's Mod, Project Zomboid, Arma 3, Mordhau | 2 GB → $12 | 4 GB → $24 | 8 GB → $48 |
-| **6 GB** — MC Forge/NeoForge, FiveM, 7 Days to Die, V Rising | 3 GB → $18 | 6 GB → $36 | 12 GB → $72 |
-| **8 GB** — Rust, DayZ, Conan Exiles, Enshrouded, Arma Reforger, Squad, Satisfactory | 4 GB → $24 | 8 GB → $48 | 16 GB → $96 |
-| **12 GB** — ARK, Palworld | 6 GB → $36 | 12 GB → $72 | 24 GB → $144 |
+| **2 GB** — Terraria, TF2, Unturned, ATS | 1 GB → $5 | 2 GB → $10 | 4 GB → $20 |
+| **3 GB** — CS2, Killing Floor 2, Astroneer, tModLoader | 1.5 GB → $7.50 | 3 GB → $15 | 6 GB → $30 |
+| **4 GB** — Minecraft, Paper, Fabric, Valheim, Garry's Mod, Project Zomboid, Arma 3, Mordhau, V Rising, 7 Days to Die | 2 GB → $10 | 4 GB → $20 | 8 GB → $40 |
+| **6 GB** — MC Forge/NeoForge, FiveM | 3 GB → $15 | 6 GB → $30 | 12 GB → $60 |
+| **8 GB** — Rust, DayZ, Conan Exiles, Enshrouded, Arma Reforger, Squad, Satisfactory | 4 GB → $20 | 8 GB → $40 | 16 GB → $80 |
+| **12 GB** — ARK, Palworld | 6 GB → $30 | 12 GB → $60 | 24 GB → $120 |
 
 _(Voice/TeamSpeak is a separate PER_SLOT product, priced per slot — not on this rate.)_
 
@@ -143,12 +151,23 @@ you re-run reprice with `--apply`.
 
 ---
 
-_Last updated: 2026-06-30. Rate: $6/GB/mo USD. Keep the cost-basis table current._
+_Last updated: 2026-06-30. Rate: $5/GB/mo USD. Keep the cost-basis table current._
 
-> **2026-06-30 right-sizing.** Recommended RAM was recalibrated against what each
-> title actually uses in practice (not the publishers' generous headline numbers),
-> trimming over-provisioned eggs so their **Low** tier still boots comfortably:
-> ARK & Palworld 16→12 GB, Satisfactory & Conan Exiles 12→8 GB, Arma 3 / Mordhau /
-> Project Zomboid 6→4 GB, CS2 & Killing Floor 2 4→3 GB. Games whose RAM is a genuine
-> floor (Rust, DayZ, Squad, Enshrouded, V Rising, 7DtD, modded MC, FiveM) were left
-> as-is. Run `npm run db:resync-tiers -- --apply` after deploy to move existing tiers.
+> **2026-06-30 market recalibration.** Two changes, after a deep competitor sweep
+> (~15 hosts: Nitrado, GPortal, Shockbyte, BisectHosting, PingPerfect, Host Havoc,
+> GTXGaming, ZAP, Nodecraft, GGServers, Citadel, Scalacube, Survival Servers, …):
+>
+> 1. **Rate $6 → $5/GB.** The market prices RAM at ~$2.65–3/GB when oversold and
+>    ~$5–6/GB when dedicated; $6 sat above even the honest-RAM premium tier. $5/GB
+>    keeps us premium-but-fair (no overcommit) and drops every headline ~17%.
+> 2. **Right-sized over-provisioned eggs** to what each title actually uses (not
+>    publishers' headline numbers), so the **Low** tier still boots comfortably:
+>    ARK & Palworld 16→12 GB, Satisfactory & Conan Exiles 12→8 GB, Arma 3 / Mordhau /
+>    Project Zomboid / **V Rising / 7 Days to Die** 6→4 GB, CS2 & Killing Floor 2
+>    4→3 GB. Genuine-floor games (Rust, DayZ, Squad, Enshrouded, Arma Reforger,
+>    modded MC, FiveM) were left as-is.
+>
+> Combined effect on "from" prices, e.g. ARK/Palworld $48→$30, Satisfactory/Conan
+> $36→$20, V Rising/7DtD $18→$10, Minecraft $12→$10, CS2/KF2 $12→$7.50. Run
+> `npm run db:resync-tiers -- --apply` after deploy to move existing tiers onto the
+> new rate + specs in one pass.

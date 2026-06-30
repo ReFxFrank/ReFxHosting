@@ -9,7 +9,7 @@
  *
  * Only the three standard tiers (name contains Low/Mid/High) are touched; custom
  * admin tiers are left alone. Rate (USD cents/GB/mo): --rate=NNN >
- * SEED_PRICE_PER_GB_CENTS > 600 ($6/GB). See docs/25-pricing.md.
+ * SEED_PRICE_PER_GB_CENTS > 500 ($5/GB). See docs/25-pricing.md.
  *
  * SAFE BY DEFAULT (dry run). Pass --apply to write.
  *   npx ts-node --transpile-only --project tsconfig.seed.json database/seed/resync-tiers.ts
@@ -34,7 +34,7 @@ const RATE =
       process.env.SEED_PRICE_PER_GB_CENTS ??
       '',
     10,
-  ) || 600;
+  ) || 500;
 const CURRENCY = 'USD';
 
 type Interval =
