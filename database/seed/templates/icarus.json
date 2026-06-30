@@ -1,0 +1,70 @@
+{
+  "name": "ICARUS",
+  "slug": "icarus",
+  "author": "ops@refx.example",
+  "description": "RocketWerkz session-based survival. SteamCMD Windows dedicated server run via Wine. Player count is set in ServerSettings.ini.",
+  "category": "survival",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:proton"
+  },
+  "steamAppId": 2089300,
+  "startupCommand": "wine ./Icarus/Binaries/Win64/IcarusServer-Win64-Shipping.exe -Log -SteamServerName=\"{{SERVER_NAME}}\" -PORT={{SERVER_PORT}} -QueryPort={{QUERY_PORT}}",
+  "startupDetect": "(Engine Initialization) Total time:",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:proton",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd image ships no `steamcmd` on PATH; bootstrap\n# it so the egg's steamcmd calls resolve (otherwise the server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server/steamapps\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 2089300 validate +quit\necho 'ICARUS install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 4,
+  "recMemoryMb": 6144,
+  "recDiskMb": 25600,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server name",
+      "type": "STRING",
+      "defaultValue": "A ReFx ICARUS Server",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "description": "Set in Icarus/Saved/Config/WindowsServer/ServerSettings.ini after first boot.",
+      "type": "NUMBER",
+      "defaultValue": "8",
+      "rules": {
+        "min": 1,
+        "max": 20
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query port",
+      "type": "NUMBER",
+      "defaultValue": "27015",
+      "rules": {
+        "min": 1024,
+        "max": 65535
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    }
+  ]
+}

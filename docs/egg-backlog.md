@@ -26,9 +26,24 @@ publish state and art are preserved).
 | Astroneer | `astroneer` | 728470 | Windows build via Proton |
 | Unturned | `unturned` | 1110390 | SteamCMD, Linux |
 | American Truck Simulator | `american-truck-simulator` | 2239530 | SteamCMD dedicated, Linux |
+| Soulmask | `soulmask` | 3017300 | SteamCMD, native Linux (UE5), CLI-driven |
+| Insurgency: Sandstorm | `insurgency-sandstorm` | 581330 | SteamCMD, native Linux (32-bit UE4); map+scenario via URL args |
+| Core Keeper | `core-keeper` | 1963720 | SteamCMD, native Linux (Unity); needs xvfb + log-tail wrapper |
+| ICARUS | `icarus` | 2089300 | Windows build via Wine; players set in ServerSettings.ini |
+| Sons of the Forest | `sons-of-the-forest` | 2465200 | Windows build via Wine; needs a 3rd (BlobSync) port |
+| Abiotic Factor | `abiotic-factor` | 2857200 | Windows build via Wine; logs to file (startup tails it for detect) |
 
 > Vanilla Terraria already shipped as `terraria` (`terraria.json`); `tmodloader`
 > is the modded variant.
+>
+> **2026-06-30 batch.** The six above were added from canonical Pelican/Pterodactyl
+> eggs (app ids + startup commands + `startupDetect` "done" strings adversarially
+> verified against SteamDB and the official server docs). The three Windows titles
+> (ICARUS, Sons of the Forest, Abiotic Factor) run via Wine on the `steamcmd:proton`
+> image, like our V Rising / Conan eggs. **Test-provision one of each before relying
+> on them** — Wine titles can need extra prefix deps, ICARUS has a known cold-start
+> hang on some Wine images, and Insurgency's default `MAP_NAME`/`SCENARIO` may want
+> tuning.
 
 ## To do
 
@@ -38,6 +53,11 @@ done yet.
 
 | Game | Likely approach | Blocker / to verify |
 |------|-----------------|---------------------|
+| Barotrauma | SteamCMD native Linux, app `1026340` | App id + startup (`./DedicatedServer -batchmode`) verified, but **port/maxplayers/name are config-only** (`serversettings.xml` attributes) — needs an install-time render (XML attrs, like 7DtD's sed step) before shipping, or the allocated port won't match. |
+| The Forest | SteamCMD Windows via Wine, app `556450` | Verified Windows-only (no native Linux server). **Port/slots are config-only** (`config.cfg`) — needs install-time render of the allocated port; also wants a Steam GSLT for the public browser. |
+| SCUM | SteamCMD Windows via Wine, app `3792580` | Server app id is recent — verify it installs anonymously on first run; Windows-only + BattlEye + heavy RAM (12–16 GB). |
+| Space Engineers / Empyrion | Windows via Wine | Wine + .NET/child-playfield processes are finicky; both spin up best on real Windows nodes. |
+| Don't Starve Together | SteamCMD native Linux, app `343050` | Wants a **two-process** master+caves shard model (one server = two processes sharing a cluster dir) + a Klei cluster token for public listing — needs a multi-process launch wrapper. |
 | Raft | `RaftDedicatedServer.exe` via Proton | Confirm the dedicated-server Steam app id + startup args before shipping (didn't want to ship a wrong app id). |
 | Survive the Nights | SteamCMD dedicated | Verify server app id + startup; the dedicated server has been unstable across builds. |
 | Chivalry 2 | — | No public anonymous SteamCMD dedicated server; it's Epic-hosted/cross-play — needs a confirmed self-host path. |

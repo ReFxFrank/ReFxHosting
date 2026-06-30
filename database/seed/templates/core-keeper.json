@@ -1,0 +1,99 @@
+{
+  "name": "Core Keeper",
+  "slug": "core-keeper",
+  "author": "ops@refx.example",
+  "description": "Mining sandbox survival. SteamCMD-installed native Linux dedicated server (headless Unity).",
+  "category": "survival",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:proton"
+  },
+  "steamAppId": 1963720,
+  "startupCommand": "rm -f ./CoreKeeperServerLog.txt; touch ./CoreKeeperServerLog.txt; xvfb-run -a -s \"-screen 0 1x1x24 -ac -nolisten tcp -nolisten unix\" ./CoreKeeperServer -batchmode -logfile CoreKeeperServerLog.txt -world {{WORLD_INDEX}} -worldname \"{{SERVER_NAME}}\" -worldseed {{WORLD_SEED}} -maxplayers {{MAX_PLAYERS}} -worldmode {{WORLD_MODE}} -port {{SERVER_PORT}} & CKPID=$!; tail -n+1 -F CoreKeeperServerLog.txt & LOGPID=$!; trap \"kill $CKPID $LOGPID 2>/dev/null\" INT TERM; wait $CKPID",
+  "startupDetect": "Started session",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd image ships no `steamcmd` on PATH; bootstrap\n# it so the egg's steamcmd calls resolve (otherwise the server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server/steamapps\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 1963720 validate +quit\n# steamclient.so so the native Linux dedicated server registers with Steam.\nmkdir -p \"${HOME:-/root}/.steam/sdk32\" \"${HOME:-/root}/.steam/sdk64\"\ncp -f /mnt/server/steamcmd/linux32/steamclient.so \"${HOME:-/root}/.steam/sdk32/steamclient.so\" 2>/dev/null || true\ncp -f /mnt/server/steamcmd/linux64/steamclient.so \"${HOME:-/root}/.steam/sdk64/steamclient.so\" 2>/dev/null || true\nchmod +x /mnt/server/CoreKeeperServer 2>/dev/null || true\necho 'Core Keeper install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 5120,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "World name",
+      "type": "STRING",
+      "defaultValue": "A ReFx Core Keeper World",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "type": "NUMBER",
+      "defaultValue": "10",
+      "rules": {
+        "min": 1,
+        "max": 100
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "WORLD_INDEX",
+      "displayName": "World slot",
+      "type": "NUMBER",
+      "defaultValue": "0",
+      "rules": {
+        "min": 0,
+        "max": 9
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "WORLD_SEED",
+      "displayName": "World seed",
+      "description": "0 = random.",
+      "type": "NUMBER",
+      "defaultValue": "0",
+      "rules": {
+        "min": 0
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "WORLD_MODE",
+      "displayName": "World mode",
+      "description": "0 = normal, 1 = hard, 2 = creative.",
+      "type": "ENUM",
+      "defaultValue": "0",
+      "rules": {
+        "options": [
+          "0",
+          "1",
+          "2"
+        ]
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    }
+  ]
+}

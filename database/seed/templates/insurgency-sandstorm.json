@@ -1,0 +1,95 @@
+{
+  "name": "Insurgency: Sandstorm",
+  "slug": "insurgency-sandstorm",
+  "author": "ops@refx.example",
+  "description": "Hardcore tactical FPS. SteamCMD-installed native Linux dedicated server with selectable map and scenario.",
+  "category": "shooter",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": 581330,
+  "startupCommand": "./Insurgency/Binaries/Linux/InsurgencyServer-Linux-Shipping {{MAP_NAME}}?Scenario={{SCENARIO}}?MaxPlayers={{MAX_PLAYERS}} -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -log -hostname=\"{{SERVER_NAME}}\"",
+  "startupDetect": "Match State Changed from LoadingAssets to WaitingToStart",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd image ships no `steamcmd` on PATH; bootstrap\n# it so the egg's steamcmd calls resolve (otherwise the server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server/steamapps\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 581330 validate +quit\n# steamclient.so so the native Linux dedicated server registers with Steam.\nmkdir -p \"${HOME:-/root}/.steam/sdk32\" \"${HOME:-/root}/.steam/sdk64\"\ncp -f /mnt/server/steamcmd/linux32/steamclient.so \"${HOME:-/root}/.steam/sdk32/steamclient.so\" 2>/dev/null || true\ncp -f /mnt/server/steamcmd/linux64/steamclient.so \"${HOME:-/root}/.steam/sdk64/steamclient.so\" 2>/dev/null || true\nchmod +x /mnt/server/Insurgency/Binaries/Linux/InsurgencyServer-Linux-Shipping 2>/dev/null || true\necho 'Insurgency: Sandstorm install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 2,
+  "recMemoryMb": 4096,
+  "recDiskMb": 30720,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server name",
+      "type": "STRING",
+      "defaultValue": "A ReFx Insurgency Server",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "description": "PvP caps at 32; co-op modes cap at 8.",
+      "type": "NUMBER",
+      "defaultValue": "28",
+      "rules": {
+        "min": 1,
+        "max": 32
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "MAP_NAME",
+      "displayName": "Map",
+      "type": "STRING",
+      "defaultValue": "Oilfield",
+      "rules": {
+        "maxLength": 32
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "SCENARIO",
+      "displayName": "Scenario",
+      "description": "e.g. Scenario_<Map>_Push_Security, _Firefight_East, _Checkpoint_Security (co-op).",
+      "type": "STRING",
+      "defaultValue": "Scenario_Oilfield_Push_Security",
+      "rules": {
+        "maxLength": 96
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query port",
+      "type": "NUMBER",
+      "defaultValue": "27131",
+      "rules": {
+        "min": 1024,
+        "max": 65535
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    }
+  ]
+}

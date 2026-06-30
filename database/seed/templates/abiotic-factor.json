@@ -1,0 +1,82 @@
+{
+  "name": "Abiotic Factor",
+  "slug": "abiotic-factor",
+  "author": "ops@refx.example",
+  "description": "Co-op sci-fi survival in a secret research facility. SteamCMD Windows dedicated server run via Wine.",
+  "category": "survival",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:proton"
+  },
+  "steamAppId": 2857200,
+  "startupCommand": "xvfb-run -a wine ./AbioticFactor/Binaries/Win64/AbioticFactorServer-Win64-Shipping.exe -log -useperfthreads -NoAsyncLoadingThread -MaxServerPlayers={{MAX_PLAYERS}} -Port={{SERVER_PORT}} -QueryPort={{QUERY_PORT}} -ServerPassword=\"{{SERVER_PASSWORD}}\" -SteamServerName=\"{{SERVER_NAME}}\" & APID=$!; sleep 8; tail -n+1 -F ./AbioticFactor/Saved/Logs/AbioticFactor.log 2>/dev/null & wait $APID",
+  "startupDetect": "Engine is initialized.",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:proton",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd image ships no `steamcmd` on PATH; bootstrap\n# it so the egg's steamcmd calls resolve (otherwise the server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server/steamapps\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 2857200 validate +quit\necho 'Abiotic Factor install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 4,
+  "recMemoryMb": 6144,
+  "recDiskMb": 12288,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server name",
+      "type": "STRING",
+      "defaultValue": "A ReFx Abiotic Factor Server",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "type": "NUMBER",
+      "defaultValue": "6",
+      "rules": {
+        "min": 1,
+        "max": 32
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query port",
+      "type": "NUMBER",
+      "defaultValue": "27015",
+      "rules": {
+        "min": 1024,
+        "max": 65535
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "SERVER_PASSWORD",
+      "displayName": "Server password",
+      "description": "Optional join password.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": {
+        "minLength": 0
+      },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 3
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "name": "Sons of the Forest",
+  "slug": "sons-of-the-forest",
+  "author": "ops@refx.example",
+  "description": "Co-op survival horror sequel. SteamCMD Windows dedicated server run via Wine.",
+  "category": "survival",
+  "deployMethods": [
+    "DOCKER",
+    "NATIVE_PROCESS"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": true,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:proton"
+  },
+  "steamAppId": 2465200,
+  "startupCommand": "wine ./SonsOfTheForestDS.exe -userdatapath \"/mnt/server/serverconfig\" -dedicatedserver.IpAddress \"0.0.0.0\" -dedicatedserver.GamePort {{SERVER_PORT}} -dedicatedserver.QueryPort {{QUERY_PORT}} -dedicatedserver.BlobSyncPort {{BLOBSYNC_PORT}} -dedicatedserver.MaxPlayers {{MAX_PLAYERS}} -dedicatedserver.GameMode \"{{GAME_MODE}}\" -dedicatedserver.SaveSlot {{SAVE_SLOT}} -dedicatedserver.SkipNetworkAccessibilityTest \"true\" -dedicatedserver.LogFilesEnabled \"true\"",
+  "startupDetect": "Dedicated server loaded.",
+  "stopCommand": "^C",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/steamcmd:proton",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd image ships no `steamcmd` on PATH; bootstrap\n# it so the egg's steamcmd calls resolve (otherwise the server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\nmkdir -p /mnt/server/steamapps\ncd /mnt/server\nsteamcmd +@sSteamCmdForcePlatformType windows +force_install_dir /mnt/server +login anonymous +app_update 2465200 validate +quit\nmkdir -p /mnt/server/serverconfig\necho 'Sons of the Forest install complete.'"
+  },
+  "configFiles": [],
+  "recCpuCores": 4,
+  "recMemoryMb": 8192,
+  "recDiskMb": 25600,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server name",
+      "description": "Edit in serverconfig/dedicatedserver.cfg.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Sons of the Forest Server",
+      "rules": {
+        "maxLength": 64
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max players",
+      "type": "NUMBER",
+      "defaultValue": "8",
+      "rules": {
+        "min": 1,
+        "max": 8
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 1
+    },
+    {
+      "envName": "QUERY_PORT",
+      "displayName": "Query port",
+      "type": "NUMBER",
+      "defaultValue": "27016",
+      "rules": {
+        "min": 1024,
+        "max": 65535
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "BLOBSYNC_PORT",
+      "displayName": "Blob-sync port",
+      "description": "Save-data streaming port — must also be allocated/open.",
+      "type": "NUMBER",
+      "defaultValue": "9700",
+      "rules": {
+        "min": 1024,
+        "max": 65535
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "GAME_MODE",
+      "displayName": "Game mode",
+      "type": "ENUM",
+      "defaultValue": "Normal",
+      "rules": {
+        "options": [
+          "Peaceful",
+          "Normal",
+          "Hard",
+          "HardSurvival",
+          "Custom"
+        ]
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    },
+    {
+      "envName": "SAVE_SLOT",
+      "displayName": "Save slot",
+      "type": "NUMBER",
+      "defaultValue": "1",
+      "rules": {
+        "min": 1,
+        "max": 10
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 5
+    }
+  ]
+}
