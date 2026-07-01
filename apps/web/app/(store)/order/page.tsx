@@ -35,7 +35,12 @@ import { Slider } from "@/components/ui/slider";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/ui/sonner";
 import { cn, formatMoney } from "@/lib/utils";
-import type { BillingInterval, HardwareTier, Price, Product } from "@/lib/types";
+import type {
+  BillingInterval,
+  HardwareTier,
+  Price,
+  Product,
+} from "@/lib/types";
 
 const INTERVAL_LABEL: Record<BillingInterval, string> = {
   WEEKLY: "Weekly",
@@ -72,7 +77,10 @@ const hasActiveTiers = (p: Product) =>
 function sortPrices(prices: Price[]) {
   return [...prices]
     .filter((p) => p.isActive !== false)
-    .sort((a, b) => INTERVAL_ORDER.indexOf(a.interval) - INTERVAL_ORDER.indexOf(b.interval));
+    .sort(
+      (a, b) =>
+        INTERVAL_ORDER.indexOf(a.interval) - INTERVAL_ORDER.indexOf(b.interval),
+    );
 }
 
 export default function OrderPage() {
@@ -108,19 +116,29 @@ export default function OrderPage() {
     () =>
       (productsQ.data ?? []).filter(
         (p) =>
-          p.isActive &&
-          p.gameTemplateId &&
-          (hasActiveTiers(p) || isPerSlot(p)),
+          p.isActive && p.gameTemplateId && (hasActiveTiers(p) || isPerSlot(p)),
       ),
     [productsQ.data],
   );
   const gameOfferings = useMemo(
-    () => offerings.filter((p) => !isVoiceType(p) && !isWebType(p) && !isBotType(p)),
+    () =>
+      offerings.filter(
+        (p) => !isVoiceType(p) && !isWebType(p) && !isBotType(p),
+      ),
     [offerings],
   );
-  const voiceOfferings = useMemo(() => offerings.filter((p) => isVoiceType(p)), [offerings]);
-  const webOfferings = useMemo(() => offerings.filter((p) => isWebType(p)), [offerings]);
-  const botOfferings = useMemo(() => offerings.filter((p) => isBotType(p)), [offerings]);
+  const voiceOfferings = useMemo(
+    () => offerings.filter((p) => isVoiceType(p)),
+    [offerings],
+  );
+  const webOfferings = useMemo(
+    () => offerings.filter((p) => isWebType(p)),
+    [offerings],
+  );
+  const botOfferings = useMemo(
+    () => offerings.filter((p) => isBotType(p)),
+    [offerings],
+  );
 
   const [productId, setProductId] = useState<string | null>(null);
   const [tierId, setTierId] = useState<string | null>(null);
@@ -132,9 +150,15 @@ export default function OrderPage() {
   const [gateway, setGateway] = useState<"stripe" | "paypal">("stripe");
   const [config, setConfig] = useState<Record<string, string>>({});
   const [couponInput, setCouponInput] = useState("");
-  const [coupon, setCoupon] = useState<{ code: string; discountMinor: number } | null>(null);
+  const [coupon, setCoupon] = useState<{
+    code: string;
+    discountMinor: number;
+  } | null>(null);
   const [giftInput, setGiftInput] = useState("");
-  const [gift, setGift] = useState<{ code: string; balanceMinor: number } | null>(null);
+  const [gift, setGift] = useState<{
+    code: string;
+    balanceMinor: number;
+  } | null>(null);
   const [useCredit, setUseCredit] = useState(false);
 
   const product = offerings.find((p) => p.id === productId) ?? null;
@@ -150,7 +174,7 @@ export default function OrderPage() {
         .sort((a, b) => a.sortOrder - b.sortOrder),
     [product],
   );
-  const tier = perSlot ? null : tiers.find((t) => t.id === tierId) ?? null;
+  const tier = perSlot ? null : (tiers.find((t) => t.id === tierId) ?? null);
   const template = product ? templatesById[product.gameTemplateId ?? ""] : null;
   const configVars = (template?.variables ?? []).filter(
     (v) => v.userEditable && v.type !== "SECRET",
@@ -189,18 +213,27 @@ export default function OrderPage() {
   // version invalidates the build. Reset them so we never submit a combo the
   // loader doesn't have.
   const setMcLoader = (v: string) =>
-    setConfig((c) => ({ ...c, LOADER: v, MINECRAFT_VERSION: "latest", LOADER_VERSION: "latest" }));
+    setConfig((c) => ({
+      ...c,
+      LOADER: v,
+      MINECRAFT_VERSION: "latest",
+      LOADER_VERSION: "latest",
+    }));
   const setMcVersion = (v: string) =>
-    setConfig((c) => ({ ...c, MINECRAFT_VERSION: v, LOADER_VERSION: "latest" }));
+    setConfig((c) => ({
+      ...c,
+      MINECRAFT_VERSION: v,
+      LOADER_VERSION: "latest",
+    }));
 
   // The price list to choose a billing interval from: tier prices (game) or
   // product prices (voice).
   const sortedPriceList = useMemo(
-    () => sortPrices(perSlot ? product?.prices ?? [] : tier?.prices ?? []),
+    () => sortPrices(perSlot ? (product?.prices ?? []) : (tier?.prices ?? [])),
     [perSlot, product, tier],
   );
   const price = interval
-    ? sortedPriceList.find((p) => p.interval === interval) ?? null
+    ? (sortedPriceList.find((p) => p.interval === interval) ?? null)
     : null;
 
   // Deep link: /order?game=<template-slug> or /order?product=<slug>
@@ -247,8 +280,8 @@ export default function OrderPage() {
       cur && ints.includes(cur)
         ? cur
         : ints.includes("MONTHLY")
-        ? "MONTHLY"
-        : ints[0] ?? null,
+          ? "MONTHLY"
+          : (ints[0] ?? null),
     );
   }, [sortedPriceList]);
 
@@ -258,7 +291,8 @@ export default function OrderPage() {
     const tpl = templatesById[product.gameTemplateId ?? ""];
     const defaults: Record<string, string> = {};
     for (const v of tpl?.variables ?? []) {
-      if (v.userEditable && v.type !== "SECRET") defaults[v.envName] = v.defaultValue ?? "";
+      if (v.userEditable && v.type !== "SECRET")
+        defaults[v.envName] = v.defaultValue ?? "";
     }
     setConfig(defaults);
   }, [product, templatesById]);
@@ -267,22 +301,41 @@ export default function OrderPage() {
   const limits = !product
     ? null
     : perSlot
-    ? {
-        cpuCores: +(product.cpuPerSlot * slots).toFixed(2),
-        memoryMb: product.memoryMbPerSlot * slots,
-        diskMb: product.diskMbPerSlot * slots,
-      }
-    : tier
-    ? { cpuCores: tier.cpuCores, memoryMb: tier.memoryMb, diskMb: tier.diskMb }
-    : null;
+      ? {
+          cpuCores: +(product.cpuPerSlot * slots).toFixed(2),
+          memoryMb: product.memoryMbPerSlot * slots,
+          diskMb: product.diskMbPerSlot * slots,
+        }
+      : tier
+        ? {
+            cpuCores: tier.cpuCores,
+            memoryMb: tier.memoryMb,
+            diskMb: tier.diskMb,
+          }
+        : null;
 
   const locationsQ = useQuery({
-    queryKey: ["catalog", "locations", limits?.cpuCores, limits?.memoryMb, limits?.diskMb, webType],
+    queryKey: [
+      "catalog",
+      "locations",
+      limits?.cpuCores,
+      limits?.memoryMb,
+      limits?.diskMb,
+      webType,
+    ],
     queryFn: () => api.catalog.locations(limits!, webType),
     enabled: !!limits,
   });
   const nodesQ = useQuery({
-    queryKey: ["catalog", "nodes", regionId, limits?.cpuCores, limits?.memoryMb, limits?.diskMb, webType],
+    queryKey: [
+      "catalog",
+      "nodes",
+      regionId,
+      limits?.cpuCores,
+      limits?.memoryMb,
+      limits?.diskMb,
+      webType,
+    ],
     queryFn: () => api.catalog.nodes(regionId!, limits!, webType),
     enabled: !!regionId && !!limits,
   });
@@ -293,7 +346,9 @@ export default function OrderPage() {
   // Pricing preview (the backend recomputes authoritatively, incl. tax).
   const quantity = perSlot ? slots : 1;
   const subtotalMinor = price ? price.amountMinor * quantity : 0;
-  const discountMinor = coupon ? Math.min(coupon.discountMinor, subtotalMinor) : 0;
+  const discountMinor = coupon
+    ? Math.min(coupon.discountMinor, subtotalMinor)
+    : 0;
   const afterDiscount = Math.max(0, subtotalMinor - discountMinor);
   const giftCredit = gift ? Math.min(gift.balanceMinor, afterDiscount) : 0;
   const afterGift = Math.max(0, afterDiscount - giftCredit);
@@ -308,7 +363,8 @@ export default function OrderPage() {
   }, [subtotalMinor]);
 
   const applyCoupon = useMutation({
-    mutationFn: () => api.billing.validateCoupon(couponInput.trim(), subtotalMinor),
+    mutationFn: () =>
+      api.billing.validateCoupon(couponInput.trim(), subtotalMinor),
     onSuccess: (res) => {
       setCoupon({ code: res.code, discountMinor: res.discountMinor });
       toast.success(`Coupon ${res.code} applied`);
@@ -323,7 +379,9 @@ export default function OrderPage() {
     mutationFn: () => api.billing.lookupGiftCard(giftInput.trim()),
     onSuccess: (res) => {
       setGift({ code: res.code, balanceMinor: res.balanceMinor });
-      toast.success(`Gift card applied — ${formatMoney(res.balanceMinor, res.currency)} balance`);
+      toast.success(
+        `Gift card applied — ${formatMoney(res.balanceMinor, res.currency)} balance`,
+      );
     },
     onError: (e) => {
       setGift(null);
@@ -358,10 +416,13 @@ export default function OrderPage() {
         router.push("/servers");
         return;
       }
-      toast.success("Order placed. Complete payment in Billing to start your server.");
+      toast.success(
+        "Order placed. Complete payment in Billing to start your server.",
+      );
       router.push("/billing");
     },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Failed to place order"),
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to place order"),
   });
 
   const stripeOn = !!payCfg.data?.stripe.configured;
@@ -374,7 +435,8 @@ export default function OrderPage() {
     mutationFn: () => api.auth.resendVerification(user?.email ?? ""),
     onSuccess: () =>
       toast.success("Verification email sent — check your inbox (and spam)."),
-    onError: () => toast.error("Couldn't send the email right now. Try again shortly."),
+    onError: () =>
+      toast.error("Couldn't send the email right now. Try again shortly."),
   });
 
   const canOrder =
@@ -383,14 +445,19 @@ export default function OrderPage() {
     !!price &&
     !!name.trim() &&
     (perSlot ? slots > 0 : !!tier) &&
-    (!(locationsQ.data?.length) || !!regionId);
+    (!locationsQ.data?.length || !!regionId);
 
   if (productsQ.isLoading) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Order a server" description="Pick a product, configure it, go live." />
+        <PageHeader
+          title="Order a server"
+          description="Pick a product, configure it, go live."
+        />
         <div className="grid gap-3 sm:grid-cols-3">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+          {Array.from({ length: 6 }).map((_, i) => (
+            <Skeleton key={i} className="h-28 rounded-xl" />
+          ))}
         </div>
       </div>
     );
@@ -399,7 +466,10 @@ export default function OrderPage() {
   if (!offerings.length) {
     return (
       <div className="space-y-4">
-        <PageHeader title="Order a server" description="Pick a product, configure it, go live." />
+        <PageHeader
+          title="Order a server"
+          description="Pick a product, configure it, go live."
+        />
         <EmptyState
           icon={ServerIcon}
           title="No plans available yet"
@@ -411,14 +481,19 @@ export default function OrderPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Order a server" description="Choose a product, configure it, and you're live in minutes." />
+      <PageHeader
+        title="Order a server"
+        description="Choose a product, configure it, and you're live in minutes."
+      />
 
       {user && !emailVerified && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
           <div className="flex items-start gap-3">
             <Mail className="mt-0.5 size-5 shrink-0 text-amber-400" />
             <div>
-              <p className="text-sm font-medium text-amber-100">Verify your email to order</p>
+              <p className="text-sm font-medium text-amber-100">
+                Verify your email to order
+              </p>
               <p className="text-sm text-amber-100/80">
                 We sent a verification link to{" "}
                 <span className="font-medium">{user.email}</span>. Confirm it to
@@ -439,7 +514,9 @@ export default function OrderPage() {
 
       {/* Step 1 — choose an offering (game or voice) */}
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-muted-foreground">1 · Choose a product</h2>
+        <h2 className="text-sm font-semibold text-muted-foreground">
+          1 · Choose a product
+        </h2>
 
         {gameOfferings.length > 0 && (
           <div className="space-y-2">
@@ -452,7 +529,10 @@ export default function OrderPage() {
                   key={g.id}
                   product={g}
                   active={g.id === productId}
-                  icon={templatesById[g.gameTemplateId ?? ""]?.iconUrl || templatesById[g.gameTemplateId ?? ""]?.cardImageUrl}
+                  icon={
+                    templatesById[g.gameTemplateId ?? ""]?.iconUrl ||
+                    templatesById[g.gameTemplateId ?? ""]?.cardImageUrl
+                  }
                   onSelect={() => setProductId(g.id)}
                 />
               ))}
@@ -490,7 +570,10 @@ export default function OrderPage() {
                   key={g.id}
                   product={g}
                   active={g.id === productId}
-                  icon={templatesById[g.gameTemplateId ?? ""]?.iconUrl || templatesById[g.gameTemplateId ?? ""]?.cardImageUrl}
+                  icon={
+                    templatesById[g.gameTemplateId ?? ""]?.iconUrl ||
+                    templatesById[g.gameTemplateId ?? ""]?.cardImageUrl
+                  }
                   onSelect={() => setProductId(g.id)}
                 />
               ))}
@@ -509,7 +592,10 @@ export default function OrderPage() {
                   key={g.id}
                   product={g}
                   active={g.id === productId}
-                  icon={templatesById[g.gameTemplateId ?? ""]?.iconUrl || templatesById[g.gameTemplateId ?? ""]?.cardImageUrl}
+                  icon={
+                    templatesById[g.gameTemplateId ?? ""]?.iconUrl ||
+                    templatesById[g.gameTemplateId ?? ""]?.cardImageUrl
+                  }
                   onSelect={() => setProductId(g.id)}
                 />
               ))}
@@ -524,7 +610,9 @@ export default function OrderPage() {
             {/* Step 2 — hardware tiers (tiered) OR slot selector (per-slot) */}
             {!perSlot ? (
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold">2 · Choose a hardware tier</h2>
+                <h2 className="text-sm font-semibold">
+                  2 · Choose a hardware tier
+                </h2>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {tiers.map((t) => (
                     <TierCard
@@ -543,7 +631,9 @@ export default function OrderPage() {
               <section className="space-y-3 rounded-xl border p-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-sm font-semibold">2 · Slots</h2>
-                  <Badge variant="secondary" className="text-sm">{slots} slots</Badge>
+                  <Badge variant="secondary" className="text-sm">
+                    {slots} slots
+                  </Badge>
                 </div>
                 <Slider
                   value={slots}
@@ -573,10 +663,14 @@ export default function OrderPage() {
                   <div className="space-y-1.5">
                     <Label>Loader</Label>
                     <Select value={mcLoader} onValueChange={setMcLoader}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         {MC_LOADERS.map((l) => (
-                          <SelectItem key={l.value} value={l.value}>{l.label}</SelectItem>
+                          <SelectItem key={l.value} value={l.value}>
+                            {l.label}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -584,24 +678,42 @@ export default function OrderPage() {
                   <div className="space-y-1.5">
                     <Label>Minecraft version</Label>
                     <Select value={mcVersion} onValueChange={setMcVersion}>
-                      <SelectTrigger><SelectValue placeholder="Select version" /></SelectTrigger>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select version" />
+                      </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="latest">Latest (recommended)</SelectItem>
+                        <SelectItem value="latest">
+                          Latest (recommended)
+                        </SelectItem>
                         {(mcVersionsQ.data?.versions ?? []).map((ver) => (
-                          <SelectItem key={ver} value={ver}>{ver}</SelectItem>
+                          <SelectItem key={ver} value={ver}>
+                            {ver}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   {MC_NEEDS_BUILD.has(mcLoader) && (
                     <div className="space-y-1.5">
-                      <Label>{MC_LOADERS.find((l) => l.value === mcLoader)?.label} build</Label>
-                      <Select value={config.LOADER_VERSION ?? "latest"} onValueChange={(v) => setConfigVal("LOADER_VERSION", v)}>
-                        <SelectTrigger><SelectValue placeholder="Select build" /></SelectTrigger>
+                      <Label>
+                        {MC_LOADERS.find((l) => l.value === mcLoader)?.label}{" "}
+                        build
+                      </Label>
+                      <Select
+                        value={config.LOADER_VERSION ?? "latest"}
+                        onValueChange={(v) => setConfigVal("LOADER_VERSION", v)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select build" />
+                        </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="latest">Latest (recommended)</SelectItem>
+                          <SelectItem value="latest">
+                            Latest (recommended)
+                          </SelectItem>
                           {(mcBuildsQ.data?.builds ?? []).map((b) => (
-                            <SelectItem key={b} value={b}>{b}</SelectItem>
+                            <SelectItem key={b} value={b}>
+                              {b}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -609,7 +721,8 @@ export default function OrderPage() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Pick your server software and version — we auto-select the matching Java runtime.
+                  Pick your server software and version — we auto-select the
+                  matching Java runtime.
                 </p>
               </section>
             ) : configVars.length > 0 ? (
@@ -635,12 +748,18 @@ export default function OrderPage() {
                         ) : v.type === "ENUM" && options ? (
                           <Select
                             value={config[v.envName] ?? ""}
-                            onValueChange={(val) => setConfigVal(v.envName, val)}
+                            onValueChange={(val) =>
+                              setConfigVal(v.envName, val)
+                            }
                           >
-                            <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select…" />
+                            </SelectTrigger>
                             <SelectContent>
                               {options.map((o) => (
-                                <SelectItem key={o} value={o}>{o}</SelectItem>
+                                <SelectItem key={o} value={o}>
+                                  {o}
+                                </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
@@ -648,11 +767,15 @@ export default function OrderPage() {
                           <Input
                             type={v.type === "NUMBER" ? "number" : "text"}
                             value={config[v.envName] ?? ""}
-                            onChange={(e) => setConfigVal(v.envName, e.target.value)}
+                            onChange={(e) =>
+                              setConfigVal(v.envName, e.target.value)
+                            }
                           />
                         )}
                         {v.description && (
-                          <p className="text-xs text-muted-foreground">{v.description}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {v.description}
+                          </p>
                         )}
                       </div>
                     );
@@ -674,10 +797,14 @@ export default function OrderPage() {
                         onClick={() => setIntervalState(p.interval)}
                         className={cn(
                           "rounded-lg border p-3 text-left transition-colors",
-                          active ? "border-primary bg-primary/5" : "hover:bg-accent/40",
+                          active
+                            ? "border-primary bg-primary/5"
+                            : "hover:bg-accent/40",
                         )}
                       >
-                        <p className="font-medium">{INTERVAL_LABEL[p.interval]}</p>
+                        <p className="font-medium">
+                          {INTERVAL_LABEL[p.interval]}
+                        </p>
                         <p className="text-xs text-muted-foreground">
                           {formatMoney(p.amountMinor * quantity, p.currency)}
                         </p>
@@ -687,7 +814,9 @@ export default function OrderPage() {
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {perSlot ? "This product has no pricing yet." : "Select a tier to see pricing."}
+                  {perSlot
+                    ? "This product has no pricing yet."
+                    : "Select a tier to see pricing."}
                 </p>
               )}
             </section>
@@ -723,25 +852,38 @@ export default function OrderPage() {
                       disabled={!regionId}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder={regionId ? "Auto (best available)" : "Pick a region first"} />
+                        <SelectValue
+                          placeholder={
+                            regionId
+                              ? "Auto (best available)"
+                              : "Pick a region first"
+                          }
+                        />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="auto">Auto (best available)</SelectItem>
+                        <SelectItem value="auto">
+                          Auto (best available)
+                        </SelectItem>
                         {(nodesQ.data ?? []).map((n) => (
-                          <SelectItem key={n.id} value={n.id}>{n.name}</SelectItem>
+                          <SelectItem key={n.id} value={n.id}>
+                            {n.name}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                    {regionId && !nodesQ.isLoading && (nodesQ.data?.length ?? 0) === 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        No nodes with capacity here — try another region.
-                      </p>
-                    )}
+                    {regionId &&
+                      !nodesQ.isLoading &&
+                      (nodesQ.data?.length ?? 0) === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No nodes with capacity here — try another region.
+                        </p>
+                      )}
                   </div>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No locations currently have capacity for this size{perSlot ? " — try fewer slots." : "."}
+                  No locations currently have capacity for this size
+                  {perSlot ? " — try fewer slots." : "."}
                 </p>
               )}
             </section>
@@ -770,7 +912,18 @@ export default function OrderPage() {
           <aside className="lg:sticky lg:top-6 h-fit space-y-3 rounded-xl border p-4">
             <h2 className="text-sm font-semibold">Summary</h2>
             <Row label="Product" value={product.name} />
-            <Row label="Type" value={voiceType ? "Voice server" : webType ? "Web hosting" : botType ? "Bot hosting" : "Game server"} />
+            <Row
+              label="Type"
+              value={
+                voiceType
+                  ? "Voice server"
+                  : webType
+                    ? "Web hosting"
+                    : botType
+                      ? "Bot hosting"
+                      : "Game server"
+              }
+            />
             {perSlot ? (
               <Row label="Slots" value={String(slots)} />
             ) : (
@@ -782,10 +935,15 @@ export default function OrderPage() {
                 value={`${limits.cpuCores} vCPU · ${(limits.memoryMb / 1024).toFixed(1)} GB · ${(limits.diskMb / 1024).toFixed(0)} GB`}
               />
             )}
-            <Row label="Duration" value={interval ? INTERVAL_LABEL[interval] : "—"} />
+            <Row
+              label="Duration"
+              value={interval ? INTERVAL_LABEL[interval] : "—"}
+            />
             <Row
               label="Location"
-              value={locationsQ.data?.find((r) => r.id === regionId)?.name ?? "Auto"}
+              value={
+                locationsQ.data?.find((r) => r.id === regionId)?.name ?? "Auto"
+              }
             />
 
             {/* Coupon */}
@@ -796,7 +954,10 @@ export default function OrderPage() {
                   <span className="font-mono">{coupon.code}</span>
                   <button
                     className="text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => { setCoupon(null); setCouponInput(""); }}
+                    onClick={() => {
+                      setCoupon(null);
+                      setCouponInput("");
+                    }}
                   >
                     Remove
                   </button>
@@ -830,7 +991,10 @@ export default function OrderPage() {
                   <span className="font-mono">{gift.code}</span>
                   <button
                     className="text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => { setGift(null); setGiftInput(""); }}
+                    onClick={() => {
+                      setGift(null);
+                      setGiftInput("");
+                    }}
                   >
                     Remove
                   </button>
@@ -898,15 +1062,30 @@ export default function OrderPage() {
                   {price ? formatMoney(dueTodayMinor, currency) : "—"}
                 </span>
               </div>
-              <p className="text-[11px] text-muted-foreground">Tax (if any) is added at checkout.</p>
+              <p className="text-[11px] text-muted-foreground">
+                Applicable tax (VAT/GST/sales tax) is calculated from your
+                billing address and shown at secure checkout.
+              </p>
             </div>
 
             {paypalOn && stripeOn && (
               <div className="space-y-1.5">
                 <Label className="text-xs">Payment method</Label>
                 <div className="flex gap-2">
-                  <Button size="sm" variant={gateway === "stripe" ? "default" : "outline"} onClick={() => setGateway("stripe")}>Card</Button>
-                  <Button size="sm" variant={gateway === "paypal" ? "default" : "outline"} onClick={() => setGateway("paypal")}>PayPal</Button>
+                  <Button
+                    size="sm"
+                    variant={gateway === "stripe" ? "default" : "outline"}
+                    onClick={() => setGateway("stripe")}
+                  >
+                    Card
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={gateway === "paypal" ? "default" : "outline"}
+                    onClick={() => setGateway("paypal")}
+                  >
+                    PayPal
+                  </Button>
                 </div>
               </div>
             )}
@@ -919,10 +1098,22 @@ export default function OrderPage() {
             >
               <ShoppingCart className="size-4" /> Complete order
             </Button>
-            <p className="text-center text-xs text-muted-foreground">
-              You&apos;ll be redirected to secure checkout. Your server provisions once
-              payment clears.
-            </p>
+            {!emailVerified ? (
+              <p className="text-center text-xs text-amber-400">
+                Verify your email to place an order — check your inbox, or
+                resend from the banner above.
+              </p>
+            ) : !price ? (
+              <p className="text-center text-xs text-amber-400">
+                This plan has no pricing configured yet — pick another, or
+                contact support.
+              </p>
+            ) : (
+              <p className="text-center text-xs text-muted-foreground">
+                You&apos;ll be redirected to secure checkout. Your server
+                provisions once payment clears.
+              </p>
+            )}
           </aside>
         </div>
       )}
@@ -942,7 +1133,7 @@ function Row({ label, value }: { label: string; value: string }) {
 /** Cheapest active price across a product's prices (per-slot) or tiers (tiered). */
 function fromPrice(product: Product): Price | null {
   const all = isPerSlot(product)
-    ? product.prices ?? []
+    ? (product.prices ?? [])
     : (product.hardwareTiers ?? []).flatMap((t) => t.prices ?? []);
   const active = all.filter((p) => p.isActive !== false);
   if (!active.length) return null;
@@ -1014,30 +1205,46 @@ function TierCard({
   // Show the price for the selected interval if present, else the cheapest.
   const sorted = sortPrices(tier.prices);
   const shown =
-    (interval ? sorted.find((p) => p.interval === interval) : null) ?? sorted[0] ?? null;
+    (interval ? sorted.find((p) => p.interval === interval) : null) ??
+    sorted[0] ??
+    null;
   return (
     <button
       onClick={onSelect}
       className={cn(
         "relative flex flex-col gap-3 rounded-xl border p-4 text-left transition-colors",
-        active ? "border-primary bg-primary/5 ring-1 ring-primary" : "hover:bg-accent/40",
+        active
+          ? "border-primary bg-primary/5 ring-1 ring-primary"
+          : "hover:bg-accent/40",
       )}
     >
       <div className="flex items-center justify-between">
         <p className="font-semibold">{tier.name}</p>
         {tier.isRecommended && (
-          <Badge className="text-[10px]" variant="secondary">Recommended</Badge>
+          <Badge className="text-[10px]" variant="secondary">
+            Recommended
+          </Badge>
         )}
       </div>
       {tier.description && (
         <p className="text-xs text-muted-foreground">{tier.description}</p>
       )}
       <div className="space-y-1 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><MemoryStick className="size-3.5" /> {(tier.memoryMb / 1024).toFixed(tier.memoryMb % 1024 ? 1 : 0)} GB RAM</span>
-        <span className="flex items-center gap-1.5"><Cpu className="size-3.5" /> {tier.cpuCores} vCPU</span>
-        <span className="flex items-center gap-1.5"><HardDrive className="size-3.5" /> {(tier.diskMb / 1024).toFixed(0)} GB disk</span>
+        <span className="flex items-center gap-1.5">
+          <MemoryStick className="size-3.5" />{" "}
+          {(tier.memoryMb / 1024).toFixed(tier.memoryMb % 1024 ? 1 : 0)} GB RAM
+        </span>
+        <span className="flex items-center gap-1.5">
+          <Cpu className="size-3.5" /> {tier.cpuCores} vCPU
+        </span>
+        <span className="flex items-center gap-1.5">
+          <HardDrive className="size-3.5" /> {(tier.diskMb / 1024).toFixed(0)}{" "}
+          GB disk
+        </span>
         {tier.recommendedPlayers != null && (
-          <span className="flex items-center gap-1.5"><Users className="size-3.5" /> ~{tier.recommendedPlayers} {unit}</span>
+          <span className="flex items-center gap-1.5">
+            <Users className="size-3.5" /> ~{tier.recommendedPlayers} {unit}
+          </span>
         )}
       </div>
       <div className="mt-auto flex items-center justify-between pt-1">

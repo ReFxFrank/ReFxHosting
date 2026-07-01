@@ -3,7 +3,21 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { HardDrive, Plus, Minus, Trash2, ExternalLink, Power, Play, RotateCw, Square, Zap, ArrowLeftRight, Loader2 } from "lucide-react";
+import {
+  HardDrive,
+  Plus,
+  Minus,
+  Trash2,
+  ExternalLink,
+  Power,
+  Play,
+  RotateCw,
+  Square,
+  Zap,
+  ArrowLeftRight,
+  Loader2,
+  TriangleAlert,
+} from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
@@ -41,7 +55,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import type { AdminServer, GameTemplate, ServerTransfer, TransferState } from "@/lib/types";
+import type {
+  AdminServer,
+  GameTemplate,
+  ServerTransfer,
+  TransferState,
+} from "@/lib/types";
 
 /** Non-terminal transfer states (an in-flight move). */
 const ACTIVE_TRANSFER_STATES: TransferState[] = [
@@ -99,7 +118,9 @@ export default function AdminServersPage() {
   const [form, setForm] = useState(emptyForm);
   const [deleteTarget, setDeleteTarget] = useState<AdminServer | null>(null);
   // The server currently open in the Transfer dialog, + the chosen destination.
-  const [transferTarget, setTransferTarget] = useState<AdminServer | null>(null);
+  const [transferTarget, setTransferTarget] = useState<AdminServer | null>(
+    null,
+  );
   const [transferToNodeId, setTransferToNodeId] = useState("");
 
   const { data: servers, isLoading } = useQuery({
@@ -186,7 +207,9 @@ export default function AdminServersPage() {
       setForm(emptyForm);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to create server"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to create server",
+      ),
   });
 
   const deleteMutation = useMutation({
@@ -197,12 +220,16 @@ export default function AdminServersPage() {
       setDeleteTarget(null);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to delete server"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to delete server",
+      ),
   });
 
   const powerMutation = useMutation({
-    mutationFn: (v: { id: string; signal: "start" | "stop" | "restart" | "kill" }) =>
-      api.servers.power(v.id, v.signal),
+    mutationFn: (v: {
+      id: string;
+      signal: "start" | "stop" | "restart" | "kill";
+    }) => api.servers.power(v.id, v.signal),
     onSuccess: (_d, v) => {
       toast.success(`Power: ${v.signal} sent`);
       invalidate();
@@ -228,7 +255,9 @@ export default function AdminServersPage() {
     enabled: !!transferTarget,
     refetchInterval: (query) => {
       const latest = query.state.data?.[0];
-      return latest && ACTIVE_TRANSFER_STATES.includes(latest.state) ? 3_000 : false;
+      return latest && ACTIVE_TRANSFER_STATES.includes(latest.state)
+        ? 3_000
+        : false;
     },
   });
 
@@ -248,7 +277,9 @@ export default function AdminServersPage() {
       });
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to start transfer"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to start transfer",
+      ),
   });
 
   const openTransfer = (s: AdminServer) => {
@@ -317,40 +348,72 @@ export default function AdminServersPage() {
                               variant="ghost"
                               size="sm"
                               title="Power"
-                              disabled={s.state === "PENDING_PAYMENT" || s.state === "INSTALLING"}
+                              disabled={
+                                s.state === "PENDING_PAYMENT" ||
+                                s.state === "INSTALLING"
+                              }
                             >
                               <Power className="size-4" /> Power
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
-                              disabled={s.state === "RUNNING" || s.state === "STARTING"}
-                              onSelect={() => powerMutation.mutate({ id: s.id, signal: "start" })}
+                              disabled={
+                                s.state === "RUNNING" || s.state === "STARTING"
+                              }
+                              onSelect={() =>
+                                powerMutation.mutate({
+                                  id: s.id,
+                                  signal: "start",
+                                })
+                              }
                             >
                               <Play /> Start
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               disabled={s.state !== "RUNNING"}
-                              onSelect={() => powerMutation.mutate({ id: s.id, signal: "restart" })}
+                              onSelect={() =>
+                                powerMutation.mutate({
+                                  id: s.id,
+                                  signal: "restart",
+                                })
+                              }
                             >
                               <RotateCw /> Restart
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              disabled={s.state === "OFFLINE" || s.state === "CRASHED"}
-                              onSelect={() => powerMutation.mutate({ id: s.id, signal: "stop" })}
+                              disabled={
+                                s.state === "OFFLINE" || s.state === "CRASHED"
+                              }
+                              onSelect={() =>
+                                powerMutation.mutate({
+                                  id: s.id,
+                                  signal: "stop",
+                                })
+                              }
                             >
                               <Square /> Stop
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
                               destructive
-                              onSelect={() => powerMutation.mutate({ id: s.id, signal: "kill" })}
+                              onSelect={() =>
+                                powerMutation.mutate({
+                                  id: s.id,
+                                  signal: "kill",
+                                })
+                              }
                             >
                               <Zap /> Kill
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                        <Button asChild variant="ghost" size="sm" title="Open server (support)">
+                        <Button
+                          asChild
+                          variant="ghost"
+                          size="sm"
+                          title="Open server (support)"
+                        >
                           <Link href={`/servers/${s.id}`}>
                             <ExternalLink className="size-4" /> Manage
                           </Link>
@@ -399,9 +462,9 @@ export default function AdminServersPage() {
           <DialogHeader>
             <DialogTitle>Create server</DialogTitle>
             <DialogDescription>
-              Provision a server from an egg. Game servers prefill resources from the
-              template&apos;s recommended values (overridable); voice servers are
-              slot-based and auto-size from the recommended specs.
+              Provision a server from an egg. Game servers prefill resources
+              from the template&apos;s recommended values (overridable); voice
+              servers are slot-based and auto-size from the recommended specs.
             </DialogDescription>
           </DialogHeader>
 
@@ -412,7 +475,9 @@ export default function AdminServersPage() {
                 id="srv-name"
                 placeholder="My game server"
                 value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
               />
             </div>
 
@@ -465,7 +530,9 @@ export default function AdminServersPage() {
                 <SelectContent>
                   {(templates ?? []).map((t) => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.category?.name ? `${t.category.name} · ${t.name}` : t.name}
+                      {t.category?.name
+                        ? `${t.category.name} · ${t.name}`
+                        : t.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -498,7 +565,9 @@ export default function AdminServersPage() {
 
             {isVoice ? (
               <div className="space-y-2">
-                <Label htmlFor="srv-slots">Slots (max simultaneous voice users)</Label>
+                <Label htmlFor="srv-slots">
+                  Slots (max simultaneous voice users)
+                </Label>
                 {/* Slot picker — voice servers are provisioned by slot count, not
                     RAM/CPU. Stepper + slider over 1..1024 (staff are trusted; the
                     free TS3 license caps at 32, a key lifts it). */}
@@ -509,7 +578,10 @@ export default function AdminServersPage() {
                     size="icon-sm"
                     disabled={form.slots <= 1}
                     onClick={() =>
-                      setForm((f) => ({ ...f, slots: Math.max(1, f.slots - 1) }))
+                      setForm((f) => ({
+                        ...f,
+                        slots: Math.max(1, f.slots - 1),
+                      }))
                     }
                   >
                     <Minus className="size-4" />
@@ -525,7 +597,10 @@ export default function AdminServersPage() {
                     onChange={(e) =>
                       setForm((f) => ({
                         ...f,
-                        slots: Math.min(1024, Math.max(1, Math.floor(Number(e.target.value) || 1))),
+                        slots: Math.min(
+                          1024,
+                          Math.max(1, Math.floor(Number(e.target.value) || 1)),
+                        ),
                       }))
                     }
                   />
@@ -535,7 +610,10 @@ export default function AdminServersPage() {
                     size="icon-sm"
                     disabled={form.slots >= 1024}
                     onClick={() =>
-                      setForm((f) => ({ ...f, slots: Math.min(1024, f.slots + 1) }))
+                      setForm((f) => ({
+                        ...f,
+                        slots: Math.min(1024, f.slots + 1),
+                      }))
                     }
                   >
                     <Plus className="size-4" />
@@ -548,13 +626,16 @@ export default function AdminServersPage() {
                   max={1024}
                   step={1}
                   value={Math.min(1024, Math.max(1, form.slots))}
-                  onChange={(e) => setForm((f) => ({ ...f, slots: Number(e.target.value) }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, slots: Number(e.target.value) }))
+                  }
                   className="w-full accent-primary"
                   aria-label="Slots"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Voice servers are sized by slots — no RAM/CPU designation. CPU,
-                  memory and disk auto-size from this template&apos;s recommended specs
+                  Voice servers are sized by slots — no RAM/CPU designation.
+                  CPU, memory and disk auto-size from this template&apos;s
+                  recommended specs
                   {selectedTemplate
                     ? ` (${selectedTemplate.recCpuCores} vCPU · ${selectedTemplate.recMemoryMb} MB RAM · ${selectedTemplate.recDiskMb} MB disk).`
                     : "."}
@@ -571,7 +652,10 @@ export default function AdminServersPage() {
                     step={0.1}
                     value={form.cpuCores}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, cpuCores: Number(e.target.value) }))
+                      setForm((f) => ({
+                        ...f,
+                        cpuCores: Number(e.target.value),
+                      }))
                     }
                   />
                 </div>
@@ -583,7 +667,10 @@ export default function AdminServersPage() {
                     min={256}
                     value={form.memoryMb}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, memoryMb: Number(e.target.value) }))
+                      setForm((f) => ({
+                        ...f,
+                        memoryMb: Number(e.target.value),
+                      }))
                     }
                   />
                 </div>
@@ -633,9 +720,9 @@ export default function AdminServersPage() {
             <DialogTitle>Transfer server</DialogTitle>
             <DialogDescription>
               Move {transferTarget?.name} to another node. The server keeps its
-              identity (SFTP, backups, plan). It is stopped and snapshotted on the
-              current node, re-created and restored on the destination, then the old
-              copy is removed — only after the destination is verified.
+              identity (SFTP, backups, plan). It is stopped and snapshotted on
+              the current node, re-created and restored on the destination, then
+              the old copy is removed — only after the destination is verified.
             </DialogDescription>
           </DialogHeader>
 
@@ -664,7 +751,9 @@ export default function AdminServersPage() {
                       <SelectItem key={n.id} value={n.id}>
                         {n.name}
                         {n.maintenance ? " · maintenance" : ""}
-                        {n.state !== "ONLINE" ? ` · ${n.state.toLowerCase()}` : ""}
+                        {n.state !== "ONLINE"
+                          ? ` · ${n.state.toLowerCase()}`
+                          : ""}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -690,7 +779,9 @@ export default function AdminServersPage() {
                   </span>
                 </div>
                 {latestTransfer.state === "FAILED" && latestTransfer.error && (
-                  <p className="mt-1 text-destructive">{latestTransfer.error}</p>
+                  <p className="mt-1 text-destructive">
+                    {latestTransfer.error}
+                  </p>
                 )}
               </div>
             )}
@@ -725,7 +816,10 @@ export default function AdminServersPage() {
       </Dialog>
 
       {/* Delete server confirmation */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete server</DialogTitle>
@@ -733,6 +827,14 @@ export default function AdminServersPage() {
               Delete server {deleteTarget?.name}? This can&apos;t be undone.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/[0.06] p-3 text-xs text-muted-foreground">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-400" />
+            <span>
+              This removes the server only — it does <strong>not</strong> cancel
+              its subscription. Billing keeps renewing until you cancel the
+              subscription under the customer&apos;s Billing.
+            </span>
+          </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDeleteTarget(null)}>
               Cancel
@@ -740,7 +842,9 @@ export default function AdminServersPage() {
             <Button
               variant="destructive"
               loading={deleteMutation.isPending}
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              onClick={() =>
+                deleteTarget && deleteMutation.mutate(deleteTarget.id)
+              }
             >
               Delete server
             </Button>

@@ -20,18 +20,18 @@ import {
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { AddCardDialog } from "@/components/billing/add-card-dialog";
-import { PageHeader, StatCard, EmptyState, ListSkeleton } from "@/components/shared";
+import {
+  PageHeader,
+  StatCard,
+  EmptyState,
+  ListSkeleton,
+} from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -97,6 +97,13 @@ const intervalLabel: Record<BillingInterval, string> = {
   ANNUAL: "Annually",
 };
 
+/** Open an invoice PDF, warning if the browser blocked the pop-up. */
+function openPdf(url: string) {
+  const w = window.open(url, "_blank", "noopener");
+  if (!w)
+    toast.error("Couldn't open the invoice — allow pop-ups and try again.");
+}
+
 export default function BillingPage() {
   const queryClient = useQueryClient();
   // On return from PayPal approval, the order id arrives as ?token=...&PayerID=...
@@ -116,7 +123,9 @@ export default function BillingPage() {
           queryClient.invalidateQueries({ queryKey: ["billing"] });
         })
         .catch((e) =>
-          toast.error(e instanceof ApiError ? e.message : "PayPal capture failed"),
+          toast.error(
+            e instanceof ApiError ? e.message : "PayPal capture failed",
+          ),
         );
     }
   }, [queryClient]);
@@ -134,9 +143,12 @@ export default function BillingPage() {
     queryFn: () => api.billing.paymentMethods(),
   });
 
-  const openInvoices = invoicesQuery.data?.filter((i) => i.state === "OPEN") ?? [];
+  const openInvoices =
+    invoicesQuery.data?.filter((i) => i.state === "OPEN") ?? [];
   const activeSubs =
-    subsQuery.data?.filter((s) => s.state === "ACTIVE" || s.state === "TRIALING") ?? [];
+    subsQuery.data?.filter(
+      (s) => s.state === "ACTIVE" || s.state === "TRIALING",
+    ) ?? [];
   const nextPayment = openInvoices.reduce((acc, i) => acc + i.totalMinor, 0);
   const nextCurrency = openInvoices[0]?.currency ?? "USD";
 
@@ -149,7 +161,9 @@ export default function BillingPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         {invoicesQuery.isLoading || subsQuery.isLoading ? (
-          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28" />)
+          Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-28" />
+          ))
         ) : (
           <>
             <StatCard
@@ -287,7 +301,9 @@ function InvoicesTab({
               const cfg = invoiceStateMap[invoice.state];
               return (
                 <TableRow key={invoice.id}>
-                  <TableCell className="font-medium">{invoice.number}</TableCell>
+                  <TableCell className="font-medium">
+                    {invoice.number}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={cfg.variant}>{cfg.label}</Badge>
                   </TableCell>
@@ -317,7 +333,9 @@ function InvoicesTab({
                               payMutation.variables?.id === invoice.id &&
                               payMutation.variables?.gateway !== "paypal"
                             }
-                            onClick={() => payMutation.mutate({ id: invoice.id })}
+                            onClick={() =>
+                              payMutation.mutate({ id: invoice.id })
+                            }
                           >
                             {stripeOn ? "Pay by card" : "Pay now"}
                           </Button>
@@ -331,7 +349,10 @@ function InvoicesTab({
                                 payMutation.variables?.gateway === "paypal"
                               }
                               onClick={() =>
-                                payMutation.mutate({ id: invoice.id, gateway: "paypal" })
+                                payMutation.mutate({
+                                  id: invoice.id,
+                                  gateway: "paypal",
+                                })
                               }
                             >
                               PayPal
@@ -346,12 +367,14 @@ function InvoicesTab({
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => setViewId(invoice.id)}>
+                          <DropdownMenuItem
+                            onClick={() => setViewId(invoice.id)}
+                          >
                             <Eye className="size-4" /> View
                           </DropdownMenuItem>
                           {invoice.pdfUrl && (
                             <DropdownMenuItem
-                              onClick={() => window.open(invoice.pdfUrl!, "_blank")}
+                              onClick={() => openPdf(invoice.pdfUrl!)}
                             >
                               <Download className="size-4" /> Download PDF
                             </DropdownMenuItem>
@@ -461,7 +484,9 @@ function InvoiceDialog({
             <div className="space-y-1.5 rounded-lg bg-muted/40 p-4 text-sm">
               <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
-                <span>{formatMoney(invoice.subtotalMinor, invoice.currency)}</span>
+                <span>
+                  {formatMoney(invoice.subtotalMinor, invoice.currency)}
+                </span>
               </div>
               <div className="flex justify-between text-muted-foreground">
                 <span>Tax</span>
@@ -477,17 +502,22 @@ function InvoiceDialog({
 
         <DialogFooter>
           {invoice?.pdfUrl && (
-            <Button variant="outline" onClick={() => window.open(invoice.pdfUrl!, "_blank")}>
+            <Button variant="outline" onClick={() => openPdf(invoice.pdfUrl!)}>
               <Download className="size-4" /> Download PDF
             </Button>
           )}
           {invoice?.state === "OPEN" && (
             <>
               <Button loading={paying} onClick={() => onPay(invoice.id)}>
-                {stripeOn ? "Pay by card" : "Pay"} {formatMoney(invoice.totalMinor, invoice.currency)}
+                {stripeOn ? "Pay by card" : "Pay"}{" "}
+                {formatMoney(invoice.totalMinor, invoice.currency)}
               </Button>
               {paypalOn && (
-                <Button variant="outline" loading={paying} onClick={() => onPay(invoice.id, "paypal")}>
+                <Button
+                  variant="outline"
+                  loading={paying}
+                  onClick={() => onPay(invoice.id, "paypal")}
+                >
                   PayPal
                 </Button>
               )}
@@ -523,7 +553,9 @@ function SubscriptionsTab({
       setCancelTarget(null);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to cancel subscription"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to cancel subscription",
+      ),
   });
 
   const resumeMutation = useMutation({
@@ -533,7 +565,9 @@ function SubscriptionsTab({
       queryClient.invalidateQueries({ queryKey: ["billing", "subscriptions"] });
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to resume subscription"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to resume subscription",
+      ),
   });
 
   if (isLoading) {
@@ -570,15 +604,21 @@ function SubscriptionsTab({
                   <div className="flex items-center gap-2">
                     <CardTitle>{sub.product?.name ?? "Subscription"}</CardTitle>
                     {sub.product?.type === "VOICE_SERVER" ? (
-                      <Badge variant="outline" className="text-[10px]">Voice</Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        Voice
+                      </Badge>
                     ) : sub.product?.type === "GAME_SERVER" ? (
-                      <Badge variant="outline" className="text-[10px]">Game</Badge>
+                      <Badge variant="outline" className="text-[10px]">
+                        Game
+                      </Badge>
                     ) : null}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     {intervalLabel[sub.interval]}
                     {sub.hardwareTier ? ` · ${sub.hardwareTier.name}` : ""}
-                    {sub.product?.perSlot && sub.slots ? ` · ${sub.slots} slots` : ""}
+                    {sub.product?.perSlot && sub.slots
+                      ? ` · ${sub.slots} slots`
+                      : ""}
                   </p>
                 </div>
                 <Badge variant={cfg.variant}>{cfg.label}</Badge>
@@ -592,9 +632,15 @@ function SubscriptionsTab({
                       </span>
                       <span className="font-medium">
                         {formatMoney(sub.renewalAmountMinor, sub.currency)}
-                        <span className="text-muted-foreground"> {intervalLabel[sub.interval]}</span>
+                        <span className="text-muted-foreground">
+                          {" "}
+                          {intervalLabel[sub.interval]}
+                        </span>
                         {sub.product?.perSlot && sub.slots ? (
-                          <span className="text-xs text-muted-foreground"> · {sub.slots} slots</span>
+                          <span className="text-xs text-muted-foreground">
+                            {" "}
+                            · {sub.slots} slots
+                          </span>
                         ) : null}
                       </span>
                     </div>
@@ -673,7 +719,10 @@ function SubscriptionsTab({
             <DialogTitle>Cancel subscription</DialogTitle>
             <DialogDescription>
               You&apos;re canceling{" "}
-              <strong>{cancelTarget?.product?.name ?? "this subscription"}</strong>.
+              <strong>
+                {cancelTarget?.product?.name ?? "this subscription"}
+              </strong>
+              .
             </DialogDescription>
           </DialogHeader>
 
@@ -698,7 +747,10 @@ function SubscriptionsTab({
               loading={cancelMutation.isPending}
               onClick={() =>
                 cancelTarget &&
-                cancelMutation.mutate({ id: cancelTarget.id, atEnd: atPeriodEnd })
+                cancelMutation.mutate({
+                  id: cancelTarget.id,
+                  atEnd: atPeriodEnd,
+                })
               }
             >
               Cancel subscription
@@ -732,7 +784,9 @@ function PaymentMethodsTab({
     mutationFn: (id: string) => api.billing.setDefaultPaymentMethod(id),
     onSuccess: () => {
       toast.success("Default payment method updated.");
-      queryClient.invalidateQueries({ queryKey: ["billing", "payment-methods"] });
+      queryClient.invalidateQueries({
+        queryKey: ["billing", "payment-methods"],
+      });
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to set default"),
@@ -742,7 +796,9 @@ function PaymentMethodsTab({
     mutationFn: (id: string) => api.billing.removePaymentMethod(id),
     onSuccess: () => {
       toast.success("Payment method removed.");
-      queryClient.invalidateQueries({ queryKey: ["billing", "payment-methods"] });
+      queryClient.invalidateQueries({
+        queryKey: ["billing", "payment-methods"],
+      });
       setRemoveTarget(null);
     },
     onError: (e) =>
@@ -751,7 +807,11 @@ function PaymentMethodsTab({
 
   return (
     <div className="space-y-4">
-      <AddCardDialog open={addOpen} onOpenChange={setAddOpen} onSaved={refetchMethods} />
+      <AddCardDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onSaved={refetchMethods}
+      />
       <div className="flex justify-end">
         <Button onClick={() => setAddOpen(true)}>
           <Plus className="size-4" /> Add payment method
@@ -800,7 +860,9 @@ function PaymentMethodsTab({
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
                     {!pm.isDefault && (
-                      <DropdownMenuItem onClick={() => defaultMutation.mutate(pm.id)}>
+                      <DropdownMenuItem
+                        onClick={() => defaultMutation.mutate(pm.id)}
+                      >
                         <Star className="size-4" /> Set as default
                       </DropdownMenuItem>
                     )}
@@ -827,7 +889,8 @@ function PaymentMethodsTab({
             <DialogTitle>Remove payment method</DialogTitle>
             <DialogDescription>
               Remove the {removeTarget?.brand ?? "card"} ending in{" "}
-              {removeTarget?.last4 ?? "————"}? Subscriptions using it may fail to renew.
+              {removeTarget?.last4 ?? "————"}? Subscriptions using it may fail
+              to renew.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -837,7 +900,9 @@ function PaymentMethodsTab({
             <Button
               variant="destructive"
               loading={removeMutation.isPending}
-              onClick={() => removeTarget && removeMutation.mutate(removeTarget.id)}
+              onClick={() =>
+                removeTarget && removeMutation.mutate(removeTarget.id)
+              }
             >
               Remove
             </Button>
