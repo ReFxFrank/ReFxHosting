@@ -2,17 +2,38 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, AlertTriangle, Wrench, XCircle, RefreshCw } from "lucide-react";
+import {
+  CheckCircle2,
+  AlertTriangle,
+  Wrench,
+  XCircle,
+  RefreshCw,
+} from "lucide-react";
 import { api } from "@/lib/api";
-import type { StatusLevel, StatusIncident, IncidentImpact, StatusRegion } from "@/lib/types";
+import type {
+  StatusLevel,
+  StatusIncident,
+  IncidentImpact,
+  StatusRegion,
+} from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusMap } from "@/components/public/status-map";
+import { StatusGlobe } from "@/components/public/status-globe";
 import { CountryFlag } from "@/components/ui/country-flag";
 
 const IMPACT: Record<IncidentImpact, { label: string; cls: string }> = {
-  OUTAGE: { label: "Outage", cls: "border-red-500/30 bg-red-500/[0.06] text-red-400" },
-  DEGRADED: { label: "Degraded", cls: "border-amber-500/30 bg-amber-500/[0.06] text-amber-400" },
-  MAINTENANCE: { label: "Maintenance", cls: "border-sky-500/30 bg-sky-500/[0.06] text-sky-400" },
+  OUTAGE: {
+    label: "Outage",
+    cls: "border-red-500/30 bg-red-500/[0.06] text-red-400",
+  },
+  DEGRADED: {
+    label: "Degraded",
+    cls: "border-amber-500/30 bg-amber-500/[0.06] text-amber-400",
+  },
+  MAINTENANCE: {
+    label: "Maintenance",
+    cls: "border-sky-500/30 bg-sky-500/[0.06] text-sky-400",
+  },
 };
 const STAGE_LABEL: Record<string, string> = {
   INVESTIGATING: "Investigating",
@@ -25,10 +46,30 @@ const META: Record<
   StatusLevel,
   { label: string; dot: string; text: string; Icon: typeof CheckCircle2 }
 > = {
-  operational: { label: "Operational", dot: "bg-emerald-500", text: "text-emerald-400", Icon: CheckCircle2 },
-  degraded: { label: "Degraded", dot: "bg-amber-500", text: "text-amber-400", Icon: AlertTriangle },
-  maintenance: { label: "Maintenance", dot: "bg-sky-500", text: "text-sky-400", Icon: Wrench },
-  outage: { label: "Outage", dot: "bg-red-500", text: "text-red-400", Icon: XCircle },
+  operational: {
+    label: "Operational",
+    dot: "bg-emerald-500",
+    text: "text-emerald-400",
+    Icon: CheckCircle2,
+  },
+  degraded: {
+    label: "Degraded",
+    dot: "bg-amber-500",
+    text: "text-amber-400",
+    Icon: AlertTriangle,
+  },
+  maintenance: {
+    label: "Maintenance",
+    dot: "bg-sky-500",
+    text: "text-sky-400",
+    Icon: Wrench,
+  },
+  outage: {
+    label: "Outage",
+    dot: "bg-red-500",
+    text: "text-red-400",
+    Icon: XCircle,
+  },
 };
 
 const HEADLINE: Record<StatusLevel, string> = {
@@ -52,7 +93,17 @@ export default function StatusPage() {
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-16 sm:px-6">
       <p className="refx-eyebrow">Status</p>
-      <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">System status</h1>
+      <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+        System status
+      </h1>
+
+      {/* Rotating globe hero (Cloudflare-style) — decorative, plots live regions. */}
+      <div className="relative mt-8 overflow-hidden rounded-2xl border border-white/[0.08] bg-[radial-gradient(ellipse_at_center,rgba(20,30,48,0.65),rgba(7,11,18,0.96))] px-6 py-8">
+        <StatusGlobe regions={data?.regions ?? []} />
+        <p className="mt-1 text-center text-xs text-muted-foreground">
+          Live global network · drag to spin
+        </p>
+      </div>
 
       {q.isLoading ? (
         <Skeleton className="mt-8 h-24 rounded-2xl" />
@@ -94,7 +145,9 @@ export default function StatusPage() {
           {/* Active incidents */}
           {data && data.incidents.active.length > 0 ? (
             <section className="mt-8 space-y-3">
-              <h2 className="text-sm font-semibold text-muted-foreground">Active incidents</h2>
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                Active incidents
+              </h2>
               {data.incidents.active.map((inc) => (
                 <IncidentCard key={inc.id} incident={inc} />
               ))}
@@ -103,7 +156,9 @@ export default function StatusPage() {
 
           {/* Components */}
           <section className="mt-10">
-            <h2 className="text-sm font-semibold text-muted-foreground">Components</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Components
+            </h2>
             <div className="mt-3 divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.08]">
               {data?.components.map((c) => (
                 <Row key={c.key} name={c.name} status={c.status} />
@@ -112,12 +167,16 @@ export default function StatusPage() {
           </section>
 
           {/* Network map */}
-          {data && data.regions.length > 0 ? <StatusMap regions={data.regions} /> : null}
+          {data && data.regions.length > 0 ? (
+            <StatusMap regions={data.regions} />
+          ) : null}
 
           {/* Locations detail */}
           {data && data.regions.length > 0 ? (
             <section className="mt-8">
-              <h2 className="text-sm font-semibold text-muted-foreground">Locations</h2>
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                Locations
+              </h2>
               <div className="mt-3 divide-y divide-white/[0.06] overflow-hidden rounded-2xl border border-white/[0.08]">
                 {data.regions.map((r) => (
                   <LocationRow key={r.code} region={r} />
@@ -142,8 +201,12 @@ export default function StatusPage() {
 
           <p className="mt-10 text-xs text-muted-foreground">
             This page reflects live infrastructure health and refreshes
-            automatically. For help with a specific server, open a ticket from the{" "}
-            <Link href="/support" className="text-foreground underline">support</Link> area.
+            automatically. For help with a specific server, open a ticket from
+            the{" "}
+            <Link href="/support" className="text-foreground underline">
+              support
+            </Link>{" "}
+            area.
           </p>
         </>
       )}
@@ -151,12 +214,22 @@ export default function StatusPage() {
   );
 }
 
-function IncidentCard({ incident, resolved }: { incident: StatusIncident; resolved?: boolean }) {
+function IncidentCard({
+  incident,
+  resolved,
+}: {
+  incident: StatusIncident;
+  resolved?: boolean;
+}) {
   const impact = IMPACT[incident.impact];
   return (
-    <div className={`rounded-2xl border p-5 ${resolved ? "border-white/[0.08] bg-white/[0.02]" : impact.cls}`}>
+    <div
+      className={`rounded-2xl border p-5 ${resolved ? "border-white/[0.08] bg-white/[0.02]" : impact.cls}`}
+    >
       <div className="flex flex-wrap items-center gap-2">
-        <span className={`rounded-full border px-2 py-0.5 text-xs font-medium ${impact.cls}`}>
+        <span
+          className={`rounded-full border px-2 py-0.5 text-xs font-medium ${impact.cls}`}
+        >
           {impact.label}
         </span>
         <span className="text-xs text-muted-foreground">
@@ -221,12 +294,17 @@ function LocationRow({ region }: { region: StatusRegion }) {
           <p className="flex items-center gap-2 text-sm font-medium">
             <CountryFlag code={region.country} />
             {region.name}
-            <span className="text-xs font-normal text-muted-foreground">{region.country}</span>
+            <span className="text-xs font-normal text-muted-foreground">
+              {region.country}
+            </span>
           </p>
           <p className="text-xs text-muted-foreground">{nodeLabel}</p>
         </div>
         <span className={`flex shrink-0 items-center gap-2 text-sm ${m.text}`}>
-          <span className={`size-2.5 rounded-full ${m.dot}`} aria-hidden="true" />
+          <span
+            className={`size-2.5 rounded-full ${m.dot}`}
+            aria-hidden="true"
+          />
           {m.label}
         </span>
       </div>
@@ -237,10 +315,20 @@ function LocationRow({ region }: { region: StatusRegion }) {
           {region.nodes.map((n) => {
             const nm = META[n.status];
             return (
-              <li key={n.name} className="flex items-center justify-between gap-3">
-                <span className="truncate font-mono text-xs text-muted-foreground">{n.name}</span>
-                <span className={`flex shrink-0 items-center gap-1.5 text-xs ${nm.text}`}>
-                  <span className={`size-2 rounded-full ${nm.dot}`} aria-hidden="true" />
+              <li
+                key={n.name}
+                className="flex items-center justify-between gap-3"
+              >
+                <span className="truncate font-mono text-xs text-muted-foreground">
+                  {n.name}
+                </span>
+                <span
+                  className={`flex shrink-0 items-center gap-1.5 text-xs ${nm.text}`}
+                >
+                  <span
+                    className={`size-2 rounded-full ${nm.dot}`}
+                    aria-hidden="true"
+                  />
                   {nm.label}
                 </span>
               </li>
