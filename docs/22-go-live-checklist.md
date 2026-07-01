@@ -59,7 +59,8 @@ until filled — intentionally. See **[docs/18-launch-legal.md](18-launch-legal.
 ## Track C — Payments, go-live 🤝
 
 Verify in **sandbox** first, then swap to live keys. See
-**[docs/07-billing.md](07-billing.md)**.
+**[docs/07-billing.md](07-billing.md)** and the step-by-step
+**[sandbox runbook — docs/28-payment-go-live.md](28-payment-go-live.md)**.
 
 - [ ] 👤 **Stripe**: create a restricted/live API key; add the webhook endpoint
       `POST https://<api-domain>/api/v1/billing/webhooks/stripe` and copy the
@@ -75,7 +76,9 @@ Verify in **sandbox** first, then swap to live keys. See
       verifies the *live wiring*.)
 - [ ] 🤝 Verify **recurring**: a PayPal Subscriptions auto-bill cycle and a saved
       Stripe-card off-session renewal both settle.
-- [ ] 🤝 Verify a **refund** from the gateway flows back (`...REFUNDED` webhook).
+- [ ] 🤝 Verify a **refund** both ways: from the gateway dashboard (the
+      `...REFUNDED` webhook records it) and from **Admin → Invoices → Refund**
+      (full/partial — the panel calls the gateway then records a REFUNDED payment).
 - [ ] 👤 Configure **tax rates / registration** to match Track A.
 - [ ] 🤝 Set real **products, hardware tiers, and per-interval prices** in the
       admin panel (the seeded numbers are placeholders).
@@ -103,9 +106,12 @@ See **[docs/19-production-deployment.md](19-production-deployment.md)** and the
 - [ ] 🤝 Firewall: open node ports `8443`, `2022`, and the game range; restrict
       Postgres/Redis to the internal network only.
 - [ ] 🤝 Consider **agent TLS cert pinning** (`AGENT_TLS_PINNING`) per node.
-- [ ] 🛠️ Run a **production preflight**: a script/checklist that fails loudly if a
-      secret is weak/default, CORS is `*`, or `NEXT_PUBLIC_API_URL` is http on an
-      https site. *(to build — Track J)*
+- [x] ✅ **Production preflight** blocks boot on weak/default secrets, `CORS_ORIGINS`
+      that is `*` **or empty**, http `PANEL_URL`, and missing SMTP
+      (`apps/panel-api/src/config/preflight.ts`).
+- [x] ✅ **Backend not publicly mapped**: Swagger `/docs` is off in prod (opt-in
+      `ENABLE_API_DOCS`), and the reverse-proxy samples 404 `/docs` + `/metrics`.
+      Verify `curl -o/dev/null -w '%{http_code}' https://api.<domain>/docs` → 404.
 
 **Web hosting (only if selling the Web Hosting line):**
 - [ ] 🤝 Stand up at least one **web node**: install the agent + run **Caddy** on
@@ -124,6 +130,14 @@ See **[docs/19-production-deployment.md](19-production-deployment.md)** and the
       (ATHP)** licence and configure it on the voice node; otherwise sell only the
       32-slot **Community** tier (works out of the box) or hide the others in
       Admin → Products. See OPERATOR-TODO § C.
+
+**Per-server databases (only if offering the MySQL "Databases" feature):**
+- [ ] 🤝 Stand up a MySQL/MariaDB server with an admin account that can
+      `CREATE USER`/`GRANT`, then add it in **Admin → Operations → Database Hosts**
+      (set the **public host** customers connect to) and hit **Test**. Open the
+      public port to customers. Until a host exists, the Databases tab shows a
+      clear "unavailable" message. (MySQL/MariaDB only for now; Postgres is a
+      future provisioner.)
 
 ---
 
@@ -157,8 +171,11 @@ exposes `/metrics` + `/health`. The public `/status` page is live.
       failures, no nodes online, host disk/memory, target down — in
       `infra/docker/prometheus/rules/alerts.yml`, routed by
       `infra/docker/alertmanager/alertmanager.yml`.
-- [ ] 🤝 **Wire an Alertmanager receiver** (email/Slack/PagerDuty — default is a
-      sink) so alerts actually reach you. (TLS-cert-expiry alert needs
+- [ ] 🤝 **Wire an Alertmanager receiver** so alerts actually reach you — the
+      default is a sink. `infra/docker/alertmanager/alertmanager.yml` ships a
+      ready-to-fill **Discord** receiver (easiest for a gaming host) plus
+      Slack/email/PagerDuty examples: paste your webhook, uncomment, and
+      `infra/scripts/dc restart alertmanager`. (TLS-cert-expiry alert needs
       blackbox_exporter; example included, commented.)
 - [ ] 🤝 External **uptime monitor** (independent of your own infra) hitting
       `/health`.
@@ -272,7 +289,14 @@ Concrete engineering items from the tracks above that need no external accounts:
    Track D + the smoke test.*
 8. ✅ **Customer knowledge base** — 40 published articles + a public
    `/knowledge-base` and a homepage hero search. *Done.*
+9. ✅ **Admin refunds + payment webhook hardening** — `POST /admin/invoices/:id/refund`
+   (full/partial via the gateway) and a resilient Stripe webhook, plus the
+   sandbox runbook (`docs/28-payment-go-live.md`). *Done.*
+10. ✅ **Per-server databases** — real MySQL/MariaDB provisioning on an
+    admin-managed `DatabaseHost` (encrypted creds), with an admin UI. *Done.*
+11. ✅ **Lifecycle hardening** — suspend truly cuts access (console/files/SFTP) +
+    reliable kill, install retries, and a stuck-server reconciler cron. *Done.*
 
 ---
 
-_Last updated: 2026-06-30. Keep this file current as items land._
+_Last updated: 2026-07-01. Keep this file current as items land._

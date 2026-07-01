@@ -20,7 +20,22 @@ route:
 receivers:
   - name: default
     # No integration = alerts are visible in the Alertmanager UI (:9093) but not
-    # pushed anywhere. Replace with one of the examples below.
+    # pushed anywhere. Uncomment ONE of the examples below and fill in your
+    # webhook/credentials, then restart Alertmanager (`infra/scripts/dc restart
+    # alertmanager`). Send yourself a test with `amtool` or trip a rule.
+
+    # --- Discord (native since Alertmanager 0.25 — easiest for a gaming host) --
+    # Create a channel webhook: Discord → Server Settings → Integrations →
+    # Webhooks → New Webhook → Copy URL. Paste it below.
+    # discord_configs:
+    #   - webhook_url: "https://discord.com/api/webhooks/XXXX/YYYY"
+    #     send_resolved: true
+
+    # --- Slack ----------------------------------------------------------------
+    # slack_configs:
+    #   - api_url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+    #     channel: "#alerts"
+    #     send_resolved: true
 
     # --- Email (SMTP) ---------------------------------------------------------
     # email_configs:
@@ -30,12 +45,6 @@ receivers:
     #     auth_username: "<user>"
     #     auth_password: "<password>"
     #     require_tls: true
-
-    # --- Slack ----------------------------------------------------------------
-    # slack_configs:
-    #   - api_url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
-    #     channel: "#alerts"
-    #     send_resolved: true
 
     # --- PagerDuty ------------------------------------------------------------
     # pagerduty_configs:
