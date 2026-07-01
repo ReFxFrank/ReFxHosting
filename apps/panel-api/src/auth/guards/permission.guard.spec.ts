@@ -1,14 +1,18 @@
-import { ExecutionContext, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { PermissionGuard } from './permission.guard';
-import { PERMISSIONS_KEY } from '../../common/decorators/permissions.decorator';
+import {
+  ExecutionContext,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { PermissionGuard } from "./permission.guard";
+import { PERMISSIONS_KEY } from "../../common/decorators/permissions.decorator";
 
 /**
  * Unit tests for the per-server PermissionGuard. Prisma is fully mocked; the
  * guard contains the authorization business logic (owner/admin override,
  * sub-user permission matching, API-key scope ceiling, denial paths).
  */
-describe('PermissionGuard', () => {
+describe("PermissionGuard", () => {
   let prisma: {
     server: { findFirst: jest.Mock };
     subUser: { findFirst: jest.Mock };
@@ -16,8 +20,8 @@ describe('PermissionGuard', () => {
   let reflector: Reflector;
   let guard: PermissionGuard;
 
-  const SERVER_ID = 'srv-1';
-  const OWNER_ID = 'user-owner';
+  const SERVER_ID = "srv-1";
+  const OWNER_ID = "user-owner";
 
   beforeEach(() => {
     prisma = {
@@ -36,7 +40,7 @@ describe('PermissionGuard', () => {
     required?: string[];
   }): ExecutionContext {
     jest
-      .spyOn(reflector, 'getAllAndOverride')
+      .spyOn(reflector, "getAllAndOverride")
       .mockReturnValue(opts.required ?? []);
     const req = {
       user: opts.user,
@@ -44,31 +48,37 @@ describe('PermissionGuard', () => {
       body: opts.body ?? {},
     };
     return {
-      getType: () => 'http',
+      getType: () => "http",
       getHandler: () => undefined,
       getClass: () => undefined,
       switchToHttp: () => ({ getRequest: () => req }),
     } as unknown as ExecutionContext;
   }
 
-  it('throws when there is no authenticated user', async () => {
+  it("throws when there is no authenticated user", async () => {
     await expect(
-      guard.canActivate(ctx({ user: undefined, params: { serverId: SERVER_ID } })),
+      guard.canActivate(
+        ctx({ user: undefined, params: { serverId: SERVER_ID } }),
+      ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('passes through when the route carries no server scope', async () => {
+  it("passes through when the route carries no server scope", async () => {
     const result = await guard.canActivate(
-      ctx({ user: { id: 'u1', globalRole: 'USER' }, params: {} }),
+      ctx({ user: { id: "u1", globalRole: "USER" }, params: {} }),
     );
     expect(result).toBe(true);
     expect(prisma.server.findFirst).not.toHaveBeenCalled();
   });
 
-  it('grants staff holding servers.manage support access without touching the server', async () => {
+  it("grants staff holding servers.manage support access without touching the server", async () => {
     const result = await guard.canActivate(
       ctx({
-        user: { id: 'admin', globalRole: 'ADMIN', permissions: ['servers.manage'] },
+        user: {
+          id: "admin",
+          globalRole: "ADMIN",
+          permissions: ["servers.manage"],
+        },
         params: { serverId: SERVER_ID },
       }),
     );
@@ -76,59 +86,127 @@ describe('PermissionGuard', () => {
     expect(prisma.server.findFirst).not.toHaveBeenCalled();
   });
 
-  it('grants an OWNER (wildcard permission) support access', async () => {
+  it("grants an OWNER (wildcard permission) support access", async () => {
     const result = await guard.canActivate(
       ctx({
-        user: { id: 'root', globalRole: 'OWNER', permissions: ['*'] },
+        user: { id: "root", globalRole: "OWNER", permissions: ["*"] },
         params: { serverId: SERVER_ID },
       }),
     );
     expect(result).toBe(true);
   });
 
-  it('does NOT grant read-only staff (servers.read only) access to a customer server', async () => {
+  it("does NOT grant read-only staff (servers.read only) access to a customer server", async () => {
     // Support tier can view the admin list but cannot operate a server they
     // neither own nor are a sub-user on.
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     prisma.subUser.findFirst.mockResolvedValue(null);
     await expect(
       guard.canActivate(
         ctx({
-          user: { id: 'support', globalRole: 'SUPPORT', permissions: ['servers.read'] },
+          user: {
+            id: "support",
+            globalRole: "SUPPORT",
+            permissions: ["servers.read"],
+          },
           params: { serverId: SERVER_ID },
         }),
       ),
-    ).rejects.toThrow('Not a member of this server');
+    ).rejects.toThrow("Not a member of this server");
   });
 
-  it('grants the server owner regardless of required permissions', async () => {
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+  it("grants the server owner regardless of required permissions", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     const result = await guard.canActivate(
       ctx({
-        user: { id: OWNER_ID, globalRole: 'USER' },
+        user: { id: OWNER_ID, globalRole: "USER" },
         params: { serverId: SERVER_ID },
-        required: ['control.console', 'file.write'],
+        required: ["control.console", "file.write"],
       }),
     );
     expect(result).toBe(true);
     expect(prisma.subUser.findFirst).not.toHaveBeenCalled();
   });
 
-  it('resolves the server from the :id param when :serverId is absent', async () => {
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+  it("blocks the owner from operating a SUSPENDED server (non-payment)", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+      state: "SUSPENDED",
+    });
+    await expect(
+      guard.canActivate(
+        ctx({
+          user: { id: OWNER_ID, globalRole: "USER" },
+          params: { serverId: SERVER_ID },
+          required: ["files.read"],
+        }),
+      ),
+    ).rejects.toThrow(/suspended/i);
+  });
+
+  it("still lets the owner VIEW a SUSPENDED server (server.read) so they can go pay", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+      state: "SUSPENDED",
+    });
+    const result = await guard.canActivate(
+      ctx({
+        user: { id: OWNER_ID, globalRole: "USER" },
+        params: { serverId: SERVER_ID },
+        required: ["server.read"],
+      }),
+    );
+    expect(result).toBe(true);
+  });
+
+  it("lets staff (servers.manage) operate a SUSPENDED server for support", async () => {
+    // Staff override returns before the server is loaded, so suspension can't block it.
+    const result = await guard.canActivate(
+      ctx({
+        user: {
+          id: "admin",
+          globalRole: "ADMIN",
+          permissions: ["servers.manage"],
+        },
+        params: { serverId: SERVER_ID },
+        required: ["files.write"],
+      }),
+    );
+    expect(result).toBe(true);
+  });
+
+  it("resolves the server from the :id param when :serverId is absent", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     await guard.canActivate(
-      ctx({ user: { id: OWNER_ID, globalRole: 'USER' }, params: { id: SERVER_ID } }),
+      ctx({
+        user: { id: OWNER_ID, globalRole: "USER" },
+        params: { id: SERVER_ID },
+      }),
     );
     expect(prisma.server.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: SERVER_ID, deletedAt: null } }),
     );
   });
 
-  it('resolves the server from the request body when no route param is present', async () => {
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+  it("resolves the server from the request body when no route param is present", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     await guard.canActivate(
       ctx({
-        user: { id: OWNER_ID, globalRole: 'USER' },
+        user: { id: OWNER_ID, globalRole: "USER" },
         params: {},
         body: { serverId: SERVER_ID },
       }),
@@ -136,55 +214,64 @@ describe('PermissionGuard', () => {
     expect(prisma.server.findFirst).toHaveBeenCalled();
   });
 
-  it('throws NotFound when the server does not exist (or is soft-deleted)', async () => {
+  it("throws NotFound when the server does not exist (or is soft-deleted)", async () => {
     prisma.server.findFirst.mockResolvedValue(null);
     await expect(
       guard.canActivate(
         ctx({
-          user: { id: 'u1', globalRole: 'USER' },
+          user: { id: "u1", globalRole: "USER" },
           params: { serverId: SERVER_ID },
         }),
       ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('grants an ACTIVE sub-user that holds all required permissions', async () => {
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+  it("grants an ACTIVE sub-user that holds all required permissions", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     prisma.subUser.findFirst.mockResolvedValue({
-      permissions: ['control.console', 'control.start', 'file.read'],
+      permissions: ["control.console", "control.start", "file.read"],
     });
     const result = await guard.canActivate(
       ctx({
-        user: { id: 'sub-1', globalRole: 'USER' },
+        user: { id: "sub-1", globalRole: "USER" },
         params: { serverId: SERVER_ID },
-        required: ['control.console', 'file.read'],
+        required: ["control.console", "file.read"],
       }),
     );
     expect(result).toBe(true);
   });
 
-  it('denies a sub-user missing one of the required permissions', async () => {
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+  it("denies a sub-user missing one of the required permissions", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     prisma.subUser.findFirst.mockResolvedValue({
-      permissions: ['control.console'],
+      permissions: ["control.console"],
     });
     await expect(
       guard.canActivate(
         ctx({
-          user: { id: 'sub-1', globalRole: 'USER' },
+          user: { id: "sub-1", globalRole: "USER" },
           params: { serverId: SERVER_ID },
-          required: ['control.console', 'file.write'],
+          required: ["control.console", "file.write"],
         }),
       ),
     ).rejects.toThrow(/Missing permissions: file\.write/);
   });
 
-  it('grants a sub-user when no specific permissions are required (membership only)', async () => {
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+  it("grants a sub-user when no specific permissions are required (membership only)", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     prisma.subUser.findFirst.mockResolvedValue({ permissions: [] });
     const result = await guard.canActivate(
       ctx({
-        user: { id: 'sub-1', globalRole: 'USER' },
+        user: { id: "sub-1", globalRole: "USER" },
         params: { serverId: SERVER_ID },
         required: [],
       }),
@@ -192,55 +279,64 @@ describe('PermissionGuard', () => {
     expect(result).toBe(true);
   });
 
-  it('only matches ACTIVE sub-user memberships', async () => {
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+  it("only matches ACTIVE sub-user memberships", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     prisma.subUser.findFirst.mockResolvedValue(null);
     await expect(
       guard.canActivate(
         ctx({
-          user: { id: 'sub-1', globalRole: 'USER' },
+          user: { id: "sub-1", globalRole: "USER" },
           params: { serverId: SERVER_ID },
-          required: ['control.console'],
+          required: ["control.console"],
         }),
       ),
     ).rejects.toThrow(/Not a member of this server/);
     expect(prisma.subUser.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { serverId: SERVER_ID, userId: 'sub-1', state: 'ACTIVE' },
+        where: { serverId: SERVER_ID, userId: "sub-1", state: "ACTIVE" },
       }),
     );
   });
 
-  describe('API-key scope ceiling', () => {
-    it('rejects a READ-scope key on a route requiring permissions', async () => {
+  describe("API-key scope ceiling", () => {
+    it("rejects a READ-scope key on a route requiring permissions", async () => {
       await expect(
         guard.canActivate(
           ctx({
-            user: { id: 'u1', globalRole: 'USER', apiKeyScopes: ['READ'] },
+            user: { id: "u1", globalRole: "USER", apiKeyScopes: ["READ"] },
             params: { serverId: SERVER_ID },
-            required: ['control.start'],
+            required: ["control.start"],
           }),
         ),
       ).rejects.toThrow(/lacks write scope/);
     });
 
-    it('allows a WRITE-scope key to proceed to the ownership check', async () => {
-      prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+    it("allows a WRITE-scope key to proceed to the ownership check", async () => {
+      prisma.server.findFirst.mockResolvedValue({
+        id: SERVER_ID,
+        ownerId: OWNER_ID,
+      });
       const result = await guard.canActivate(
         ctx({
-          user: { id: OWNER_ID, globalRole: 'USER', apiKeyScopes: ['WRITE'] },
+          user: { id: OWNER_ID, globalRole: "USER", apiKeyScopes: ["WRITE"] },
           params: { serverId: SERVER_ID },
-          required: ['control.start'],
+          required: ["control.start"],
         }),
       );
       expect(result).toBe(true);
     });
 
-    it('does not enforce the scope ceiling when no permissions are required', async () => {
-      prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+    it("does not enforce the scope ceiling when no permissions are required", async () => {
+      prisma.server.findFirst.mockResolvedValue({
+        id: SERVER_ID,
+        ownerId: OWNER_ID,
+      });
       const result = await guard.canActivate(
         ctx({
-          user: { id: OWNER_ID, globalRole: 'USER', apiKeyScopes: ['READ'] },
+          user: { id: OWNER_ID, globalRole: "USER", apiKeyScopes: ["READ"] },
           params: { serverId: SERVER_ID },
           required: [],
         }),
@@ -249,22 +345,28 @@ describe('PermissionGuard', () => {
     });
   });
 
-  it('reads required permissions from handler + class metadata', async () => {
+  it("reads required permissions from handler + class metadata", async () => {
     const spy = jest
-      .spyOn(reflector, 'getAllAndOverride')
-      .mockReturnValue(['control.console']);
-    prisma.server.findFirst.mockResolvedValue({ id: SERVER_ID, ownerId: OWNER_ID });
+      .spyOn(reflector, "getAllAndOverride")
+      .mockReturnValue(["control.console"]);
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
     await guard.canActivate({
-      getType: () => 'http',
-      getHandler: () => 'handlerRef',
-      getClass: () => 'classRef',
+      getType: () => "http",
+      getHandler: () => "handlerRef",
+      getClass: () => "classRef",
       switchToHttp: () => ({
         getRequest: () => ({
-          user: { id: OWNER_ID, globalRole: 'USER' },
+          user: { id: OWNER_ID, globalRole: "USER" },
           params: { serverId: SERVER_ID },
         }),
       }),
     } as unknown as ExecutionContext);
-    expect(spy).toHaveBeenCalledWith(PERMISSIONS_KEY, ['handlerRef', 'classRef']);
+    expect(spy).toHaveBeenCalledWith(PERMISSIONS_KEY, [
+      "handlerRef",
+      "classRef",
+    ]);
   });
 });

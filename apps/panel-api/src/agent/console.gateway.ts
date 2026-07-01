@@ -1,6 +1,6 @@
-import { Logger, UnauthorizedException } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+import { Logger, UnauthorizedException } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
 import {
   ConnectedSocket,
   MessageBody,
@@ -9,11 +9,11 @@ import {
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
-} from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
-import { PrismaService } from '../prisma/prisma.service';
-import { AppConfig } from '../config/configuration';
-import { NodeAgentClient } from './agent.client';
+} from "@nestjs/websockets";
+import { Server, Socket } from "socket.io";
+import { PrismaService } from "../prisma/prisma.service";
+import { AppConfig } from "../config/configuration";
+import { NodeAgentClient } from "./agent.client";
 
 /**
  * Bridges browser <-> node-agent live console + stats.
@@ -25,7 +25,7 @@ import { NodeAgentClient } from './agent.client';
  * emitPower. Console input from clients (with the control.console permission) is
  * forwarded to the agent over the signed REST control API.
  */
-@WebSocketGateway({ namespace: '/ws/console', cors: { origin: true } })
+@WebSocketGateway({ namespace: "/ws/console", cors: { origin: true } })
 export class ConsoleGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {
@@ -47,10 +47,10 @@ export class ConsoleGateway
         (client.handshake.auth?.token as string) ||
         (client.handshake.headers?.authorization as string)?.replace(
           /^Bearer /,
-          '',
+          "",
         );
-      if (!token) throw new UnauthorizedException('missing token');
-      const secret = this.config.get<AppConfig['jwt']>('jwt')!.accessSecret;
+      if (!token) throw new UnauthorizedException("missing token");
+      const secret = this.config.get<AppConfig["jwt"]>("jwt")!.accessSecret;
       const payload = await this.jwt.verifyAsync(token, { secret });
       // The WS console is the one authenticated surface that bypasses the HTTP
       // guards/interceptors, so re-check the user's status here: a suspended/
@@ -60,14 +60,14 @@ export class ConsoleGateway
         where: { id: payload.sub, deletedAt: null },
         select: { state: true, mustChangePassword: true },
       });
-      if (!user || user.state !== 'ACTIVE' || user.mustChangePassword) {
-        throw new UnauthorizedException('account not permitted');
+      if (!user || user.state !== "ACTIVE" || user.mustChangePassword) {
+        throw new UnauthorizedException("account not permitted");
       }
       client.data.userId = payload.sub;
       client.data.role = payload.role;
     } catch {
-      this.logger.debug('console client rejected: invalid token');
-      client.emit('error', { message: 'unauthorized' });
+      this.logger.debug("console client rejected: invalid token");
+      client.emit("error", { message: "unauthorized" });
       client.disconnect(true);
     }
   }
@@ -77,22 +77,26 @@ export class ConsoleGateway
     // there is no per-server upstream to tear down.
   }
 
-  @SubscribeMessage('subscribe')
+  @SubscribeMessage("subscribe")
   async onSubscribe(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { serverId: string },
   ): Promise<void> {
-    const ok = await this.canAccess(client.data.userId, client.data.role, body.serverId);
+    const ok = await this.canAccess(
+      client.data.userId,
+      client.data.role,
+      body.serverId,
+    );
     if (!ok) {
-      client.emit('error', { message: 'forbidden' });
+      client.emit("error", { message: "forbidden" });
       return;
     }
     client.data.serverId = body.serverId;
     await client.join(this.room(body.serverId));
-    client.emit('subscribed', { serverId: body.serverId });
+    client.emit("subscribed", { serverId: body.serverId });
   }
 
-  @SubscribeMessage('command')
+  @SubscribeMessage("command")
   async onCommand(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { command: string },
@@ -103,10 +107,10 @@ export class ConsoleGateway
       client.data.userId,
       client.data.role,
       serverId,
-      'control.console',
+      "control.console",
     );
     if (!ok) {
-      client.emit('error', { message: 'forbidden' });
+      client.emit("error", { message: "forbidden" });
       return;
     }
     const node = await this.nodeForServer(serverId);
@@ -117,17 +121,17 @@ export class ConsoleGateway
 
   /** Push a console/log line to every browser subscribed to this server. */
   emitConsole(serverId: string, frame: unknown): void {
-    this.server.to(this.room(serverId)).emit('console', frame);
+    this.server.to(this.room(serverId)).emit("console", frame);
   }
 
   /** Push a live stats frame to every browser subscribed to this server. */
   emitStats(serverId: string, frame: unknown): void {
-    this.server.to(this.room(serverId)).emit('stats', frame);
+    this.server.to(this.room(serverId)).emit("stats", frame);
   }
 
   /** Push a power/state-change event to every browser subscribed to this server. */
   emitPower(serverId: string, frame: unknown): void {
-    this.server.to(this.room(serverId)).emit('power', frame);
+    this.server.to(this.room(serverId)).emit("power", frame);
   }
 
   // ---- authorization ------------------------------------------------------
@@ -138,15 +142,19 @@ export class ConsoleGateway
     serverId: string,
     permission?: string,
   ): Promise<boolean> {
-    if (role === 'ADMIN' || role === 'OWNER') return true;
+    if (role === "ADMIN" || role === "OWNER") return true;
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
-      select: { ownerId: true },
+      select: { ownerId: true, state: true },
     });
     if (!server) return false;
+    // A suspended (non-paying) server's console is off-limits to the tenant —
+    // mirror the HTTP PermissionGuard so the WS path isn't a bypass. Staff
+    // (ADMIN/OWNER) already returned above.
+    if (server.state === "SUSPENDED") return false;
     if (server.ownerId === userId) return true;
     const sub = await this.prisma.subUser.findFirst({
-      where: { serverId, userId, state: 'ACTIVE' },
+      where: { serverId, userId, state: "ACTIVE" },
       select: { permissions: true },
     });
     if (!sub) return false;

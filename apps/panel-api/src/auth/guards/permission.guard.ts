@@ -4,13 +4,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { GqlExecutionContext } from '@nestjs/graphql';
-import { PERMISSIONS_KEY } from '../../common/decorators/permissions.decorator';
-import { AuthUser } from '../../common/decorators/current-user.decorator';
-import { hasPermission } from '../../common/permissions';
-import { PrismaService } from '../../prisma/prisma.service';
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { GqlExecutionContext } from "@nestjs/graphql";
+import { PERMISSIONS_KEY } from "../../common/decorators/permissions.decorator";
+import { AuthUser } from "../../common/decorators/current-user.decorator";
+import { hasPermission } from "../../common/permissions";
+import { PrismaService } from "../../prisma/prisma.service";
 
 /**
  * Per-server authorization. Resolves the target server from the `:serverId`
@@ -27,6 +27,15 @@ import { PrismaService } from '../../prisma/prisma.service';
  * API-key principals are additionally constrained: a READ-scope key cannot pass
  * a guard that requires any non-read permission.
  */
+/**
+ * Permissions a customer/sub-user may still exercise while their server is
+ * SUSPENDED (non-payment): read-only visibility so they can see the suspended
+ * state and go pay. Everything operational — console, files, backups, power,
+ * settings — is blocked until the past-due invoice settles. Staff (servers.manage)
+ * bypass this entirely so support can still work the server.
+ */
+const SUSPENDED_ALLOWED = new Set(["server.read"]);
+
 @Injectable()
 export class PermissionGuard implements CanActivate {
   constructor(
@@ -42,11 +51,11 @@ export class PermissionGuard implements CanActivate {
       ]) ?? [];
 
     const req =
-      context.getType<'graphql'>() === 'graphql'
+      context.getType<"graphql">() === "graphql"
         ? GqlExecutionContext.create(context).getContext().req
         : context.switchToHttp().getRequest();
     const user: AuthUser | undefined = req?.user;
-    if (!user) throw new ForbiddenException('Not authenticated');
+    if (!user) throw new ForbiddenException("Not authenticated");
 
     const serverId =
       req?.params?.serverId ?? req?.params?.id ?? req?.body?.serverId;
@@ -57,35 +66,51 @@ export class PermissionGuard implements CanActivate {
 
     // API-key scope ceiling.
     if (user.apiKeyScopes && required.length) {
-      const hasWrite = user.apiKeyScopes.some((s) => s === 'WRITE' || s === 'ADMIN');
-      if (!hasWrite) throw new ForbiddenException('API key lacks write scope');
+      const hasWrite = user.apiKeyScopes.some(
+        (s) => s === "WRITE" || s === "ADMIN",
+      );
+      if (!hasWrite) throw new ForbiddenException("API key lacks write scope");
     }
 
     // Staff support override: a principal whose admin RBAC grants `servers.manage`
     // (ADMIN/OWNER by default) may operate any server, so support can help a
     // customer from the admin panel. Read-only staff (servers.read only) and
     // customers fall through to the owner/sub-user checks below.
-    if (hasPermission(user.permissions ?? [], 'servers.manage')) {
+    if (hasPermission(user.permissions ?? [], "servers.manage")) {
       return true;
     }
 
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
-      select: { id: true, ownerId: true },
+      select: { id: true, ownerId: true, state: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
+
+    // A suspended (non-paying) server is view-only for the customer/sub-user —
+    // block console, files, backups, settings, etc. so access actually stops when
+    // billing lapses. Staff already returned above, so this only gates the tenant.
+    if (
+      server.state === "SUSPENDED" &&
+      !required.every((p) => SUSPENDED_ALLOWED.has(p))
+    ) {
+      throw new ForbiddenException(
+        "This server is suspended. Settle the past-due invoice to restore access.",
+      );
+    }
 
     if (server.ownerId === user.id) return true;
 
     const sub = await this.prisma.subUser.findFirst({
-      where: { serverId, userId: user.id, state: 'ACTIVE' },
+      where: { serverId, userId: user.id, state: "ACTIVE" },
       select: { permissions: true },
     });
-    if (!sub) throw new ForbiddenException('Not a member of this server');
+    if (!sub) throw new ForbiddenException("Not a member of this server");
 
     const missing = required.filter((p) => !sub.permissions.includes(p));
     if (missing.length) {
-      throw new ForbiddenException(`Missing permissions: ${missing.join(', ')}`);
+      throw new ForbiddenException(
+        `Missing permissions: ${missing.join(", ")}`,
+      );
     }
     return true;
   }
