@@ -56,7 +56,14 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           push: true
-          platforms: linux/amd64,linux/arm64
+          # amd64 only, on purpose. The panel-api/web/agent images run on x86
+          # servers, and the arm64 leg builds under QEMU emulation where Prisma 7's
+          # native (Rust) query engine misreads the schema and fails
+          # `prisma generate` (phantom validation errors). arm64 NODE support is
+          # unaffected — it comes from the cross-compiled agent BINARY (see the
+          # agent-binaries matrix below, which still targets linux/arm64), not
+          # these images. It also roughly halves the build time.
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
