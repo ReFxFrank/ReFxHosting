@@ -159,10 +159,31 @@ export default function StatusPage() {
 
           {/* Network locations — rotating globe (replaces the flat map). */}
           <section className="mt-10">
-            <h2 className="text-sm font-semibold text-muted-foreground">
-              Network locations
-            </h2>
-            <div className="relative mt-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[radial-gradient(ellipse_at_center,rgba(20,30,48,0.65),rgba(7,11,18,0.96))] px-6 py-8">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-muted-foreground">
+                Network locations
+              </h2>
+              {/* Status colour key (carried over from the old map). */}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                {(
+                  [
+                    "operational",
+                    "degraded",
+                    "maintenance",
+                    "outage",
+                  ] as StatusLevel[]
+                ).map((s) => (
+                  <span key={s} className="flex items-center gap-1.5">
+                    <span
+                      className={`size-2 rounded-full ${META[s].dot}`}
+                      aria-hidden="true"
+                    />
+                    {META[s].label}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[radial-gradient(ellipse_at_center,rgba(20,30,48,0.65),rgba(7,11,18,0.96))] px-6 py-8">
               <StatusGlobe regions={data?.regions ?? []} />
               <p className="mt-1 text-center text-xs text-muted-foreground">
                 Live global network · drag to spin · scroll to zoom
