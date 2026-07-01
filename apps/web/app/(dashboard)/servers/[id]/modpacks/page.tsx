@@ -62,7 +62,10 @@ export default function ModpacksPage() {
   if (search.isError) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Modpacks" description="Install full modpacks from Modrinth." />
+        <PageHeader
+          title="Modpacks"
+          description="Install full modpacks from Modrinth."
+        />
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
             {search.error instanceof ApiError
@@ -84,10 +87,10 @@ export default function ModpacksPage() {
       <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm text-amber-200/90">
         <AlertTriangle className="mt-0.5 size-4 shrink-0" />
         <p>
-          Installing a modpack switches this server&apos;s Minecraft version + loader,
-          reinstalls it (your worlds are preserved), clears existing mods, then
-          downloads the pack&apos;s mods and config. It runs in the background — you&apos;ll
-          get a notification when it&apos;s done.
+          Installing a modpack switches this server&apos;s Minecraft version +
+          loader, reinstalls it (your worlds are preserved), clears existing
+          mods, then downloads the pack&apos;s mods and config. It runs in the
+          background — you&apos;ll get a notification when it&apos;s done.
         </p>
       </div>
 
@@ -114,6 +117,20 @@ export default function ModpacksPage() {
         <Button type="submit">Search</Button>
       </form>
 
+      <p className="-mt-1 text-xs text-muted-foreground">
+        Powered by{" "}
+        <a
+          href="https://modrinth.com/modpacks"
+          target="_blank"
+          rel="noreferrer"
+          className="underline hover:text-foreground"
+        >
+          Modrinth
+        </a>
+        . CurseForge-exclusive packs (from curseforge.com) aren&apos;t supported
+        yet — but many popular packs are on both, so try searching by name.
+      </p>
+
       {search.isLoading ? (
         <div className="grid gap-3 sm:grid-cols-2">
           {Array.from({ length: 6 }).map((_, i) => (
@@ -135,10 +152,13 @@ export default function ModpacksPage() {
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate font-semibold">{p.title}</p>
                     <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
-                      <ArrowDownToLine className="size-3" /> {formatCount(p.downloads)}
+                      <ArrowDownToLine className="size-3" />{" "}
+                      {formatCount(p.downloads)}
                     </span>
                   </div>
-                  <p className="line-clamp-2 text-xs text-muted-foreground">{p.description}</p>
+                  <p className="line-clamp-2 text-xs text-muted-foreground">
+                    {p.description}
+                  </p>
                   <div className="mt-2 flex items-center gap-2">
                     <Button size="sm" onClick={() => setPicker(p)}>
                       <Download className="size-4" /> Install…
@@ -160,12 +180,18 @@ export default function ModpacksPage() {
       ) : (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            No modpacks found. Try a different search.
+            {query
+              ? `No Modrinth modpacks match “${query}”. This browser searches Modrinth only — CurseForge-exclusive packs can't be installed yet.`
+              : "Search for a modpack by name to get started."}
           </CardContent>
         </Card>
       )}
 
-      <VersionPicker serverId={id} project={picker} onClose={() => setPicker(null)} />
+      <VersionPicker
+        serverId={id}
+        project={picker}
+        onClose={() => setPicker(null)}
+      />
     </div>
   );
 }
@@ -200,7 +226,9 @@ function InstalledCard({
         <Package className="size-8 shrink-0 text-primary" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <p className="font-semibold">Installed: {pack.title ?? "Modpack"}</p>
+            <p className="font-semibold">
+              Installed: {pack.title ?? "Modpack"}
+            </p>
             {pack.projectId && (
               <a
                 href={`https://modrinth.com/modpack/${pack.projectId}`}
@@ -214,19 +242,27 @@ function InstalledCard({
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
             {pack.versionNumber && (
-              <Badge variant="muted" className="text-[10px]">{pack.versionNumber}</Badge>
+              <Badge variant="muted" className="text-[10px]">
+                {pack.versionNumber}
+              </Badge>
             )}
             {pack.mcVersion && (
-              <Badge variant="muted" className="text-[10px]">MC {pack.mcVersion}</Badge>
+              <Badge variant="muted" className="text-[10px]">
+                MC {pack.mcVersion}
+              </Badge>
             )}
             {pack.loader && (
-              <Badge variant="secondary" className="text-[10px] capitalize">{pack.loader}</Badge>
+              <Badge variant="secondary" className="text-[10px] capitalize">
+                {pack.loader}
+              </Badge>
             )}
             {typeof pack.filesInstalled === "number" && (
               <span className="ml-1">{pack.filesInstalled} files</span>
             )}
             {pack.installedAt && (
-              <span className="ml-1">· installed {formatDate(pack.installedAt)}</span>
+              <span className="ml-1">
+                · installed {formatDate(pack.installedAt)}
+              </span>
             )}
           </div>
         </div>
@@ -245,10 +281,10 @@ function InstalledCard({
           <DialogHeader>
             <DialogTitle>Uninstall {pack.title ?? "modpack"}?</DialogTitle>
             <DialogDescription>
-              This clears the pack&apos;s mods from the server. Your world is kept, and
-              the current loader/version stay as-is — switch to vanilla from the
-              Minecraft tab if you want a clean server. Config files the pack added
-              may remain.
+              This clears the pack&apos;s mods from the server. Your world is
+              kept, and the current loader/version stay as-is — switch to
+              vanilla from the Minecraft tab if you want a clean server. Config
+              files the pack added may remain.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -287,7 +323,8 @@ function VersionPicker({
 
   const queryClient = useQueryClient();
   const install = useMutation({
-    mutationFn: (versionId: string) => api.servers.modpacks.install(serverId, versionId),
+    mutationFn: (versionId: string) =>
+      api.servers.modpacks.install(serverId, versionId),
     onSuccess: () => {
       toast.success("Modpack install started — watch your notifications.");
       onClose();
@@ -302,7 +339,8 @@ function VersionPicker({
         8000,
       );
     },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Install failed"),
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Install failed"),
   });
 
   return (
@@ -311,8 +349,8 @@ function VersionPicker({
         <DialogHeader>
           <DialogTitle>Install {project?.title}</DialogTitle>
           <DialogDescription>
-            Pick a version. The server will switch to that version&apos;s Minecraft
-            release and loader.
+            Pick a version. The server will switch to that version&apos;s
+            Minecraft release and loader.
           </DialogDescription>
         </DialogHeader>
 
@@ -333,10 +371,18 @@ function VersionPicker({
                   <p className="truncate text-sm font-medium">{v.name}</p>
                   <div className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                     {v.gameVersions.slice(0, 3).map((g) => (
-                      <Badge key={g} variant="muted" className="text-[10px]">{g}</Badge>
+                      <Badge key={g} variant="muted" className="text-[10px]">
+                        {g}
+                      </Badge>
                     ))}
                     {v.loaders.map((l) => (
-                      <Badge key={l} variant="secondary" className="text-[10px] capitalize">{l}</Badge>
+                      <Badge
+                        key={l}
+                        variant="secondary"
+                        className="text-[10px] capitalize"
+                      >
+                        {l}
+                      </Badge>
                     ))}
                     <span className="ml-1">{formatDate(v.datePublished)}</span>
                   </div>
