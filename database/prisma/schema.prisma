@@ -821,19 +821,42 @@ enum DbEngine {
 }
 
 model ServerDatabase {
-  id           String   @id @db.Uuid
-  serverId     String   @db.Uuid
-  server       Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  id           String        @id @db.Uuid
+  serverId     String        @db.Uuid
+  server       Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  // Which shared DB host this was provisioned on (nullable for legacy rows).
+  hostId       String?       @db.Uuid
+  dbHost       DatabaseHost? @relation(fields: [hostId], references: [id])
   engine       DbEngine
   name         String
   username     String
   passwordEnc  String
   host         String
   port         Int
-  remoteAccess String   @default("%") // allowed host pattern
-  createdAt    DateTime @default(now())
+  remoteAccess String        @default("%") // allowed host pattern
+  createdAt    DateTime      @default(now())
 
   @@unique([serverId, name])
+}
+
+// A shared database server the panel provisions per-server databases on. The
+// admin connection (host/port/username/passwordEnc) is used to run the
+// CREATE/DROP/GRANT DDL; `publicHost` is what customers connect to (which may be
+// a public hostname/IP different from the internal admin `host`).
+model DatabaseHost {
+  id           String           @id @db.Uuid
+  name         String
+  engine       DbEngine         @default(MARIADB)
+  host         String // admin connection host (panel -> DB server)
+  port         Int              @default(3306)
+  username     String // admin/provisioner user
+  passwordEnc  String // AES-256-GCM
+  publicHost   String // hostname/IP customers connect to
+  maxDatabases Int              @default(500)
+  isActive     Boolean          @default(true)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  databases    ServerDatabase[]
 }
 
 model Schedule {

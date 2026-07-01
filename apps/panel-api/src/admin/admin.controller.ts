@@ -20,6 +20,11 @@ import { BillingService } from "../billing/billing.service";
 import { TemplatesService } from "../templates/templates.service";
 import { ServersService } from "../servers/servers.service";
 import { TransfersService } from "../servers/transfers.service";
+import { DatabaseHostsService } from "../databases/database-hosts.service";
+import {
+  CreateDatabaseHostDto,
+  UpdateDatabaseHostDto,
+} from "../databases/dto/databases.dto";
 import { AlertsService } from "../platform/alerts.service";
 import { HomepageAlertsService } from "../platform/homepage-alerts.service";
 import { IncidentsService } from "../platform/incidents.service";
@@ -143,6 +148,7 @@ export class AdminController {
     private readonly coupons: CouponsService,
     private readonly giftCards: GiftCardsService,
     private readonly credit: CreditService,
+    private readonly dbHosts: DatabaseHostsService,
   ) {}
 
   // ---- Coupons -----------------------------------------------------------
@@ -586,6 +592,55 @@ export class AdminController {
   @Audit({ action: "admin.role.delete", targetType: "Role", targetParam: "id" })
   deleteRole(@Param("id") id: string) {
     return this.roles.remove(id);
+  }
+
+  // ---- Database hosts (shared MySQL/MariaDB for per-server databases) -----
+
+  @Get("database-hosts")
+  @RequirePerm("nodes.read")
+  listDatabaseHosts() {
+    return this.dbHosts.list();
+  }
+
+  @Post("database-hosts")
+  @RequirePerm("nodes.manage")
+  @Audit({ action: "admin.dbhost.create", targetType: "DatabaseHost" })
+  createDatabaseHost(@Body() dto: CreateDatabaseHostDto) {
+    return this.dbHosts.create(dto);
+  }
+
+  @Patch("database-hosts/:id")
+  @RequirePerm("nodes.manage")
+  @Audit({
+    action: "admin.dbhost.update",
+    targetType: "DatabaseHost",
+    targetParam: "id",
+  })
+  updateDatabaseHost(
+    @Param("id") id: string,
+    @Body() dto: UpdateDatabaseHostDto,
+  ) {
+    return this.dbHosts.update(id, dto);
+  }
+
+  @Delete("database-hosts/:id")
+  @RequirePerm("nodes.manage")
+  @HttpCode(204)
+  @Audit({
+    action: "admin.dbhost.delete",
+    targetType: "DatabaseHost",
+    targetParam: "id",
+  })
+  async deleteDatabaseHost(@Param("id") id: string) {
+    await this.dbHosts.remove(id);
+  }
+
+  /** Verify the admin connection to a host works. */
+  @Post("database-hosts/:id/test")
+  @HttpCode(200)
+  @RequirePerm("nodes.manage")
+  testDatabaseHost(@Param("id") id: string) {
+    return this.dbHosts.test(id);
   }
 
   // ---- Billing, orders & invoices ---------------------------------------

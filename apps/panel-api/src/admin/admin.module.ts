@@ -1,12 +1,13 @@
-import { Module } from '@nestjs/common';
-import { AdminController } from './admin.controller';
-import { AdminService } from './admin.service';
-import { RolesService } from './roles.service';
-import { NodesModule } from '../nodes/nodes.module';
-import { TemplatesModule } from '../templates/templates.module';
-import { UsersModule } from '../users/users.module';
-import { BillingModule } from '../billing/billing.module';
-import { ServersModule } from '../servers/servers.module';
+import { Module } from "@nestjs/common";
+import { AdminController } from "./admin.controller";
+import { AdminService } from "./admin.service";
+import { RolesService } from "./roles.service";
+import { NodesModule } from "../nodes/nodes.module";
+import { TemplatesModule } from "../templates/templates.module";
+import { UsersModule } from "../users/users.module";
+import { BillingModule } from "../billing/billing.module";
+import { ServersModule } from "../servers/servers.module";
+import { DatabasesModule } from "../databases/databases.module";
 
 /**
  * Admin module. Aggregates the admin-only surface and imports the feature
@@ -20,6 +21,7 @@ import { ServersModule } from '../servers/servers.module';
     UsersModule,
     BillingModule,
     ServersModule,
+    DatabasesModule,
   ],
   controllers: [AdminController],
   providers: [AdminService, RolesService],

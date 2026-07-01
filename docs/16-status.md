@@ -84,7 +84,13 @@ serves the server sub-resources (`files`, `backups`, `databases`, `stats`,
 GameTemplate "egg editor"), `catalog`, `orders`, and `dashboard` surfaces. The
 authoritative route-by-route map is **[17 — Integration Map](17-integration-map.md)**.
 Remaining `// TODO(impl)` on these paths is external wiring (live payment
-capture, real DB-host provisioning, SFTP credential push), not missing routes.
+capture, SFTP credential push), not missing routes. **Per-server databases are
+now real:** the panel provisions CREATE DATABASE / CREATE USER / GRANT on a
+shared MySQL/MariaDB **`DatabaseHost`** (admin-managed, AES-GCM-encrypted admin
+creds) via `DatabaseProvisioner`, with drop on delete and password rotation; when
+no host is configured the customer sees a clear "unavailable" error rather than a
+fake success. Admin UI for adding hosts is the remaining piece (API is live at
+`/admin/database-hosts`).
 
 ## What is deliberately *not* done
 
