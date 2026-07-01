@@ -147,10 +147,16 @@ export function evaluatePreflight(
   }
 
   // --- Email delivery --------------------------------------------------------
+  // Transactional email is load-bearing: without it customers can't verify their
+  // address (so they can't order), reset a password, or get a receipt. Block a
+  // production boot with no SMTP rather than silently dropping to the log-only
+  // transport. Operators who truly want to launch without email can override with
+  // ALLOW_INSECURE_CONFIG=true.
   if (!config.email.host) {
-    warnings.push(
-      "SMTP_HOST is not set — password-reset, email-verification and receipt " +
-        "emails will NOT be delivered (logging transport only).",
+    errors.push(
+      "SMTP_HOST is not set — verification, password-reset and receipt emails " +
+        "cannot be delivered (log-only transport), so customers cannot verify " +
+        "their email or receive receipts. Configure SMTP before launch.",
     );
   }
 

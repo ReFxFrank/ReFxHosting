@@ -133,15 +133,20 @@ describe("production preflight", () => {
     expect(errors.some((e) => e.includes("PANEL_URL"))).toBe(false);
   });
 
-  it("warns (not errors) on missing SMTP, no gateways, and pinning off", () => {
+  it("blocks a production boot with no SMTP configured", () => {
     const c = goodConfig();
     c.email.host = undefined;
+    const { errors } = evaluatePreflight(c, true);
+    expect(errors.some((e) => e.includes("SMTP_HOST"))).toBe(true);
+  });
+
+  it("warns (not errors) on no gateways and pinning off", () => {
+    const c = goodConfig();
     c.stripe.secretKey = "";
     c.paypal.clientId = "";
     c.agentTlsPinning = false;
     const { errors, warnings } = evaluatePreflight(c, true);
     expect(errors).toEqual([]);
-    expect(warnings.some((w) => w.includes("SMTP_HOST"))).toBe(true);
     expect(warnings.some((w) => w.includes("payment gateway"))).toBe(true);
     expect(warnings.some((w) => w.includes("AGENT_TLS_PINNING"))).toBe(true);
   });
