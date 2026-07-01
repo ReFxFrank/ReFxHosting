@@ -91,6 +91,11 @@ function transferStepLabel(state: TransferState): string {
   }
 }
 
+function fmtGb(mb: number): string {
+  const gb = mb / 1024;
+  return `${Number.isInteger(gb) ? gb : gb.toFixed(1)} GB`;
+}
+
 function ownerLabel(s: AdminServer): string {
   const o = s.owner;
   if (!o) return "—";
@@ -151,6 +156,14 @@ export default function AdminServersPage() {
     queryKey: ["admin", "templates"],
     queryFn: () => api.admin.templates(),
     enabled: createOpen,
+  });
+
+  // Live capacity for the resize target's node, so staff see headroom before
+  // bumping resources (the backend rejects a bump past the node's free pool).
+  const { data: capacity } = useQuery({
+    queryKey: ["admin", "node-capacity", resizeTarget?.nodeId],
+    queryFn: () => api.admin.nodeCapacity(resizeTarget!.nodeId),
+    enabled: !!resizeTarget,
   });
 
   const selectedTemplate: GameTemplate | undefined = templates?.find(
@@ -886,6 +899,21 @@ export default function AdminServersPage() {
                   }))
                 }
               />
+              {capacity &&
+                (() => {
+                  const max =
+                    (resizeTarget?.memoryMb ?? 0) + capacity.memory.free;
+                  const over = resizeForm.memoryMb > max;
+                  return (
+                    <p
+                      className={`text-[11px] ${over ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      Node: {fmtGb(capacity.memory.used)}/
+                      {fmtGb(capacity.memory.total)} used · max {fmtGb(max)}
+                      {over && " — exceeds free capacity"}
+                    </p>
+                  );
+                })()}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">CPU (cores)</Label>
@@ -901,6 +929,21 @@ export default function AdminServersPage() {
                   }))
                 }
               />
+              {capacity &&
+                (() => {
+                  const max = (resizeTarget?.cpuCores ?? 0) + capacity.cpu.free;
+                  const over = resizeForm.cpuCores > max;
+                  return (
+                    <p
+                      className={`text-[11px] ${over ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      Node: {capacity.cpu.used.toFixed(1)}/
+                      {capacity.cpu.total.toFixed(1)} used · max{" "}
+                      {max.toFixed(1)}
+                      {over && " — exceeds free capacity"}
+                    </p>
+                  );
+                })()}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Disk (MB)</Label>
@@ -915,6 +958,20 @@ export default function AdminServersPage() {
                   }))
                 }
               />
+              {capacity &&
+                (() => {
+                  const max = (resizeTarget?.diskMb ?? 0) + capacity.disk.free;
+                  const over = resizeForm.diskMb > max;
+                  return (
+                    <p
+                      className={`text-[11px] ${over ? "text-destructive" : "text-muted-foreground"}`}
+                    >
+                      Node: {fmtGb(capacity.disk.used)}/
+                      {fmtGb(capacity.disk.total)} used · max {fmtGb(max)}
+                      {over && " — exceeds free capacity"}
+                    </p>
+                  );
+                })()}
             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Swap (MB)</Label>

@@ -80,6 +80,7 @@ import type {
   StatusWebhook,
   IncidentImpact,
   IncidentStatusStage,
+  NodeCapacity,
 } from "@/lib/types";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
@@ -1106,6 +1107,9 @@ export const api = {
       }>,
     ) => http.patch<Node>(`/admin/nodes/${id}`, input),
     deleteNode: (id: string) => http.delete<void>(`/admin/nodes/${id}`),
+    /** A node's aggregate capacity vs current allocation (cpu/mem/disk). */
+    nodeCapacity: (id: string) =>
+      http.get<NodeCapacity>(`/nodes/${id}/capacity`),
 
     // Database hosts (shared MySQL/MariaDB for per-server databases).
     databaseHosts: () => getList<DatabaseHost>("/admin/database-hosts"),

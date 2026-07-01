@@ -460,6 +460,13 @@ export interface DatabaseHostInput {
   isActive?: boolean;
 }
 
+/** A node's aggregate capacity vs current allocation (from GET /nodes/:id/capacity). */
+export interface NodeCapacity {
+  cpu: { total: number; used: number; free: number };
+  memory: { total: number; used: number; free: number };
+  disk: { total: number; used: number; free: number };
+}
+
 export interface GameTemplate {
   id: string;
   categoryId: string | null;
