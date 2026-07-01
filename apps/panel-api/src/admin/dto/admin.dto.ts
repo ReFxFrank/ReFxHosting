@@ -1,5 +1,5 @@
-import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsStrongPassword } from '../../auth/password.validator';
+import { ApiProperty, ApiPropertyOptional, PartialType } from "@nestjs/swagger";
+import { IsStrongPassword } from "../../auth/password.validator";
 import {
   IsArray,
   IsBoolean,
@@ -16,10 +16,10 @@ import {
   Max,
   MaxLength,
   Min,
-} from 'class-validator';
-import { CreditReason, GlobalRole, UserState } from '@prisma/client';
-import { CreateProductDto } from '../../billing/dto/create-product.dto';
-import { CreateAlertDto } from '../../platform/dto/create-alert.dto';
+} from "class-validator";
+import { CreditReason, GlobalRole, UserState } from "@prisma/client";
+import { CreateProductDto } from "../../billing/dto/create-product.dto";
+import { CreateAlertDto } from "../../platform/dto/create-alert.dto";
 
 /** Admin product update (all fields optional). */
 export class UpdateProductDto extends PartialType(CreateProductDto) {}
@@ -48,7 +48,7 @@ export class AdminCreateUserDto {
 
   @ApiPropertyOptional({
     description:
-      'Initial password (10+ chars, mixed case + number + symbol). Omit to auto-generate a strong one (returned once).',
+      "Initial password (10+ chars, mixed case + number + symbol). Omit to auto-generate a strong one (returned once).",
   })
   @IsOptional()
   @IsStrongPassword()
@@ -68,7 +68,8 @@ export class AdminCreateUserDto {
 
   @ApiPropertyOptional({
     enum: GlobalRole,
-    description: 'Global role (default CUSTOMER). Must be below your own level.',
+    description:
+      "Global role (default CUSTOMER). Must be below your own level.",
   })
   @IsOptional()
   @IsEnum(GlobalRole)
@@ -77,7 +78,7 @@ export class AdminCreateUserDto {
   @ApiPropertyOptional({
     default: true,
     description:
-      'Mark the email verified so the account can sign in immediately (default true).',
+      "Mark the email verified so the account can sign in immediately (default true).",
   })
   @IsOptional()
   @IsBoolean()
@@ -90,32 +91,40 @@ export class SetUserRoleDto {
   @IsEnum(GlobalRole)
   role?: GlobalRole;
 
-  @ApiPropertyOptional({ description: 'Assign a specific RBAC role by id (system or custom).' })
+  @ApiPropertyOptional({
+    description: "Assign a specific RBAC role by id (system or custom).",
+  })
   @IsOptional()
   @IsString()
   roleId?: string;
 }
 
 export class SetGatewayConfigDto {
-  @ApiPropertyOptional({ description: 'Stripe secret key (write-only; stored encrypted).' })
+  @ApiPropertyOptional({
+    description: "Stripe secret key (write-only; stored encrypted).",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   stripeSecretKey?: string;
 
-  @ApiPropertyOptional({ description: 'Stripe webhook signing secret (encrypted).' })
+  @ApiPropertyOptional({
+    description: "Stripe webhook signing secret (encrypted).",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   stripeWebhookSecret?: string;
 
-  @ApiPropertyOptional({ description: 'Stripe publishable key (not secret).' })
+  @ApiPropertyOptional({ description: "Stripe publishable key (not secret)." })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   stripePublishableKey?: string;
 
-  @ApiPropertyOptional({ description: 'Card-statement descriptor / branding (≤22 chars).' })
+  @ApiPropertyOptional({
+    description: "Card-statement descriptor / branding (≤22 chars).",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(64)
@@ -127,18 +136,23 @@ export class SetGatewayConfigDto {
   @MaxLength(255)
   paypalClientId?: string;
 
-  @ApiPropertyOptional({ description: 'PayPal client secret (encrypted).' })
+  @ApiPropertyOptional({ description: "PayPal client secret (encrypted)." })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   paypalClientSecret?: string;
 
-  @ApiPropertyOptional({ description: 'PayPal environment.', enum: ['sandbox', 'live'] })
+  @ApiPropertyOptional({
+    description: "PayPal environment.",
+    enum: ["sandbox", "live"],
+  })
   @IsOptional()
-  @IsIn(['sandbox', 'live'])
+  @IsIn(["sandbox", "live"])
   paypalMode?: string;
 
-  @ApiPropertyOptional({ description: 'PayPal webhook id (for verifying webhooks).' })
+  @ApiPropertyOptional({
+    description: "PayPal webhook id (for verifying webhooks).",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
@@ -147,13 +161,15 @@ export class SetGatewayConfigDto {
 
 /** Owner-editable SMTP / email settings. */
 export class SetEmailConfigDto {
-  @ApiPropertyOptional({ description: 'SMTP host (blank disables real delivery).' })
+  @ApiPropertyOptional({
+    description: "SMTP host (blank disables real delivery).",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   host?: string;
 
-  @ApiPropertyOptional({ description: 'SMTP port.' })
+  @ApiPropertyOptional({ description: "SMTP port." })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -166,52 +182,62 @@ export class SetEmailConfigDto {
   @MaxLength(255)
   user?: string;
 
-  @ApiPropertyOptional({ description: 'SMTP password (write-only; stored encrypted).' })
+  @ApiPropertyOptional({
+    description: "SMTP password (write-only; stored encrypted).",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(512)
   password?: string;
 
-  @ApiPropertyOptional({ description: 'From address, e.g. "ReFx <no-reply@refx.gg>".' })
+  @ApiPropertyOptional({
+    description: 'From address, e.g. "ReFx <no-reply@refx.gg>".',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   from?: string;
 
-  @ApiPropertyOptional({ description: 'Use TLS on connect (port 465).' })
+  @ApiPropertyOptional({ description: "Use TLS on connect (port 465)." })
   @IsOptional()
   @IsBoolean()
   secure?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Visual theme for transactional emails.',
-    enum: ['dark', 'light'],
+    description: "Visual theme for transactional emails.",
+    enum: ["dark", "light"],
   })
   @IsOptional()
-  @IsIn(['dark', 'light'])
-  theme?: 'dark' | 'light';
+  @IsIn(["dark", "light"])
+  theme?: "dark" | "light";
 }
 
 export class TestEmailDto {
-  @ApiProperty({ description: 'Recipient for the test email.' })
+  @ApiProperty({ description: "Recipient for the test email." })
   @IsEmail()
   to!: string;
 }
 
 export class SetSteamConfigDto {
-  @ApiPropertyOptional({ description: 'Steam Web API key (write-only; stored encrypted).' })
+  @ApiPropertyOptional({
+    description: "Steam Web API key (write-only; stored encrypted).",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   apiKey?: string;
 
-  @ApiPropertyOptional({ description: 'Central Steam username for steamcmd Workshop downloads.' })
+  @ApiPropertyOptional({
+    description: "Central Steam username for steamcmd Workshop downloads.",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)
   username?: string;
 
-  @ApiPropertyOptional({ description: 'Steam password (write-only; stored encrypted).' })
+  @ApiPropertyOptional({
+    description: "Steam password (write-only; stored encrypted).",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(512)
@@ -219,8 +245,8 @@ export class SetSteamConfigDto {
 
   @ApiPropertyOptional({
     description:
-      'One-time Steam Guard code for the game-download account. Staged and ' +
-      'consumed on the next install; clears the machine prompt after first use.',
+      "One-time Steam Guard code for the game-download account. Staged and " +
+      "consumed on the next install; clears the machine prompt after first use.",
   })
   @IsOptional()
   @IsString()
@@ -230,14 +256,16 @@ export class SetSteamConfigDto {
 
 /** Verify + cache the game-download Steam login on a specific node. */
 export class VerifySteamLoginDto {
-  @ApiProperty({ description: 'Node to run the login probe on (caches the sentry there).' })
+  @ApiProperty({
+    description: "Node to run the login probe on (caches the sentry there).",
+  })
   @IsString()
   nodeId!: string;
 
   @ApiPropertyOptional({
     description:
-      'Fresh Steam Guard code to use right now (recommended for mobile-authenticator ' +
-      'accounts). Falls back to the staged code if omitted.',
+      "Fresh Steam Guard code to use right now (recommended for mobile-authenticator " +
+      "accounts). Falls back to the staged code if omitted.",
   })
   @IsOptional()
   @IsString()
@@ -291,7 +319,7 @@ export class UpdateRoleDto {
 
 /** Identifiers for a bulk action (e.g. deleting multiple orders at once). */
 export class BulkIdsDto {
-  @ApiProperty({ type: [String], description: 'Target ids.' })
+  @ApiProperty({ type: [String], description: "Target ids." })
   @IsArray()
   @IsString({ each: true })
   ids!: string[];
@@ -303,7 +331,10 @@ export class BulkIdsDto {
  * in integer minor units (cents).
  */
 export class GrantCreditDto {
-  @ApiProperty({ description: 'Signed amount in minor units (cents). Positive grants, negative deducts.' })
+  @ApiProperty({
+    description:
+      "Signed amount in minor units (cents). Positive grants, negative deducts.",
+  })
   @IsInt()
   amountMinor!: number;
 
@@ -319,6 +350,17 @@ export class GrantCreditDto {
   note?: string;
 }
 
+export class RefundInvoiceDto {
+  @ApiPropertyOptional({
+    description:
+      "Amount to refund in minor units (cents). Omit for a full refund of the amount paid.",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  amountMinor?: number;
+}
+
 /**
  * Admin "Create Server" (Pterodactyl-style): provisions a server directly from
  * an egg/template for any owner, without a billing subscription.
@@ -328,35 +370,41 @@ export class AdminCreateServerDto {
   @IsString()
   name!: string;
 
-  @ApiProperty({ description: 'Owner (user) id' })
+  @ApiProperty({ description: "Owner (user) id" })
   @IsString()
   ownerId!: string;
 
-  @ApiProperty({ description: 'Node to place the server on' })
+  @ApiProperty({ description: "Node to place the server on" })
   @IsString()
   nodeId!: string;
 
-  @ApiProperty({ description: 'GameTemplate (egg) id' })
+  @ApiProperty({ description: "GameTemplate (egg) id" })
   @IsString()
   templateId!: string;
 
   @ApiPropertyOptional({
     description:
-      'CPU cores. Optional — defaults to the template\'s recommended spec ' +
-      '(used for voice/slot-based servers that size from recommended specs).',
+      "CPU cores. Optional — defaults to the template's recommended spec " +
+      "(used for voice/slot-based servers that size from recommended specs).",
   })
   @IsOptional()
   @IsNumber()
   @Min(0.1)
   cpuCores?: number;
 
-  @ApiPropertyOptional({ description: 'Memory (MiB). Optional — defaults to the template recommended spec.' })
+  @ApiPropertyOptional({
+    description:
+      "Memory (MiB). Optional — defaults to the template recommended spec.",
+  })
   @IsOptional()
   @IsInt()
   @Min(256)
   memoryMb?: number;
 
-  @ApiPropertyOptional({ description: 'Disk (MiB). Optional — defaults to the template recommended spec.' })
+  @ApiPropertyOptional({
+    description:
+      "Disk (MiB). Optional — defaults to the template recommended spec.",
+  })
   @IsOptional()
   @IsInt()
   @Min(1024)
@@ -364,9 +412,9 @@ export class AdminCreateServerDto {
 
   @ApiPropertyOptional({
     description:
-      'Slot count for voice/slot-based templates (e.g. TeamSpeak max clients). ' +
-      'When set, resources default to the template recommended specs and the ' +
-      'slot cap is injected into the container environment.',
+      "Slot count for voice/slot-based templates (e.g. TeamSpeak max clients). " +
+      "When set, resources default to the template recommended specs and the " +
+      "slot cap is injected into the container environment.",
   })
   @IsOptional()
   @IsInt()
@@ -379,7 +427,7 @@ export class AdminCreateServerDto {
   @Min(0)
   swapMb?: number;
 
-  @ApiPropertyOptional({ description: 'Initial env var overrides' })
+  @ApiPropertyOptional({ description: "Initial env var overrides" })
   @IsOptional()
   @IsObject()
   environment?: Record<string, string>;
@@ -390,7 +438,9 @@ export class AdminCreateServerDto {
  * to `toNodeId` while keeping its identity (shortId, SFTP, backups, plan).
  */
 export class TransferServerDto {
-  @ApiProperty({ description: 'Destination node id (must differ from the current node).' })
+  @ApiProperty({
+    description: "Destination node id (must differ from the current node).",
+  })
   @IsUUID()
   toNodeId!: string;
 }
@@ -398,7 +448,7 @@ export class TransferServerDto {
 export class SetUserPasswordDto {
   @ApiPropertyOptional({
     description:
-      'New password (10+ chars, mixed case + number + symbol). Omit to auto-generate a strong temporary password.',
+      "New password (10+ chars, mixed case + number + symbol). Omit to auto-generate a strong temporary password.",
   })
   @IsOptional()
   @IsStrongPassword()

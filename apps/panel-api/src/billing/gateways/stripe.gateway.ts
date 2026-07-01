@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import Stripe from 'stripe';
-import { Invoice } from '@prisma/client';
+import { Injectable, Logger } from "@nestjs/common";
+import Stripe from "stripe";
+import { Invoice } from "@prisma/client";
 
 /**
  * Stripe v22 ships its rich namespace types (Event, Invoice, errors, …) only
@@ -12,43 +12,45 @@ import { Invoice } from '@prisma/client';
  */
 type StripeClient = InstanceType<typeof Stripe>;
 type CheckoutSessionCreateParams = Parameters<
-  StripeClient['checkout']['sessions']['create']
+  StripeClient["checkout"]["sessions"]["create"]
 >[0];
 type CheckoutSession = Awaited<
-  ReturnType<StripeClient['checkout']['sessions']['create']>
+  ReturnType<StripeClient["checkout"]["sessions"]["create"]>
 >;
-export type StripeEvent = ReturnType<StripeClient['webhooks']['constructEvent']>;
+export type StripeEvent = ReturnType<
+  StripeClient["webhooks"]["constructEvent"]
+>;
 export type StripeInvoice = Awaited<
-  ReturnType<StripeClient['invoices']['retrieve']>
+  ReturnType<StripeClient["invoices"]["retrieve"]>
 >;
 export type StripeCharge = Awaited<
-  ReturnType<StripeClient['charges']['retrieve']>
+  ReturnType<StripeClient["charges"]["retrieve"]>
 >;
 export type StripeCheckoutSession = Awaited<
-  ReturnType<StripeClient['checkout']['sessions']['retrieve']>
+  ReturnType<StripeClient["checkout"]["sessions"]["retrieve"]>
 >;
 export type StripePaymentIntent = Awaited<
-  ReturnType<StripeClient['paymentIntents']['retrieve']>
+  ReturnType<StripeClient["paymentIntents"]["retrieve"]>
 >;
 type StripeSetupIntent = Awaited<
-  ReturnType<StripeClient['setupIntents']['create']>
+  ReturnType<StripeClient["setupIntents"]["create"]>
 >;
 type StripePaymentMethod = Awaited<
-  ReturnType<StripeClient['paymentMethods']['retrieve']>
+  ReturnType<StripeClient["paymentMethods"]["retrieve"]>
 >;
-export type StripeMetadata = StripeInvoice['metadata'];
+export type StripeMetadata = StripeInvoice["metadata"];
 export type StripeError = InstanceType<typeof Stripe.errors.StripeError> & {
   payment_intent?: { id?: string };
 };
-import { AuthUser } from '../../common/decorators/current-user.decorator';
-import { SettingsService } from '../../platform/settings.service';
+import { AuthUser } from "../../common/decorators/current-user.decorator";
+import { SettingsService } from "../../platform/settings.service";
 import {
   ChargeResult,
   CheckoutSessionParams,
   CheckoutSessionResult,
   GatewayUser,
   PaymentGateway,
-} from './payment-gateway.interface';
+} from "./payment-gateway.interface";
 
 /**
  * Stripe implementation of the PaymentGateway contract. Wraps the Stripe Node
@@ -57,9 +59,9 @@ import {
  */
 @Injectable()
 export class StripeGateway implements PaymentGateway {
-  readonly name = 'stripe';
+  readonly name = "stripe";
   private readonly logger = new Logger(StripeGateway.name);
-  private cachedKey = '';
+  private cachedKey = "";
   private cachedClient: StripeClient | null = null;
 
   constructor(private readonly settings: SettingsService) {}
@@ -72,12 +74,12 @@ export class StripeGateway implements PaymentGateway {
    */
   private async client(): Promise<StripeClient> {
     const { secretKey } = await this.settings.stripeConfig();
-    const key = secretKey || 'sk_test_unconfigured';
+    const key = secretKey || "sk_test_unconfigured";
     if (!this.cachedClient || key !== this.cachedKey) {
       if (!secretKey) {
         this.logger.warn(
-          'Stripe secret key is not set — inert mode (no live charges). ' +
-            'Configure it under Payments or set STRIPE_SECRET_KEY.',
+          "Stripe secret key is not set — inert mode (no live charges). " +
+            "Configure it under Payments or set STRIPE_SECRET_KEY.",
         );
       }
       this.cachedClient = new Stripe(key, {
@@ -87,7 +89,7 @@ export class StripeGateway implements PaymentGateway {
         // whose required apiVersion literal no longer matches and fails the build.
         // Bump the SDK and this string together, deliberately
         // (stripe-node 22.3.0 → 2026-06-24.dahlia).
-        apiVersion: '2026-06-24.dahlia',
+        apiVersion: "2026-06-24.dahlia",
         typescript: true,
       });
       this.cachedKey = key;
@@ -102,7 +104,7 @@ export class StripeGateway implements PaymentGateway {
       (user as GatewayUser).lastName,
     ]
       .filter(Boolean)
-      .join(' ')
+      .join(" ")
       .trim();
 
     // TODO(impl): de-duplicate by searching existing customers (metadata.userId)
@@ -131,7 +133,10 @@ export class StripeGateway implements PaymentGateway {
       const intent = await stripe.paymentIntents.create({
         // Charge the outstanding balance (total minus any credit already applied,
         // e.g. a gift card).
-        amount: Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)),
+        amount: Math.max(
+          0,
+          invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
+        ),
         currency: invoice.currency.toLowerCase(),
         payment_method: paymentMethodRef,
         confirm: true,
@@ -143,7 +148,7 @@ export class StripeGateway implements PaymentGateway {
         description: `Invoice ${invoice.number}`,
       });
 
-      const success = intent.status === 'succeeded';
+      const success = intent.status === "succeeded";
       return {
         gatewayRef: intent.id,
         success,
@@ -158,11 +163,30 @@ export class StripeGateway implements PaymentGateway {
         `Stripe charge failed for invoice ${invoice.id}: ${e.message}`,
       );
       return {
-        gatewayRef: e.payment_intent?.id ?? '',
+        gatewayRef: e.payment_intent?.id ?? "",
         success: false,
-        failureReason: e.message ?? 'Unknown Stripe error',
+        failureReason: e.message ?? "Unknown Stripe error",
       };
     }
+  }
+
+  /**
+   * Refund a charge back to the customer's card. `charge()` returns a
+   * PaymentIntent id, so we refund by `payment_intent` (also accepting a bare
+   * `ch_…` charge id for robustness). Omitting `amount` refunds in full.
+   */
+  async refund(
+    chargeRef: string,
+    amountMinor?: number,
+  ): Promise<{ refundRef: string }> {
+    const stripe = await this.client();
+    const refund = await stripe.refunds.create({
+      ...(chargeRef.startsWith("ch_")
+        ? { charge: chargeRef }
+        : { payment_intent: chargeRef }),
+      ...(amountMinor != null ? { amount: amountMinor } : {}),
+    });
+    return { refundRef: refund.id };
   }
 
   /**
@@ -176,10 +200,13 @@ export class StripeGateway implements PaymentGateway {
     const stripe = await this.client();
     const intent: StripeSetupIntent = await stripe.setupIntents.create({
       customer: customerRef,
-      usage: 'off_session',
-      payment_method_types: ['card'],
+      usage: "off_session",
+      payment_method_types: ["card"],
     });
-    return { clientSecret: intent.client_secret ?? '', setupIntentId: intent.id };
+    return {
+      clientSecret: intent.client_secret ?? "",
+      setupIntentId: intent.id,
+    };
   }
 
   /**
@@ -196,13 +223,13 @@ export class StripeGateway implements PaymentGateway {
   } | null> {
     const stripe = await this.client();
     const si = await stripe.setupIntents.retrieve(setupIntentId);
-    if (si.status !== 'succeeded' || !si.payment_method) return null;
+    if (si.status !== "succeeded" || !si.payment_method) return null;
     const pmId =
-      typeof si.payment_method === 'string'
+      typeof si.payment_method === "string"
         ? si.payment_method
         : si.payment_method.id;
     const customerId =
-      typeof si.customer === 'string' ? si.customer : (si.customer?.id ?? '');
+      typeof si.customer === "string" ? si.customer : (si.customer?.id ?? "");
     const pm: StripePaymentMethod = await stripe.paymentMethods.retrieve(pmId);
     return {
       customerId,
@@ -237,7 +264,7 @@ export class StripeGateway implements PaymentGateway {
     const stripe = await this.client();
     const { statementDescriptor } = await this.settings.stripeConfig();
     const base: CheckoutSessionCreateParams = {
-      mode: 'payment',
+      mode: "payment",
       customer: customerRef,
       success_url: successUrl,
       cancel_url: cancelUrl,
@@ -248,7 +275,10 @@ export class StripeGateway implements PaymentGateway {
           price_data: {
             currency: invoice.currency.toLowerCase(),
             // Outstanding balance (total minus any applied credit, e.g. gift card).
-            unit_amount: Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)),
+            unit_amount: Math.max(
+              0,
+              invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
+            ),
             product_data: { name: `Invoice ${invoice.number}` },
           },
         },
@@ -265,7 +295,9 @@ export class StripeGateway implements PaymentGateway {
       try {
         session = await stripe.checkout.sessions.create({
           ...base,
-          payment_intent_data: { statement_descriptor_suffix: statementDescriptor },
+          payment_intent_data: {
+            statement_descriptor_suffix: statementDescriptor,
+          },
         });
       } catch (err) {
         this.logger.warn(
@@ -277,14 +309,17 @@ export class StripeGateway implements PaymentGateway {
       session = await stripe.checkout.sessions.create(base);
     }
 
-    return { sessionId: session.id, url: session.url ?? '' };
+    return { sessionId: session.id, url: session.url ?? "" };
   }
 
   /**
    * Verify and decode a Stripe webhook using the raw request body and the
    * `stripe-signature` header. Throws on invalid signatures.
    */
-  async verifyWebhook(rawBody: Buffer, signature: string): Promise<StripeEvent> {
+  async verifyWebhook(
+    rawBody: Buffer,
+    signature: string,
+  ): Promise<StripeEvent> {
     const { webhookSecret } = await this.settings.stripeConfig();
     const stripe = await this.client();
     return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);

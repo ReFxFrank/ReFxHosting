@@ -1371,6 +1371,82 @@ export class BillingService {
     this.logger.log(`Invoice ${invoiceId} refunded via ${details.gateway}`);
   }
 
+  /**
+   * Admin-initiated refund: refund a PAID invoice's settled payment back to the
+   * original method via its gateway, then record a REFUNDED Payment. A full
+   * refund moves the invoice to REFUNDED; a partial refund records the amount but
+   * leaves the invoice PAID (there's no partial-refunded state). Does NOT touch
+   * the subscription or servers — cancel/suspend those separately if intended.
+   */
+  async refundInvoice(
+    invoiceId: string,
+    amountMinor?: number,
+    actorId?: string,
+  ): Promise<{ refunded: boolean; amountMinor: number; full: boolean }> {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id: invoiceId },
+    });
+    if (!invoice) throw new NotFoundException("Invoice not found");
+    if (invoice.state !== InvoiceState.PAID) {
+      throw new BadRequestException("Only a PAID invoice can be refunded");
+    }
+
+    const charge = await this.prisma.payment.findFirst({
+      where: { invoiceId, state: PaymentState.SUCCEEDED },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!charge || !charge.gatewayRef) {
+      throw new BadRequestException(
+        "No settled gateway payment found to refund (was it paid manually?)",
+      );
+    }
+
+    const paidMinor = invoice.amountPaidMinor || invoice.totalMinor;
+    const requested = amountMinor && amountMinor > 0 ? amountMinor : paidMinor;
+    if (requested > paidMinor) {
+      throw new BadRequestException(
+        `Refund exceeds the amount paid (${paidMinor} ${invoice.currency})`,
+      );
+    }
+    const full = requested >= paidMinor;
+
+    const gateway =
+      charge.gateway === this.paypal.name ? this.paypal : this.stripe;
+    const { refundRef } = await gateway.refund(
+      charge.gatewayRef,
+      full ? undefined : requested,
+      invoice.currency,
+    );
+
+    await this.prisma.$transaction([
+      this.prisma.payment.create({
+        data: {
+          id: uuidv7(),
+          invoiceId,
+          gateway: charge.gateway,
+          gatewayRef: refundRef,
+          amountMinor: requested,
+          currency: invoice.currency,
+          state: PaymentState.REFUNDED,
+        },
+      }),
+      ...(full
+        ? [
+            this.prisma.invoice.update({
+              where: { id: invoiceId },
+              data: { state: InvoiceState.REFUNDED },
+            }),
+          ]
+        : []),
+    ]);
+
+    this.logger.log(
+      `Invoice ${invoiceId} ${full ? "fully" : "partially"} refunded ` +
+        `(${requested} ${invoice.currency}) via ${charge.gateway} by ${actorId ?? "system"}`,
+    );
+    return { refunded: true, amountMinor: requested, full };
+  }
+
   /** Charge a saved default method, else hand off to a hosted Stripe checkout. */
   private async chargeOrCheckout(
     userId: string,

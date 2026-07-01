@@ -48,8 +48,12 @@ describe("BillingService settlement engine", () => {
           : "http://localhost:3000",
       ),
     };
-    const stripe = { name: "stripe", charge: jest.fn() };
-    const paypal = { name: "paypal" };
+    const stripe = {
+      name: "stripe",
+      charge: jest.fn(),
+      refund: jest.fn().mockResolvedValue({ refundRef: "re_1" }),
+    };
+    const paypal = { name: "paypal", refund: jest.fn() };
     const settings = {};
     const email = {
       sendPaymentReceipt: jest.fn().mockResolvedValue(undefined),
@@ -75,7 +79,15 @@ describe("BillingService settlement engine", () => {
       suspensionQueue as any,
       provisionQueue as any,
     );
-    return { svc, prisma, stripe, email, suspensionQueue, provisionQueue };
+    return {
+      svc,
+      prisma,
+      stripe,
+      paypal,
+      email,
+      suspensionQueue,
+      provisionQueue,
+    };
   }
 
   const openInvoice = (over: Record<string, unknown> = {}) => ({
@@ -420,6 +432,82 @@ describe("BillingService settlement engine", () => {
         expect.objectContaining({ gateway: "stripe" }),
       );
       expect(prisma.subscription.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---- refundInvoice: admin-initiated gateway refund -----------------------
+
+  describe("refundInvoice", () => {
+    const paidInvoice = (over: Record<string, unknown> = {}) =>
+      openInvoice({ state: "PAID", amountPaidMinor: 1500, ...over });
+
+    it("full refund: calls the gateway, records a REFUNDED payment, marks the invoice REFUNDED", async () => {
+      const { svc, prisma, stripe } = make();
+      prisma.invoice.findUnique.mockResolvedValue(paidInvoice());
+      prisma.payment.findFirst.mockResolvedValue({
+        gateway: "stripe",
+        gatewayRef: "pi_1",
+        state: "SUCCEEDED",
+      });
+
+      const res = await svc.refundInvoice("inv-1", undefined, "admin-1");
+
+      expect(stripe.refund).toHaveBeenCalledWith("pi_1", undefined, "USD");
+      expect(res).toEqual({ refunded: true, amountMinor: 1500, full: true });
+      expect(prisma.payment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            state: "REFUNDED",
+            gatewayRef: "re_1",
+            amountMinor: 1500,
+          }),
+        }),
+      );
+      expect(prisma.invoice.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { state: "REFUNDED" } }),
+      );
+    });
+
+    it("partial refund: passes the amount and leaves the invoice PAID", async () => {
+      const { svc, prisma, stripe } = make();
+      prisma.invoice.findUnique.mockResolvedValue(paidInvoice());
+      prisma.payment.findFirst.mockResolvedValue({
+        gateway: "stripe",
+        gatewayRef: "pi_1",
+        state: "SUCCEEDED",
+      });
+
+      const res = await svc.refundInvoice("inv-1", 500, "admin-1");
+
+      expect(stripe.refund).toHaveBeenCalledWith("pi_1", 500, "USD");
+      expect(res.full).toBe(false);
+      expect(prisma.invoice.update).not.toHaveBeenCalled();
+    });
+
+    it("rejects refunding an invoice that isn't PAID", async () => {
+      const { svc, prisma } = make();
+      prisma.invoice.findUnique.mockResolvedValue(
+        openInvoice({ state: "OPEN" }),
+      );
+      await expect(svc.refundInvoice("inv-1")).rejects.toThrow(/PAID/);
+    });
+
+    it("rejects a refund larger than the amount paid", async () => {
+      const { svc, prisma } = make();
+      prisma.invoice.findUnique.mockResolvedValue(paidInvoice());
+      prisma.payment.findFirst.mockResolvedValue({
+        gateway: "stripe",
+        gatewayRef: "pi_1",
+        state: "SUCCEEDED",
+      });
+      await expect(svc.refundInvoice("inv-1", 9999)).rejects.toThrow(/exceeds/);
+    });
+
+    it("rejects when there's no settled gateway payment to refund", async () => {
+      const { svc, prisma } = make();
+      prisma.invoice.findUnique.mockResolvedValue(paidInvoice());
+      prisma.payment.findFirst.mockResolvedValue(null);
+      await expect(svc.refundInvoice("inv-1")).rejects.toThrow(/No settled/);
     });
   });
 });

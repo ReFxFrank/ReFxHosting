@@ -1,14 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Invoice } from '@prisma/client';
-import { SettingsService } from '../../platform/settings.service';
-import { AuthUser } from '../../common/decorators/current-user.decorator';
+import { Injectable, Logger } from "@nestjs/common";
+import { Invoice } from "@prisma/client";
+import { SettingsService } from "../../platform/settings.service";
+import { AuthUser } from "../../common/decorators/current-user.decorator";
 import {
   ChargeResult,
   CheckoutSessionParams,
   CheckoutSessionResult,
   GatewayUser,
   PaymentGateway,
-} from './payment-gateway.interface';
+} from "./payment-gateway.interface";
 
 /**
  * PayPal implementation using the Orders v2 REST API via global `fetch`. The
@@ -18,7 +18,7 @@ import {
  */
 @Injectable()
 export class PayPalGateway implements PaymentGateway {
-  readonly name = 'paypal';
+  readonly name = "paypal";
   private readonly logger = new Logger(PayPalGateway.name);
 
   /** Cached OAuth token + expiry epoch ms, keyed by the client id it was for. */
@@ -29,9 +29,9 @@ export class PayPalGateway implements PaymentGateway {
   /** Sandbox/live base URL for the effective mode (settings → env). */
   private async resolveBaseUrl(): Promise<string> {
     const { mode } = await this.settings.paypalConfig();
-    return mode === 'live'
-      ? 'https://api-m.paypal.com'
-      : 'https://api-m.sandbox.paypal.com';
+    return mode === "live"
+      ? "https://api-m.paypal.com"
+      : "https://api-m.sandbox.paypal.com";
   }
 
   /**
@@ -42,12 +42,12 @@ export class PayPalGateway implements PaymentGateway {
   private async getAccessToken(): Promise<string> {
     const { clientId, clientSecret, mode } = await this.settings.paypalConfig();
     if (!clientId || !clientSecret) {
-      throw new Error('PayPal is not configured (missing client id/secret)');
+      throw new Error("PayPal is not configured (missing client id/secret)");
     }
     const baseUrl =
-      mode === 'live'
-        ? 'https://api-m.paypal.com'
-        : 'https://api-m.sandbox.paypal.com';
+      mode === "live"
+        ? "https://api-m.paypal.com"
+        : "https://api-m.sandbox.paypal.com";
 
     const now = Date.now();
     if (
@@ -58,15 +58,15 @@ export class PayPalGateway implements PaymentGateway {
       return this.token.value;
     }
 
-    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
     const res = await fetch(`${baseUrl}/v1/oauth2/token`, {
-      method: 'POST',
+      method: "POST",
       headers: {
         Authorization: `Basic ${basic}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
+        "Content-Type": "application/x-www-form-urlencoded",
       },
-      body: 'grant_type=client_credentials',
+      body: "grant_type=client_credentials",
     });
 
     if (!res.ok) {
@@ -89,7 +89,7 @@ export class PayPalGateway implements PaymentGateway {
   /** Authorized JSON helper against the PayPal REST base. */
   private async api<T>(
     path: string,
-    init: { method: string; body?: unknown } = { method: 'GET' },
+    init: { method: string; body?: unknown } = { method: "GET" },
   ): Promise<T> {
     const token = await this.getAccessToken();
     const baseUrl = await this.resolveBaseUrl();
@@ -97,7 +97,7 @@ export class PayPalGateway implements PaymentGateway {
       method: init.method,
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: init.body ? JSON.stringify(init.body) : undefined,
     });
@@ -127,11 +127,11 @@ export class PayPalGateway implements PaymentGateway {
   ): Promise<ChargeResult> {
     try {
       const order = await this.api<{ id: string; status: string }>(
-        '/v2/checkout/orders',
+        "/v2/checkout/orders",
         {
-          method: 'POST',
+          method: "POST",
           body: {
-            intent: 'CAPTURE',
+            intent: "CAPTURE",
             purchase_units: [
               {
                 custom_id: invoice.id,
@@ -140,7 +140,12 @@ export class PayPalGateway implements PaymentGateway {
                 invoice_id: `${invoice.number}-${Date.now().toString(36)}`,
                 amount: {
                   currency_code: invoice.currency,
-                  value: (Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)) / 100).toFixed(2),
+                  value: (
+                    Math.max(
+                      0,
+                      invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
+                    ) / 100
+                  ).toFixed(2),
                 },
               },
             ],
@@ -154,10 +159,10 @@ export class PayPalGateway implements PaymentGateway {
       // otherwise an explicit capture call is required:
       const captured = await this.api<{ id: string; status: string }>(
         `/v2/checkout/orders/${order.id}/capture`,
-        { method: 'POST' },
+        { method: "POST" },
       );
 
-      const success = captured.status === 'COMPLETED';
+      const success = captured.status === "COMPLETED";
       return {
         gatewayRef: captured.id,
         success,
@@ -170,8 +175,46 @@ export class PayPalGateway implements PaymentGateway {
       this.logger.warn(
         `PayPal charge failed for invoice ${invoice.id} (pm ${paymentMethodRef}): ${e.message}`,
       );
-      return { gatewayRef: '', success: false, failureReason: e.message };
+      return { gatewayRef: "", success: false, failureReason: e.message };
     }
+  }
+
+  /**
+   * Refund a capture. `charge()` persists the ORDER id, so resolve its capture id
+   * first (falling back to treating the ref as a capture id, e.g. one recorded
+   * from a webhook). Omitting amount refunds in full.
+   */
+  async refund(
+    chargeRef: string,
+    amountMinor?: number,
+    currency?: string,
+  ): Promise<{ refundRef: string }> {
+    let captureId = chargeRef;
+    try {
+      const order = await this.api<{
+        purchase_units?: Array<{
+          payments?: { captures?: Array<{ id: string }> };
+        }>;
+      }>(`/v2/checkout/orders/${chargeRef}`);
+      const cap = order.purchase_units?.[0]?.payments?.captures?.[0]?.id;
+      if (cap) captureId = cap;
+    } catch {
+      // Not an order id (or already refunded) — assume it's a capture id.
+    }
+    const body =
+      amountMinor != null && currency
+        ? {
+            amount: {
+              value: (amountMinor / 100).toFixed(2),
+              currency_code: currency,
+            },
+          }
+        : undefined;
+    const refund = await this.api<{ id: string }>(
+      `/v2/payments/captures/${captureId}/refund`,
+      { method: "POST", body },
+    );
+    return { refundRef: refund.id };
   }
 
   /** Create a PayPal order and return its approval (checkout) link. */
@@ -183,10 +226,10 @@ export class PayPalGateway implements PaymentGateway {
     const order = await this.api<{
       id: string;
       links: Array<{ rel: string; href: string }>;
-    }>('/v2/checkout/orders', {
-      method: 'POST',
+    }>("/v2/checkout/orders", {
+      method: "POST",
       body: {
-        intent: 'CAPTURE',
+        intent: "CAPTURE",
         purchase_units: [
           {
             custom_id: invoice.id,
@@ -196,7 +239,12 @@ export class PayPalGateway implements PaymentGateway {
             invoice_id: `${invoice.number}-${Date.now().toString(36)}`,
             amount: {
               currency_code: invoice.currency,
-              value: (Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)) / 100).toFixed(2),
+              value: (
+                Math.max(
+                  0,
+                  invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
+                ) / 100
+              ).toFixed(2),
             },
           },
         ],
@@ -207,8 +255,8 @@ export class PayPalGateway implements PaymentGateway {
       },
     });
 
-    const approve = order.links.find((l) => l.rel === 'approve');
-    return { sessionId: order.id, url: approve?.href ?? '' };
+    const approve = order.links.find((l) => l.rel === "approve");
+    return { sessionId: order.id, url: approve?.href ?? "" };
   }
 
   /**
@@ -235,7 +283,7 @@ export class PayPalGateway implements PaymentGateway {
           }>;
         };
       }>;
-    }>(`/v2/checkout/orders/${orderId}/capture`, { method: 'POST' });
+    }>(`/v2/checkout/orders/${orderId}/capture`, { method: "POST" });
 
     const unit = res.purchase_units?.[0];
     const capture = unit?.payments?.captures?.[0];
@@ -257,36 +305,39 @@ export class PayPalGateway implements PaymentGateway {
 
   /** Map our BillingInterval to a PayPal billing-cycle frequency. */
   private static frequencyFor(interval: string): {
-    interval_unit: 'DAY' | 'WEEK' | 'MONTH' | 'YEAR';
+    interval_unit: "DAY" | "WEEK" | "MONTH" | "YEAR";
     interval_count: number;
   } {
     switch (interval) {
-      case 'WEEKLY':
-        return { interval_unit: 'WEEK', interval_count: 1 };
-      case 'BIWEEKLY':
-        return { interval_unit: 'WEEK', interval_count: 2 };
-      case 'MONTHLY':
-        return { interval_unit: 'MONTH', interval_count: 1 };
-      case 'QUARTERLY':
-        return { interval_unit: 'MONTH', interval_count: 3 };
-      case 'SEMIANNUAL':
-        return { interval_unit: 'MONTH', interval_count: 6 };
-      case 'ANNUAL':
-        return { interval_unit: 'YEAR', interval_count: 1 };
+      case "WEEKLY":
+        return { interval_unit: "WEEK", interval_count: 1 };
+      case "BIWEEKLY":
+        return { interval_unit: "WEEK", interval_count: 2 };
+      case "MONTHLY":
+        return { interval_unit: "MONTH", interval_count: 1 };
+      case "QUARTERLY":
+        return { interval_unit: "MONTH", interval_count: 3 };
+      case "SEMIANNUAL":
+        return { interval_unit: "MONTH", interval_count: 6 };
+      case "ANNUAL":
+        return { interval_unit: "YEAR", interval_count: 1 };
       default:
-        return { interval_unit: 'MONTH', interval_count: 1 };
+        return { interval_unit: "MONTH", interval_count: 1 };
     }
   }
 
   /** Create a PayPal catalog product (one per platform Product). */
-  async createCatalogProduct(name: string, description?: string): Promise<string> {
-    const res = await this.api<{ id: string }>('/v1/catalogs/products', {
-      method: 'POST',
+  async createCatalogProduct(
+    name: string,
+    description?: string,
+  ): Promise<string> {
+    const res = await this.api<{ id: string }>("/v1/catalogs/products", {
+      method: "POST",
       body: {
         name: name.slice(0, 127),
         description: (description ?? name).slice(0, 256),
-        type: 'SERVICE',
-        category: 'SOFTWARE',
+        type: "SERVICE",
+        category: "SOFTWARE",
       },
     });
     return res.id;
@@ -304,16 +355,16 @@ export class PayPalGateway implements PaymentGateway {
     currency: string;
   }): Promise<string> {
     const freq = PayPalGateway.frequencyFor(params.interval);
-    const res = await this.api<{ id: string }>('/v1/billing/plans', {
-      method: 'POST',
+    const res = await this.api<{ id: string }>("/v1/billing/plans", {
+      method: "POST",
       body: {
         product_id: params.paypalProductId,
         name: params.name.slice(0, 127),
-        status: 'ACTIVE',
+        status: "ACTIVE",
         billing_cycles: [
           {
             frequency: freq,
-            tenure_type: 'REGULAR',
+            tenure_type: "REGULAR",
             sequence: 1,
             total_cycles: 0, // 0 = bill forever until cancelled
             pricing_scheme: {
@@ -326,7 +377,7 @@ export class PayPalGateway implements PaymentGateway {
         ],
         payment_preferences: {
           auto_bill_outstanding: true,
-          setup_fee_failure_action: 'CONTINUE',
+          setup_fee_failure_action: "CONTINUE",
           payment_failure_threshold: 1,
         },
       },
@@ -349,21 +400,21 @@ export class PayPalGateway implements PaymentGateway {
       id: string;
       status: string;
       links: Array<{ rel: string; href: string }>;
-    }>('/v1/billing/subscriptions', {
-      method: 'POST',
+    }>("/v1/billing/subscriptions", {
+      method: "POST",
       body: {
         plan_id: params.planId,
         custom_id: params.customId,
         application_context: {
-          shipping_preference: 'NO_SHIPPING',
-          user_action: 'SUBSCRIBE_NOW',
+          shipping_preference: "NO_SHIPPING",
+          user_action: "SUBSCRIBE_NOW",
           return_url: params.successUrl,
           cancel_url: params.cancelUrl,
         },
       },
     });
-    const approve = res.links.find((l) => l.rel === 'approve');
-    return { id: res.id, approveUrl: approve?.href ?? '', status: res.status };
+    const approve = res.links.find((l) => l.rel === "approve");
+    return { id: res.id, approveUrl: approve?.href ?? "", status: res.status };
   }
 
   /** Fetch a subscription's current state (status + custom_id). */
@@ -372,17 +423,21 @@ export class PayPalGateway implements PaymentGateway {
     status: string;
     customId?: string;
   }> {
-    const res = await this.api<{ id: string; status: string; custom_id?: string }>(
-      `/v1/billing/subscriptions/${subscriptionId}`,
-      { method: 'GET' },
-    );
+    const res = await this.api<{
+      id: string;
+      status: string;
+      custom_id?: string;
+    }>(`/v1/billing/subscriptions/${subscriptionId}`, { method: "GET" });
     return { id: res.id, status: res.status, customId: res.custom_id };
   }
 
   /** Cancel a subscription (best-effort; ignores already-cancelled). */
-  async cancelSubscription(subscriptionId: string, reason = 'Cancelled by customer'): Promise<void> {
+  async cancelSubscription(
+    subscriptionId: string,
+    reason = "Cancelled by customer",
+  ): Promise<void> {
     await this.api(`/v1/billing/subscriptions/${subscriptionId}/cancel`, {
-      method: 'POST',
+      method: "POST",
       body: { reason: reason.slice(0, 127) },
     });
   }
@@ -398,31 +453,41 @@ export class PayPalGateway implements PaymentGateway {
   ): Promise<{ event_type: string; resource: Record<string, any> }> {
     const { webhookId } = await this.settings.paypalConfig();
     if (!webhookId) {
-      throw new Error('PayPal webhook id is not configured');
+      throw new Error("PayPal webhook id is not configured");
     }
-    const event = JSON.parse(rawBody.toString('utf8'));
+    const event = JSON.parse(rawBody.toString("utf8"));
     const baseUrl = await this.resolveBaseUrl();
     const token = await this.getAccessToken();
 
-    const res = await fetch(`${baseUrl}/v1/notifications/verify-webhook-signature`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        auth_algo: headers['paypal-auth-algo'],
-        cert_url: headers['paypal-cert-url'],
-        transmission_id: headers['paypal-transmission-id'],
-        transmission_sig: headers['paypal-transmission-sig'],
-        transmission_time: headers['paypal-transmission-time'],
-        webhook_id: webhookId,
-        webhook_event: event,
-      }),
-    });
+    const res = await fetch(
+      `${baseUrl}/v1/notifications/verify-webhook-signature`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          auth_algo: headers["paypal-auth-algo"],
+          cert_url: headers["paypal-cert-url"],
+          transmission_id: headers["paypal-transmission-id"],
+          transmission_sig: headers["paypal-transmission-sig"],
+          transmission_time: headers["paypal-transmission-time"],
+          webhook_id: webhookId,
+          webhook_event: event,
+        }),
+      },
+    );
     if (!res.ok) {
-      throw new Error(`PayPal webhook verify HTTP ${res.status}: ${await res.text()}`);
+      throw new Error(
+        `PayPal webhook verify HTTP ${res.status}: ${await res.text()}`,
+      );
     }
     const body = (await res.json()) as { verification_status?: string };
-    if (body.verification_status !== 'SUCCESS') {
-      throw new Error(`PayPal webhook signature not verified (${body.verification_status})`);
+    if (body.verification_status !== "SUCCESS") {
+      throw new Error(
+        `PayPal webhook signature not verified (${body.verification_status})`,
+      );
     }
     return event;
   }
