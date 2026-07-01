@@ -122,6 +122,14 @@ export default function AdminServersPage() {
     null,
   );
   const [transferToNodeId, setTransferToNodeId] = useState("");
+  // Staff resize (comp RAM/CPU/disk with no invoice).
+  const [resizeTarget, setResizeTarget] = useState<AdminServer | null>(null);
+  const [resizeForm, setResizeForm] = useState({
+    cpuCores: 1,
+    memoryMb: 1024,
+    diskMb: 5120,
+    swapMb: 0,
+  });
 
   const { data: servers, isLoading } = useQuery({
     queryKey: ["admin", "servers"],
@@ -224,6 +232,34 @@ export default function AdminServersPage() {
         e instanceof ApiError ? e.message : "Failed to delete server",
       ),
   });
+
+  const resizeMutation = useMutation({
+    mutationFn: () =>
+      api.admin.resizeServer(resizeTarget!.id, {
+        cpuCores: resizeForm.cpuCores,
+        memoryMb: resizeForm.memoryMb,
+        diskMb: resizeForm.diskMb,
+        swapMb: resizeForm.swapMb,
+      }),
+    onSuccess: () => {
+      toast.success("Resources updated — applied live");
+      invalidate();
+      setResizeTarget(null);
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to update resources",
+      ),
+  });
+  const openResize = (s: AdminServer) => {
+    setResizeForm({
+      cpuCores: s.cpuCores,
+      memoryMb: s.memoryMb,
+      diskMb: s.diskMb,
+      swapMb: s.swapMb ?? 0,
+    });
+    setResizeTarget(s);
+  };
 
   const powerMutation = useMutation({
     mutationFn: (v: {
@@ -417,6 +453,14 @@ export default function AdminServersPage() {
                           <Link href={`/servers/${s.id}`}>
                             <ExternalLink className="size-4" /> Manage
                           </Link>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Edit resources (RAM / CPU / disk) — no invoice"
+                          onClick={() => openResize(s)}
+                        >
+                          <HardDrive className="size-4" /> Resources
                         </Button>
                         <Button
                           variant="ghost"
@@ -810,6 +854,92 @@ export default function AdminServersPage() {
               }
             >
               <ArrowLeftRight className="size-4" /> Start transfer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Resize resources (staff comp — no invoice) */}
+      <Dialog
+        open={!!resizeTarget}
+        onOpenChange={(o) => !o && setResizeTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit resources — {resizeTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Applies live on the node (no reinstall) and does not create an
+              invoice. Capacity on the server&apos;s node is checked first.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Memory (MB)</Label>
+              <Input
+                type="number"
+                min={256}
+                value={resizeForm.memoryMb}
+                onChange={(e) =>
+                  setResizeForm((f) => ({
+                    ...f,
+                    memoryMb: Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">CPU (cores)</Label>
+              <Input
+                type="number"
+                min={0.1}
+                step={0.5}
+                value={resizeForm.cpuCores}
+                onChange={(e) =>
+                  setResizeForm((f) => ({
+                    ...f,
+                    cpuCores: Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Disk (MB)</Label>
+              <Input
+                type="number"
+                min={1024}
+                value={resizeForm.diskMb}
+                onChange={(e) =>
+                  setResizeForm((f) => ({
+                    ...f,
+                    diskMb: Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Swap (MB)</Label>
+              <Input
+                type="number"
+                min={0}
+                value={resizeForm.swapMb}
+                onChange={(e) =>
+                  setResizeForm((f) => ({
+                    ...f,
+                    swapMb: Number(e.target.value),
+                  }))
+                }
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setResizeTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              loading={resizeMutation.isPending}
+              onClick={() => resizeMutation.mutate()}
+            >
+              Apply
             </Button>
           </DialogFooter>
         </DialogContent>

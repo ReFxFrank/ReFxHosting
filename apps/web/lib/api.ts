@@ -1346,6 +1346,16 @@ export const api = {
       environment?: Record<string, string>;
     }) => http.post<Server>("/admin/servers", input),
     deleteServer: (id: string) => http.delete<void>(`/admin/servers/${id}`),
+    /** Staff resize: change CPU/RAM/swap/disk directly (no invoice). Applies live. */
+    resizeServer: (
+      id: string,
+      input: {
+        cpuCores?: number;
+        memoryMb?: number;
+        swapMb?: number;
+        diskMb?: number;
+      },
+    ) => http.patch<AdminServer>(`/admin/servers/${id}/resize`, input),
     /** Move a server to another node (Pterodactyl-style). Returns the queued transfer. */
     transferServer: (id: string, toNodeId: string) =>
       http.post<ServerTransfer>(`/admin/servers/${id}/transfer`, { toNodeId }),

@@ -21,6 +21,7 @@ import { TemplatesService } from "../templates/templates.service";
 import { ServersService } from "../servers/servers.service";
 import { TransfersService } from "../servers/transfers.service";
 import { DatabaseHostsService } from "../databases/database-hosts.service";
+import { ResizeServerDto } from "../servers/dto/server.dto";
 import {
   CreateDatabaseHostDto,
   UpdateDatabaseHostDto,
@@ -1062,6 +1063,23 @@ export class AdminController {
   })
   deleteServer(@Param("id") id: string) {
     return this.servers.delete(id);
+  }
+
+  /**
+   * Staff resize: change a server's CPU/RAM/swap/disk directly (no invoice) —
+   * for comps/support. Validates node capacity, updates the DB, and applies the
+   * new limits live on the agent (no reinstall). Customer-facing upgrades still
+   * go through the invoice-gated Upgrade flow.
+   */
+  @Patch("servers/:id/resize")
+  @RequirePerm("servers.manage")
+  @Audit({
+    action: "admin.server.resize",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  resizeServer(@Param("id") id: string, @Body() dto: ResizeServerDto) {
+    return this.servers.resize(id, dto);
   }
 
   /**
