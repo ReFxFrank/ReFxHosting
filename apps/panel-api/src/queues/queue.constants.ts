@@ -3,16 +3,41 @@
  * (services) and consumers (processors) import from here so the contract stays
  * in one place.
  */
+import type { JobsOptions } from "bullmq";
+
+/**
+ * Suspend jobs must actually stop the workload, so a kill that fails (e.g. the
+ * node was briefly unreachable) is retried several times rather than giving up
+ * after one attempt. Applied at each enqueue site because the same queue is
+ * registered in several modules (per-instance defaultJobOptions wouldn't cover
+ * all producers). The lifecycle reconciler is the longer backstop.
+ */
+export const SUSPENSION_JOB_OPTS: JobsOptions = {
+  attempts: 5,
+  backoff: { type: "exponential", delay: 30_000 },
+  removeOnComplete: 100,
+  removeOnFail: 500,
+};
+
+/**
+ * Install jobs retry a few times so a transient node blip doesn't immediately
+ * CRASH a customer's freshly-ordered (paid) server. The processor only marks
+ * CRASHED on the final attempt.
+ */
+export const INSTALL_JOB_OPTS: JobsOptions = {
+  attempts: 3,
+  backoff: { type: "exponential", delay: 20_000 },
+};
 
 export const QUEUE = {
-  PROVISIONING: 'provisioning',
-  REINSTALL: 'reinstall',
-  BACKUPS: 'backups',
-  BILLING_RENEWAL: 'billing-renewal',
-  SUSPENSION: 'suspension',
-  MODPACK: 'modpack',
-  TRANSFER: 'transfer',
-  WEBHOOK_DELIVERY: 'webhook-delivery',
+  PROVISIONING: "provisioning",
+  REINSTALL: "reinstall",
+  BACKUPS: "backups",
+  BILLING_RENEWAL: "billing-renewal",
+  SUSPENSION: "suspension",
+  MODPACK: "modpack",
+  TRANSFER: "transfer",
+  WEBHOOK_DELIVERY: "webhook-delivery",
 } as const;
 
 export type QueueName = (typeof QUEUE)[keyof typeof QUEUE];
@@ -46,7 +71,7 @@ export interface BillingRenewalJob {
   subscriptionId: string;
 }
 
-export type SuspensionAction = 'suspend' | 'unsuspend';
+export type SuspensionAction = "suspend" | "unsuspend";
 
 export interface SuspensionJob {
   serverId?: string;
@@ -76,16 +101,16 @@ export interface TransferJob {
 
 /** Status-event webhook types pushed to subscribers (Helios, etc.). */
 export type StatusWebhookEvent =
-  | 'incident.created'
-  | 'incident.updated'
-  | 'incident.resolved'
-  | 'component.status_changed';
+  | "incident.created"
+  | "incident.updated"
+  | "incident.resolved"
+  | "component.status_changed";
 
 export const STATUS_WEBHOOK_EVENTS: StatusWebhookEvent[] = [
-  'incident.created',
-  'incident.updated',
-  'incident.resolved',
-  'component.status_changed',
+  "incident.created",
+  "incident.updated",
+  "incident.resolved",
+  "component.status_changed",
 ];
 
 /**
@@ -101,15 +126,15 @@ export interface WebhookDeliveryJob {
 }
 
 export const JOB = {
-  PROVISION: 'provision',
-  RECONFIGURE: 'reconfigure',
-  REINSTALL: 'reinstall',
-  RUN_BACKUP: 'run-backup',
-  RENEW: 'renew',
-  DUNNING: 'dunning',
-  SUSPEND: 'suspend',
-  INSTALL_MODPACK: 'install-modpack',
-  UNINSTALL_MODPACK: 'uninstall-modpack',
-  TRANSFER: 'transfer',
-  DELIVER_WEBHOOK: 'deliver-webhook',
+  PROVISION: "provision",
+  RECONFIGURE: "reconfigure",
+  REINSTALL: "reinstall",
+  RUN_BACKUP: "run-backup",
+  RENEW: "renew",
+  DUNNING: "dunning",
+  SUSPEND: "suspend",
+  INSTALL_MODPACK: "install-modpack",
+  UNINSTALL_MODPACK: "uninstall-modpack",
+  TRANSFER: "transfer",
+  DELIVER_WEBHOOK: "deliver-webhook",
 } as const;

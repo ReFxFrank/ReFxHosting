@@ -5,10 +5,10 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
 import {
   Invoice,
   InvoiceState,
@@ -20,38 +20,40 @@ import {
   Product,
   Subscription,
   SubscriptionState,
-} from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { SettingsService } from '../platform/settings.service';
+} from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { SettingsService } from "../platform/settings.service";
 import {
   Paginated,
   PaginationDto,
   paginate,
-} from '../common/dto/pagination.dto';
-import { uuidv7 } from '../common/util/uuid';
-import { AppConfig } from '../config/configuration';
+} from "../common/dto/pagination.dto";
+import { uuidv7 } from "../common/util/uuid";
+import { AppConfig } from "../config/configuration";
 import {
   JOB,
   QUEUE,
   SuspensionJob,
-} from '../queues/queue.constants';
-import { StripeGateway } from './gateways/stripe.gateway';
-import { PayPalGateway } from './gateways/paypal.gateway';
-import { EmailService } from '../email/email.service';
-import { NotificationsService } from '../platform/notifications.service';
-import { PushService } from '../push/push.service';
-import { addInterval } from './interval.util';
-import { generateInvoiceNumber } from './invoice-number.util';
-import { calculateTax } from './tax.util';
-import { CreateProductDto } from './dto/create-product.dto';
-import { CreatePriceDto } from './dto/create-price.dto';
+  SUSPENSION_JOB_OPTS,
+  INSTALL_JOB_OPTS,
+} from "../queues/queue.constants";
+import { StripeGateway } from "./gateways/stripe.gateway";
+import { PayPalGateway } from "./gateways/paypal.gateway";
+import { EmailService } from "../email/email.service";
+import { NotificationsService } from "../platform/notifications.service";
+import { PushService } from "../push/push.service";
+import { addInterval } from "./interval.util";
+import { generateInvoiceNumber } from "./invoice-number.util";
+import { calculateTax } from "./tax.util";
+import { CreateProductDto } from "./dto/create-product.dto";
+import { CreatePriceDto } from "./dto/create-price.dto";
 import {
   CreateHardwareTierDto,
   UpdateHardwareTierDto,
-} from './dto/hardware-tier.dto';
-import { UpdatePriceDto } from './dto/update-price.dto';
-import { CreateSubscriptionDto } from './dto/create-subscription.dto';
-import { AddPaymentMethodDto } from './dto/add-payment-method.dto';
+} from "./dto/hardware-tier.dto";
+import { UpdatePriceDto } from "./dto/update-price.dto";
+import { CreateSubscriptionDto } from "./dto/create-subscription.dto";
+import { AddPaymentMethodDto } from "./dto/add-payment-method.dto";
 
 /** Details needed to record a successful payment against an invoice. */
 export interface MarkPaidDetails {
@@ -66,7 +68,7 @@ export interface MarkPaidDetails {
 @Injectable()
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
-  private readonly billingCfg: AppConfig['billing'];
+  private readonly billingCfg: AppConfig["billing"];
   private readonly panelUrl: string;
 
   constructor(
@@ -82,8 +84,8 @@ export class BillingService {
     @InjectQueue(QUEUE.SUSPENSION) private readonly suspensionQueue: Queue,
     @InjectQueue(QUEUE.PROVISIONING) private readonly provisionQueue: Queue,
   ) {
-    this.billingCfg = this.config.get<AppConfig['billing']>('billing')!;
-    this.panelUrl = this.config.get<AppConfig['panelUrl']>('panelUrl')!;
+    this.billingCfg = this.config.get<AppConfig["billing"]>("billing")!;
+    this.panelUrl = this.config.get<AppConfig["panelUrl"]>("panelUrl")!;
   }
 
   // ---- Products & Prices -------------------------------------------------
@@ -97,7 +99,7 @@ export class BillingService {
     prices: { where: { isActive: true } },
     hardwareTiers: {
       where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { sortOrder: "asc" },
       include: { prices: { where: { isActive: true } } },
     },
   } satisfies Prisma.ProductInclude;
@@ -106,7 +108,7 @@ export class BillingService {
   private static readonly productAdminInclude = {
     prices: true,
     hardwareTiers: {
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { sortOrder: "asc" },
       include: { prices: true },
     },
   } satisfies Prisma.ProductInclude;
@@ -117,15 +119,16 @@ export class BillingService {
    * written consistently.
    */
   private static resolveBillingModel(dto: {
-    billingModel?: 'HARDWARE_TIER' | 'PER_SLOT';
+    billingModel?: "HARDWARE_TIER" | "PER_SLOT";
     perSlot?: boolean;
-  }): { billingModel: 'HARDWARE_TIER' | 'PER_SLOT'; perSlot: boolean } | null {
-    if (dto.billingModel === undefined && dto.perSlot === undefined) return null;
+  }): { billingModel: "HARDWARE_TIER" | "PER_SLOT"; perSlot: boolean } | null {
+    if (dto.billingModel === undefined && dto.perSlot === undefined)
+      return null;
     const perSlot =
       dto.billingModel !== undefined
-        ? dto.billingModel === 'PER_SLOT'
+        ? dto.billingModel === "PER_SLOT"
         : !!dto.perSlot;
-    return { billingModel: perSlot ? 'PER_SLOT' : 'HARDWARE_TIER', perSlot };
+    return { billingModel: perSlot ? "PER_SLOT" : "HARDWARE_TIER", perSlot };
   }
 
   /** List active products with their active prices + hardware tiers. */
@@ -133,7 +136,7 @@ export class BillingService {
     return this.prisma.product.findMany({
       where: { isActive: true },
       include: BillingService.productInclude,
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
     });
   }
 
@@ -142,7 +145,7 @@ export class BillingService {
       where: { id },
       include: BillingService.productAdminInclude,
     });
-    if (!product) throw new NotFoundException('Product not found');
+    if (!product) throw new NotFoundException("Product not found");
     return product;
   }
 
@@ -153,7 +156,7 @@ export class BillingService {
       data: {
         id: uuidv7(),
         type: dto.type,
-        billingModel: model?.billingModel ?? 'HARDWARE_TIER',
+        billingModel: model?.billingModel ?? "HARDWARE_TIER",
         name: dto.name,
         slug: dto.slug,
         description: dto.description,
@@ -187,7 +190,9 @@ export class BillingService {
         select: { productId: true },
       });
       if (!tier || tier.productId !== dto.productId) {
-        throw new BadRequestException('Hardware tier does not belong to product');
+        throw new BadRequestException(
+          "Hardware tier does not belong to product",
+        );
       }
     } else {
       // SQL treats NULLs as distinct, so the unique index can't enforce a single
@@ -203,7 +208,7 @@ export class BillingService {
       });
       if (dup) {
         throw new ConflictException(
-          'A price for that interval and currency already exists — edit it instead.',
+          "A price for that interval and currency already exists — edit it instead.",
         );
       }
     }
@@ -223,10 +228,10 @@ export class BillingService {
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
+        e.code === "P2002"
       ) {
         throw new ConflictException(
-          'A price for that interval and currency already exists — edit it instead.',
+          "A price for that interval and currency already exists — edit it instead.",
         );
       }
       throw e;
@@ -236,7 +241,7 @@ export class BillingService {
   /** Admin: update an existing price's mutable fields. */
   async updatePrice(id: string, dto: UpdatePriceDto): Promise<Price> {
     const price = await this.prisma.price.findUnique({ where: { id } });
-    if (!price) throw new NotFoundException('Price not found');
+    if (!price) throw new NotFoundException("Price not found");
     const data: Prisma.PriceUpdateInput = {};
     if (dto.interval !== undefined) data.interval = dto.interval;
     if (dto.currency !== undefined) data.currency = dto.currency;
@@ -248,10 +253,10 @@ export class BillingService {
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
+        e.code === "P2002"
       ) {
         throw new ConflictException(
-          'A price for that interval and currency already exists.',
+          "A price for that interval and currency already exists.",
         );
       }
       throw e;
@@ -264,7 +269,7 @@ export class BillingService {
       where: { id },
       select: { id: true },
     });
-    if (!price) throw new NotFoundException('Price not found');
+    if (!price) throw new NotFoundException("Price not found");
     await this.prisma.price.delete({ where: { id } });
     return { id };
   }
@@ -273,7 +278,7 @@ export class BillingService {
   listAllProducts(): Promise<Product[]> {
     return this.prisma.product.findMany({
       include: BillingService.productAdminInclude,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
@@ -311,7 +316,8 @@ export class BillingService {
     if (dto.maxSlots !== undefined) data.maxSlots = dto.maxSlots;
     if (dto.slotStep !== undefined) data.slotStep = dto.slotStep;
     if (dto.cpuPerSlot !== undefined) data.cpuPerSlot = dto.cpuPerSlot;
-    if (dto.memoryMbPerSlot !== undefined) data.memoryMbPerSlot = dto.memoryMbPerSlot;
+    if (dto.memoryMbPerSlot !== undefined)
+      data.memoryMbPerSlot = dto.memoryMbPerSlot;
     if (dto.diskMbPerSlot !== undefined) data.diskMbPerSlot = dto.diskMbPerSlot;
     return this.prisma.product.update({ where: { id }, data });
   }
@@ -327,10 +333,10 @@ export class BillingService {
       where: { id },
       select: { id: true, _count: { select: { subscriptions: true } } },
     });
-    if (!product) throw new NotFoundException('Product not found');
+    if (!product) throw new NotFoundException("Product not found");
     if (product._count.subscriptions > 0) {
       throw new BadRequestException(
-        'This product has subscriptions and can’t be deleted without breaking billing history — deactivate it instead.',
+        "This product has subscriptions and can’t be deleted without breaking billing history — deactivate it instead.",
       );
     }
     await this.prisma.product.delete({ where: { id } });
@@ -343,7 +349,7 @@ export class BillingService {
       where: { slug, isActive: true },
       include: BillingService.productInclude,
     });
-    if (!product) throw new NotFoundException('Product not found');
+    if (!product) throw new NotFoundException("Product not found");
     return product;
   }
 
@@ -375,7 +381,7 @@ export class BillingService {
       where: { id: tierId },
       select: { id: true },
     });
-    if (!tier) throw new NotFoundException('Hardware tier not found');
+    if (!tier) throw new NotFoundException("Hardware tier not found");
     const data: Prisma.HardwareTierUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name;
     if (dto.description !== undefined) data.description = dto.description;
@@ -400,10 +406,10 @@ export class BillingService {
       where: { id: tierId },
       select: { id: true, _count: { select: { subscriptions: true } } },
     });
-    if (!tier) throw new NotFoundException('Hardware tier not found');
+    if (!tier) throw new NotFoundException("Hardware tier not found");
     if (tier._count.subscriptions > 0) {
       throw new BadRequestException(
-        'This tier has subscriptions and can’t be deleted — deactivate it instead.',
+        "This tier has subscriptions and can’t be deleted — deactivate it instead.",
       );
     }
     await this.prisma.hardwareTier.delete({ where: { id: tierId } });
@@ -421,14 +427,18 @@ export class BillingService {
       where: { id: dto.priceId },
     });
     if (!price || price.productId !== dto.productId) {
-      throw new BadRequestException('Price does not belong to product');
+      throw new BadRequestException("Price does not belong to product");
     }
     if (price.interval !== dto.interval) {
-      throw new BadRequestException('Interval does not match the selected price');
+      throw new BadRequestException(
+        "Interval does not match the selected price",
+      );
     }
     // The chosen price must match the chosen tier (or both be product-level).
     if ((price.hardwareTierId ?? null) !== (dto.hardwareTierId ?? null)) {
-      throw new BadRequestException('Price does not belong to the selected tier');
+      throw new BadRequestException(
+        "Price does not belong to the selected tier",
+      );
     }
 
     const now = new Date();
@@ -448,7 +458,7 @@ export class BillingService {
         currentPeriodEnd,
         cancelAtPeriodEnd: false,
         autoRenew: true,
-        gateway: dto.gateway ?? 'stripe',
+        gateway: dto.gateway ?? "stripe",
       },
     });
   }
@@ -464,7 +474,7 @@ export class BillingService {
           select: { id: true, shortId: true, name: true, state: true },
         },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     // Enrich with the recurring amount the customer will be billed at renewal
     // (per-slot rate × slots) + the linked server(s), without leaking the full
@@ -515,7 +525,7 @@ export class BillingService {
     const sub = await this.prisma.subscription.findFirst({
       where: { id, userId },
     });
-    if (!sub) throw new NotFoundException('Subscription not found');
+    if (!sub) throw new NotFoundException("Subscription not found");
     return sub;
   }
 
@@ -533,7 +543,7 @@ export class BillingService {
     // Stop future PayPal auto-charges either way (immediate cancel, or cancel at
     // period end where service continues until currentPeriodEnd but PayPal must
     // not bill the next cycle). Best-effort: ignore PayPal errors (already gone).
-    if (sub.gateway === 'paypal' && sub.gatewaySubId) {
+    if (sub.gateway === "paypal" && sub.gatewaySubId) {
       try {
         await this.paypal.cancelSubscription(sub.gatewaySubId);
       } catch (e) {
@@ -567,8 +577,11 @@ export class BillingService {
    */
   async resumeSubscription(userId: string, id: string): Promise<Subscription> {
     const sub = await this.getOwnedSubscription(userId, id);
-    if (sub.state === SubscriptionState.CANCELED || sub.state === SubscriptionState.EXPIRED) {
-      throw new BadRequestException('Subscription cannot be resumed');
+    if (
+      sub.state === SubscriptionState.CANCELED ||
+      sub.state === SubscriptionState.EXPIRED
+    ) {
+      throw new BadRequestException("Subscription cannot be resumed");
     }
     return this.prisma.subscription.update({
       where: { id },
@@ -587,7 +600,7 @@ export class BillingService {
       this.prisma.invoice.findMany({
         where,
         include: { lineItems: true },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip: pagination.skip,
         take: pagination.take,
       }),
@@ -614,15 +627,15 @@ export class BillingService {
     }
     if (pagination.q) {
       where.OR = [
-        { number: { contains: pagination.q, mode: 'insensitive' } },
-        { user: { email: { contains: pagination.q, mode: 'insensitive' } } },
+        { number: { contains: pagination.q, mode: "insensitive" } },
+        { user: { email: { contains: pagination.q, mode: "insensitive" } } },
       ];
     }
     const [data, total] = await this.prisma.$transaction([
       this.prisma.invoice.findMany({
         where,
         include: { user: BillingService.userSelect },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip: pagination.skip,
         take: pagination.take,
       }),
@@ -638,8 +651,8 @@ export class BillingService {
     const where: Prisma.SubscriptionWhereInput = {};
     if (pagination.q) {
       where.OR = [
-        { user: { email: { contains: pagination.q, mode: 'insensitive' } } },
-        { product: { name: { contains: pagination.q, mode: 'insensitive' } } },
+        { user: { email: { contains: pagination.q, mode: "insensitive" } } },
+        { product: { name: { contains: pagination.q, mode: "insensitive" } } },
       ];
     }
     const [data, total] = await this.prisma.$transaction([
@@ -650,7 +663,7 @@ export class BillingService {
           product: { select: { id: true, name: true, type: true } },
           _count: { select: { servers: true } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip: pagination.skip,
         take: pagination.take,
       }),
@@ -671,10 +684,10 @@ export class BillingService {
         servers: { where: { deletedAt: null }, select: { id: true } },
       },
     });
-    if (!sub) throw new NotFoundException('Order not found');
+    if (!sub) throw new NotFoundException("Order not found");
     if (sub.servers.length > 0) {
       throw new BadRequestException(
-        'This order still has active servers — delete or transfer them before removing it.',
+        "This order still has active servers — delete or transfer them before removing it.",
       );
     }
     await this.prisma.$transaction([
@@ -739,7 +752,7 @@ export class BillingService {
         this.prisma.invoice.count({ where: { state: InvoiceState.PAID } }),
       ]);
     return {
-      currency: 'USD',
+      currency: "USD",
       revenueMinor: paid._sum.amountPaidMinor ?? 0,
       outstandingMinor:
         (open._sum.totalMinor ?? 0) - (open._sum.amountPaidMinor ?? 0),
@@ -754,10 +767,12 @@ export class BillingService {
     const where: Prisma.PaymentWhereInput = {};
     if (pagination.q) {
       where.OR = [
-        { invoice: { number: { contains: pagination.q, mode: 'insensitive' } } },
+        {
+          invoice: { number: { contains: pagination.q, mode: "insensitive" } },
+        },
         {
           invoice: {
-            user: { email: { contains: pagination.q, mode: 'insensitive' } },
+            user: { email: { contains: pagination.q, mode: "insensitive" } },
           },
         },
       ];
@@ -781,7 +796,7 @@ export class BillingService {
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         skip: pagination.skip,
         take: pagination.take,
       }),
@@ -793,10 +808,10 @@ export class BillingService {
   /** Void (revoke) an invoice — marks it uncollectable without deleting history. */
   async voidInvoice(id: string): Promise<Invoice> {
     const invoice = await this.prisma.invoice.findUnique({ where: { id } });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
     if (invoice.state === InvoiceState.PAID) {
       throw new BadRequestException(
-        'A paid invoice cannot be voided; issue a refund instead',
+        "A paid invoice cannot be voided; issue a refund instead",
       );
     }
     const updated = await this.prisma.invoice.update({
@@ -805,7 +820,9 @@ export class BillingService {
     });
     // Voiding an upgrade invoice abandons the staged change (the server stays on
     // its current plan); the customer can request the upgrade again later.
-    await this.prisma.pendingPlanChange.deleteMany({ where: { invoiceId: id } });
+    await this.prisma.pendingPlanChange.deleteMany({
+      where: { invoiceId: id },
+    });
     // Release any server reserved by this unpaid order so it disappears from the
     // customer's dashboard (it was never provisioned).
     if (invoice.subscriptionId) {
@@ -821,15 +838,18 @@ export class BillingService {
    */
   async markInvoiceManuallyPaid(id: string): Promise<Invoice> {
     const invoice = await this.prisma.invoice.findUnique({ where: { id } });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
     if (invoice.state === InvoiceState.PAID) return invoice;
     if (invoice.state !== InvoiceState.OPEN) {
       throw new BadRequestException(`Invoice is ${invoice.state}, not payable`);
     }
     return this.markInvoicePaid(id, {
-      gateway: 'manual',
+      gateway: "manual",
       gatewayRef: `manual-${id}`,
-      amountMinor: Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0)),
+      amountMinor: Math.max(
+        0,
+        invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
+      ),
       currency: invoice.currency,
     });
   }
@@ -839,9 +859,11 @@ export class BillingService {
    * PENDING_PAYMENT), freeing their allocations, and cancel the subscription if
    * nothing of it remains live. Used when an unpaid invoice is voided/deleted.
    */
-  private async releaseUnpaidReservation(subscriptionId: string): Promise<void> {
+  private async releaseUnpaidReservation(
+    subscriptionId: string,
+  ): Promise<void> {
     const pending = await this.prisma.server.findMany({
-      where: { subscriptionId, deletedAt: null, state: 'PENDING_PAYMENT' },
+      where: { subscriptionId, deletedAt: null, state: "PENDING_PAYMENT" },
       select: { id: true },
     });
     for (const s of pending) {
@@ -852,7 +874,7 @@ export class BillingService {
         }),
         this.prisma.server.update({
           where: { id: s.id },
-          data: { deletedAt: new Date(), state: 'OFFLINE' },
+          data: { deletedAt: new Date(), state: "OFFLINE" },
         }),
       ]);
     }
@@ -878,7 +900,7 @@ export class BillingService {
   /** Permanently delete an invoice (and its line items/payments via cascade). */
   async deleteInvoice(id: string): Promise<void> {
     const invoice = await this.prisma.invoice.findUnique({ where: { id } });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
     // Deleting a PAID invoice removes a revenue record — allowed (the UI
     // confirms it), but we must NOT release/soft-delete the server it paid for.
     // Only an unpaid invoice releases its pending reservation.
@@ -931,7 +953,7 @@ export class BillingService {
       where: { id, userId },
       include: { lineItems: true, payments: true },
     });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
     return invoice;
   }
 
@@ -944,12 +966,12 @@ export class BillingService {
   async payInvoice(
     userId: string,
     id: string,
-    gateway?: 'stripe' | 'paypal',
+    gateway?: "stripe" | "paypal",
   ): Promise<{ paid: boolean; checkoutUrl?: string; reason?: string }> {
     const invoice = await this.prisma.invoice.findFirst({
       where: { id, userId },
     });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
     if (invoice.state === InvoiceState.PAID) {
       return { paid: true };
     }
@@ -966,7 +988,7 @@ export class BillingService {
     const outstanding = invoice.totalMinor - (invoice.amountPaidMinor ?? 0);
     if (outstanding <= 0) {
       await this.markInvoicePaid(invoice.id, {
-        gateway: 'credit',
+        gateway: "credit",
         gatewayRef: `comp-${invoice.id}`,
         amountMinor: invoice.totalMinor,
         currency: invoice.currency,
@@ -979,10 +1001,10 @@ export class BillingService {
     const cancelUrl = `${this.panelUrl}/billing`;
 
     // Explicit PayPal request → PayPal approval flow (when configured).
-    if (gateway === 'paypal') {
+    if (gateway === "paypal") {
       const paypal = await this.settings.paypalConfig();
       if (!paypal.clientId || !paypal.clientSecret) {
-        throw new BadRequestException('PayPal is not configured');
+        throw new BadRequestException("PayPal is not configured");
       }
       try {
         const session = await this.paypal.createCheckoutSession({
@@ -991,19 +1013,19 @@ export class BillingService {
           cancelUrl,
         });
         if (!session.url) {
-          throw new Error('PayPal did not return an approval URL');
+          throw new Error("PayPal did not return an approval URL");
         }
         // Record the PayPal order id so capture can resolve the invoice by it
         // even if the capture response omits custom_id.
         if (session.sessionId) {
           await this.prisma.invoice.update({
             where: { id: invoice.id },
-            data: { gateway: 'paypal', gatewayInvoiceId: session.sessionId },
+            data: { gateway: "paypal", gatewayInvoiceId: session.sessionId },
           });
         }
         return { paid: false, checkoutUrl: session.url };
       } catch (e) {
-        const detail = (e as Error).message ?? 'unknown error';
+        const detail = (e as Error).message ?? "unknown error";
         this.logger.error(`PayPal checkout failed: ${detail}`);
         // Surface PayPal's own reason (e.g. invalid_client = wrong keys/mode) so
         // the owner can fix it without digging through logs.
@@ -1024,22 +1046,26 @@ export class BillingService {
   async payForServer(
     userId: string,
     serverId: string,
-    gateway?: 'stripe' | 'paypal',
+    gateway?: "stripe" | "paypal",
   ): Promise<{ paid: boolean; checkoutUrl?: string; reason?: string }> {
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, ownerId: userId, deletedAt: null },
       select: { subscriptionId: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     if (!server.subscriptionId) {
-      throw new BadRequestException('This server has no invoice to pay');
+      throw new BadRequestException("This server has no invoice to pay");
     }
     const invoice = await this.prisma.invoice.findFirst({
-      where: { subscriptionId: server.subscriptionId, state: InvoiceState.OPEN },
-      orderBy: { createdAt: 'desc' },
+      where: {
+        subscriptionId: server.subscriptionId,
+        state: InvoiceState.OPEN,
+      },
+      orderBy: { createdAt: "desc" },
       select: { id: true },
     });
-    if (!invoice) throw new BadRequestException('No open invoice for this server');
+    if (!invoice)
+      throw new BadRequestException("No open invoice for this server");
     return this.payInvoice(userId, invoice.id, gateway);
   }
 
@@ -1061,7 +1087,7 @@ export class BillingService {
         `PayPal capture failed: ${(e as Error).message}`,
       );
     }
-    if (result.status !== 'COMPLETED') {
+    if (result.status !== "COMPLETED") {
       throw new BadRequestException(
         `PayPal payment not completed (status: ${result.status})`,
       );
@@ -1081,10 +1107,10 @@ export class BillingService {
         select: { id: true },
       });
     }
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
 
     await this.markInvoicePaid(invoice.id, {
-      gateway: 'paypal',
+      gateway: "paypal",
       gatewayRef: result.captureId ?? orderId,
       amountMinor: result.amountMinor,
       currency: result.currency,
@@ -1103,7 +1129,7 @@ export class BillingService {
       where: { id: priceId },
       include: { product: true },
     });
-    if (!price) throw new NotFoundException('Price not found');
+    if (!price) throw new NotFoundException("Price not found");
     if (price.paypalPlanId) return price.paypalPlanId;
 
     let paypalProductId = price.product.paypalProductId;
@@ -1144,10 +1170,10 @@ export class BillingService {
     const sub = await this.prisma.subscription.findFirst({
       where: { id: subscriptionId, userId },
     });
-    if (!sub) throw new NotFoundException('Subscription not found');
+    if (!sub) throw new NotFoundException("Subscription not found");
     const paypal = await this.settings.paypalConfig();
     if (!paypal.clientId || !paypal.clientSecret) {
-      throw new BadRequestException('PayPal is not configured');
+      throw new BadRequestException("PayPal is not configured");
     }
     const planId = await this.ensurePayPalPlan(sub.priceId);
     const created = await this.paypal.createSubscription({
@@ -1157,11 +1183,11 @@ export class BillingService {
       cancelUrl: `${this.panelUrl}/billing`,
     });
     if (!created.approveUrl) {
-      throw new BadGatewayException('PayPal did not return an approval URL');
+      throw new BadGatewayException("PayPal did not return an approval URL");
     }
     await this.prisma.subscription.update({
       where: { id: sub.id },
-      data: { gateway: 'paypal', gatewaySubId: created.id },
+      data: { gateway: "paypal", gatewaySubId: created.id },
     });
     return { approveUrl: created.approveUrl };
   }
@@ -1195,14 +1221,15 @@ export class BillingService {
     // new period (a renewal PayPal initiated).
     const open = await this.prisma.invoice.findFirst({
       where: { subscriptionId: sub.id, state: InvoiceState.OPEN },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     const isRenewal = !open;
     const invoice =
-      open ?? (await this.createInvoiceForSubscription(sub.id, { noTax: true }));
+      open ??
+      (await this.createInvoiceForSubscription(sub.id, { noTax: true }));
 
     await this.markInvoicePaid(invoice.id, {
-      gateway: 'paypal',
+      gateway: "paypal",
       gatewayRef: details.saleId,
       amountMinor: details.amountMinor ?? invoice.totalMinor,
       currency: details.currency ?? invoice.currency,
@@ -1251,12 +1278,16 @@ export class BillingService {
         select: { id: true },
       });
       for (const s of servers) {
-        await this.suspensionQueue.add(JOB.SUSPEND, {
-          serverId: s.id,
-          subscriptionId: sub.id,
-          action: 'suspend',
-          reason: `PayPal subscription ${state.toLowerCase()}`,
-        } satisfies SuspensionJob);
+        await this.suspensionQueue.add(
+          JOB.SUSPEND,
+          {
+            serverId: s.id,
+            subscriptionId: sub.id,
+            action: "suspend",
+            reason: `PayPal subscription ${state.toLowerCase()}`,
+          } satisfies SuspensionJob,
+          SUSPENSION_JOB_OPTS,
+        );
       }
     }
   }
@@ -1293,7 +1324,12 @@ export class BillingService {
   /** Record a refund/reversal against an invoice (idempotent by gatewayRef). */
   async refundExternalPayment(
     invoiceId: string,
-    details: { gateway: string; gatewayRef: string; amountMinor?: number; currency?: string },
+    details: {
+      gateway: string;
+      gatewayRef: string;
+      amountMinor?: number;
+      currency?: string;
+    },
   ): Promise<void> {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
@@ -1319,7 +1355,10 @@ export class BillingService {
           invoiceId,
           gateway: details.gateway,
           gatewayRef: details.gatewayRef,
-          amountMinor: details.amountMinor ?? invoice.amountPaidMinor ?? invoice.totalMinor,
+          amountMinor:
+            details.amountMinor ??
+            invoice.amountPaidMinor ??
+            invoice.totalMinor,
           currency: details.currency ?? invoice.currency,
           state: PaymentState.REFUNDED,
         },
@@ -1353,8 +1392,15 @@ export class BillingService {
     }
 
     const customerId = await this.getGatewayCustomerId(userId);
-    const chargedMinor = Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0));
-    const result = await this.stripe.charge(invoice, method.gatewayRef, customerId);
+    const chargedMinor = Math.max(
+      0,
+      invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
+    );
+    const result = await this.stripe.charge(
+      invoice,
+      method.gatewayRef,
+      customerId,
+    );
     if (result.success) {
       await this.markInvoicePaid(invoice.id, {
         gateway: this.stripe.name,
@@ -1364,10 +1410,14 @@ export class BillingService {
       });
       return { paid: true };
     }
-    await this.handlePaymentFailure(invoice.id, result.failureReason ?? 'charge failed', {
-      gateway: this.stripe.name,
-      gatewayRef: result.gatewayRef,
-    });
+    await this.handlePaymentFailure(
+      invoice.id,
+      result.failureReason ?? "charge failed",
+      {
+        gateway: this.stripe.name,
+        gatewayRef: result.gatewayRef,
+      },
+    );
     return { paid: false, reason: result.failureReason };
   }
 
@@ -1384,7 +1434,7 @@ export class BillingService {
       : await this.prisma.invoice.findFirst({
           where: { gatewayInvoiceId: ref },
         });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
     return invoice;
   }
 
@@ -1409,7 +1459,7 @@ export class BillingService {
       where: { id: subscriptionId },
       include: { user: true },
     });
-    if (!subscription) throw new NotFoundException('Subscription not found');
+    if (!subscription) throw new NotFoundException("Subscription not found");
     const price = await this.prisma.price.findUnique({
       where: { id: subscription.priceId },
       select: { currency: true },
@@ -1419,7 +1469,7 @@ export class BillingService {
     const subtotalMinor = Math.max(0, Math.round(args.amountMinor));
     const taxLoc = this.resolveTaxRegion(subscription.user);
     const tax = calculateTax(subtotalMinor, {
-      region: taxLoc?.region ?? '',
+      region: taxLoc?.region ?? "",
       country: taxLoc?.country,
     });
     const totalMinor = subtotalMinor + tax.taxMinor;
@@ -1469,13 +1519,13 @@ export class BillingService {
     try {
       const amount = `${(totalMinor / 100).toFixed(2)} ${currency.toUpperCase()}`;
       await this.notifications.createNotification(subscription.userId, {
-        title: 'Pay to complete your upgrade',
+        title: "Pay to complete your upgrade",
         body: `Invoice ${number} for ${amount} is ready. Your plan upgrade applies once it's paid.`,
       });
       await this.push.sendToUser(subscription.userId, {
-        title: 'Pay to complete your upgrade',
+        title: "Pay to complete your upgrade",
         body: `Invoice ${number} — ${amount} due. Your upgrade applies once paid.`,
-        type: 'billing.invoice',
+        type: "billing.invoice",
         data: { invoiceId: invoice.id },
       });
     } catch {
@@ -1543,12 +1593,12 @@ export class BillingService {
       where: { id: subscriptionId },
       include: { product: true, user: true, hardwareTier: true },
     });
-    if (!subscription) throw new NotFoundException('Subscription not found');
+    if (!subscription) throw new NotFoundException("Subscription not found");
 
     const price = await this.prisma.price.findUnique({
       where: { id: subscription.priceId },
     });
-    if (!price) throw new NotFoundException('Price not found for subscription');
+    if (!price) throw new NotFoundException("Price not found for subscription");
 
     const currency = price.currency || this.billingCfg.defaultCurrency;
     // Per-slot products bill price-per-slot × slots; others are a single unit.
@@ -1559,7 +1609,10 @@ export class BillingService {
     const unitMinor = price.amountMinor;
     const subtotalMinor = unitMinor * quantity;
     // Coupon discount reduces the taxable base; never exceeds the subtotal.
-    const discountMinor = Math.max(0, Math.min(opts.discountMinor ?? 0, subtotalMinor));
+    const discountMinor = Math.max(
+      0,
+      Math.min(opts.discountMinor ?? 0, subtotalMinor),
+    );
     const taxableMinor = subtotalMinor - discountMinor;
 
     // Tax from the customer's saved billing address (no-tax when none on file).
@@ -1570,7 +1623,7 @@ export class BillingService {
     const tax = opts.noTax
       ? { taxMinor: 0, taxType: null as string | null, taxRatePct: 0 }
       : calculateTax(taxableMinor, {
-          region: taxLoc?.region ?? '',
+          region: taxLoc?.region ?? "",
           country: taxLoc?.country,
         });
     const totalMinor = taxableMinor + tax.taxMinor;
@@ -1627,15 +1680,15 @@ export class BillingService {
       const amount = `${(totalMinor / 100).toFixed(2)} ${currency.toUpperCase()}`;
       const due = invoice.dueAt
         ? `, due ${invoice.dueAt.toISOString().slice(0, 10)}`
-        : '';
+        : "";
       await this.notifications.createNotification(subscription.userId, {
-        title: 'New invoice available',
+        title: "New invoice available",
         body: `Invoice ${number} for ${amount} is ready to pay${due}.`,
       });
       await this.push.sendToUser(subscription.userId, {
-        title: 'New invoice available',
+        title: "New invoice available",
         body: `Invoice ${number} — ${amount} due${due}.`,
-        type: 'billing.invoice',
+        type: "billing.invoice",
         data: { invoiceId: invoice.id },
       });
     } catch {
@@ -1682,13 +1735,15 @@ export class BillingService {
    * state); everywhere else it's the ISO country code (VAT/GST). Returns nulls
    * when no address is on file, which the tax engine treats as no-tax.
    */
-  private resolveTaxRegion(user: {
-    country: string | null;
-    region: string | null;
-  } | null): { region: string; country?: string } | null {
+  private resolveTaxRegion(
+    user: {
+      country: string | null;
+      region: string | null;
+    } | null,
+  ): { region: string; country?: string } | null {
     if (!user?.country) return null;
     const country = user.country.toUpperCase();
-    if (country === 'US') {
+    if (country === "US") {
       if (!user.region) return null; // need the state to rate US sales tax
       return { region: user.region.toUpperCase(), country };
     }
@@ -1703,7 +1758,7 @@ export class BillingService {
     const invoice = await this.prisma.invoice.findUnique({
       where: { id: invoiceId },
     });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
 
     // Idempotency: Stripe emits several overlapping events for one payment
     // (invoice.paid + invoice.payment_succeeded + payment_intent.succeeded) and
@@ -1737,7 +1792,8 @@ export class BillingService {
           amountPaidMinor: invoice.totalMinor,
           paidAt: new Date(),
           gateway: details.gateway,
-          gatewayInvoiceId: details.gatewayInvoiceId ?? invoice.gatewayInvoiceId,
+          gatewayInvoiceId:
+            details.gatewayInvoiceId ?? invoice.gatewayInvoiceId,
         },
       }),
       this.prisma.payment.create({
@@ -1806,15 +1862,19 @@ export class BillingService {
    */
   private async provisionPaidServers(subscriptionId: string): Promise<void> {
     const pending = await this.prisma.server.findMany({
-      where: { subscriptionId, deletedAt: null, state: 'PENDING_PAYMENT' },
+      where: { subscriptionId, deletedAt: null, state: "PENDING_PAYMENT" },
       select: { id: true },
     });
     for (const s of pending) {
       await this.prisma.server.update({
         where: { id: s.id },
-        data: { state: 'INSTALLING' },
+        data: { state: "INSTALLING" },
       });
-      await this.provisionQueue.add(JOB.PROVISION, { serverId: s.id });
+      await this.provisionQueue.add(
+        JOB.PROVISION,
+        { serverId: s.id },
+        INSTALL_JOB_OPTS,
+      );
     }
   }
 
@@ -1833,10 +1893,10 @@ export class BillingService {
       });
       const job: SuspensionJob = {
         subscriptionId,
-        action: 'unsuspend',
-        reason: 'invoice paid',
+        action: "unsuspend",
+        reason: "invoice paid",
       };
-      await this.suspensionQueue.add(JOB.SUSPEND, job);
+      await this.suspensionQueue.add(JOB.SUSPEND, job, SUSPENSION_JOB_OPTS);
     }
   }
 
@@ -1853,14 +1913,14 @@ export class BillingService {
       where: { id: invoiceId },
       include: { subscription: { include: { servers: true } } },
     });
-    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice) throw new NotFoundException("Invoice not found");
 
     await this.prisma.payment.create({
       data: {
         id: uuidv7(),
         invoiceId,
-        gateway: details?.gateway ?? invoice.gateway ?? 'unknown',
-        gatewayRef: details?.gatewayRef ?? '',
+        gateway: details?.gateway ?? invoice.gateway ?? "unknown",
+        gatewayRef: details?.gatewayRef ?? "",
         amountMinor: invoice.totalMinor,
         currency: invoice.currency,
         state: PaymentState.FAILED,
@@ -1881,9 +1941,9 @@ export class BillingService {
     try {
       const amount = `${(invoice.totalMinor / 100).toFixed(2)} ${invoice.currency.toUpperCase()}`;
       await this.push.sendToUser(invoice.userId, {
-        title: 'Payment failed',
+        title: "Payment failed",
         body: `Payment for invoice ${invoice.number} (${amount}) failed. Update your payment method to avoid suspension.`,
-        type: 'billing.invoice',
+        type: "billing.invoice",
         data: { invoiceId: invoice.id },
       });
     } catch {
@@ -1908,10 +1968,10 @@ export class BillingService {
       const job: SuspensionJob = {
         serverId: server.id,
         subscriptionId: subscription.id,
-        action: 'suspend',
+        action: "suspend",
         reason: `payment failed: ${reason}`,
       };
-      await this.suspensionQueue.add(JOB.SUSPEND, job);
+      await this.suspensionQueue.add(JOB.SUSPEND, job, SUSPENSION_JOB_OPTS);
     }
   }
 
@@ -1947,7 +2007,7 @@ export class BillingService {
   listPaymentMethods(userId: string): Promise<PaymentMethod[]> {
     return this.prisma.paymentMethod.findMany({
       where: { userId },
-      orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ isDefault: "desc" }, { createdAt: "desc" }],
     });
   }
 
@@ -1958,7 +2018,7 @@ export class BillingService {
     const method = await this.prisma.paymentMethod.findFirst({
       where: { id, userId },
     });
-    if (!method) throw new NotFoundException('Payment method not found');
+    if (!method) throw new NotFoundException("Payment method not found");
     return method;
   }
 
@@ -1973,7 +2033,7 @@ export class BillingService {
     if (method.isDefault) {
       const next = await this.prisma.paymentMethod.findFirst({
         where: { userId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
       });
       if (next) {
         await this.prisma.paymentMethod.update({
@@ -2018,7 +2078,7 @@ export class BillingService {
         gatewayCustomerId: true,
       },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
     if (user.gatewayCustomerId) return user.gatewayCustomerId;
 
     const customerId = await this.stripe.createCustomer({
@@ -2035,7 +2095,9 @@ export class BillingService {
   }
 
   /** The user's existing gateway customer id (undefined if none yet). */
-  private async getGatewayCustomerId(userId: string): Promise<string | undefined> {
+  private async getGatewayCustomerId(
+    userId: string,
+  ): Promise<string | undefined> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { gatewayCustomerId: true },
@@ -2067,10 +2129,10 @@ export class BillingService {
     const customerId = await this.ensureGatewayCustomer(userId);
     const saved = await this.stripe.getSavedPaymentMethod(setupIntentId);
     if (!saved || !saved.paymentMethodId) {
-      throw new BadRequestException('Card setup is not complete yet');
+      throw new BadRequestException("Card setup is not complete yet");
     }
     if (saved.customerId && saved.customerId !== customerId) {
-      throw new BadRequestException('Setup does not belong to this account');
+      throw new BadRequestException("Setup does not belong to this account");
     }
 
     const existing = await this.prisma.paymentMethod.findFirst({
@@ -2199,7 +2261,12 @@ export class BillingService {
       if (!c.user?.email || !c.expMonth || !c.expYear) continue;
       await this.email.sendCardExpiring(
         { email: c.user.email, firstName: c.user.firstName },
-        { brand: c.brand, last4: c.last4, expMonth: c.expMonth, expYear: c.expYear },
+        {
+          brand: c.brand,
+          last4: c.last4,
+          expMonth: c.expMonth,
+          expYear: c.expYear,
+        },
       );
       sent += 1;
     }
@@ -2235,14 +2302,14 @@ export class BillingService {
     const sub = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
     });
-    if (!sub) throw new NotFoundException('Subscription not found');
+    if (!sub) throw new NotFoundException("Subscription not found");
     if (sub.cancelAtPeriodEnd || sub.state === SubscriptionState.CANCELED) {
       // Expire instead of renewing.
       await this.prisma.subscription.update({
         where: { id: subscriptionId },
         data: { state: SubscriptionState.EXPIRED },
       });
-      return { invoiceId: '', paid: false, reason: 'canceled' };
+      return { invoiceId: "", paid: false, reason: "canceled" };
     }
 
     // Reuse an existing OPEN invoice for this subscription (the dunning case —
@@ -2250,7 +2317,7 @@ export class BillingService {
     // so a retry never creates a duplicate invoice. Otherwise raise a fresh one.
     const open = await this.prisma.invoice.findFirst({
       where: { subscriptionId, state: InvoiceState.OPEN },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
     // Apply a scheduled DOWNGRADE only when raising a FRESH invoice, so the new
@@ -2274,13 +2341,24 @@ export class BillingService {
       where: { userId: sub.userId, isDefault: true },
     });
     if (!method) {
-      await this.handlePaymentFailure(invoice.id, 'no default payment method');
-      return { invoiceId: invoice.id, paid: false, reason: 'no payment method' };
+      await this.handlePaymentFailure(invoice.id, "no default payment method");
+      return {
+        invoiceId: invoice.id,
+        paid: false,
+        reason: "no payment method",
+      };
     }
 
     const customerId = await this.getGatewayCustomerId(sub.userId);
-    const chargedMinor = Math.max(0, invoice.totalMinor - (invoice.amountPaidMinor ?? 0));
-    const result = await this.stripe.charge(invoice, method.gatewayRef, customerId);
+    const chargedMinor = Math.max(
+      0,
+      invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
+    );
+    const result = await this.stripe.charge(
+      invoice,
+      method.gatewayRef,
+      customerId,
+    );
     if (result.success) {
       await this.markInvoicePaid(invoice.id, {
         gateway: this.stripe.name,
@@ -2301,10 +2379,14 @@ export class BillingService {
       return { invoiceId: invoice.id, paid: true };
     }
 
-    await this.handlePaymentFailure(invoice.id, result.failureReason ?? 'charge failed', {
-      gateway: this.stripe.name,
-      gatewayRef: result.gatewayRef,
-    });
+    await this.handlePaymentFailure(
+      invoice.id,
+      result.failureReason ?? "charge failed",
+      {
+        gateway: this.stripe.name,
+        gatewayRef: result.gatewayRef,
+      },
+    );
     return { invoiceId: invoice.id, paid: false, reason: result.failureReason };
   }
 }

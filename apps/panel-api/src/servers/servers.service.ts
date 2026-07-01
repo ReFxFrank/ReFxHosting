@@ -5,50 +5,55 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-} from '@nestjs/common';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
+} from "@nestjs/common";
+import { InjectQueue } from "@nestjs/bullmq";
+import { Queue } from "bullmq";
 import {
   PendingPlanChange,
   Prisma,
   Server,
   ServerState,
   Subscription,
-} from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CryptoService } from '../common/crypto/crypto.service';
-import { uuidv7, shortId } from '../common/util/uuid';
-import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
-import { AuthUser } from '../common/decorators/current-user.decorator';
-import { NodesService } from '../nodes/nodes.service';
-import { NodeAgentClient, PowerSignal } from '../agent/agent.client';
+} from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { CryptoService } from "../common/crypto/crypto.service";
+import { uuidv7, shortId } from "../common/util/uuid";
+import {
+  Paginated,
+  PaginationDto,
+  paginate,
+} from "../common/dto/pagination.dto";
+import { AuthUser } from "../common/decorators/current-user.decorator";
+import { NodesService } from "../nodes/nodes.service";
+import { NodeAgentClient, PowerSignal } from "../agent/agent.client";
 import {
   JOB,
   ProvisionJob,
   QUEUE,
   ReinstallJob,
-} from '../queues/queue.constants';
+  INSTALL_JOB_OPTS,
+} from "../queues/queue.constants";
 import {
   CreateServerDto,
   ResizeServerDto,
   SwitchGameDto,
   UpgradeServerDto,
-} from './dto/server.dto';
-import { AdminCreateServerDto } from '../admin/dto/admin.dto';
+} from "./dto/server.dto";
+import { AdminCreateServerDto } from "../admin/dto/admin.dto";
 import {
   PORT_RANGE_START,
   PORT_RANGE_END,
   pickFreePort,
   isPortEnvName,
   buildAllocationAlias,
-} from './allocation-port.util';
-import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
-import { MinecraftResolverService } from './minecraft-resolver.service';
-import { BillingService } from '../billing/billing.service';
+} from "./allocation-port.util";
 import {
-  LOADER_STARTUP,
-  isMinecraftLoader,
-} from './minecraft-loader.util';
+  isJavaImage,
+  resolveJavaImage,
+} from "../common/util/java-version.util";
+import { MinecraftResolverService } from "./minecraft-resolver.service";
+import { BillingService } from "../billing/billing.service";
+import { LOADER_STARTUP, isMinecraftLoader } from "./minecraft-loader.util";
 
 /**
  * Outcome of a plan change. An UPGRADE is `invoiced` (server stays on the old
@@ -56,15 +61,15 @@ import {
  * `scheduled` to apply at the next renewal; a no-cost change is `applied` now.
  */
 export type PlanChangeResult =
-  | { status: 'applied'; server: Server }
+  | { status: "applied"; server: Server }
   | {
-      status: 'invoiced';
+      status: "invoiced";
       server: Server;
       invoiceId: string;
       amountMinor: number;
       currency: string;
     }
-  | { status: 'scheduled'; server: Server; effectiveAt: Date };
+  | { status: "scheduled"; server: Server; effectiveAt: Date };
 
 /** Target plan configuration staged by a plan change. */
 interface PlanChangeTarget {
@@ -79,7 +84,7 @@ interface PlanChangeTarget {
 type ServerWithNode = Prisma.ServerGetPayload<{ include: { node: true } }>;
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
-const STOPPED_STATES: ServerState[] = ['OFFLINE', 'CRASHED'];
+const STOPPED_STATES: ServerState[] = ["OFFLINE", "CRASHED"];
 
 @Injectable()
 export class ServersService {
@@ -99,7 +104,10 @@ export class ServersService {
 
   // ---- read --------------------------------------------------------------
 
-  async list(user: AuthUser, pagination: PaginationDto): Promise<Paginated<Server>> {
+  async list(
+    user: AuthUser,
+    pagination: PaginationDto,
+  ): Promise<Paginated<Server>> {
     // Client area is always scoped to the caller: servers they OWN or are an
     // active sub-user on. Staff do NOT get a platform-wide view here even though
     // they're ADMIN/OWNER — that lives in the admin panel (adminList). This keeps
@@ -108,16 +116,18 @@ export class ServersService {
       deletedAt: null,
       OR: [
         { ownerId: user.id },
-        { subUsers: { some: { userId: user.id, state: 'ACTIVE' } } },
+        { subUsers: { some: { userId: user.id, state: "ACTIVE" } } },
       ],
-      ...(pagination.q ? { name: { contains: pagination.q, mode: 'insensitive' } } : {}),
+      ...(pagination.q
+        ? { name: { contains: pagination.q, mode: "insensitive" } }
+        : {}),
     };
     const [data, total] = await this.prisma.$transaction([
       this.prisma.server.findMany({
         where,
         skip: pagination.skip,
         take: pagination.take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           template: true,
           node: { select: { name: true, fqdn: true } },
@@ -126,7 +136,11 @@ export class ServersService {
       }),
       this.prisma.server.count({ where }),
     ]);
-    return paginate(data.map((s) => this.withPrimaryAllocation(s)), total, pagination);
+    return paginate(
+      data.map((s) => this.withPrimaryAllocation(s)),
+      total,
+      pagination,
+    );
   }
 
   async get(id: string): Promise<Server> {
@@ -139,7 +153,7 @@ export class ServersService {
         variables: true,
       },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     return this.withPrimaryAllocation(server);
   }
 
@@ -156,7 +170,7 @@ export class ServersService {
         deletedAt: null,
         OR: [
           { ownerId: user.id },
-          { subUsers: { some: { userId: user.id, state: 'ACTIVE' } } },
+          { subUsers: { some: { userId: user.id, state: "ACTIVE" } } },
         ],
       },
       include: {
@@ -166,7 +180,7 @@ export class ServersService {
         variables: true,
       },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     return this.withPrimaryAllocation(server);
   }
 
@@ -187,23 +201,29 @@ export class ServersService {
       where: { id: dto.subscriptionId, userId: ownerId },
       include: { product: true, hardwareTier: true },
     });
-    if (!subscription) throw new NotFoundException('Subscription not found');
-    if (subscription.state !== 'ACTIVE' && subscription.state !== 'TRIALING') {
-      throw new BadRequestException('Subscription is not active');
+    if (!subscription) throw new NotFoundException("Subscription not found");
+    if (subscription.state !== "ACTIVE" && subscription.state !== "TRIALING") {
+      throw new BadRequestException("Subscription is not active");
     }
 
     const template = await this.prisma.gameTemplate.findUnique({
       where: { id: dto.templateId },
       include: { category: { select: { slug: true } } },
     });
-    if (!template) throw new NotFoundException('Template not found');
-    this.assertTemplateAllowed(subscription.product.allowedTemplateIds, dto.templateId);
+    if (!template) throw new NotFoundException("Template not found");
+    this.assertTemplateAllowed(
+      subscription.product.allowedTemplateIds,
+      dto.templateId,
+    );
 
     const environment = await this.resolveMinecraftEnv(
       template.slug,
       dto.environment,
     );
-    const dockerImage = this.resolveDockerImage(template.dockerImages, environment);
+    const dockerImage = this.resolveDockerImage(
+      template.dockerImages,
+      environment,
+    );
 
     // Resource limits, by billing model:
     //  • HARDWARE_TIER (game): the chosen tier's fixed RAM/CPU/disk.
@@ -220,16 +240,17 @@ export class ServersService {
           diskMb: tier.diskMb || template.recDiskMb,
         }
       : prod.perSlot
-      ? {
-          cpuCores: (prod.cpuPerSlot || 0) * slots || template.recCpuCores,
-          memoryMb: (prod.memoryMbPerSlot || 0) * slots || template.recMemoryMb,
-          diskMb: (prod.diskMbPerSlot || 0) * slots || template.recDiskMb,
-        }
-      : {
-          cpuCores: prod.cpuCores ?? template.recCpuCores,
-          memoryMb: prod.memoryMb ?? template.recMemoryMb,
-          diskMb: prod.diskMb ?? template.recDiskMb,
-        };
+        ? {
+            cpuCores: (prod.cpuPerSlot || 0) * slots || template.recCpuCores,
+            memoryMb:
+              (prod.memoryMbPerSlot || 0) * slots || template.recMemoryMb,
+            diskMb: (prod.diskMbPerSlot || 0) * slots || template.recDiskMb,
+          }
+        : {
+            cpuCores: prod.cpuCores ?? template.recCpuCores,
+            memoryMb: prod.memoryMb ?? template.recMemoryMb,
+            diskMb: prod.diskMb ?? template.recDiskMb,
+          };
 
     // Voice servers need a slot cap regardless of billing model: a per-slot
     // product uses the purchased count; a flat-tier voice product (TeamSpeak's
@@ -239,10 +260,10 @@ export class ServersService {
     const voiceSlots = prod.perSlot
       ? slots
       : (tier?.recommendedPlayers ?? prod.slots ?? null);
-    if (voiceSlots && (prod.perSlot || template.slug.startsWith('teamspeak'))) {
+    if (voiceSlots && (prod.perSlot || template.slug.startsWith("teamspeak"))) {
       const env = environment as Record<string, string>;
       env.SLOTS = String(voiceSlots);
-      if (template.slug.startsWith('teamspeak')) {
+      if (template.slug.startsWith("teamspeak")) {
         env.TS3SERVER_MAX_CLIENTS = String(voiceSlots);
       }
     }
@@ -251,17 +272,32 @@ export class ServersService {
     // capacity; otherwise the scheduler picks the best node in the chosen region.
     // WEB_APP servers need a web-enabled node (Caddy on :80/:443) — the scheduler
     // and the eligibility check filter to supportsWeb nodes when this is set.
-    const requiresWeb = this.serverTypeForTemplate(template) === 'WEB_APP';
+    const requiresWeb = this.serverTypeForTemplate(template) === "WEB_APP";
     let nodeId = dto.nodeId;
     if (nodeId) {
-      await this.nodes.assertEligibleForOrder(nodeId, limits, dto.regionId, requiresWeb);
+      await this.nodes.assertEligibleForOrder(
+        nodeId,
+        limits,
+        dto.regionId,
+        requiresWeb,
+      );
     } else {
-      const node = await this.nodes.pickNodeFor(limits, dto.regionId, requiresWeb);
+      const node = await this.nodes.pickNodeFor(
+        limits,
+        dto.regionId,
+        requiresWeb,
+      );
       if (!node) {
         // Surface WHY nothing fit (configured capacity vs. the plan's reserved
         // resources — not host telemetry), so it's actionable.
-        const detail = await this.nodes.capacityShortfall(limits, dto.regionId, requiresWeb);
-        throw new ConflictException(`No node has capacity for this plan. ${detail}`);
+        const detail = await this.nodes.capacityShortfall(
+          limits,
+          dto.regionId,
+          requiresWeb,
+        );
+        throw new ConflictException(
+          `No node has capacity for this plan. ${detail}`,
+        );
       }
       nodeId = node.id;
     }
@@ -278,8 +314,8 @@ export class ServersService {
         templateVersion: template.version,
         // Deferred orders are reserved (port + identity) but NOT installed until
         // the first payment clears (see billing.markInvoicePaid → provision).
-        state: opts.deferProvision ? 'PENDING_PAYMENT' : 'INSTALLING',
-        deployMethod: (template.deployMethods[0] as any) ?? 'DOCKER',
+        state: opts.deferProvision ? "PENDING_PAYMENT" : "INSTALLING",
+        deployMethod: (template.deployMethods[0] as any) ?? "DOCKER",
         // Voice servers are a separate product line; record the type now and
         // treat it as immutable (a voice server is never game-switched). Classify
         // by the TEMPLATE — identical to adminCreate() and the migration backfill —
@@ -308,9 +344,11 @@ export class ServersService {
     // Only install now when not deferring for payment. Deferred servers are
     // provisioned once the invoice is paid (billing.markInvoicePaid).
     if (!opts.deferProvision) {
-      await this.provisionQueue.add(JOB.PROVISION, {
-        serverId: server.id,
-      } satisfies ProvisionJob);
+      await this.provisionQueue.add(
+        JOB.PROVISION,
+        { serverId: server.id } satisfies ProvisionJob,
+        INSTALL_JOB_OPTS,
+      );
     }
 
     return this.prisma.server.findUniqueOrThrow({ where: { id: server.id } });
@@ -328,25 +366,28 @@ export class ServersService {
       where: { id: dto.ownerId, deletedAt: null },
       select: { id: true },
     });
-    if (!owner) throw new NotFoundException('Owner not found');
+    if (!owner) throw new NotFoundException("Owner not found");
 
     const node = await this.prisma.node.findFirst({
       where: { id: dto.nodeId, deletedAt: null },
       select: { id: true, supportsWeb: true },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
 
     const template = await this.prisma.gameTemplate.findUnique({
       where: { id: dto.templateId },
       include: { category: { select: { slug: true } } },
     });
-    if (!template) throw new NotFoundException('Template not found');
+    if (!template) throw new NotFoundException("Template not found");
 
     // A web app needs a web-enabled node (Caddy on :80/:443); refuse to place one
     // on a node that can't serve it, so staff get a clear error not a broken site.
-    if (this.serverTypeForTemplate(template) === 'WEB_APP' && !node.supportsWeb) {
+    if (
+      this.serverTypeForTemplate(template) === "WEB_APP" &&
+      !node.supportsWeb
+    ) {
       throw new BadRequestException(
-        'This node is not web-enabled — pick a node with web hosting support.',
+        "This node is not web-enabled — pick a node with web hosting support.",
       );
     }
 
@@ -354,12 +395,16 @@ export class ServersService {
       template.slug,
       dto.environment,
     );
-    const dockerImage = this.resolveDockerImage(template.dockerImages, environment);
+    const dockerImage = this.resolveDockerImage(
+      template.dockerImages,
+      environment,
+    );
 
     // Voice / slot-based templates (e.g. TeamSpeak) are sized from the egg's
     // recommended specs and provisioned by slot count rather than raw specs.
     const isVoice =
-      template.category?.slug === 'voice' || template.slug.startsWith('teamspeak');
+      template.category?.slug === "voice" ||
+      template.slug.startsWith("teamspeak");
     const slots = dto.slots && dto.slots > 0 ? Math.floor(dto.slots) : null;
 
     // Voice servers are SLOT-BASED: staff pick a slot count, never RAM/CPU. Size
@@ -367,7 +412,7 @@ export class ServersService {
     // cpu/mem/disk in the request is ignored so voice can't carry a hardware
     // designation. Game servers use the supplied (or recommended) specs as before.
     if (isVoice && !slots) {
-      throw new BadRequestException('Voice servers require a slot count.');
+      throw new BadRequestException("Voice servers require a slot count.");
     }
     const cpuCores = isVoice
       ? template.recCpuCores
@@ -385,7 +430,7 @@ export class ServersService {
     if (isVoice && slots) {
       const env = environment as Record<string, string>;
       env.SLOTS = String(slots);
-      if (template.slug.startsWith('teamspeak')) {
+      if (template.slug.startsWith("teamspeak")) {
         env.TS3SERVER_MAX_CLIENTS = String(slots);
       }
     }
@@ -399,8 +444,8 @@ export class ServersService {
         nodeId: dto.nodeId,
         templateId: template.id,
         templateVersion: template.version,
-        state: 'INSTALLING',
-        deployMethod: (template.deployMethods[0] as any) ?? 'DOCKER',
+        state: "INSTALLING",
+        deployMethod: (template.deployMethods[0] as any) ?? "DOCKER",
         // Authoritative web/voice/game discriminator, set once at creation.
         serverType: this.serverTypeForTemplate(template),
         cpuCores,
@@ -431,7 +476,7 @@ export class ServersService {
     const where: Prisma.ServerWhereInput = {
       deletedAt: null,
       ...(pagination.q
-        ? { name: { contains: pagination.q, mode: 'insensitive' } }
+        ? { name: { contains: pagination.q, mode: "insensitive" } }
         : {}),
     };
     const [data, total] = await this.prisma.$transaction([
@@ -439,17 +484,23 @@ export class ServersService {
         where,
         skip: pagination.skip,
         take: pagination.take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: {
           template: { select: { id: true, name: true, slug: true } },
           node: { select: { id: true, name: true, fqdn: true } },
-          owner: { select: { id: true, email: true, firstName: true, lastName: true } },
+          owner: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
           allocations: true,
         },
       }),
       this.prisma.server.count({ where }),
     ]);
-    return paginate(data.map((s) => this.withPrimaryAllocation(s)), total, pagination);
+    return paginate(
+      data.map((s) => this.withPrimaryAllocation(s)),
+      total,
+      pagination,
+    );
   }
 
   // ---- power -------------------------------------------------------------
@@ -459,27 +510,27 @@ export class ServersService {
       where: { id, deletedAt: null },
       include: { node: true, template: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
-    if (server.state === 'SUSPENDED') {
-      throw new ForbiddenException('Server is suspended');
+    if (!server) throw new NotFoundException("Server not found");
+    if (server.state === "SUSPENDED") {
+      throw new ForbiddenException("Server is suspended");
     }
-    if (server.state === 'INSTALLING' || server.state === 'REINSTALLING') {
+    if (server.state === "INSTALLING" || server.state === "REINSTALLING") {
       throw new ConflictException(`Cannot ${signal} while ${server.state}`);
     }
 
     // TeamSpeak: the customer must accept TeamSpeak's license before the voice
     // server may run. Enforced here so we never start a server that would block.
     if (
-      (signal === 'start' || signal === 'restart') &&
-      (server.template?.slug ?? '').startsWith('teamspeak') &&
+      (signal === "start" || signal === "restart") &&
+      (server.template?.slug ?? "").startsWith("teamspeak") &&
       String(
         (server.environment as Record<string, unknown> | null)?.[
-          'REFX_TS3_LICENSE_ACCEPTED'
-        ] ?? '',
-      ) !== '1'
+          "REFX_TS3_LICENSE_ACCEPTED"
+        ] ?? "",
+      ) !== "1"
     ) {
       throw new BadRequestException(
-        'Accept the TeamSpeak license on the Voice tab before starting this server.',
+        "Accept the TeamSpeak license on the Voice tab before starting this server.",
       );
     }
 
@@ -487,11 +538,11 @@ export class ServersService {
 
     // Optimistic transition; the agent confirms the real state via heartbeat.
     const nextState: ServerState =
-      signal === 'start'
-        ? 'STARTING'
-        : signal === 'restart'
-          ? 'STARTING'
-          : 'STOPPING';
+      signal === "start"
+        ? "STARTING"
+        : signal === "restart"
+          ? "STARTING"
+          : "STOPPING";
     await this.prisma.server.update({
       where: { id },
       data: { state: nextState },
@@ -524,12 +575,14 @@ export class ServersService {
         subscription: { include: { product: true } },
       },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
 
     // Voice servers can't be switched to a game — they keep their identity for
     // life. Authoritative check on the stored discriminator, not the template.
-    if (server.serverType === 'VOICE_SERVER') {
-      throw new BadRequestException('Voice servers cannot be switched to a game.');
+    if (server.serverType === "VOICE_SERVER") {
+      throw new BadRequestException(
+        "Voice servers cannot be switched to a game.",
+      );
     }
 
     // (1) Must be stopped.
@@ -540,21 +593,21 @@ export class ServersService {
     }
 
     if (server.templateId === dto.templateId) {
-      throw new BadRequestException('Server already runs that game');
+      throw new BadRequestException("Server already runs that game");
     }
 
     const target = await this.prisma.gameTemplate.findUnique({
       where: { id: dto.templateId },
       include: { category: { select: { slug: true } } },
     });
-    if (!target) throw new NotFoundException('Target template not found');
+    if (!target) throw new NotFoundException("Target template not found");
 
     // Voice and game servers are separate worlds: a game server can't be
     // switched *into* a voice template (the reverse is rejected above). The
     // target has no Server row yet, so classify it by template.
     if (this.isVoiceTemplate(target)) {
       throw new BadRequestException(
-        'Game servers cannot be switched into a voice server.',
+        "Game servers cannot be switched into a voice server.",
       );
     }
 
@@ -573,7 +626,10 @@ export class ServersService {
       target.slug,
       dto.environment,
     );
-    const dockerImage = this.resolveDockerImage(target.dockerImages, environment);
+    const dockerImage = this.resolveDockerImage(
+      target.dockerImages,
+      environment,
+    );
     const gameSwitchLogId = uuidv7();
 
     // (3)+(4) atomic record + repoint.
@@ -599,7 +655,7 @@ export class ServersService {
           startupCommand: this.minecraftStartupFor(target, environment),
           deployMethod: (target.deployMethods[0] as any) ?? server.deployMethod,
           environment,
-          state: 'SWITCHING_GAME',
+          state: "SWITCHING_GAME",
         },
       }),
     ]);
@@ -617,20 +673,23 @@ export class ServersService {
   async gameHistory(id: string) {
     return this.prisma.gameSwitchLog.findMany({
       where: { serverId: id },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
   }
 
   // ---- reinstall ---------------------------------------------------------
 
-  async reinstall(id: string, preserveData = true): Promise<{ accepted: true }> {
+  async reinstall(
+    id: string,
+    preserveData = true,
+  ): Promise<{ accepted: true }> {
     const server = await this.get(id);
-    if (!STOPPED_STATES.includes(server.state) && server.state !== 'RUNNING') {
+    if (!STOPPED_STATES.includes(server.state) && server.state !== "RUNNING") {
       throw new ConflictException(`Cannot reinstall while ${server.state}`);
     }
     await this.prisma.server.update({
       where: { id },
-      data: { state: 'REINSTALLING' },
+      data: { state: "REINSTALLING" },
     });
     await this.reinstallQueue.add(JOB.REINSTALL, {
       serverId: id,
@@ -655,14 +714,16 @@ export class ServersService {
       where: { id, deletedAt: null },
       include: { template: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
 
     const slug = server.template?.slug;
-    if (!slug?.startsWith('minecraft-')) {
-      throw new BadRequestException('This server is not a Minecraft server');
+    if (!slug?.startsWith("minecraft-")) {
+      throw new BadRequestException("This server is not a Minecraft server");
     }
-    if (!STOPPED_STATES.includes(server.state) && server.state !== 'RUNNING') {
-      throw new ConflictException(`Cannot change version while ${server.state}`);
+    if (!STOPPED_STATES.includes(server.state) && server.state !== "RUNNING") {
+      throw new ConflictException(
+        `Cannot change version while ${server.state}`,
+      );
     }
 
     const concrete = await this.mcResolver.resolve(slug, version);
@@ -678,12 +739,12 @@ export class ServersService {
     await this.prisma.$transaction([
       this.prisma.server.update({
         where: { id },
-        data: { environment, dockerImage, state: 'REINSTALLING' },
+        data: { environment, dockerImage, state: "REINSTALLING" },
       }),
       // Keep an explicit per-server override (if one exists) in sync so it can't
       // shadow the new value in the install spec.
       this.prisma.serverVariable.updateMany({
-        where: { serverId: id, envName: 'MINECRAFT_VERSION' },
+        where: { serverId: id, envName: "MINECRAFT_VERSION" },
         data: { value: concrete },
       }),
     ]);
@@ -711,18 +772,18 @@ export class ServersService {
       where: { id, deletedAt: null },
       include: { template: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
-    if (server.template?.slug !== 'minecraft') {
-      throw new BadRequestException('This server is not a Minecraft server');
+    if (!server) throw new NotFoundException("Server not found");
+    if (server.template?.slug !== "minecraft") {
+      throw new BadRequestException("This server is not a Minecraft server");
     }
     if (!isMinecraftLoader(dto.loader)) {
       throw new BadRequestException(`Unknown loader: ${dto.loader}`);
     }
-    if (!STOPPED_STATES.includes(server.state) && server.state !== 'RUNNING') {
+    if (!STOPPED_STATES.includes(server.state) && server.state !== "RUNNING") {
       throw new ConflictException(`Cannot reconfigure while ${server.state}`);
     }
 
-    const { concrete } = await this.applyMinecraftEnv(id, dto, 'REINSTALLING');
+    const { concrete } = await this.applyMinecraftEnv(id, dto, "REINSTALLING");
 
     await this.reinstallQueue.add(JOB.REINSTALL, {
       serverId: id,
@@ -742,21 +803,21 @@ export class ServersService {
   async applyMinecraftEnv(
     id: string,
     dto: { loader: string; version?: string; loaderVersion?: string },
-    state?: 'REINSTALLING',
+    state?: "REINSTALLING",
   ): Promise<{ concrete: string; loaderVersion: string }> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
       include: { template: true },
     });
-    if (!server?.template) throw new NotFoundException('Server not found');
+    if (!server?.template) throw new NotFoundException("Server not found");
     if (!isMinecraftLoader(dto.loader)) {
       throw new BadRequestException(`Unknown loader: ${dto.loader}`);
     }
 
-    const loaderVersion = dto.loaderVersion?.trim() || 'latest';
+    const loaderVersion = dto.loaderVersion?.trim() || "latest";
     const concrete = await this.mcResolver.resolveByLoader(
       dto.loader,
-      dto.version ?? 'latest',
+      dto.version ?? "latest",
     );
     const environment = {
       ...((server.environment as Record<string, unknown>) ?? {}),
@@ -781,15 +842,15 @@ export class ServersService {
         },
       }),
       this.prisma.serverVariable.updateMany({
-        where: { serverId: id, envName: 'LOADER' },
+        where: { serverId: id, envName: "LOADER" },
         data: { value: dto.loader },
       }),
       this.prisma.serverVariable.updateMany({
-        where: { serverId: id, envName: 'MINECRAFT_VERSION' },
+        where: { serverId: id, envName: "MINECRAFT_VERSION" },
         data: { value: concrete },
       }),
       this.prisma.serverVariable.updateMany({
-        where: { serverId: id, envName: 'LOADER_VERSION' },
+        where: { serverId: id, envName: "LOADER_VERSION" },
         data: { value: loaderVersion },
       }),
     ]);
@@ -804,7 +865,7 @@ export class ServersService {
       where: { id, deletedAt: null },
       include: { node: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
 
     // Validate the node can absorb an upgrade.
     if (dto.memoryMb || dto.cpuCores || dto.diskMb) {
@@ -817,7 +878,7 @@ export class ServersService {
         deltaCpu > cap.cpu.free ||
         deltaDisk > cap.disk.free
       ) {
-        throw new ConflictException('Node lacks capacity for this upgrade');
+        throw new ConflictException("Node lacks capacity for this upgrade");
       }
     }
 
@@ -847,16 +908,13 @@ export class ServersService {
 
   // ---- console command (one-shot) ----------------------------------------
 
-  async sendCommand(
-    id: string,
-    command: string,
-  ): Promise<{ accepted: true }> {
+  async sendCommand(id: string, command: string): Promise<{ accepted: true }> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
       include: { node: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
-    if (server.state !== 'RUNNING' && server.state !== 'STARTING') {
+    if (!server) throw new NotFoundException("Server not found");
+    if (server.state !== "RUNNING" && server.state !== "STARTING") {
       throw new ConflictException(`Server is not running (${server.state})`);
     }
     await this.agent.sendCommand(server.node, server.id, command);
@@ -872,7 +930,7 @@ export class ServersService {
       where: { id, deletedAt: null },
       select: { startupCommand: true, dockerImage: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     return {
       startupCommand: server.startupCommand,
       dockerImage: server.dockerImage,
@@ -887,7 +945,7 @@ export class ServersService {
       where: { id, deletedAt: null },
       select: { id: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     return this.prisma.server.update({
       where: { id },
       data: {
@@ -919,29 +977,32 @@ export class ServersService {
       where: { id, deletedAt: null },
       include: { node: true, subscription: { include: { product: true } } },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     const sub = server.subscription;
     const product = sub?.product;
 
     // ---- Hardware-tier change (move to a higher/lower tier) ----------------
     if (dto.hardwareTierId) {
       if (!sub || !product) {
-        throw new BadRequestException('Server has no subscription to change');
+        throw new BadRequestException("Server has no subscription to change");
       }
       const tier = await this.prisma.hardwareTier.findFirst({
         where: { id: dto.hardwareTierId, productId: product.id },
         include: { prices: true },
       });
-      if (!tier) throw new BadRequestException('Tier does not belong to this product');
-      if (!tier.isActive) throw new BadRequestException('That tier is not available');
+      if (!tier)
+        throw new BadRequestException("Tier does not belong to this product");
+      if (!tier.isActive)
+        throw new BadRequestException("That tier is not available");
 
       const currentPrice = await this.prisma.price.findUnique({
         where: { id: sub.priceId },
         select: { currency: true, amountMinor: true },
       });
-      const currency = currentPrice?.currency ?? 'USD';
+      const currency = currentPrice?.currency ?? "USD";
       const newPrice = tier.prices.find(
-        (p) => p.interval === sub.interval && p.currency === currency && p.isActive,
+        (p) =>
+          p.interval === sub.interval && p.currency === currency && p.isActive,
       );
       if (!newPrice) {
         throw new BadRequestException(
@@ -956,7 +1017,7 @@ export class ServersService {
         tier.cpuCores - server.cpuCores > cap.cpu.free ||
         tier.diskMb - server.diskMb > cap.disk.free
       ) {
-        throw new ConflictException('Node lacks capacity for this upgrade');
+        throw new ConflictException("Node lacks capacity for this upgrade");
       }
 
       return this.stagePlanChange(
@@ -970,7 +1031,7 @@ export class ServersService {
           memoryMb: tier.memoryMb,
           diskMb: tier.diskMb,
         },
-        (currentPrice?.amountMinor ?? 0),
+        currentPrice?.amountMinor ?? 0,
         newPrice.amountMinor,
         currency,
         `Plan change to ${tier.name}`,
@@ -994,7 +1055,7 @@ export class ServersService {
         limits.cpuCores - server.cpuCores > cap.cpu.free ||
         limits.diskMb - server.diskMb > cap.disk.free
       ) {
-        throw new ConflictException('Node lacks capacity for this upgrade');
+        throw new ConflictException("Node lacks capacity for this upgrade");
       }
       const perSlotPrice = await this.prisma.price.findUnique({
         where: { id: sub!.priceId },
@@ -1014,12 +1075,12 @@ export class ServersService {
         },
         perSlotMinor * sub!.slots,
         perSlotMinor * slots,
-        perSlotPrice?.currency ?? 'USD',
+        perSlotPrice?.currency ?? "USD",
         `Plan change to ${slots} slots`,
       );
     }
 
-    return { status: 'applied', server: await this.resize(id, dto) };
+    return { status: "applied", server: await this.resize(id, dto) };
   }
 
   // ---- plan-change staging (invoice-gated upgrades, scheduled downgrades) --
@@ -1044,8 +1105,8 @@ export class ServersService {
     if (existing) {
       throw new ConflictException(
         existing.invoiceId
-          ? 'An upgrade invoice is already awaiting payment for this server — pay or cancel it first.'
-          : 'A plan change is already scheduled for this server.',
+          ? "An upgrade invoice is already awaiting payment for this server — pay or cancel it first."
+          : "A plan change is already scheduled for this server.",
       );
     }
 
@@ -1060,7 +1121,7 @@ export class ServersService {
         applyAtPeriodEnd: true,
         ...target,
       });
-      return { status: 'scheduled', server, effectiveAt: sub.currentPeriodEnd };
+      return { status: "scheduled", server, effectiveAt: sub.currentPeriodEnd };
     }
 
     const prorated =
@@ -1069,7 +1130,10 @@ export class ServersService {
     // No incremental cost (same price, or prorates to ~0 at the period's tail):
     // apply immediately.
     if (prorated <= 0) {
-      return { status: 'applied', server: await this.applyPlanChangeNow(server, target) };
+      return {
+        status: "applied",
+        server: await this.applyPlanChangeNow(server, target),
+      };
     }
 
     // Paid upgrade. Claim the single pending-change slot FIRST — the unique
@@ -1100,7 +1164,7 @@ export class ServersService {
       data: { invoiceId: invoice.id },
     });
     return {
-      status: 'invoiced',
+      status: "invoiced",
       server,
       invoiceId: invoice.id,
       amountMinor: invoice.totalMinor,
@@ -1121,10 +1185,10 @@ export class ServersService {
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
+        err.code === "P2002"
       ) {
         throw new ConflictException(
-          'A plan change is already in progress for this server — pay or cancel it first.',
+          "A plan change is already in progress for this server — pay or cancel it first.",
         );
       }
       throw err;
@@ -1137,7 +1201,8 @@ export class ServersService {
     sub: { currentPeriodStart: Date; currentPeriodEnd: Date },
   ): number {
     const now = Date.now();
-    const full = sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime();
+    const full =
+      sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime();
     if (full <= 0) return deltaRecurringMinor; // safety: bill the full delta
     const remaining = Math.max(
       0,
@@ -1193,13 +1258,13 @@ export class ServersService {
       select: { subscriptionId: true },
     });
     if (!server?.subscriptionId) {
-      throw new NotFoundException('Server has no subscription');
+      throw new NotFoundException("Server has no subscription");
     }
     const pending = await this.prisma.pendingPlanChange.findUnique({
       where: { subscriptionId: server.subscriptionId },
     });
     if (!pending) {
-      throw new NotFoundException('No pending plan change to cancel');
+      throw new NotFoundException("No pending plan change to cancel");
     }
     if (pending.invoiceId) {
       // Upgrade awaiting payment: voiding the invoice also clears the staged change.
@@ -1223,7 +1288,7 @@ export class ServersService {
     /** A staged plan change awaiting payment (upgrade) or the next renewal
      *  (downgrade), so the page can offer to pay or cancel it. */
     pendingChange: {
-      kind: 'upgrade' | 'downgrade';
+      kind: "upgrade" | "downgrade";
       invoiceId: string | null;
       effectiveAt: string | null;
     } | null;
@@ -1261,7 +1326,7 @@ export class ServersService {
                 prices: true,
                 hardwareTiers: {
                   where: { isActive: true },
-                  orderBy: { sortOrder: 'asc' },
+                  orderBy: { sortOrder: "asc" },
                   include: { prices: true },
                 },
               },
@@ -1270,12 +1335,12 @@ export class ServersService {
         },
       },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     const sub = server.subscription;
     const product = sub?.product;
     const price = product?.prices.find((p) => p.id === sub?.priceId);
-    const currency = price?.currency ?? 'USD';
-    const interval = sub?.interval ?? 'MONTHLY';
+    const currency = price?.currency ?? "USD";
+    const interval = sub?.interval ?? "MONTHLY";
 
     // Fraction of the current period still to run — the basis for the prorated
     // upgrade charge the web previews (matches `proratedAmount`).
@@ -1283,7 +1348,10 @@ export class ServersService {
       ? sub.currentPeriodEnd.getTime() - sub.currentPeriodStart.getTime()
       : 0;
     const periodRemaining = sub
-      ? Math.max(0, Math.min(sub.currentPeriodEnd.getTime() - Date.now(), periodFull))
+      ? Math.max(
+          0,
+          Math.min(sub.currentPeriodEnd.getTime() - Date.now(), periodFull),
+        )
       : 0;
     const prorationFactor = periodFull > 0 ? periodRemaining / periodFull : 1;
 
@@ -1294,9 +1362,8 @@ export class ServersService {
       : null;
     const pendingChange = pending
       ? {
-          kind: (pending.invoiceId ? 'upgrade' : 'downgrade') as
-            | 'upgrade'
-            | 'downgrade',
+          kind: (pending.invoiceId ? "upgrade" : "downgrade") as
+            "upgrade" | "downgrade",
           invoiceId: pending.invoiceId,
           effectiveAt: pending.applyAtPeriodEnd
             ? sub!.currentPeriodEnd.toISOString()
@@ -1317,7 +1384,8 @@ export class ServersService {
       isRecommended: t.isRecommended,
       amountMinor:
         t.prices.find(
-          (p) => p.interval === interval && p.currency === currency && p.isActive,
+          (p) =>
+            p.interval === interval && p.currency === currency && p.isActive,
         )?.amountMinor ?? null,
     }));
 
@@ -1369,12 +1437,12 @@ export class ServersService {
         subscription: { include: { product: { include: { prices: true } } } },
       },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
 
     const sub = server.subscription;
     const currentPrice = sub?.product.prices.find((p) => p.id === sub.priceId);
-    const currency = currentPrice?.currency ?? 'USD';
-    const interval = sub?.interval ?? 'MONTHLY';
+    const currency = currentPrice?.currency ?? "USD";
+    const interval = sub?.interval ?? "MONTHLY";
     const currentAmountMinor = currentPrice?.amountMinor ?? 0;
 
     // Tier change: recurring = the target tier's price for this interval/currency.
@@ -1422,7 +1490,7 @@ export class ServersService {
     const candidates = await this.prisma.product.findMany({
       where: {
         isActive: true,
-        type: 'GAME_SERVER',
+        type: "GAME_SERVER",
         cpuCores: { gte: wantCpu },
         memoryMb: { gte: wantMem },
         diskMb: { gte: wantDisk },
@@ -1432,7 +1500,10 @@ export class ServersService {
     let newAmount = currentAmount;
     for (const product of candidates) {
       const price = product.prices.find((p) => p.currency === currency);
-      if (price && (newAmount === currentAmount || price.amountMinor < newAmount)) {
+      if (
+        price &&
+        (newAmount === currentAmount || price.amountMinor < newAmount)
+      ) {
         newAmount = price.amountMinor;
       }
     }
@@ -1458,17 +1529,17 @@ export class ServersService {
         template: { include: { category: { select: { slug: true } } } },
       },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
 
     // Voice servers keep their identity for the life of the server — game
     // switching doesn't apply, so there's nothing to switch to.
-    if (server.serverType === 'VOICE_SERVER') return [];
+    if (server.serverType === "VOICE_SERVER") return [];
 
     const allowed = server.subscription?.product.allowedTemplateIds ?? [];
     const templates = await this.prisma.gameTemplate.findMany({
       where: allowed.length > 0 ? { id: { in: allowed } } : {},
       include: { category: { select: { slug: true } } },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
     // Never offer voice templates as switch targets — voice servers are a
     // separate product line and can't be swapped with game servers.
@@ -1486,7 +1557,8 @@ export class ServersService {
   ): boolean {
     if (!template) return false;
     return (
-      template.slug.startsWith('teamspeak') || template.category?.slug === 'voice'
+      template.slug.startsWith("teamspeak") ||
+      template.category?.slug === "voice"
     );
   }
 
@@ -1494,15 +1566,17 @@ export class ServersService {
    *  (kind=WEB) provision app-container web apps; voice via slug/category; else a
    *  game server. Mirrors the create + adminCreate paths so they always agree. */
   private serverTypeForTemplate(
-    template:
-      | { slug: string; kind?: string | null; category?: { slug: string } | null }
-      | null,
-  ): 'WEB_APP' | 'VOICE_SERVER' | 'GAME_SERVER' | 'BOT_APP' {
-    if (template?.kind === 'WEB') return 'WEB_APP';
+    template: {
+      slug: string;
+      kind?: string | null;
+      category?: { slug: string } | null;
+    } | null,
+  ): "WEB_APP" | "VOICE_SERVER" | "GAME_SERVER" | "BOT_APP" {
+    if (template?.kind === "WEB") return "WEB_APP";
     // Bot containers don't need the HTTP reverse proxy, so they're NOT WEB_APP
     // (which gates onto web-enabled nodes) — they schedule on any node.
-    if (template?.kind === 'BOT') return 'BOT_APP';
-    return this.isVoiceTemplate(template) ? 'VOICE_SERVER' : 'GAME_SERVER';
+    if (template?.kind === "BOT") return "BOT_APP";
+    return this.isVoiceTemplate(template) ? "VOICE_SERVER" : "GAME_SERVER";
   }
 
   // ---- schedule run-now ---------------------------------------------------
@@ -1515,7 +1589,7 @@ export class ServersService {
       where: { id: scheduleId, serverId: id },
       select: { id: true },
     });
-    if (!schedule) throw new NotFoundException('Schedule not found');
+    if (!schedule) throw new NotFoundException("Schedule not found");
 
     // Record the manual trigger; the scheduler worker picks up due schedules.
     await this.prisma.schedule.update({
@@ -1532,12 +1606,12 @@ export class ServersService {
   async suspend(id: string, reason?: string): Promise<{ accepted: true }> {
     await this.suspensionQueue.add(JOB.SUSPEND, {
       serverId: id,
-      action: 'suspend',
+      action: "suspend",
       reason,
     });
     await this.prisma.server.update({
       where: { id },
-      data: { suspendedAt: new Date(), state: 'SUSPENDED' },
+      data: { suspendedAt: new Date(), state: "SUSPENDED" },
     });
     return { accepted: true };
   }
@@ -1545,11 +1619,11 @@ export class ServersService {
   async unsuspend(id: string): Promise<{ accepted: true }> {
     await this.suspensionQueue.add(JOB.SUSPEND, {
       serverId: id,
-      action: 'unsuspend',
+      action: "unsuspend",
     });
     await this.prisma.server.update({
       where: { id },
-      data: { suspendedAt: null, state: 'OFFLINE' },
+      data: { suspendedAt: null, state: "OFFLINE" },
     });
     return { accepted: true };
   }
@@ -1559,12 +1633,14 @@ export class ServersService {
       where: { id, deletedAt: null },
       include: { node: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     // Tear down on the node, then soft-delete and free allocations.
     try {
       await this.agent.deleteServer(server.node, server.id);
     } catch (e: any) {
-      this.logger.warn(`agent delete failed (continuing soft-delete): ${e.message}`);
+      this.logger.warn(
+        `agent delete failed (continuing soft-delete): ${e.message}`,
+      );
     }
     await this.prisma.$transaction([
       this.prisma.allocation.updateMany({
@@ -1573,7 +1649,7 @@ export class ServersService {
       }),
       this.prisma.server.update({
         where: { id },
-        data: { deletedAt: new Date(), state: 'OFFLINE' },
+        data: { deletedAt: new Date(), state: "OFFLINE" },
       }),
     ]);
   }
@@ -1612,7 +1688,7 @@ export class ServersService {
         allocationPortEnd: true,
       },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
 
     // Branded per-server hostname (GPortal-style) when the node has a wildcard
     // game domain; otherwise null and we advertise the node fqdn as before.
@@ -1660,7 +1736,7 @@ export class ServersService {
         // it first. Retry with a freshly computed free port.
         if (
           e instanceof Prisma.PrismaClientKnownRequestError &&
-          e.code === 'P2002' &&
+          e.code === "P2002" &&
           attempt < MAX_ATTEMPTS - 1
         ) {
           continue;
@@ -1670,7 +1746,7 @@ export class ServersService {
     }
 
     if (!port) {
-      throw new ConflictException('No free port available on the node');
+      throw new ConflictException("No free port available on the node");
     }
 
     // Wire the primary port into the startup env so {{SERVER_PORT}} resolves.
@@ -1727,7 +1803,7 @@ export class ServersService {
         } catch (e) {
           if (
             e instanceof Prisma.PrismaClientKnownRequestError &&
-            e.code === 'P2002'
+            e.code === "P2002"
           ) {
             taken.add(candidate); // someone grabbed it; mark taken and retry
             continue;
@@ -1766,7 +1842,8 @@ export class ServersService {
     T extends { allocations?: { isPrimary: boolean }[] | null },
   >(server: T) {
     const allocations = server.allocations ?? [];
-    const primary = allocations.find((a) => a.isPrimary) ?? allocations[0] ?? null;
+    const primary =
+      allocations.find((a) => a.isPrimary) ?? allocations[0] ?? null;
     return { ...server, primaryAllocation: primary };
   }
 
@@ -1774,7 +1851,7 @@ export class ServersService {
     // Empty whitelist = all templates permitted.
     if (allowed.length > 0 && !allowed.includes(templateId)) {
       throw new ForbiddenException(
-        'This game is not available on your current plan',
+        "This game is not available on your current plan",
       );
     }
   }
@@ -1798,17 +1875,17 @@ export class ServersService {
   ): Promise<Prisma.InputJsonObject> {
     const env = { ...((environment ?? {}) as Record<string, string>) };
     const requested =
-      env['MINECRAFT_VERSION'] != null
-        ? String(env['MINECRAFT_VERSION'])
-        : 'latest';
-    if (templateSlug === 'minecraft') {
+      env["MINECRAFT_VERSION"] != null
+        ? String(env["MINECRAFT_VERSION"])
+        : "latest";
+    if (templateSlug === "minecraft") {
       // Unified egg: loader is per-server (LOADER env), not in the slug.
-      env['MINECRAFT_VERSION'] = await this.mcResolver.resolveByLoader(
-        String(env['LOADER'] ?? 'paper'),
+      env["MINECRAFT_VERSION"] = await this.mcResolver.resolveByLoader(
+        String(env["LOADER"] ?? "paper"),
         requested,
       );
-    } else if (templateSlug?.startsWith('minecraft-')) {
-      env['MINECRAFT_VERSION'] = await this.mcResolver.resolve(
+    } else if (templateSlug?.startsWith("minecraft-")) {
+      env["MINECRAFT_VERSION"] = await this.mcResolver.resolve(
         templateSlug,
         requested,
       );
@@ -1826,9 +1903,11 @@ export class ServersService {
     template: { slug: string | null; startupCommand: string },
     environment: Record<string, unknown> | null | undefined,
   ): string {
-    if (template.slug !== 'minecraft') return template.startupCommand;
-    const loader = String((environment ?? {})['LOADER'] ?? 'paper');
-    return isMinecraftLoader(loader) ? LOADER_STARTUP[loader] : template.startupCommand;
+    if (template.slug !== "minecraft") return template.startupCommand;
+    const loader = String((environment ?? {})["LOADER"] ?? "paper");
+    return isMinecraftLoader(loader)
+      ? LOADER_STARTUP[loader]
+      : template.startupCommand;
   }
 
   private resolveDockerImage(
@@ -1839,14 +1918,14 @@ export class ServersService {
     if (!isJavaImage(base)) return base;
     const env = (environment ?? {}) as Record<string, unknown>;
     const mc =
-      env['MINECRAFT_VERSION'] != null
-        ? String(env['MINECRAFT_VERSION'])
-        : 'latest';
-    return resolveJavaImage(base, mc, 'jre');
+      env["MINECRAFT_VERSION"] != null
+        ? String(env["MINECRAFT_VERSION"])
+        : "latest";
+    return resolveJavaImage(base, mc, "jre");
   }
 
   private firstDockerImage(images: Prisma.JsonValue): string | undefined {
-    if (images && typeof images === 'object' && !Array.isArray(images)) {
+    if (images && typeof images === "object" && !Array.isArray(images)) {
       const values = Object.values(images as Record<string, unknown>);
       if (values.length) return String(values[0]);
     }
