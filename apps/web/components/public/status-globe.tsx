@@ -18,6 +18,7 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
   const rRef = useRef(0);
   const phiRef = useRef(0);
   const widthRef = useRef(0);
+  const scaleRef = useRef(1); // wheel-zoom factor (clamped)
 
   // Markers from the regions that have known coordinates. A region with any node
   // down is drawn slightly larger so trouble spots stand out on the spinning globe.
@@ -61,8 +62,10 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
       theta: 0.28,
       dark: 1,
       diffuse: 1.2,
-      mapSamples: 16000,
-      mapBrightness: 6,
+      // Denser dot map = more detailed, accurate coastlines than the default.
+      mapSamples: 44000,
+      mapBrightness: 5.5,
+      scale: 1,
       // ReFx blue palette (RGB 0–1). base = the dotted landmasses, glow = the rim,
       // marker = the datacenter pins.
       baseColor: [0.26, 0.34, 0.48],
@@ -71,16 +74,30 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
       markers,
     });
 
+    // Scroll-to-zoom via cobe's `scale`, on a non-passive listener so we can stop
+    // the page from scrolling while the pointer is over the globe.
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const next = scaleRef.current - e.deltaY * 0.0015;
+      scaleRef.current = Math.min(3, Math.max(0.8, next));
+    };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+
     // This cobe build is driven by the caller: run a rAF loop and push the new
-    // rotation (+ current size) each frame via update(). Auto-rotate unless the
-    // user is dragging or prefers reduced motion.
+    // rotation, size and zoom each frame via update(). Auto-rotate (slowly) unless
+    // the user is dragging or prefers reduced motion.
     let raf = 0;
     const tick = () => {
       if (pointerInteracting.current === null && !reduceMotion) {
-        phiRef.current += 0.004;
+        phiRef.current += 0.0016;
       }
       const w = widthRef.current * dpr;
-      globe.update({ phi: phiRef.current + rRef.current, width: w, height: w });
+      globe.update({
+        phi: phiRef.current + rRef.current,
+        width: w,
+        height: w,
+        scale: scaleRef.current,
+      });
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -93,6 +110,7 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
     return () => {
       cancelAnimationFrame(raf);
       globe.destroy();
+      canvas.removeEventListener("wheel", onWheel);
       window.removeEventListener("resize", onResize);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,7 +141,7 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
       onTouchStart={(e) => e.touches[0] && onDown(e.touches[0].clientX)}
       onTouchEnd={onUp}
       onTouchMove={(e) => e.touches[0] && onMove(e.touches[0].clientX)}
-      className="mx-auto aspect-square w-full max-w-[380px] cursor-grab opacity-0 transition-opacity duration-700"
+      className="mx-auto aspect-square w-full max-w-[440px] cursor-grab opacity-0 transition-opacity duration-700"
       style={{ contain: "layout paint size" }}
       aria-hidden="true"
     />

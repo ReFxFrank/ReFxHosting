@@ -17,7 +17,6 @@ import type {
   StatusRegion,
 } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
-import { StatusMap } from "@/components/public/status-map";
 import { StatusGlobe } from "@/components/public/status-globe";
 import { CountryFlag } from "@/components/ui/country-flag";
 
@@ -97,14 +96,6 @@ export default function StatusPage() {
         System status
       </h1>
 
-      {/* Rotating globe hero (Cloudflare-style) — decorative, plots live regions. */}
-      <div className="relative mt-8 overflow-hidden rounded-2xl border border-white/[0.08] bg-[radial-gradient(ellipse_at_center,rgba(20,30,48,0.65),rgba(7,11,18,0.96))] px-6 py-8">
-        <StatusGlobe regions={data?.regions ?? []} />
-        <p className="mt-1 text-center text-xs text-muted-foreground">
-          Live global network · drag to spin
-        </p>
-      </div>
-
       {q.isLoading ? (
         <Skeleton className="mt-8 h-24 rounded-2xl" />
       ) : q.isError ? (
@@ -166,10 +157,18 @@ export default function StatusPage() {
             </div>
           </section>
 
-          {/* Network map */}
-          {data && data.regions.length > 0 ? (
-            <StatusMap regions={data.regions} />
-          ) : null}
+          {/* Network locations — rotating globe (replaces the flat map). */}
+          <section className="mt-10">
+            <h2 className="text-sm font-semibold text-muted-foreground">
+              Network locations
+            </h2>
+            <div className="relative mt-3 overflow-hidden rounded-2xl border border-white/[0.08] bg-[radial-gradient(ellipse_at_center,rgba(20,30,48,0.65),rgba(7,11,18,0.96))] px-6 py-8">
+              <StatusGlobe regions={data?.regions ?? []} />
+              <p className="mt-1 text-center text-xs text-muted-foreground">
+                Live global network · drag to spin · scroll to zoom
+              </p>
+            </div>
+          </section>
 
           {/* Locations detail */}
           {data && data.regions.length > 0 ? (
