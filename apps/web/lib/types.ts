@@ -432,6 +432,34 @@ export interface ServerVariableField {
   isSet?: boolean;
 }
 
+/** A shared MySQL/MariaDB host the panel provisions per-server databases on. */
+export interface DatabaseHost {
+  id: string;
+  name: string;
+  engine: "MYSQL" | "MARIADB" | "POSTGRESQL";
+  host: string;
+  port: number;
+  username: string;
+  publicHost: string;
+  maxDatabases: number;
+  isActive: boolean;
+  databaseCount?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DatabaseHostInput {
+  name: string;
+  engine?: string;
+  host: string;
+  port?: number;
+  username: string;
+  password?: string;
+  publicHost: string;
+  maxDatabases?: number;
+  isActive?: boolean;
+}
+
 export interface GameTemplate {
   id: string;
   categoryId: string | null;

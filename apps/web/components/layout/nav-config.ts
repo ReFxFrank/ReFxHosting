@@ -21,6 +21,7 @@ import {
   TicketPercent,
   Gift,
   ShieldCheck,
+  Database,
   type LucideIcon,
 } from "lucide-react";
 
@@ -57,56 +58,171 @@ export const customerNav: NavItem[] = [
 // staff member lacks. The server enforces the same permission on every request,
 // so this is not security-by-hiding.
 export const adminNav: NavSection[] = [
-  { items: [{ label: "Overview", href: "/admin", icon: LayoutDashboard, perm: "dashboard.read" }] },
+  {
+    items: [
+      {
+        label: "Overview",
+        href: "/admin",
+        icon: LayoutDashboard,
+        perm: "dashboard.read",
+      },
+    ],
+  },
   {
     title: "Operations",
     items: [
-      { label: "Servers", href: "/admin/servers", icon: ServerCog, perm: "servers.read" },
+      {
+        label: "Servers",
+        href: "/admin/servers",
+        icon: ServerCog,
+        perm: "servers.read",
+      },
       { label: "Nodes", href: "/admin/nodes", icon: Boxes, perm: "nodes.read" },
-      { label: "Locations", href: "/admin/locations", icon: MapPin, perm: "locations.manage" },
+      {
+        label: "Database Hosts",
+        href: "/admin/database-hosts",
+        icon: Database,
+        perm: "nodes.read",
+      },
+      {
+        label: "Locations",
+        href: "/admin/locations",
+        icon: MapPin,
+        perm: "locations.manage",
+      },
     ],
   },
   {
     title: "Customers & Billing",
     items: [
-      { label: "Customers", href: "/admin/customers", icon: Users, perm: "users.read" },
-      { label: "Users", href: "/admin/users", icon: UserCog, perm: "users.read" },
-      { label: "Orders", href: "/admin/orders", icon: ShoppingCart, perm: "billing.read" },
-      { label: "Invoices", href: "/admin/invoices", icon: ReceiptText, perm: "billing.read" },
-      { label: "Billing", href: "/admin/billing", icon: CreditCard, perm: "billing.read" },
-      { label: "Payments", href: "/admin/payments", icon: Wallet, perm: "payments.manage" },
-      { label: "Coupons", href: "/admin/coupons", icon: TicketPercent, perm: "billing.manage" },
-      { label: "Gift cards", href: "/admin/gift-cards", icon: Gift, perm: "billing.manage" },
+      {
+        label: "Customers",
+        href: "/admin/customers",
+        icon: Users,
+        perm: "users.read",
+      },
+      {
+        label: "Users",
+        href: "/admin/users",
+        icon: UserCog,
+        perm: "users.read",
+      },
+      {
+        label: "Orders",
+        href: "/admin/orders",
+        icon: ShoppingCart,
+        perm: "billing.read",
+      },
+      {
+        label: "Invoices",
+        href: "/admin/invoices",
+        icon: ReceiptText,
+        perm: "billing.read",
+      },
+      {
+        label: "Billing",
+        href: "/admin/billing",
+        icon: CreditCard,
+        perm: "billing.read",
+      },
+      {
+        label: "Payments",
+        href: "/admin/payments",
+        icon: Wallet,
+        perm: "payments.manage",
+      },
+      {
+        label: "Coupons",
+        href: "/admin/coupons",
+        icon: TicketPercent,
+        perm: "billing.manage",
+      },
+      {
+        label: "Gift cards",
+        href: "/admin/gift-cards",
+        icon: Gift,
+        perm: "billing.manage",
+      },
     ],
   },
   {
     title: "Support",
     items: [
-      { label: "Tickets", href: "/admin/support", icon: LifeBuoy, perm: "support.read" },
+      {
+        label: "Tickets",
+        href: "/admin/support",
+        icon: LifeBuoy,
+        perm: "support.read",
+      },
     ],
   },
   {
     title: "Catalog",
     items: [
-      { label: "Products", href: "/admin/products", icon: Package, perm: "catalog.manage" },
-      { label: "Eggs", href: "/admin/templates", icon: Egg, perm: "catalog.manage" },
+      {
+        label: "Products",
+        href: "/admin/products",
+        icon: Package,
+        perm: "catalog.manage",
+      },
+      {
+        label: "Eggs",
+        href: "/admin/templates",
+        icon: Egg,
+        perm: "catalog.manage",
+      },
     ],
   },
   {
     title: "Content",
     items: [
-      { label: "Homepage Alerts", href: "/admin/homepage-alerts", icon: Megaphone, perm: "content.manage" },
-      { label: "Status Incidents", href: "/admin/incidents", icon: Siren, perm: "content.manage" },
-      { label: "Alerts", href: "/admin/alerts", icon: Bell, perm: "content.manage" },
-      { label: "Staff", href: "/admin/staff", icon: Users, perm: "content.manage" },
+      {
+        label: "Homepage Alerts",
+        href: "/admin/homepage-alerts",
+        icon: Megaphone,
+        perm: "content.manage",
+      },
+      {
+        label: "Status Incidents",
+        href: "/admin/incidents",
+        icon: Siren,
+        perm: "content.manage",
+      },
+      {
+        label: "Alerts",
+        href: "/admin/alerts",
+        icon: Bell,
+        perm: "content.manage",
+      },
+      {
+        label: "Staff",
+        href: "/admin/staff",
+        icon: Users,
+        perm: "content.manage",
+      },
     ],
   },
   {
     title: "System",
     items: [
-      { label: "Roles & Permissions", href: "/admin/roles", icon: ShieldCheck, perm: "roles.manage" },
-      { label: "Audit Logs", href: "/admin/audit", icon: ScrollText, perm: "audit.read" },
-      { label: "Settings", href: "/admin/settings", icon: Settings, perm: "settings.manage" },
+      {
+        label: "Roles & Permissions",
+        href: "/admin/roles",
+        icon: ShieldCheck,
+        perm: "roles.manage",
+      },
+      {
+        label: "Audit Logs",
+        href: "/admin/audit",
+        icon: ScrollText,
+        perm: "audit.read",
+      },
+      {
+        label: "Settings",
+        href: "/admin/settings",
+        icon: Settings,
+        perm: "settings.manage",
+      },
     ],
   },
 ];

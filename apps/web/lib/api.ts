@@ -27,6 +27,8 @@ import type {
   ServerDatabase,
   ServerStat,
   ServerVariableField,
+  DatabaseHost,
+  DatabaseHostInput,
   Session,
   ApiKey,
   Subscription,
@@ -1104,6 +1106,17 @@ export const api = {
       }>,
     ) => http.patch<Node>(`/admin/nodes/${id}`, input),
     deleteNode: (id: string) => http.delete<void>(`/admin/nodes/${id}`),
+
+    // Database hosts (shared MySQL/MariaDB for per-server databases).
+    databaseHosts: () => getList<DatabaseHost>("/admin/database-hosts"),
+    createDatabaseHost: (input: DatabaseHostInput) =>
+      http.post<DatabaseHost>("/admin/database-hosts", input),
+    updateDatabaseHost: (id: string, input: Partial<DatabaseHostInput>) =>
+      http.patch<DatabaseHost>(`/admin/database-hosts/${id}`, input),
+    deleteDatabaseHost: (id: string) =>
+      http.delete<void>(`/admin/database-hosts/${id}`),
+    testDatabaseHost: (id: string) =>
+      http.post<{ ok: true }>(`/admin/database-hosts/${id}/test`),
 
     users: (query?: { q?: string; role?: string; state?: string }) =>
       http.get<Paginated<User>>("/admin/users", { query }),
