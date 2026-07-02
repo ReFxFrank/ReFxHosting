@@ -139,3 +139,55 @@ func envSlice(env map[string]string) []string {
 	}
 	return out
 }
+
+// secretEnvNames are host env vars that must never reach a hosted game/install
+// process. Combined with the REFX_ prefix rule below, this drops the agent's own
+// configuration and any operator secret so a hosted process — which on native
+// nodes runs as the agent's OS user — cannot read the panel signing key, tokens
+// or infra credentials out of its environment.
+var secretEnvNames = map[string]bool{
+	"SECRETS_ENC_KEY":       true,
+	"SIGNING_KEY":           true,
+	"BOOTSTRAP_TOKEN":       true,
+	"NODE_TOKEN":            true,
+	"DATABASE_URL":          true,
+	"REDIS_PASSWORD":        true,
+	"AWS_SECRET_ACCESS_KEY": true,
+	"AWS_ACCESS_KEY_ID":     true,
+	"S3_SECRET_KEY":         true,
+	"S3_ACCESS_KEY":         true,
+	"STRIPE_SECRET_KEY":     true,
+	"PAYPAL_CLIENT_SECRET":  true,
+	"SMTP_PASSWORD":         true,
+	"SMTP_PASS":             true,
+	"MINIO_ROOT_PASSWORD":   true,
+}
+
+// isSecretEnvKey reports whether a host env var is agent config/secret and must
+// be withheld from hosted processes. Errs toward compatibility: only the agent's
+// REFX_-namespaced vars and an explicit secret allowlist are dropped, so game
+// runtimes that rely on inherited PATH/HOME/JAVA_HOME/locale keep working.
+func isSecretEnvKey(name string) bool {
+	up := strings.ToUpper(name)
+	return strings.HasPrefix(up, "REFX_") || secretEnvNames[up]
+}
+
+// processEnv builds the environment for a hosted game/install process: the host
+// environment MINUS the agent's own config/secrets, PLUS the server's Spec.Env.
+// Deliberately not `append(os.Environ(), …)` — that inherited every secret the
+// agent held (CWE-668). Spec.Env overrides any surviving base key.
+func processEnv(specEnv map[string]string) []string {
+	out := make([]string, 0, len(specEnv)+32)
+	for _, kv := range os.Environ() {
+		eq := strings.IndexByte(kv, '=')
+		if eq <= 0 {
+			continue
+		}
+		if isSecretEnvKey(kv[:eq]) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	out = append(out, envSlice(specEnv)...)
+	return out
+}

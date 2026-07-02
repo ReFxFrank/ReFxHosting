@@ -144,7 +144,9 @@ func (n *NativeRuntime) runInstallScript(ctx context.Context, s *server.Server, 
 func (n *NativeRuntime) runCommand(ctx context.Context, name string, args []string, dir string, env map[string]string, ch chan<- InstallProgress) error {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), envSlice(env)...)
+	// Scrubbed env — the install/steamcmd process must not inherit the agent's
+	// secrets (see processEnv).
+	cmd.Env = processEnv(env)
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
@@ -190,7 +192,9 @@ func (n *NativeRuntime) Start(ctx context.Context, s *server.Server) error {
 
 	cmd := exec.Command(fields[0], fields[1:]...)
 	cmd.Dir = s.DataDir
-	cmd.Env = append(os.Environ(), envSlice(s.Spec.Env)...)
+	// Scrubbed env — a hosted game process (which on native nodes runs as the
+	// agent's OS user) must not inherit the agent's secrets (see processEnv).
+	cmd.Env = processEnv(s.Spec.Env)
 	osabstraction.SetProcessGroup(cmd) // own process group for clean signalling
 
 	stdin, err := cmd.StdinPipe()
