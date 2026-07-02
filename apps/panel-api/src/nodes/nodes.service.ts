@@ -247,8 +247,9 @@ export class NodesService {
 
   /**
    * Shape returned to the admin UI: the Node row plus its region (name +
-   * country) and the single most-recent NodeHeartbeat. The UI renders gauges
-   * from the heartbeat against the node's advertised capacity.
+   * country), the single most-recent NodeHeartbeat, and a live (non-deleted)
+   * server count. The UI renders gauges from the heartbeat against the node's
+   * advertised capacity and shows the count in the Servers column.
    */
   private readonly adminNodeInclude = {
     region: { select: { id: true, code: true, name: true, country: true } },
@@ -256,12 +257,24 @@ export class NodesService {
       orderBy: { recordedAt: "desc" as const },
       take: 1,
     },
+    _count: {
+      select: { servers: { where: { deletedAt: null } } },
+    },
   };
 
-  /** Flatten the `heartbeats` array into a single `latestHeartbeat` field. */
-  private decorate<T extends { heartbeats?: { recordedAt: Date }[] }>(node: T) {
-    const { heartbeats, ...rest } = node;
-    return { ...rest, latestHeartbeat: heartbeats?.[0] ?? null };
+  /** Flatten `heartbeats` into `latestHeartbeat` and `_count` into `servers`. */
+  private decorate<
+    T extends {
+      heartbeats?: { recordedAt: Date }[];
+      _count?: { servers: number };
+    },
+  >(node: T) {
+    const { heartbeats, _count, ...rest } = node;
+    return {
+      ...rest,
+      latestHeartbeat: heartbeats?.[0] ?? null,
+      servers: _count?.servers ?? 0,
+    };
   }
 
   async list(pagination: PaginationDto): Promise<Paginated<unknown>> {
