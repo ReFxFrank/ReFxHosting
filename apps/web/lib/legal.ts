@@ -31,7 +31,14 @@ export const LEGAL = {
   effectiveDate: process.env.NEXT_PUBLIC_LEGAL_EFFECTIVE_DATE ?? "June 26, 2026",
   /** New-order money-back window, rendered on the Refund Policy. */
   refundWindow: process.env.NEXT_PUBLIC_REFUND_WINDOW ?? "72 hours",
-  appStoreUrl: process.env.NEXT_PUBLIC_APP_STORE_URL ?? "#",
+  /**
+   * App Store listing for the ReFx Server Manager iOS app (now live). An env
+   * override wins; otherwise fall back to the published listing so the badge
+   * links live even if the build-time var is unset.
+   */
+  appStoreUrl:
+    process.env.NEXT_PUBLIC_APP_STORE_URL ??
+    "https://apps.apple.com/us/app/refx-server-manager/id6783853821",
 } as const;
 
 /**
