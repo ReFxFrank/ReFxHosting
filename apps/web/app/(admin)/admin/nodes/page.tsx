@@ -741,10 +741,11 @@ function NodeEconomicsPanel() {
             <TableHeader>
               <TableRow>
                 <TableHead>Node</TableHead>
+                <TableHead className="text-right">Servers</TableHead>
                 <TableHead className="text-right">Cost</TableHead>
                 <TableHead className="text-right">Est. revenue</TableHead>
                 <TableHead className="text-right">Margin</TableHead>
-                <TableHead className="text-right">RAM sold</TableHead>
+                <TableHead className="text-right">RAM used</TableHead>
                 <TableHead className="text-right">$/GB</TableHead>
                 <TableHead className="text-right">Break-even</TableHead>
               </TableRow>
@@ -755,6 +756,7 @@ function NodeEconomicsPanel() {
                 const capGb = n.capacity.memoryMb / 1024;
                 const hasCost = n.monthlyCostMinor != null;
                 const profit = n.marginMinor != null && n.marginMinor >= 0;
+                const comped = n.serverCount - n.paidServerCount;
                 return (
                   <TableRow key={n.id}>
                     <TableCell>
@@ -762,6 +764,17 @@ function NodeEconomicsPanel() {
                       <div className="text-xs text-muted-foreground">
                         {n.provider || n.region?.name || "—"}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {n.serverCount}
+                      {comped > 0 && (
+                        <span
+                          className="ml-1 text-xs text-warning"
+                          title="Servers with no active subscription (staff comps / free servers) — they use capacity but add $0 revenue."
+                        >
+                          · {comped} comped
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {hasCost ? (
@@ -807,9 +820,10 @@ function NodeEconomicsPanel() {
           </Table>
         </div>
         <p className="text-xs text-muted-foreground">
-          Revenue is estimated from active subscriptions on each node — staff
-          comps and free servers aren&apos;t counted. &ldquo;Break-even&rdquo;
-          is the RAM you&apos;d need sold at the current $/GB to cover that
+          Revenue is estimated from active subscriptions on each node.
+          Comped/free servers (no subscription) show in the Servers column and
+          count toward RAM used, but add $0 revenue. &ldquo;Break-even&rdquo; is
+          the RAM you&apos;d need sold at the current $/GB to cover that
           node&apos;s cost.
         </p>
       </CardContent>
