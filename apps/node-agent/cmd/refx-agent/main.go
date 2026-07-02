@@ -266,7 +266,7 @@ func buildManager(log zerolog.Logger, cfg *config.Config, caps osabstraction.Cap
 		}
 	}
 
-	native := runtime.NewNativeRuntime(log, steamHome)
+	native := runtime.NewNativeRuntime(log, steamHome, cfg.Runtime.Native.RunAsUID, cfg.Runtime.Native.RunAsGID)
 	winc := runtime.NewWindowsContainerRuntime(log)
 
 	opts := runtime.Options{

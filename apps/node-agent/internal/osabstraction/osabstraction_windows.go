@@ -20,6 +20,14 @@ func setProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr.CreationFlags |= 0x00000200
 }
 
+// setProcessCredential is a no-op on Windows: uid/gid privilege-drop isn't
+// applicable. Isolation there would use a distinct service account, which is out
+// of scope for this runtime. Always reports "not applied".
+func setProcessCredential(_ *exec.Cmd, _, _ int) bool { return false }
+
+// isolationSupported reports whether per-process uid/gid isolation is available.
+func isolationSupported() bool { return false }
+
 // killProcessGroup terminates the process. Child cleanup is enforced by the
 // Job Object (JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE) at the runtime layer.
 func killProcessGroup(p *os.Process) error {

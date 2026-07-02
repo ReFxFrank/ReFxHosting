@@ -34,6 +34,12 @@ type NativeRuntime struct {
 	// REFX_NODE_STEAM_HOME so the host game-download account's Steam Guard
 	// machine-auth persists across servers (once per node). Empty disables it.
 	steamHome string
+	// runAsUID/runAsGID: when both > 0, hosted game/install processes are launched
+	// under this unprivileged uid/gid (Linux) and their data dir is chowned to it,
+	// isolating each tenant from the agent and from other tenants. 0 = disabled
+	// (run as the agent user, the historical default).
+	runAsUID int
+	runAsGID int
 
 	mu        sync.Mutex
 	processes map[string]*nativeProcess // keyed by server id
@@ -53,13 +59,40 @@ type nativeProcess struct {
 	netTx       int64
 }
 
-// NewNativeRuntime constructs the native backend.
-func NewNativeRuntime(log zerolog.Logger, steamHome string) *NativeRuntime {
-	return &NativeRuntime{
+// NewNativeRuntime constructs the native backend. runAsUID/runAsGID enable
+// per-process privilege drop when both are > 0 (Linux only).
+func NewNativeRuntime(log zerolog.Logger, steamHome string, runAsUID, runAsGID int) *NativeRuntime {
+	rt := &NativeRuntime{
 		log:       log.With().Str("runtime", "native").Logger(),
 		steamHome: steamHome,
+		runAsUID:  runAsUID,
+		runAsGID:  runAsGID,
 		processes: make(map[string]*nativeProcess),
 	}
+	if runAsUID > 0 && runAsGID > 0 {
+		if osabstraction.IsolationSupported() {
+			rt.log.Info().Int("uid", runAsUID).Int("gid", runAsGID).
+				Msg("native process isolation enabled (per-server privilege drop)")
+		} else {
+			rt.log.Warn().Msg("native run_as_uid/gid set but isolation is not supported on this OS; ignoring")
+		}
+	}
+	return rt
+}
+
+// isolated reports whether per-process privilege drop is configured and usable.
+func (n *NativeRuntime) isolated() bool {
+	return n.runAsUID > 0 && n.runAsGID > 0 && osabstraction.IsolationSupported()
+}
+
+// prepareIsolation, when isolation is on, chowns the server's data directory to
+// the run uid/gid so the dropped-privilege process can read/write it. Called
+// before launching a game or install process against that dir.
+func (n *NativeRuntime) prepareIsolation(dataDir string) error {
+	if !n.isolated() {
+		return nil
+	}
+	return chownTreeStrict(dataDir, n.runAsUID, n.runAsGID)
 }
 
 // Name implements Runtime.
@@ -147,6 +180,14 @@ func (n *NativeRuntime) runCommand(ctx context.Context, name string, args []stri
 	// Scrubbed env — the install/steamcmd process must not inherit the agent's
 	// secrets (see processEnv).
 	cmd.Env = processEnv(env)
+	// When isolation is on, run installs under the same unprivileged uid so the
+	// installed files are owned by (and readable/writable to) the game process.
+	if n.isolated() {
+		if err := n.prepareIsolation(dir); err != nil {
+			return fmt.Errorf("native: prepare isolation: %w", err)
+		}
+		osabstraction.SetProcessCredential(cmd, n.runAsUID, n.runAsGID)
+	}
 	stdout, _ := cmd.StdoutPipe()
 	stderr, _ := cmd.StderrPipe()
 	if err := cmd.Start(); err != nil {
@@ -196,6 +237,18 @@ func (n *NativeRuntime) Start(ctx context.Context, s *server.Server) error {
 	// agent's OS user) must not inherit the agent's secrets (see processEnv).
 	cmd.Env = processEnv(s.Spec.Env)
 	osabstraction.SetProcessGroup(cmd) // own process group for clean signalling
+
+	// Optional per-server privilege drop: run under a dedicated unprivileged
+	// uid/gid so the game can't read the agent's files or other tenants' data.
+	// Fail loudly if requested but the data dir can't be prepared — never fall
+	// back to running un-isolated.
+	if n.isolated() {
+		if err := n.prepareIsolation(s.DataDir); err != nil {
+			s.SetState(server.StateCrashed)
+			return fmt.Errorf("native: prepare isolation: %w", err)
+		}
+		osabstraction.SetProcessCredential(cmd, n.runAsUID, n.runAsGID)
+	}
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

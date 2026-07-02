@@ -95,7 +95,7 @@ func TestManagerRegisterAppliesInstallSpec(t *testing.T) {
 	mgr := runtime.NewManager(runtime.Options{
 		Logger:     zerolog.Nop(),
 		ServersDir: t.TempDir(),
-		Native:     runtime.NewNativeRuntime(zerolog.Nop(), ""),
+		Native:     runtime.NewNativeRuntime(zerolog.Nop(), "", 0, 0),
 	})
 
 	dto := panel.ServerInstallSpec{

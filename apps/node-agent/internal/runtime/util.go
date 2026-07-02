@@ -172,6 +172,20 @@ func isSecretEnvKey(name string) bool {
 	return strings.HasPrefix(up, "REFX_") || secretEnvNames[up]
 }
 
+// chownTreeStrict recursively changes ownership of dir (and everything under it)
+// to uid:gid, returning the FIRST error. Unlike the best-effort chownTree used by
+// the Docker runtime, this fails loudly — when native isolation is on we must not
+// launch a dropped-privilege process against a dir it can't own. Symlinks are
+// lchowned so a symlink can't redirect the chown outside the jail.
+func chownTreeStrict(dir string, uid, gid int) error {
+	return filepath.WalkDir(dir, func(path string, _ os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Lchown(path, uid, gid)
+	})
+}
+
 // processEnv builds the environment for a hosted game/install process: the host
 // environment MINUS the agent's own config/secrets, PLUS the server's Spec.Env.
 // Deliberately not `append(os.Environ(), …)` — that inherited every secret the

@@ -252,6 +252,38 @@ it); either disable it or allow your UDP allocation range.
 On a 2×NVMe box choose **RAID-1** at OVH install time for customer-data safety
 (or RAID-0 + rely on off-site backups). Server data lives under `/var/lib/refx`.
 
+### 2.6 Native-runtime tenant isolation (optional, recommended for shared native nodes)
+The **Docker** runtime already isolates each server inside its own container as an
+unprivileged uid, so tenants can't read the agent's files or each other's data.
+The **native-process** runtime, by default, runs game processes as the agent's own
+OS user — fine for a single-tenant or trusted node, but on a **shared** native node
+you should turn on per-server privilege drop so one customer's server can't read the
+agent's signing key or another tenant's data:
+
+1. Create a locked-down account and note its uid/gid:
+   ```bash
+   sudo useradd --system --no-create-home --shell /usr/sbin/nologin refx-games
+   id refx-games   # -> uid=NNN gid=MMM
+   ```
+2. In `/etc/refx/config.yaml` set (using that uid/gid):
+   ```yaml
+   runtime:
+     native:
+       run_as_uid: NNN
+       run_as_gid: MMM
+   ```
+3. The agent must be able to change UID. Either run it as **root**, or edit
+   `/etc/systemd/system/refx-agent.service` to grant the capability and allow the
+   drop, then `systemctl daemon-reload && systemctl restart refx-agent`:
+   ```ini
+   AmbientCapabilities=CAP_NET_BIND_SERVICE CAP_SETUID CAP_SETGID CAP_CHOWN
+   NoNewPrivileges=no
+   ```
+   With this on, each server's process runs as `refx-games` and its `/var/lib/refx`
+   data dir is chowned to it; if the agent can't drop privilege the server Start
+   fails loudly rather than silently running un-isolated. (Docker nodes need none of
+   this.)
+
 ---
 
 ## Part 2W — Windows node (alternative to the Ubuntu node)

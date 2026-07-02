@@ -90,6 +90,24 @@ type RuntimeConfig struct {
 	Default string `mapstructure:"default"`
 	// Docker holds Docker-specific settings.
 	Docker DockerConfig `mapstructure:"docker"`
+	// Native holds native-process runtime settings.
+	Native NativeConfig `mapstructure:"native"`
+}
+
+// NativeConfig tunes the native-process runtime.
+type NativeConfig struct {
+	// RunAsUID / RunAsGID: when both are > 0, each hosted game/install process is
+	// launched under this dedicated unprivileged UID/GID (Linux only) and its
+	// data directory is chowned to it — so a tenant's process cannot read the
+	// agent's files (the panel signing key) or any other tenant's server data.
+	//
+	// 0 (the default) keeps the historical behaviour: processes run as the agent's
+	// own OS user. Enabling isolation requires the agent to run with the privilege
+	// to change UID (e.g. as root, or with CAP_SETUID and NoNewPrivileges OFF in
+	// the systemd unit); if the agent lacks that privilege the process Start fails
+	// loudly rather than silently running un-isolated.
+	RunAsUID int `mapstructure:"run_as_uid"`
+	RunAsGID int `mapstructure:"run_as_gid"`
 }
 
 // DockerConfig configures the Docker runtime.

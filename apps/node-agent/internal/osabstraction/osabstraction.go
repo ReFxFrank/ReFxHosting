@@ -57,3 +57,15 @@ func SetProcessGroup(cmd *exec.Cmd) { setProcessGroup(cmd) }
 
 // KillProcessGroup terminates a process and its descendants.
 func KillProcessGroup(p *os.Process) error { return killProcessGroup(p) }
+
+// SetProcessCredential launches the command under the given unprivileged
+// uid/gid (privilege drop) where supported. Returns true when a credential was
+// applied (Linux with uid,gid > 0); false otherwise (Windows, or uid/gid unset).
+// Requires the agent to run with privilege to change UID.
+func SetProcessCredential(cmd *exec.Cmd, uid, gid int) bool {
+	return setProcessCredential(cmd, uid, gid)
+}
+
+// IsolationSupported reports whether per-process uid/gid isolation is available
+// on this OS (Linux: yes; Windows: no).
+func IsolationSupported() bool { return isolationSupported() }

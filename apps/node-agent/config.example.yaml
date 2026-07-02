@@ -41,6 +41,19 @@ runtime:
   docker:
     host: "" # honours DOCKER_HOST when empty (unix socket / npipe)
     network: refx0 # user-defined bridge network containers join
+  native:
+    # Per-server privilege drop for the native-process runtime (Linux only).
+    # When BOTH are > 0, each hosted game/install process runs under this
+    # dedicated unprivileged uid/gid and its data dir is chowned to it — so a
+    # tenant's process can't read the agent's files (the panel signing key) or
+    # any other tenant's server data. 0 (default) = run as the agent's own user.
+    #
+    # Requires the agent to run with privilege to change UID: run it as root, OR
+    # grant CAP_SETUID and set NoNewPrivileges=no in the systemd unit. Create a
+    # locked-down account first, e.g.:  useradd --system --no-create-home \
+    #   --shell /usr/sbin/nologin refx-games  (then use its uid/gid below).
+    run_as_uid: 0
+    run_as_gid: 0
 
 # Stats collection + node heartbeat cadence.
 stats:

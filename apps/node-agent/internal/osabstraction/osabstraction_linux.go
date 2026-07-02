@@ -19,6 +19,30 @@ func setProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr.Setpgid = true
 }
 
+// setProcessCredential makes the child run under the given uid/gid (privilege
+// drop). Requires the agent itself to be privileged (root / CAP_SETUID). Returns
+// true when a credential was applied. Preserves any process-group setting.
+func setProcessCredential(cmd *exec.Cmd, uid, gid int) bool {
+	if uid <= 0 || gid <= 0 {
+		return false
+	}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.Credential = &syscall.Credential{
+		Uid: uint32(uid),
+		Gid: uint32(gid),
+		// Don't inherit the agent's supplementary groups — the hosted process
+		// gets exactly its own gid, nothing the agent user happened to belong to.
+		NoSetGroups: true,
+	}
+	return true
+}
+
+// isolationSupported reports whether per-process uid/gid isolation is available
+// on this platform.
+func isolationSupported() bool { return true }
+
 // killProcessGroup sends SIGKILL to the entire process group.
 func killProcessGroup(p *os.Process) error {
 	if p == nil {
