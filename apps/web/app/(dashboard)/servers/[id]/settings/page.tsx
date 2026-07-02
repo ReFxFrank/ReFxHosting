@@ -265,7 +265,108 @@ function StartupTab({ server }: { server: Server }) {
       </Card>
 
       <VariablesCard id={server.id} />
+
+      {/* Simple Voice Chat is a Minecraft feature — only surface it there. */}
+      {server.template?.slug?.startsWith("minecraft") && (
+        <VoiceChatCard id={server.id} />
+      )}
     </div>
+  );
+}
+
+/**
+ * Simple Voice Chat self-serve: reserve a dedicated UDP port so proximity voice
+ * doesn't collide with the game/query port. Publishes on the next restart.
+ */
+function VoiceChatCard({ id }: { id: string }) {
+  const qc = useQueryClient();
+  const status = useQuery({
+    queryKey: ["server-voice-chat", id],
+    queryFn: () => api.servers.voiceChatStatus(id),
+  });
+  const refresh = () =>
+    qc.invalidateQueries({ queryKey: ["server-voice-chat", id] });
+
+  const enable = useMutation({
+    mutationFn: () => api.servers.enableVoiceChat(id),
+    onSuccess: (r) => {
+      toast.success(`Voice port ${r.port} reserved`);
+      refresh();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to enable"),
+  });
+  const disable = useMutation({
+    mutationFn: () => api.servers.disableVoiceChat(id),
+    onSuccess: () => {
+      toast.success("Voice port removed");
+      refresh();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to disable"),
+  });
+
+  const port = status.data?.port;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Simple Voice Chat</CardTitle>
+        <CardDescription>
+          Proximity voice for Minecraft needs its own UDP port. Enable it to
+          reserve a dedicated port so voice doesn&apos;t clash with your game or
+          query port.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {status.isLoading ? (
+          <p className="text-sm text-muted-foreground">Checking…</p>
+        ) : status.data?.enabled ? (
+          <>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2 text-sm">
+              Enabled on port{" "}
+              <span className="font-mono font-semibold">{port}</span>.
+            </div>
+            <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
+              <li>
+                In <span className="font-mono">Files</span>, open{" "}
+                <span className="font-mono">
+                  voicechat/voicechat-server.properties
+                </span>{" "}
+                (Paper: <span className="font-mono">plugins/voicechat/…</span>)
+                and set{" "}
+                <span className="font-mono text-foreground">port={port}</span>{" "}
+                and <span className="font-mono">bind_address=0.0.0.0</span>.
+              </li>
+              <li>
+                <span className="font-medium text-foreground">
+                  Restart the server
+                </span>{" "}
+                so the new port is published.
+              </li>
+            </ol>
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                loading={disable.isPending}
+                onClick={() => disable.mutate()}
+              >
+                Disable
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Not enabled. We&apos;ll reserve a free UDP port for voice chat.
+            </p>
+            <Button loading={enable.isPending} onClick={() => enable.mutate()}>
+              Enable voice chat
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -459,6 +459,17 @@ export const api = {
       id: string,
       input: { startupCommand?: string; dockerImage?: string },
     ) => http.patch<Server>(`/servers/${id}/startup`, input),
+    /** Simple Voice Chat dedicated-port self-serve. */
+    voiceChatStatus: (id: string) =>
+      http.get<{ enabled: boolean; port: number | null; ip: string | null }>(
+        `/servers/${id}/voice-chat`,
+      ),
+    enableVoiceChat: (id: string) =>
+      http.post<{ port: number; ip: string; alreadyEnabled: boolean }>(
+        `/servers/${id}/voice-chat`,
+      ),
+    disableVoiceChat: (id: string) =>
+      http.delete<{ disabled: boolean }>(`/servers/${id}/voice-chat`),
     variables: (id: string) =>
       http.get<ServerVariableField[]>(`/servers/${id}/variables`),
     setVariable: (id: string, envName: string, value: string) =>

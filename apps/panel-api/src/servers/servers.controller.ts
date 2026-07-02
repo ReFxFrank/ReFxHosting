@@ -684,6 +684,36 @@ export class ServersController {
     return this.resources.removeAllocation(id, allocationId);
   }
 
+  // ---- Simple Voice Chat (self-serve dedicated UDP port) -----------------
+
+  @Get(":serverId/voice-chat")
+  @RequirePermissions("allocation.read")
+  voiceChatStatus(@Param("serverId") id: string) {
+    return this.servers.voiceChatStatus(id);
+  }
+
+  @Post(":serverId/voice-chat")
+  @RequirePermissions("allocation.create")
+  @Audit({
+    action: "server.voicechat.enable",
+    targetType: "Server",
+    targetParam: "serverId",
+  })
+  enableVoiceChat(@Param("serverId") id: string) {
+    return this.servers.enableVoiceChat(id);
+  }
+
+  @Delete(":serverId/voice-chat")
+  @RequirePermissions("allocation.delete")
+  @Audit({
+    action: "server.voicechat.disable",
+    targetType: "Server",
+    targetParam: "serverId",
+  })
+  disableVoiceChat(@Param("serverId") id: string) {
+    return this.servers.disableVoiceChat(id);
+  }
+
   // ---- sub-users ---------------------------------------------------------
 
   @Get(":serverId/sub-users")
