@@ -35,7 +35,7 @@ import {
   Server as ServerIcon,
   DollarSign,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, API_URL } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -76,6 +76,30 @@ import {
   copyToClipboard,
 } from "@/lib/utils";
 import type { Node, NodeOs, NodeEconomics } from "@/lib/types";
+
+/** GitHub repo the node-agent installer scripts live in (matches install-node.sh). */
+const REPO_SLUG = "refxfrank/refxhosting";
+
+/**
+ * Build the copy-paste agent install command for a node's OS, with the panel
+ * API URL and bootstrap token pre-filled. The installer strips a trailing
+ * /api or /api/v1, but API_URL is already the bare origin, so pass it as-is.
+ */
+function installCommand(os: NodeOs, token: string): string {
+  const raw = `https://raw.githubusercontent.com/${REPO_SLUG}/main/infra/scripts`;
+  if (os === "WINDOWS") {
+    return [
+      "cd $env:TEMP",
+      "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12",
+      `Invoke-WebRequest -Uri "${raw}/install-node.ps1" -OutFile install-node.ps1 -UseBasicParsing`,
+      `powershell -ExecutionPolicy Bypass -File .\\install-node.ps1 -PanelUrl ${API_URL} -Token ${token} -Version latest`,
+    ].join("\n");
+  }
+  return [
+    `curl -fsSL ${raw}/install-node.sh -o install-node.sh`,
+    `sudo bash install-node.sh --panel-url ${API_URL} --token ${token}`,
+  ].join("\n");
+}
 
 /** Format integer minor units (cents) as a currency string. */
 function fmtMoney(minor: number, currency = "USD"): string {
@@ -788,7 +812,10 @@ export default function AdminNodesPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [bootstrapToken, setBootstrapToken] = useState<string | null>(null);
+  const [bootstrap, setBootstrap] = useState<{
+    token: string;
+    os: NodeOs;
+  } | null>(null);
   const [detailNode, setDetailNode] = useState<Node | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Node | null>(null);
   const [editNode, setEditNode] = useState<Node | null>(null);
@@ -880,8 +907,8 @@ export default function AdminNodesPage() {
       toast.success("Node created");
       invalidate();
       setCreateOpen(false);
+      setBootstrap({ token: node.bootstrapToken, os: form.os });
       setForm(emptyForm);
-      setBootstrapToken(node.bootstrapToken);
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to create node"),
@@ -914,8 +941,11 @@ export default function AdminNodesPage() {
     onSuccess: (res) => {
       // The old token is now dead; surface the fresh one in the same dialog the
       // create flow uses.
+      setBootstrap({
+        token: res.bootstrapToken,
+        os: detailNode?.os ?? "LINUX",
+      });
       setDetailNode(null);
-      setBootstrapToken(res.bootstrapToken);
     },
     onError: (e) =>
       toast.error(
@@ -1413,36 +1443,64 @@ export default function AdminNodesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Bootstrap token dialog (shown once) */}
-      <Dialog
-        open={!!bootstrapToken}
-        onOpenChange={(o) => !o && setBootstrapToken(null)}
-      >
+      {/* Install command / bootstrap token dialog (shown once) */}
+      <Dialog open={!!bootstrap} onOpenChange={(o) => !o && setBootstrap(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Bootstrap token</DialogTitle>
+            <DialogTitle>Install the node agent</DialogTitle>
             <DialogDescription>
-              Run the daemon installer with this token to enroll the node.
+              {bootstrap?.os === "WINDOWS"
+                ? "Run this in an elevated PowerShell on the Windows node."
+                : "Run this as root on the Linux node."}{" "}
+              It installs the agent and enrolls it with this panel.
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
             <span>
-              Copy this token now — it is shown only once and cannot be
-              retrieved again.
+              This is shown only once — the token can&apos;t be retrieved again
+              (regenerate a new one from the node&apos;s menu if you lose it).
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm">
-              {bootstrapToken}
-            </code>
-            {bootstrapToken && <CopyButton value={bootstrapToken} />}
-          </div>
+          {bootstrap && (
+            <>
+              <div>
+                <div className="mb-1.5 flex items-center justify-between">
+                  <p className="refx-eyebrow">
+                    Install command
+                    {bootstrap.os === "WINDOWS" ? " (PowerShell)" : " (root)"}
+                  </p>
+                  <CopyButton
+                    value={installCommand(bootstrap.os, bootstrap.token)}
+                  />
+                </div>
+                <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-md border bg-muted/50 px-3 py-2 font-mono text-xs leading-relaxed">
+                  {installCommand(bootstrap.os, bootstrap.token)}
+                </pre>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Panel URL <span className="font-mono">{API_URL}</span> is
+                  pre-filled. The node flips to{" "}
+                  <span className="font-medium">online</span> here within a few
+                  seconds of the agent starting.
+                </p>
+              </div>
+
+              <div>
+                <p className="refx-eyebrow mb-1.5">Bootstrap token only</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 overflow-x-auto rounded-md border bg-muted/50 px-3 py-2 font-mono text-sm">
+                    {bootstrap.token}
+                  </code>
+                  <CopyButton value={bootstrap.token} />
+                </div>
+              </div>
+            </>
+          )}
 
           <DialogFooter>
-            <Button onClick={() => setBootstrapToken(null)}>Done</Button>
+            <Button onClick={() => setBootstrap(null)}>Done</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
