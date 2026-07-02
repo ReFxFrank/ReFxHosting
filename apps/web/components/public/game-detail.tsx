@@ -13,6 +13,7 @@ import {
 import { GameImage } from "./game-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SpotlightCard } from "@/components/ui/spotlight-card";
 import { formatMoney, formatMb, cn } from "@/lib/utils";
 import type { StorefrontGameDetail, StorefrontPlan } from "@/lib/types";
 
@@ -40,7 +41,8 @@ function monthlyPrice(
 ) {
   if (!prices.length) return null;
   const monthly = prices.find((p) => p.interval === "MONTHLY");
-  const pick = monthly ?? prices.reduce((a, b) => (b.amountMinor < a.amountMinor ? b : a));
+  const pick =
+    monthly ?? prices.reduce((a, b) => (b.amountMinor < a.amountMinor ? b : a));
   return { amountMinor: pick.amountMinor, currency: pick.currency };
 }
 
@@ -52,7 +54,9 @@ function planCards(plans: StorefrontPlan[]): PlanCard[] {
   const cards: PlanCard[] = [];
   for (const p of plans) {
     if (p.hardwareTiers && p.hardwareTiers.length) {
-      for (const t of [...p.hardwareTiers].sort((a, b) => a.sortOrder - b.sortOrder)) {
+      for (const t of [...p.hardwareTiers].sort(
+        (a, b) => a.sortOrder - b.sortOrder,
+      )) {
         cards.push({
           key: t.id,
           productSlug: p.slug,
@@ -99,15 +103,24 @@ export function GameDetailHero({
   return (
     <section className="relative overflow-hidden border-b border-white/[0.06]">
       <div className="absolute inset-0">
-        <GameImage src={game.heroImageUrl ?? game.cardImageUrl} alt={game.name} className="opacity-30" />
+        <GameImage
+          src={game.heroImageUrl ?? game.cardImageUrl}
+          alt={game.name}
+          className="opacity-30"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-[#070b12] via-[#070b12]/80 to-[#070b12]/40" />
       </div>
       <div className="relative mx-auto w-full max-w-6xl px-4 py-14 sm:px-6 sm:py-20">
-        <Link href={backHref} className="text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href={backHref}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
           ← {backLabel}
         </Link>
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {game.category && <Badge variant="secondary">{game.category.name}</Badge>}
+          {game.category && (
+            <Badge variant="secondary">{game.category.name}</Badge>
+          )}
           {game.tags?.slice(0, 4).map((t) => (
             <Badge key={t} variant="muted">
               {t}
@@ -118,7 +131,9 @@ export function GameDetailHero({
           {game.name}
         </h1>
         {game.description && (
-          <p className="mt-4 max-w-2xl text-lg text-muted-foreground">{game.description}</p>
+          <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
+            {game.description}
+          </p>
         )}
         <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
           <Button size="lg" asChild className="w-full sm:w-auto">
@@ -130,7 +145,10 @@ export function GameDetailHero({
             <p className="text-sm text-muted-foreground">
               from{" "}
               <span className="text-lg font-semibold text-foreground">
-                {formatMoney(game.startingPrice.amountMinor, game.startingPrice.currency)}
+                {formatMoney(
+                  game.startingPrice.amountMinor,
+                  game.startingPrice.currency,
+                )}
               </span>
               /mo
             </p>
@@ -162,16 +180,17 @@ export function GameOrderSummaryPanel({
 
       {plans.length === 0 ? (
         <div className="refx-card rounded-2xl p-8 text-center text-sm text-muted-foreground">
-          No plans are currently available for this game. Please check back soon.
+          No plans are currently available for this game. Please check back
+          soon.
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {planCards(plans).map((c) => (
-            <div
+            <SpotlightCard
               key={c.key}
               className={cn(
-                "refx-card flex flex-col rounded-2xl p-5",
-                c.recommended && "ring-1 ring-primary",
+                "flex flex-col p-5",
+                c.recommended && "ring-1 ring-primary refx-glow",
               )}
             >
               <div className="flex items-center justify-between">
@@ -183,11 +202,14 @@ export function GameOrderSummaryPanel({
                 )}
               </div>
               {c.description && (
-                <p className="mt-1 text-sm text-muted-foreground">{c.description}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {c.description}
+                </p>
               )}
               <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
-                  <Cpu className="size-4 text-primary" /> {c.cpuCores ?? "—"} vCPU
+                  <Cpu className="size-4 text-primary" /> {c.cpuCores ?? "—"}{" "}
+                  vCPU
                 </li>
                 <li className="flex items-center gap-2">
                   <MemoryStick className="size-4 text-primary" />{" "}
@@ -199,7 +221,8 @@ export function GameOrderSummaryPanel({
                 </li>
                 {c.recommendedPlayers != null && (
                   <li className="flex items-center gap-2">
-                    <Users className="size-4 text-primary" /> ~{c.recommendedPlayers} {capacityUnit}
+                    <Users className="size-4 text-primary" /> ~
+                    {c.recommendedPlayers} {capacityUnit}
                   </li>
                 )}
               </ul>
@@ -220,7 +243,7 @@ export function GameOrderSummaryPanel({
               <Button className="mt-4 w-full" asChild>
                 <Link href={`/order?product=${c.productSlug}`}>Select</Link>
               </Button>
-            </div>
+            </SpotlightCard>
           ))}
         </div>
       )}
@@ -252,7 +275,9 @@ export function GameAbout({ game }: { game: StorefrontGameDetail["game"] }) {
     <div className="refx-card rounded-2xl p-6">
       <h2 className="text-lg font-bold tracking-tight">About {game.name}</h2>
       <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-        {game.longDescription || game.description || "No description provided yet."}
+        {game.longDescription ||
+          game.description ||
+          "No description provided yet."}
       </p>
       <div className="mt-5 grid grid-cols-3 gap-3 border-t border-white/[0.06] pt-5 text-center">
         <Spec label="Rec. CPU" value={`${game.recCpuCores} vCPU`} />

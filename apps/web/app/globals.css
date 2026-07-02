@@ -154,7 +154,9 @@
   body {
     @apply text-foreground;
     background-color: hsl(var(--background));
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
@@ -162,9 +164,21 @@
   .dark body {
     background-color: #070b12;
     background-image:
-      radial-gradient(900px 600px at 18% -8%, rgba(0, 114, 255, 0.1), transparent 60%),
-      radial-gradient(1100px 700px at 100% 0%, rgba(88, 167, 211, 0.07), transparent 55%),
-      radial-gradient(800px 800px at 50% 120%, rgba(0, 114, 255, 0.05), transparent 60%);
+      radial-gradient(
+        900px 600px at 18% -8%,
+        rgba(0, 114, 255, 0.1),
+        transparent 60%
+      ),
+      radial-gradient(
+        1100px 700px at 100% 0%,
+        rgba(88, 167, 211, 0.07),
+        transparent 55%
+      ),
+      radial-gradient(
+        800px 800px at 50% 120%,
+        rgba(0, 114, 255, 0.05),
+        transparent 60%
+      );
     background-attachment: fixed;
   }
   /* Thin, dense scrollbars to match the panel aesthetic. */
@@ -192,8 +206,11 @@
   /* Outer shell — deep navy/blue-black gradient, thin blue border, soft shadow. */
   .refx-shell {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(10, 18, 32, 0.96), rgba(7, 13, 24, 0.96));
+    background: linear-gradient(
+      180deg,
+      rgba(10, 18, 32, 0.96),
+      rgba(7, 13, 24, 0.96)
+    );
     border: 1px solid rgba(0, 114, 255, 0.16);
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.04) inset,
@@ -203,8 +220,11 @@
   /* Panel — layered dark glass with a faint inner highlight. */
   .refx-panel {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(10, 18, 32, 0.96), rgba(7, 13, 24, 0.96));
+    background: linear-gradient(
+      180deg,
+      rgba(10, 18, 32, 0.96),
+      rgba(7, 13, 24, 0.96)
+    );
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: var(--radius);
     box-shadow:
@@ -215,8 +235,11 @@
   /* Card — inset module, subtle gradient, thin border, inner highlight. */
   .refx-card {
     position: relative;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+    background: linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.045),
+      rgba(255, 255, 255, 0.015)
+    );
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: var(--radius);
     box-shadow:
@@ -236,8 +259,11 @@
 
   /* Inset dark-glass control surface (inputs, triggers). */
   .refx-input {
-    background:
-      linear-gradient(180deg, rgba(7, 13, 24, 0.7), rgba(10, 18, 32, 0.55));
+    background: linear-gradient(
+      180deg,
+      rgba(7, 13, 24, 0.7),
+      rgba(10, 18, 32, 0.55)
+    );
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.03) inset,
@@ -246,8 +272,11 @@
 
   /* Primary blue glass/gradient surface (buttons, active states). */
   .refx-primary-surface {
-    background:
-      linear-gradient(180deg, rgba(40, 140, 255, 1), rgba(0, 114, 255, 1));
+    background: linear-gradient(
+      180deg,
+      rgba(40, 140, 255, 1),
+      rgba(0, 114, 255, 1)
+    );
     border: 1px solid rgba(120, 185, 255, 0.55);
     box-shadow:
       0 1px 0 rgba(255, 255, 255, 0.25) inset,
@@ -255,13 +284,16 @@
   }
 }
 
-@layer utilities {
-  /* Soft, wide, low-opacity blue glow — reinforces active/premium states. */
-  .refx-glow {
-    box-shadow: 0 0 0 1px rgba(0, 114, 255, 0.18),
-      0 10px 40px -12px rgba(0, 114, 255, 0.45);
-  }
+/* Soft, wide, low-opacity blue glow — reinforces active/premium states.
+   Registered as a Tailwind v4 utility (not @layer utilities) so variants like
+   hover:refx-glow / group-hover:refx-glow actually generate. */
+@utility refx-glow {
+  box-shadow:
+    0 0 0 1px rgba(0, 114, 255, 0.18),
+    0 10px 40px -12px rgba(0, 114, 255, 0.45);
+}
 
+@layer utilities {
   /* Thin luminous top-edge beam, drawn inside the element. */
   .refx-beam::before {
     content: "";
@@ -289,6 +321,122 @@
       transparent 60%
     );
     pointer-events: none;
+  }
+
+  /* One site-wide card hover grammar: lift + blue border-brighten + soft glow. */
+  .refx-hover-card {
+    transition:
+      transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+      border-color 0.35s ease,
+      box-shadow 0.35s ease;
+  }
+  @media (hover: hover) {
+    .refx-hover-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(0, 114, 255, 0.35);
+      box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.07) inset,
+        0 0 0 1px rgba(0, 114, 255, 0.16),
+        0 16px 44px -18px rgba(0, 114, 255, 0.4);
+    }
+  }
+
+  /* Below-fold render skipping for long storefront pages. */
+  .refx-cv {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 640px;
+  }
+
+  /* Cursor-tracking inner light wash (::after paints above card content).
+     Position fed by useSpotlight() via --refx-mx/--refx-my. */
+  .refx-spotlight::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    background: radial-gradient(
+      240px circle at var(--refx-mx, 50%) var(--refx-my, 40%),
+      rgba(0, 114, 255, 0.13),
+      transparent 70%
+    );
+  }
+
+  /* Cursor-tracking 1px gradient border ring (padding-box mask trick; plain
+     mask, NOT backdrop-filter). Paints exactly over .refx-card's 1px border. */
+  .refx-border-glow::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    background: radial-gradient(
+      220px circle at var(--refx-mx, 50%) var(--refx-my, 0%),
+      rgba(122, 190, 255, 0.9),
+      rgba(0, 114, 255, 0.35) 45%,
+      transparent 75%
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .refx-spotlight:hover::after,
+    .refx-border-glow:hover::before {
+      opacity: 1;
+    }
+  }
+
+  /* Animated beam variant: a bright 1px hotspot glides along the top edge.
+     Static .refx-beam stays the default everywhere else. */
+  .refx-beam-live::before {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(125, 183, 255, 0.08) 35%,
+      rgba(125, 183, 255, 0.7) 50%,
+      rgba(125, 183, 255, 0.08) 65%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: refxBeamSweep 9s ease-in-out infinite;
+  }
+
+  /* Diagonal glass sheen for saturated primary CTAs (transform-only).
+     Deliberately does NOT set `position` so it composes with `absolute`
+     elements (e.g. the hero search submit); pair with `relative` when the
+     host isn't already positioned. */
+  .refx-sheen {
+    overflow: hidden;
+  }
+  .refx-sheen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      115deg,
+      transparent 35%,
+      rgba(255, 255, 255, 0.25) 50%,
+      transparent 65%
+    );
+    transform: translateX(-160%);
+  }
+  @media (hover: hover) {
+    .refx-sheen:hover::after {
+      animation: refxSheen 0.9s ease;
+    }
   }
 }
 
@@ -325,11 +473,21 @@
 }
 
 /* Staggered ramp for a hero's stacked elements (eyebrow → headline → … ). */
-.refx-enter-1 { animation-delay: 0.05s; }
-.refx-enter-2 { animation-delay: 0.15s; }
-.refx-enter-3 { animation-delay: 0.27s; }
-.refx-enter-4 { animation-delay: 0.4s; }
-.refx-enter-5 { animation-delay: 0.52s; }
+.refx-enter-1 {
+  animation-delay: 0.05s;
+}
+.refx-enter-2 {
+  animation-delay: 0.15s;
+}
+.refx-enter-3 {
+  animation-delay: 0.27s;
+}
+.refx-enter-4 {
+  animation-delay: 0.4s;
+}
+.refx-enter-5 {
+  animation-delay: 0.52s;
+}
 
 /* The headline gets a touch more travel + a soft blur-in for a premium feel. */
 .refx-enter-hero {
@@ -366,6 +524,107 @@
   }
 }
 
+/* ── Aurora hero backdrop ──
+   Oversized (-25% inset) so drift never exposes an edge; one shared keyframe,
+   desynchronized via negative delays. Transform/opacity only. */
+.refx-aurora {
+  position: absolute;
+  inset: -25%;
+  pointer-events: none;
+  will-change: transform;
+}
+.refx-aurora-a {
+  background: radial-gradient(
+    42% 38% at 50% 18%,
+    rgba(0, 114, 255, 0.16),
+    transparent 70%
+  );
+  animation: refxAurora 34s ease-in-out infinite alternate;
+}
+.refx-aurora-b {
+  background: radial-gradient(
+    30% 30% at 78% 30%,
+    rgba(34, 211, 238, 0.09),
+    transparent 70%
+  );
+  animation: refxAurora 26s ease-in-out infinite alternate-reverse;
+  animation-delay: -8s;
+}
+.refx-aurora-c {
+  background: radial-gradient(
+    34% 32% at 22% 32%,
+    rgba(125, 183, 255, 0.06),
+    transparent 70%
+  );
+  animation: refxAurora 44s ease-in-out infinite alternate;
+  animation-delay: -18s;
+}
+@keyframes refxAurora {
+  from {
+    transform: translate3d(-2.5%, -1.5%, 0) scale(1) rotate(-1deg);
+  }
+  to {
+    transform: translate3d(2.5%, 2%, 0) scale(1.06) rotate(1deg);
+  }
+}
+
+/* Static etched-grid texture, faded in from the top by a plain CSS mask. */
+.refx-hero-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(125, 183, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(125, 183, 255, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  -webkit-mask-image: radial-gradient(
+    60% 55% at 50% 0%,
+    black 25%,
+    transparent 75%
+  );
+  mask-image: radial-gradient(60% 55% at 50% 0%, black 25%, transparent 75%);
+}
+
+/* ── Headline shimmer ──
+   First and last stops identical (#3aa0ff) so the linear loop is seamless.
+   Homepage h1 only — sub-pages use the static two-stop gradient. */
+.refx-text-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    #3aa0ff,
+    #9dccff 35%,
+    #22d3ee 60%,
+    #3aa0ff
+  );
+  background-size: 200% auto;
+  background-position: 0% center;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: refxTextShimmer 8s linear infinite;
+}
+@keyframes refxTextShimmer {
+  to {
+    background-position: 200% center;
+  }
+}
+
+/* Sweep driver for .refx-beam-live (class lives in @layer utilities). */
+@keyframes refxBeamSweep {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -80% 0;
+  }
+}
+
+/* Sweep driver for .refx-sheen (class lives in @layer utilities). */
+@keyframes refxSheen {
+  to {
+    transform: translateX(160%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .refx-enter,
   .refx-enter-hero,
@@ -374,5 +633,32 @@
     opacity: 1;
     transform: none;
     filter: none;
+  }
+  .refx-aurora {
+    animation: none;
+    transform: none;
+  }
+  .refx-text-shimmer {
+    animation: none;
+  }
+  .refx-hover-card {
+    transition: none;
+  }
+  .refx-spotlight::after,
+  .refx-border-glow::before {
+    transition: none;
+  }
+  .refx-beam-live::before {
+    animation: none;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(125, 183, 255, 0.55),
+      transparent
+    );
+    background-size: 100% 100%;
+  }
+  .refx-sheen::after {
+    animation: none;
   }
 }

@@ -132,8 +132,16 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
 
       <main className="flex-1">{children}</main>
 
-      <footer className="border-t border-white/[0.06] bg-[rgba(7,11,18,0.6)]">
-        <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-2 lg:grid-cols-5">
+      <footer className="refx-beam refx-beam-live relative border-t border-white/[0.06] bg-[rgba(7,11,18,0.6)]">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(50% 90% at 50% 130%, rgba(0,114,255,0.07), transparent 70%)",
+          }}
+        />
+        <div className="relative mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 md:grid-cols-2 lg:grid-cols-5">
           <div className="space-y-4 lg:col-span-1">
             <LogoWordmark height={24} />
             <p className="max-w-xs text-sm text-muted-foreground">
@@ -180,7 +188,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             ]}
           />
         </div>
-        <div className="border-t border-white/[0.04] py-5">
+        <div className="relative border-t border-white/[0.04] py-5">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <p className="text-xs text-muted-foreground">
               © {new Date().getFullYear()} {BRAND}. All rights reserved.
@@ -233,7 +241,7 @@ function FooterCol({
           <li key={l.href}>
             <Link
               href={l.href}
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-block text-sm text-muted-foreground transition-[color,transform] hover:translate-x-0.5 hover:text-foreground"
             >
               {l.label}
             </Link>

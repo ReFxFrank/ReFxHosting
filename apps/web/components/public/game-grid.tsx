@@ -5,6 +5,7 @@ import { Search, ArrowRight, Cpu, MemoryStick } from "lucide-react";
 import { GameImage } from "./game-image";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { useSpotlight } from "@/hooks/use-spotlight";
 import { cn, formatMoney, formatMb } from "@/lib/utils";
 import type { StorefrontGame } from "@/lib/types";
 
@@ -19,16 +20,19 @@ export function GameCard({
   game: StorefrontGame;
   basePath?: string;
 }) {
+  const { ref: spotRef, onMouseMove } = useSpotlight<HTMLAnchorElement>();
   return (
     <Link
+      ref={spotRef}
+      onMouseMove={onMouseMove}
       href={`${basePath}/${game.slug}`}
-      className="group refx-card relative flex flex-col overflow-hidden rounded-2xl transition-all duration-200 hover:-translate-y-0.5 hover:refx-glow"
+      className="group refx-card refx-hover-card refx-spotlight refx-border-glow relative flex flex-col rounded-2xl"
     >
-      <div className="relative aspect-[16/9] overflow-hidden">
+      <div className="relative aspect-[16/9] overflow-hidden rounded-t-2xl">
         <GameImage
           src={game.cardImageUrl}
           alt={game.name}
-          className="transition-transform duration-300 group-hover:scale-[1.04]"
+          className="transition-transform duration-500 ease-out group-hover:scale-[1.05]"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#070b12] via-transparent to-transparent" />
         {game.featured && (
@@ -47,7 +51,9 @@ export function GameCard({
         <div className="space-y-1">
           <h3 className="font-semibold tracking-tight">{game.name}</h3>
           {game.description && (
-            <p className="line-clamp-2 text-sm text-muted-foreground">{game.description}</p>
+            <p className="line-clamp-2 text-sm text-muted-foreground">
+              {game.description}
+            </p>
           )}
         </div>
 
@@ -66,7 +72,10 @@ export function GameCard({
               <>
                 <span className="text-muted-foreground">from </span>
                 <span className="font-semibold text-foreground">
-                  {formatMoney(game.startingPrice.amountMinor, game.startingPrice.currency)}
+                  {formatMoney(
+                    game.startingPrice.amountMinor,
+                    game.startingPrice.currency,
+                  )}
                 </span>
                 <span className="text-muted-foreground">/mo</span>
               </>
@@ -119,7 +128,8 @@ export function GameCategoryTabs({
   onChange: (v: string) => void;
 }) {
   const cats = new Map<string, string>();
-  for (const g of games) if (g.category) cats.set(g.category.slug, g.category.name);
+  for (const g of games)
+    if (g.category) cats.set(g.category.slug, g.category.name);
 
   const tabs = [
     { value: FEATURED, label: "Popular" },

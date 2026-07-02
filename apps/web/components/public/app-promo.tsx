@@ -12,8 +12,11 @@ const POINTS = [
 /** Marketing band promoting the iOS companion app. */
 export function AppPromo() {
   return (
-    <section id="app" className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
-      <div className="refx-beam relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[rgba(10,14,22,0.6)] p-8 sm:p-12">
+    <section
+      id="app"
+      className="refx-cv mx-auto w-full max-w-6xl px-4 py-16 sm:px-6"
+    >
+      <div className="refx-beam refx-beam-live relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[rgba(10,14,22,0.6)] p-8 sm:p-12">
         <div className="grid items-center gap-10 md:grid-cols-2">
           <div className="space-y-6">
             <p className="refx-eyebrow">{LEGAL.brand} for iOS</p>
@@ -21,10 +24,10 @@ export function AppPromo() {
               Your servers, in your pocket
             </h2>
             <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              The {LEGAL.brand} app puts your whole control panel on your phone —
-              power your servers, watch their status live, handle billing, and stay
-              on top of support, with push notifications the moment something
-              changes.
+              The {LEGAL.brand} app puts your whole control panel on your phone
+              — power your servers, watch their status live, handle billing, and
+              stay on top of support, with push notifications the moment
+              something changes.
             </p>
             <ul className="space-y-3">
               {POINTS.map(({ icon: Icon, label }) => (

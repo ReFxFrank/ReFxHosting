@@ -8,7 +8,10 @@ import { Search } from "lucide-react";
 const POPULAR: { label: string; slug: string }[] = [
   { label: "Getting started", slug: "getting-started-with-refx" },
   { label: "Switching games", slug: "switching-games-on-your-server" },
-  { label: "Connect to your server", slug: "finding-and-connecting-to-your-server" },
+  {
+    label: "Connect to your server",
+    slug: "finding-and-connecting-to-your-server",
+  },
   { label: "Billing", slug: "invoices-renewals-and-payment" },
 ];
 
@@ -24,7 +27,11 @@ export function HeroKbSearch() {
   function submit(e: React.FormEvent) {
     e.preventDefault();
     const query = q.trim();
-    router.push(query ? `/knowledge-base?q=${encodeURIComponent(query)}` : "/knowledge-base");
+    router.push(
+      query
+        ? `/knowledge-base?q=${encodeURIComponent(query)}`
+        : "/knowledge-base",
+    );
   }
 
   return (
@@ -40,7 +47,7 @@ export function HeroKbSearch() {
         />
         <button
           type="submit"
-          className="refx-primary-surface absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg px-4 py-2 text-sm font-medium text-white"
+          className="refx-primary-surface refx-sheen absolute right-1.5 top-1/2 -translate-y-1/2 rounded-lg px-4 py-2 text-sm font-medium text-white"
         >
           Search
         </button>

@@ -12,6 +12,7 @@ import {
 } from "@/components/public/home-sections";
 import { HomepageAlertBanner } from "@/components/public/homepage-alert-banner";
 import { AppPromo } from "@/components/public/app-promo";
+import { StatsSection } from "@/components/public/stats-section";
 import {
   GameGrid,
   GameCategoryTabs,
@@ -41,7 +42,8 @@ export default function HomePage() {
   const filtered = useMemo(() => {
     let list = all;
     if (category === FEATURED) list = all.filter((g) => g.featured);
-    else if (category !== ALL) list = all.filter((g) => g.category?.slug === category);
+    else if (category !== ALL)
+      list = all.filter((g) => g.category?.slug === category);
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -71,8 +73,11 @@ export default function HomePage() {
         </div>
       </div>
 
+      {/* Sections choreograph their own per-card reveals internally. */}
+      <ServicesSection />
+
       <Reveal>
-        <ServicesSection />
+        <StatsSection />
       </Reveal>
 
       <section className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
@@ -80,13 +85,19 @@ export default function HomePage() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="refx-eyebrow">Game catalog</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight">Choose your game</h2>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight">
+              Choose your game
+            </h2>
           </div>
           <GameSearchFilter value={search} onChange={setSearch} />
         </div>
 
         <div className="mb-6">
-          <GameCategoryTabs games={all} active={category} onChange={setCategory} />
+          <GameCategoryTabs
+            games={all}
+            active={category}
+            onChange={setCategory}
+          />
         </div>
 
         {games.isLoading ? (
@@ -100,13 +111,9 @@ export default function HomePage() {
         )}
       </section>
 
-      <Reveal>
-        <HostingFeatureCards />
-      </Reveal>
+      <HostingFeatureCards />
 
-      <Reveal>
-        <SupportSection />
-      </Reveal>
+      <SupportSection />
 
       <Reveal>
         <AppPromo />
