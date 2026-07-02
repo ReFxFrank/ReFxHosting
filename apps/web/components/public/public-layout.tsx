@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect } from "react";
-import { ArrowRight, LayoutDashboard } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, LayoutDashboard, Menu, X } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { LogoWordmark } from "@/components/brand/logo";
@@ -29,6 +29,10 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
   const status = useAuthStore((s) => s.status);
   const bootstrap = useAuthStore((s) => s.bootstrap);
   const authed = status === "authenticated";
+  // Mobile hamburger state — the desktop nav is hidden below `md`, so phones
+  // need this menu to reach Games/Voice/Web Hosting/Help/Team/Status at all.
+  // Every menu link closes it via onClick, so no navigation effect is needed.
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Resolve auth state once so the header can show Client Area vs Login.
   useEffect(() => {
@@ -68,7 +72,12 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               </Button>
             ) : (
               <>
-                <Button size="sm" variant="ghost" asChild className="hidden sm:inline-flex">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  asChild
+                  className="hidden sm:inline-flex"
+                >
                   <Link href="/login">Login</Link>
                 </Button>
                 <Button size="sm" asChild>
@@ -78,8 +87,47 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
                 </Button>
               </>
             )}
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              className="md:hidden"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              {menuOpen ? (
+                <X className="size-5" />
+              ) : (
+                <Menu className="size-5" />
+              )}
+            </Button>
           </div>
         </div>
+
+        {/* Mobile nav — stacked links under the sticky header. */}
+        {menuOpen && (
+          <nav className="border-t border-white/[0.06] px-4 pb-4 pt-2 md:hidden">
+            {NAV.map((n) => (
+              <Link
+                key={n.href}
+                href={n.href}
+                onClick={() => setMenuOpen(false)}
+                className="block rounded-lg px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground"
+              >
+                {n.label}
+              </Link>
+            ))}
+            {!authed && (
+              <Link
+                href="/login"
+                onClick={() => setMenuOpen(false)}
+                className="mt-1 block rounded-lg border border-white/[0.08] px-3 py-2.5 text-center text-sm font-medium transition-colors hover:bg-white/[0.04]"
+              >
+                Login
+              </Link>
+            )}
+          </nav>
+        )}
       </header>
 
       <main className="flex-1">{children}</main>
@@ -138,10 +186,30 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               © {new Date().getFullYear()} {BRAND}. All rights reserved.
             </p>
             <nav className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-              <Link href="/terms" className="transition-colors hover:text-foreground">Terms</Link>
-              <Link href="/privacy" className="transition-colors hover:text-foreground">Privacy</Link>
-              <Link href="/acceptable-use" className="transition-colors hover:text-foreground">Acceptable Use</Link>
-              <Link href="/refunds" className="transition-colors hover:text-foreground">Refunds</Link>
+              <Link
+                href="/terms"
+                className="transition-colors hover:text-foreground"
+              >
+                Terms
+              </Link>
+              <Link
+                href="/privacy"
+                className="transition-colors hover:text-foreground"
+              >
+                Privacy
+              </Link>
+              <Link
+                href="/acceptable-use"
+                className="transition-colors hover:text-foreground"
+              >
+                Acceptable Use
+              </Link>
+              <Link
+                href="/refunds"
+                className="transition-colors hover:text-foreground"
+              >
+                Refunds
+              </Link>
             </nav>
           </div>
         </div>
