@@ -34,7 +34,7 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
   const rRef = useRef(0);
   const phiRef = useRef(0);
   const widthRef = useRef(0); // canvas CSS size (wrapper × MAX_ZOOM)
-  const zoomRef = useRef(0.95); // user zoom (slightly under 1 so the rim glow shows)
+  const zoomRef = useRef(0.9); // user zoom (under 1 so the rim glow shows)
   const pinchDist = useRef<number | null>(null);
 
   // Markers from the regions that have known coordinates. A region with any node
@@ -130,7 +130,7 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
     let raf = 0;
     const tick = () => {
       if (pointerInteracting.current === null && !reduceMotion) {
-        phiRef.current += 0.0016;
+        phiRef.current += 0.0009;
       }
       const w = widthRef.current * dpr;
       globe.update({
@@ -179,7 +179,12 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
   return (
     <div
       ref={wrapperRef}
-      className="relative mx-auto aspect-square w-full max-w-[440px] overflow-hidden"
+      // rounded-full: the crop window must be CIRCULAR. With a square crop,
+      // any zoom between 1 and √2 leaves the sphere's curved edge visible in
+      // the square's corners (circle covers the sides but not the diagonal).
+      // A circular window is concentric with the sphere, so every zoom ≥ 1
+      // fills it completely — no corner artifacts at any zoom level.
+      className="relative mx-auto aspect-square w-full max-w-[440px] overflow-hidden rounded-full"
       style={{ contain: "layout paint size" }}
       aria-hidden="true"
     >
