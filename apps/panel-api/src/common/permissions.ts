@@ -28,7 +28,9 @@ export const ADMIN_PERMISSIONS = [
   // Granular billing action (implied by `billing.manage`).
   "billing.refund", // refund a paid invoice
   "payments.manage",
+  "catalog.read",
   "catalog.manage",
+  "content.read",
   "content.manage",
   "support.read",
   "support.manage",

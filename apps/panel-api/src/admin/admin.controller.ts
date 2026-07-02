@@ -855,7 +855,7 @@ export class AdminController {
   // ---- Products ----------------------------------------------------------
 
   @Get("products")
-  @RequirePerm("catalog.manage")
+  @RequirePerm("catalog.read")
   listProducts() {
     return this.billing.listAllProducts();
   }
@@ -868,7 +868,7 @@ export class AdminController {
   }
 
   @Get("products/:id")
-  @RequirePerm("catalog.manage")
+  @RequirePerm("catalog.read")
   getProduct(@Param("id") id: string) {
     return this.billing.getProduct(id);
   }
@@ -1005,7 +1005,7 @@ export class AdminController {
   // ---- Templates (egg editor) -------------------------------------------
 
   @Get("templates")
-  @RequirePerm("catalog.manage")
+  @RequirePerm("catalog.read")
   listTemplates() {
     return this.templates.list();
   }
@@ -1018,7 +1018,7 @@ export class AdminController {
   }
 
   @Get("templates/:id")
-  @RequirePerm("catalog.manage")
+  @RequirePerm("catalog.read")
   getTemplate(@Param("id") id: string) {
     return this.templates.get(id);
   }
@@ -1117,7 +1117,7 @@ export class AdminController {
   // ---- Alerts ------------------------------------------------------------
 
   @Get("alerts")
-  @RequirePerm("content.manage")
+  @RequirePerm("content.read")
   listAlerts() {
     return this.alerts.listAllAlerts();
   }
