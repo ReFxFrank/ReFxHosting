@@ -1,0 +1,83 @@
+# Copy this file into your node repo at .github/workflows/upload-release.yml
+#
+# Repo secrets required (Settings → Secrets and variables → Actions):
+#   RELEASE_HOST_URL      e.g. https://releases.yourdomain.com  (no trailing slash)
+#   RELEASE_UPLOAD_TOKEN  must match the Worker's UPLOAD_TOKEN secret
+
+name: Upload release to private host
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    # Skip pre-releases so nodes never auto-update to one. Remove if unwanted.
+    if: ${{ !github.event.release.prerelease }}
+    steps:
+      - name: Download release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir assets
+          gh release download "${{ github.event.release.tag_name }}" \
+            --repo "${{ github.repository }}" --dir assets
+          ls -la assets
+
+      - name: Upload assets to private host
+        env:
+          HOST: ${{ secrets.RELEASE_HOST_URL }}
+          TOKEN: ${{ secrets.RELEASE_UPLOAD_TOKEN }}
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          cd assets
+          files='[]'
+          for f in *; do
+            # Companion checksum files (e.g. refx-agent-linux-amd64.sha256)
+            # are not uploaded as assets: the manifest carries the checksums.
+            # They are used below to cross-check our own hash instead.
+            case "$f" in *.sha256) continue ;; esac
+
+            sha=$(sha256sum "$f" | cut -d' ' -f1)
+            size=$(stat -c%s "$f")
+
+            if [ -f "$f.sha256" ]; then
+              expected=$(awk '{print tolower($1)}' "$f.sha256")
+              if [ "$sha" != "$expected" ]; then
+                echo "::error::$f does not match $f.sha256 (got $sha, expected $expected)"
+                exit 1
+              fi
+              echo "$f matches its .sha256 companion"
+            fi
+
+            echo "Uploading $f ($size bytes, sha256 $sha)"
+            curl -fsS --retry 3 -T "$f" \
+              -H "Authorization: Bearer $TOKEN" \
+              -H "X-Checksum-SHA256: $sha" \
+              "$HOST/api/upload/$VERSION/$f"
+            echo
+            files=$(jq --arg n "$f" --arg s "$sha" --argjson z "$size" \
+              '. + [{name: $n, sha256: $s, size: $z}]' <<< "$files")
+          done
+
+          if [ "$files" = "[]" ]; then
+            echo "::error::release has no uploadable assets"
+            exit 1
+          fi
+
+          # Publish the manifest last: nodes only see the new version once
+          # every asset is fully uploaded.
+          jq -n --arg v "$VERSION" --argjson files "$files" \
+            '{version: $v, published_at: (now | todate), files: $files}' \
+            > manifest.json
+          cat manifest.json
+          curl -fsS --retry 3 -X PUT \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            --data-binary @manifest.json \
+            "$HOST/api/manifest"
