@@ -368,10 +368,52 @@ export interface Node {
   gameDomain?: string | null;
   /** Whether this node can host web servers (runs Caddy on :80/:443). */
   supportsWeb?: boolean;
+  /** What this node costs you per month, in minor units (cents). Null = untracked. */
+  monthlyCostMinor?: number | null;
+  /** ISO currency of monthlyCostMinor. */
+  costCurrency?: string;
+  /** Free-text provider/box label, e.g. "OVH Rise-3 · Hillsboro". */
+  provider?: string | null;
   servers?: number;
   /** Most-recent heartbeat for live gauges (null until the agent reports). */
   latestHeartbeat?: NodeHeartbeat | null;
   createdAt: string;
+}
+
+/** One node's row in the economics/margin view (GET /nodes/economics). */
+export interface NodeEconomicsRow {
+  id: string;
+  name: string;
+  provider: string | null;
+  region?: { code: string; name: string; country?: string | null } | null;
+  monthlyCostMinor: number | null;
+  costCurrency: string;
+  monthlyRevenueMinorEstimated: number;
+  /** revenue − cost; null when no cost is set for the node. */
+  marginMinor: number | null;
+  /** revenue ≥ cost; null when no cost is set. */
+  profitable: boolean | null;
+  serverCount: number;
+  paidServerCount: number;
+  allocated: { cpuCores: number; memoryMb: number; diskMb: number };
+  capacity: { cpuCores: number; memoryMb: number; diskMb: number };
+  /** What you actually earn per allocated GB of RAM, in minor units. */
+  effectivePerGbMinor: number | null;
+  /** GB of RAM you'd need allocated (at the current rate) to cover cost. */
+  breakEvenMemGb: number | null;
+}
+
+/** Portfolio economics across all nodes. */
+export interface NodeEconomics {
+  currency: string;
+  totals: {
+    monthlyCostMinor: number;
+    monthlyRevenueMinorEstimated: number;
+    marginMinor: number;
+    nodeCount: number;
+    nodesWithCost: number;
+  };
+  nodes: NodeEconomicsRow[];
 }
 
 export interface NodeHeartbeat {

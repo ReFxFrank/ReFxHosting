@@ -349,6 +349,16 @@ model Node {
   // places web servers on supportsWeb nodes; game/voice servers ignore it.
   supportsWeb   Boolean    @default(false)
 
+  // Economics: what this node costs YOU per month (the hardware/hosting bill),
+  // in integer minor units (cents) + ISO currency — same money convention as
+  // everywhere else. Optional; set per node in the admin UI so the panel can
+  // show live per-node margin (this cost vs. the estimated monthly revenue of
+  // the servers placed on the node). `provider` is a free-text label for the
+  // box (e.g. "OVH Rise-3 · Hillsboro").
+  monthlyCostMinor Int?
+  costCurrency     String  @default("USD")
+  provider         String?
+
   servers       Server[]
   allocations   Allocation[]
   heartbeats    NodeHeartbeat[]

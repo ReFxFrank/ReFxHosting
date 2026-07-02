@@ -33,6 +33,7 @@ import {
   Square,
   Download,
   Server as ServerIcon,
+  DollarSign,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -67,13 +68,30 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { cn, formatMb, formatDateTime, pct, copyToClipboard } from "@/lib/utils";
-import type { Node, NodeOs } from "@/lib/types";
+import {
+  cn,
+  formatMb,
+  formatDateTime,
+  pct,
+  copyToClipboard,
+} from "@/lib/utils";
+import type { Node, NodeOs, NodeEconomics } from "@/lib/types";
+
+/** Format integer minor units (cents) as a currency string. */
+function fmtMoney(minor: number, currency = "USD"): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: minor % 100 === 0 ? 0 : 2,
+  }).format(minor / 100);
+}
 
 /** Bar tint by utilisation: green < 70 < amber < 90 < red. */
 function usageIndicator(value: number) {
-  if (value > 90) return "bg-destructive shadow-[0_0_12px_-2px_rgba(255,80,80,0.7)]";
-  if (value > 70) return "bg-warning shadow-[0_0_12px_-2px_rgba(245,170,40,0.7)]";
+  if (value > 90)
+    return "bg-destructive shadow-[0_0_12px_-2px_rgba(255,80,80,0.7)]";
+  if (value > 70)
+    return "bg-warning shadow-[0_0_12px_-2px_rgba(245,170,40,0.7)]";
   return "bg-success shadow-[0_0_12px_-2px_rgba(40,200,120,0.6)]";
 }
 
@@ -118,6 +136,7 @@ function EditCapacityDialog({
     onSuccess: () => {
       toast.success("Node updated");
       queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "node-economics"] });
       onClose();
     },
     onError: (e) =>
@@ -131,7 +150,10 @@ function EditCapacityDialog({
       queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
       onClose();
     },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't pin certificate"),
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? e.message : "Couldn't pin certificate",
+      ),
   });
   const unpin = useMutation({
     mutationFn: () => api.admin.unpinNodeCert(node!.id),
@@ -140,7 +162,8 @@ function EditCapacityDialog({
       queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
       onClose();
     },
-    onError: (e) => toast.error(e instanceof ApiError ? e.message : "Couldn't unpin"),
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Couldn't unpin"),
   });
 
   return (
@@ -154,8 +177,9 @@ function EditCapacityDialog({
         <DialogHeader>
           <DialogTitle>Edit node — {node?.name}</DialogTitle>
           <DialogDescription>
-            The connection address the panel uses to reach this node&apos;s agent
-            (FQDN/port), and the schedulable capacity the placement engine reserves.
+            The connection address the panel uses to reach this node&apos;s
+            agent (FQDN/port), and the schedulable capacity the placement engine
+            reserves.
           </DialogDescription>
         </DialogHeader>
         {node && (
@@ -172,20 +196,33 @@ function EditCapacityDialog({
             <p className="refx-eyebrow">Agent TLS certificate</p>
             {node.agentCertSha256 ? (
               <div className="flex items-center justify-between gap-3">
-                <p className="min-w-0 truncate font-mono text-xs text-muted-foreground" title={node.agentCertSha256}>
+                <p
+                  className="min-w-0 truncate font-mono text-xs text-muted-foreground"
+                  title={node.agentCertSha256}
+                >
                   Pinned · {node.agentCertSha256.slice(0, 24)}…
                 </p>
-                <Button variant="ghost" size="sm" loading={unpin.isPending} onClick={() => unpin.mutate()}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  loading={unpin.isPending}
+                  onClick={() => unpin.mutate()}
+                >
                   Unpin
                 </Button>
               </div>
             ) : (
               <div className="flex items-center justify-between gap-3">
                 <p className="text-xs text-muted-foreground">
-                  Not pinned — the panel accepts any cert. Pin to verify the agent
-                  (requires AGENT_TLS_PINNING).
+                  Not pinned — the panel accepts any cert. Pin to verify the
+                  agent (requires AGENT_TLS_PINNING).
                 </p>
-                <Button variant="outline" size="sm" loading={pin.isPending} onClick={() => pin.mutate()}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={pin.isPending}
+                  onClick={() => pin.mutate()}
+                >
                   Pin certificate
                 </Button>
               </div>
@@ -217,6 +254,11 @@ function CapacityForm({
   const [diskMb, setDiskMb] = useState(node.diskMb ?? 10240);
   const [gameDomain, setGameDomain] = useState(node.gameDomain ?? "");
   const [supportsWeb, setSupportsWeb] = useState(!!node.supportsWeb);
+  const [monthlyCost, setMonthlyCost] = useState(
+    node.monthlyCostMinor != null ? String(node.monthlyCostMinor / 100) : "",
+  );
+  const [costCurrency, setCostCurrency] = useState(node.costCurrency ?? "USD");
+  const [provider, setProvider] = useState(node.provider ?? "");
 
   return (
     <div className="space-y-5">
@@ -234,8 +276,13 @@ function CapacityForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="node-scheme">Scheme</Label>
-            <Select value={scheme} onValueChange={(v) => setScheme(v as "http" | "https")}>
-              <SelectTrigger id="node-scheme"><SelectValue /></SelectTrigger>
+            <Select
+              value={scheme}
+              onValueChange={(v) => setScheme(v as "http" | "https")}
+            >
+              <SelectTrigger id="node-scheme">
+                <SelectValue />
+              </SelectTrigger>
               <SelectContent>
                 <SelectItem value="https">https</SelectItem>
                 <SelectItem value="http">http</SelectItem>
@@ -255,7 +302,10 @@ function CapacityForm({
         </div>
         <p className="text-xs text-muted-foreground">
           The panel reaches the agent at{" "}
-          <span className="font-mono">{scheme}://{fqdn || "…"}:{daemonPort}</span>.
+          <span className="font-mono">
+            {scheme}://{fqdn || "…"}:{daemonPort}
+          </span>
+          .
         </p>
         <div className="space-y-1.5">
           <Label htmlFor="node-game-domain-edit">Game domain (optional)</Label>
@@ -267,17 +317,19 @@ function CapacityForm({
           />
           <p className="text-xs text-muted-foreground">
             Branded per-server addresses via a wildcard{" "}
-            <span className="font-mono">*.{gameDomain.trim() || "fra.refx.gg"}</span> DNS
-            record → this node&apos;s IP. Applies to newly-provisioned servers. Blank = use
-            the FQDN.
+            <span className="font-mono">
+              *.{gameDomain.trim() || "fra.refx.gg"}
+            </span>{" "}
+            DNS record → this node&apos;s IP. Applies to newly-provisioned
+            servers. Blank = use the FQDN.
           </p>
         </div>
         <div className="flex items-start justify-between gap-3 rounded-lg border border-white/[0.08] p-3">
           <div>
             <Label htmlFor="node-supports-web-edit">Web hosting enabled</Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              This node runs Caddy on :80/:443 and can host web servers. The scheduler
-              only places web hosting on web-enabled nodes.
+              This node runs Caddy on :80/:443 and can host web servers. The
+              scheduler only places web hosting on web-enabled nodes.
             </p>
           </div>
           <Switch
@@ -324,6 +376,45 @@ function CapacityForm({
         </div>
       </div>
 
+      <div className="space-y-3">
+        <p className="refx-eyebrow">Cost &amp; economics</p>
+        <div className="grid gap-4 sm:grid-cols-[1fr_110px]">
+          <div className="space-y-1.5">
+            <Label htmlFor="node-cost">Your monthly cost</Label>
+            <Input
+              id="node-cost"
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="e.g. 174.00"
+              value={monthlyCost}
+              onChange={(e) => setMonthlyCost(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="node-currency">Currency</Label>
+            <Input
+              id="node-currency"
+              value={costCurrency}
+              onChange={(e) => setCostCurrency(e.target.value.toUpperCase())}
+            />
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="node-provider">Provider / box label (optional)</Label>
+          <Input
+            id="node-provider"
+            placeholder="e.g. OVH Rise-3 · Hillsboro"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          What this node costs you (the hardware/hosting bill). Drives the
+          margin view — leave the cost blank if you don&apos;t want to track it.
+        </p>
+      </div>
+
       <DialogFooter>
         <Button
           loading={saving}
@@ -338,6 +429,11 @@ function CapacityForm({
               diskMb,
               gameDomain: gameDomain.trim(),
               supportsWeb,
+              monthlyCostMinor: monthlyCost.trim()
+                ? Math.round(Number(monthlyCost) * 100)
+                : 0,
+              costCurrency: costCurrency.trim() || "USD",
+              provider: provider.trim(),
             })
           }
         >
@@ -388,9 +484,18 @@ function NodePing({ nodeId, poll }: { nodeId: string; poll?: boolean }) {
   }
 
   const tint =
-    data.ms > 150 ? "text-destructive" : data.ms > 60 ? "text-warning" : "text-success";
+    data.ms > 150
+      ? "text-destructive"
+      : data.ms > 60
+        ? "text-warning"
+        : "text-success";
   return (
-    <span className={cn("flex items-center gap-1 text-xs font-medium tabular-nums", tint)}>
+    <span
+      className={cn(
+        "flex items-center gap-1 text-xs font-medium tabular-nums",
+        tint,
+      )}
+    >
       <Wifi className="size-3" /> {data.ms} ms
     </span>
   );
@@ -414,9 +519,13 @@ function AgentVersionBadge({
     <div className="flex flex-col gap-0.5">
       <span className="font-mono text-xs">{current}</span>
       {behind ? (
-        <Badge variant="warning" className="w-fit text-[10px]">Update available</Badge>
+        <Badge variant="warning" className="w-fit text-[10px]">
+          Update available
+        </Badge>
       ) : latest != null ? (
-        <Badge variant="success" className="w-fit text-[10px]">Up to date</Badge>
+        <Badge variant="success" className="w-fit text-[10px]">
+          Up to date
+        </Badge>
       ) : null}
     </div>
   );
@@ -426,9 +535,7 @@ function AgentVersionBadge({
 function NodeUsage({ node, compact }: { node: Node; compact?: boolean }) {
   const hb = node.latestHeartbeat;
   if (!hb) {
-    return (
-      <span className="text-xs text-muted-foreground">No heartbeat</span>
-    );
+    return <span className="text-xs text-muted-foreground">No heartbeat</span>;
   }
   // hb.cpuPct is whole-machine utilisation [0,100] (aggregate /proc/stat), NOT
   // per-core — so show it against the node's core count like MEM/DISK show used
@@ -443,7 +550,11 @@ function NodeUsage({ node, compact }: { node: Node; compact?: boolean }) {
         icon={Cpu}
         label="CPU"
         value={cpu}
-        detail={node.cpuCores ? `${coresUsed.toFixed(1)} / ${node.cpuCores} cores · ${cpu}%` : `${cpu}%`}
+        detail={
+          node.cpuCores
+            ? `${coresUsed.toFixed(1)} / ${node.cpuCores} cores · ${cpu}%`
+            : `${cpu}%`
+        }
       />
       <UsageBar
         icon={MemoryStick}
@@ -500,7 +611,177 @@ const emptyForm = {
   allocationPortEnd: 25999,
   gameDomain: "",
   supportsWeb: false,
+  monthlyCost: "",
+  costCurrency: "USD",
+  provider: "",
 };
+
+/** A single portfolio stat tile. */
+function EconTile({
+  label,
+  value,
+  tone,
+  sub,
+}: {
+  label: string;
+  value: string;
+  tone?: "good" | "bad";
+  sub?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p
+        className={cn(
+          "mt-1 text-2xl font-semibold tabular-nums",
+          tone === "good" && "text-emerald-400",
+          tone === "bad" && "text-destructive",
+        )}
+      >
+        {value}
+      </p>
+      {sub ? (
+        <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Portfolio economics: total cost vs. estimated revenue + a per-node margin
+ * table. Revenue is derived from the active subscriptions of servers on each
+ * node, so it's an estimate (comps/free servers carry no subscription).
+ */
+function NodeEconomicsPanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "node-economics"],
+    queryFn: () => api.admin.nodeEconomics(),
+  });
+
+  if (isLoading) return <Skeleton className="h-40 w-full rounded-2xl" />;
+  if (!data || data.nodes.length === 0) return null;
+
+  const t = data.totals;
+  const cur = data.currency;
+  const marginPct =
+    t.monthlyRevenueMinorEstimated > 0
+      ? Math.round((t.marginMinor / t.monthlyRevenueMinorEstimated) * 100)
+      : null;
+  const profitable = t.marginMinor >= 0;
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 p-5">
+        <div className="flex items-center gap-2">
+          <DollarSign className="size-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold">Economics</h2>
+          <span className="text-xs text-muted-foreground">
+            estimated monthly · {t.nodesWithCost}/{t.nodeCount} nodes have a
+            cost set
+          </span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <EconTile
+            label="Monthly cost"
+            value={fmtMoney(t.monthlyCostMinor, cur)}
+            sub="Your hardware / hosting bill"
+          />
+          <EconTile
+            label="Est. monthly revenue"
+            value={fmtMoney(t.monthlyRevenueMinorEstimated, cur)}
+            sub="Active subscriptions on these nodes"
+          />
+          <EconTile
+            label="Margin"
+            value={`${fmtMoney(t.marginMinor, cur)}${
+              marginPct != null ? ` · ${marginPct}%` : ""
+            }`}
+            tone={profitable ? "good" : "bad"}
+            sub={profitable ? "In profit" : "Underwater"}
+          />
+        </div>
+
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Node</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
+                <TableHead className="text-right">Est. revenue</TableHead>
+                <TableHead className="text-right">Margin</TableHead>
+                <TableHead className="text-right">RAM sold</TableHead>
+                <TableHead className="text-right">$/GB</TableHead>
+                <TableHead className="text-right">Break-even</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {data.nodes.map((n) => {
+                const ramSoldGb = n.allocated.memoryMb / 1024;
+                const capGb = n.capacity.memoryMb / 1024;
+                const hasCost = n.monthlyCostMinor != null;
+                const profit = n.marginMinor != null && n.marginMinor >= 0;
+                return (
+                  <TableRow key={n.id}>
+                    <TableCell>
+                      <div className="font-medium">{n.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {n.provider || n.region?.name || "—"}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {hasCost ? (
+                        fmtMoney(n.monthlyCostMinor!, n.costCurrency)
+                      ) : (
+                        <span className="text-muted-foreground">not set</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmtMoney(n.monthlyRevenueMinorEstimated, cur)}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right tabular-nums font-medium",
+                        n.marginMinor != null &&
+                          (profit ? "text-emerald-400" : "text-destructive"),
+                      )}
+                    >
+                      {n.marginMinor != null ? (
+                        fmtMoney(n.marginMinor, cur)
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {ramSoldGb.toFixed(ramSoldGb % 1 === 0 ? 0 : 1)} /{" "}
+                      {capGb.toFixed(0)} GB
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {n.effectivePerGbMinor != null
+                        ? fmtMoney(n.effectivePerGbMinor, cur)
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums text-muted-foreground">
+                      {n.breakEvenMemGb != null
+                        ? `${n.breakEvenMemGb} GB`
+                        : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Revenue is estimated from active subscriptions on each node — staff
+          comps and free servers aren&apos;t counted. &ldquo;Break-even&rdquo;
+          is the RAM you&apos;d need sold at the current $/GB to cover that
+          node&apos;s cost.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AdminNodesPage() {
   const queryClient = useQueryClient();
@@ -543,13 +824,20 @@ export default function AdminNodesPage() {
       setUpdateAllOpen(false);
       setSelected(new Set());
       if (res.updated.length)
-        toast.success(`Updating ${res.updated.length} node${res.updated.length === 1 ? "" : "s"}…`);
+        toast.success(
+          `Updating ${res.updated.length} node${res.updated.length === 1 ? "" : "s"}…`,
+        );
       if (res.failed.length)
-        toast.error(`${res.failed.length} unreachable — ${res.failed[0].name}: ${res.failed[0].reason}`);
-      if (!res.updated.length && !res.failed.length) toast.info("No nodes to update");
+        toast.error(
+          `${res.failed.length} unreachable — ${res.failed[0].name}: ${res.failed[0].reason}`,
+        );
+      if (!res.updated.length && !res.failed.length)
+        toast.info("No nodes to update");
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to update agents"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to update agents",
+      ),
   });
 
   const nodeList = nodes ?? [];
@@ -563,8 +851,10 @@ export default function AdminNodesPage() {
       return next;
     });
 
-  const invalidate = () =>
+  const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["admin", "nodes"] });
+    queryClient.invalidateQueries({ queryKey: ["admin", "node-economics"] });
+  };
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -580,6 +870,11 @@ export default function AdminNodesPage() {
         allocationPortEnd: form.allocationPortEnd,
         gameDomain: form.gameDomain.trim() || undefined,
         supportsWeb: form.supportsWeb,
+        monthlyCostMinor: form.monthlyCost.trim()
+          ? Math.round(Number(form.monthlyCost) * 100)
+          : undefined,
+        costCurrency: form.costCurrency.trim() || "USD",
+        provider: form.provider.trim() || undefined,
       }),
     onSuccess: (node) => {
       toast.success("Node created");
@@ -631,27 +926,37 @@ export default function AdminNodesPage() {
   const restartAgentMutation = useMutation({
     mutationFn: (id: string) => api.admin.restartNodeAgent(id),
     onSuccess: () => {
-      toast.success("Agent restart requested — the node reconnects in a few seconds");
+      toast.success(
+        "Agent restart requested — the node reconnects in a few seconds",
+      );
       setRestartTarget(null);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to restart agent"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to restart agent",
+      ),
   });
 
   const clearSteamCacheMutation = useMutation({
     mutationFn: (id: string) => api.admin.clearNodeSteamCache(id),
     onSuccess: () => {
-      toast.success("Steam cache cleared — the next install re-authenticates the account");
+      toast.success(
+        "Steam cache cleared — the next install re-authenticates the account",
+      );
       setSteamClearTarget(null);
     },
     onError: (e) =>
-      toast.error(e instanceof ApiError ? e.message : "Failed to clear Steam cache"),
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to clear Steam cache",
+      ),
   });
 
   const updateAgentMutation = useMutation({
     mutationFn: (id: string) => api.admin.updateNodeAgent(id),
     onSuccess: () => {
-      toast.success("Updating — the agent downloads the latest release and reconnects shortly");
+      toast.success(
+        "Updating — the agent downloads the latest release and reconnects shortly",
+      );
       setUpdateTarget(null);
     },
     onError: (e) =>
@@ -667,7 +972,9 @@ export default function AdminNodesPage() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setUpdateAllOpen(true)}>
               <Download className="size-4" />{" "}
-              {selected.size ? `Update selected (${selected.size})` : "Update all agents"}
+              {selected.size
+                ? `Update selected (${selected.size})`
+                : "Update all agents"}
             </Button>
             <Button onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" /> Add node
@@ -675,6 +982,8 @@ export default function AdminNodesPage() {
           </div>
         }
       />
+
+      <NodeEconomicsPanel />
 
       {isLoading ? (
         <ListSkeleton rows={4} />
@@ -707,7 +1016,10 @@ export default function AdminNodesPage() {
               </TableHeader>
               <TableBody>
                 {nodes.map((node) => (
-                  <TableRow key={node.id} data-state={selected.has(node.id) ? "selected" : undefined}>
+                  <TableRow
+                    key={node.id}
+                    data-state={selected.has(node.id) ? "selected" : undefined}
+                  >
                     <TableCell>
                       <input
                         type="checkbox"
@@ -749,16 +1061,24 @@ export default function AdminNodesPage() {
                     <TableCell>
                       <NodeUsage node={node} compact />
                     </TableCell>
-                    <TableCell className="tabular-nums">{node.servers ?? 0}</TableCell>
+                    <TableCell className="tabular-nums">
+                      {node.servers ?? 0}
+                    </TableCell>
                     <TableCell>
-                      <AgentVersionBadge current={node.agentVersion} latest={latestVersion} />
+                      <AgentVersionBadge
+                        current={node.agentVersion}
+                        latest={latestVersion}
+                      />
                     </TableCell>
                     <TableCell>
                       <Switch
                         checked={node.maintenance}
                         disabled={maintenanceMutation.isPending}
                         onCheckedChange={(v: boolean) =>
-                          maintenanceMutation.mutate({ id: node.id, maintenance: v })
+                          maintenanceMutation.mutate({
+                            id: node.id,
+                            maintenance: v,
+                          })
                         }
                       />
                     </TableCell>
@@ -823,8 +1143,8 @@ export default function AdminNodesPage() {
           <DialogHeader>
             <DialogTitle>Add node</DialogTitle>
             <DialogDescription>
-              Register a new daemon node. A one-time bootstrap token will be issued
-              after creation.
+              Register a new daemon node. A one-time bootstrap token will be
+              issued after creation.
             </DialogDescription>
           </DialogHeader>
 
@@ -836,7 +1156,9 @@ export default function AdminNodesPage() {
                   id="node-name"
                   placeholder="node-eu-01"
                   value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, name: e.target.value }))
+                  }
                 />
               </div>
               <div className="space-y-1.5">
@@ -845,7 +1167,9 @@ export default function AdminNodesPage() {
                   id="node-fqdn"
                   placeholder="node-eu-01.example.com"
                   value={form.fqdn}
-                  onChange={(e) => setForm((f) => ({ ...f, fqdn: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, fqdn: e.target.value }))
+                  }
                   className="font-mono"
                 />
               </div>
@@ -880,7 +1204,9 @@ export default function AdminNodesPage() {
                 <Label>Operating system</Label>
                 <Select
                   value={form.os}
-                  onValueChange={(v) => setForm((f) => ({ ...f, os: v as NodeOs }))}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, os: v as NodeOs }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -937,7 +1263,9 @@ export default function AdminNodesPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="node-port-start">Allocation port range — start</Label>
+                <Label htmlFor="node-port-start">
+                  Allocation port range — start
+                </Label>
                 <Input
                   id="node-port-start"
                   type="number"
@@ -945,12 +1273,17 @@ export default function AdminNodesPage() {
                   max={65535}
                   value={form.allocationPortStart}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, allocationPortStart: Number(e.target.value) }))
+                    setForm((f) => ({
+                      ...f,
+                      allocationPortStart: Number(e.target.value),
+                    }))
                   }
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="node-port-end">Allocation port range — end</Label>
+                <Label htmlFor="node-port-end">
+                  Allocation port range — end
+                </Label>
                 <Input
                   id="node-port-end"
                   type="number"
@@ -958,14 +1291,17 @@ export default function AdminNodesPage() {
                   max={65535}
                   value={form.allocationPortEnd}
                   onChange={(e) =>
-                    setForm((f) => ({ ...f, allocationPortEnd: Number(e.target.value) }))
+                    setForm((f) => ({
+                      ...f,
+                      allocationPortEnd: Number(e.target.value),
+                    }))
                   }
                 />
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Servers on this node get their game + query/RCON ports from this range.
-              Open it on the node&apos;s firewall / security group.
+              Servers on this node get their game + query/RCON ports from this
+              range. Open it on the node&apos;s firewall / security group.
             </p>
 
             <div className="space-y-1.5">
@@ -974,13 +1310,21 @@ export default function AdminNodesPage() {
                 id="node-game-domain"
                 placeholder="e.g. fra.refx.gg"
                 value={form.gameDomain}
-                onChange={(e) => setForm((f) => ({ ...f, gameDomain: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, gameDomain: e.target.value }))
+                }
               />
               <p className="text-xs text-muted-foreground">
                 Branded per-server addresses. Add a wildcard DNS record
-                <span className="font-mono"> *.{form.gameDomain.trim() || "fra.refx.gg"} </span>
+                <span className="font-mono">
+                  {" "}
+                  *.{form.gameDomain.trim() || "fra.refx.gg"}{" "}
+                </span>
                 → this node&apos;s public IP; each server then shows
-                <span className="font-mono"> &lt;id&gt;.{form.gameDomain.trim() || "fra.refx.gg"}:port </span>
+                <span className="font-mono">
+                  {" "}
+                  &lt;id&gt;.{form.gameDomain.trim() || "fra.refx.gg"}:port{" "}
+                </span>
                 instead of the raw IP. Leave blank to use the node FQDN.
               </p>
             </div>
@@ -989,15 +1333,66 @@ export default function AdminNodesPage() {
               <div>
                 <Label htmlFor="node-supports-web">Web hosting enabled</Label>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Turn on if this node runs Caddy on :80/:443 for web servers. The
-                  scheduler only places web hosting on web-enabled nodes.
+                  Turn on if this node runs Caddy on :80/:443 for web servers.
+                  The scheduler only places web hosting on web-enabled nodes.
                 </p>
               </div>
               <Switch
                 id="node-supports-web"
                 checked={form.supportsWeb}
-                onCheckedChange={(v) => setForm((f) => ({ ...f, supportsWeb: v }))}
+                onCheckedChange={(v) =>
+                  setForm((f) => ({ ...f, supportsWeb: v }))
+                }
               />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-[1fr_100px]">
+              <div className="space-y-1.5">
+                <Label htmlFor="create-node-cost">
+                  Your monthly cost (optional)
+                </Label>
+                <Input
+                  id="create-node-cost"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  placeholder="e.g. 174.00"
+                  value={form.monthlyCost}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, monthlyCost: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="create-node-currency">Currency</Label>
+                <Input
+                  id="create-node-currency"
+                  value={form.costCurrency}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      costCurrency: e.target.value.toUpperCase(),
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-node-provider">
+                Provider / box label (optional)
+              </Label>
+              <Input
+                id="create-node-provider"
+                placeholder="e.g. OVH Rise-3 · Hillsboro"
+                value={form.provider}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, provider: e.target.value }))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                What this node costs you — powers the margin view. Editable
+                later.
+              </p>
             </div>
           </div>
 
@@ -1007,7 +1402,9 @@ export default function AdminNodesPage() {
             </Button>
             <Button
               loading={createMutation.isPending}
-              disabled={!form.name.trim() || !form.fqdn.trim() || !form.regionId.trim()}
+              disabled={
+                !form.name.trim() || !form.fqdn.trim() || !form.regionId.trim()
+              }
               onClick={() => createMutation.mutate()}
             >
               Create node
@@ -1017,7 +1414,10 @@ export default function AdminNodesPage() {
       </Dialog>
 
       {/* Bootstrap token dialog (shown once) */}
-      <Dialog open={!!bootstrapToken} onOpenChange={(o) => !o && setBootstrapToken(null)}>
+      <Dialog
+        open={!!bootstrapToken}
+        onOpenChange={(o) => !o && setBootstrapToken(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Bootstrap token</DialogTitle>
@@ -1029,8 +1429,8 @@ export default function AdminNodesPage() {
           <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
             <span>
-              Copy this token now — it is shown only once and cannot be retrieved
-              again.
+              Copy this token now — it is shown only once and cannot be
+              retrieved again.
             </span>
           </div>
 
@@ -1048,7 +1448,10 @@ export default function AdminNodesPage() {
       </Dialog>
 
       {/* Node detail / heartbeats dialog */}
-      <Dialog open={!!detailNode} onOpenChange={(o) => !o && setDetailNode(null)}>
+      <Dialog
+        open={!!detailNode}
+        onOpenChange={(o) => !o && setDetailNode(null)}
+      >
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-3">
@@ -1059,14 +1462,16 @@ export default function AdminNodesPage() {
               <span className="flex items-center gap-1">
                 <MapPin className="size-3.5" />
                 {detailNode?.region?.name ?? "—"}
-                {detailNode?.region?.country ? ` · ${detailNode.region.country}` : ""}
+                {detailNode?.region?.country
+                  ? ` · ${detailNode.region.country}`
+                  : ""}
               </span>
-              {detailNode && (
-                <NodePing nodeId={detailNode.id} poll />
-              )}
+              {detailNode && <NodePing nodeId={detailNode.id} poll />}
             </DialogDescription>
           </DialogHeader>
-          {detailNode && <NodeDetailLive nodeId={detailNode.id} fallback={detailNode} />}
+          {detailNode && (
+            <NodeDetailLive nodeId={detailNode.id} fallback={detailNode} />
+          )}
           {detailNode && <NodeServersPower nodeId={detailNode.id} />}
           {detailNode && <NodeHeartbeatChart nodeId={detailNode.id} />}
           <DialogFooter className="sm:justify-between">
@@ -1093,7 +1498,8 @@ export default function AdminNodesPage() {
                 variant="outline"
                 loading={regenerateBootstrapMutation.isPending}
                 onClick={() =>
-                  detailNode && regenerateBootstrapMutation.mutate(detailNode.id)
+                  detailNode &&
+                  regenerateBootstrapMutation.mutate(detailNode.id)
                 }
               >
                 <KeyRound className="size-4" /> Regenerate token
@@ -1110,7 +1516,10 @@ export default function AdminNodesPage() {
       <EditCapacityDialog node={editNode} onClose={() => setEditNode(null)} />
 
       {/* Delete node confirmation */}
-      <Dialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete node</DialogTitle>
@@ -1125,7 +1534,9 @@ export default function AdminNodesPage() {
             <Button
               variant="destructive"
               loading={deleteMutation.isPending}
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
+              onClick={() =>
+                deleteTarget && deleteMutation.mutate(deleteTarget.id)
+              }
             >
               Delete node
             </Button>
@@ -1134,14 +1545,17 @@ export default function AdminNodesPage() {
       </Dialog>
 
       {/* Restart agent confirmation */}
-      <Dialog open={!!restartTarget} onOpenChange={(o) => !o && setRestartTarget(null)}>
+      <Dialog
+        open={!!restartTarget}
+        onOpenChange={(o) => !o && setRestartTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Restart agent on {restartTarget?.name}?</DialogTitle>
             <DialogDescription>
               The node daemon restarts and reconnects within a few seconds.
-              Running game servers are <b>not</b> stopped — they keep running and
-              re-attach automatically. This does not reboot the VPS itself.
+              Running game servers are <b>not</b> stopped — they keep running
+              and re-attach automatically. This does not reboot the VPS itself.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1170,12 +1584,13 @@ export default function AdminNodesPage() {
                 : "Update every node's agent?"}
             </DialogTitle>
             <DialogDescription>
-              Each node downloads the latest released agent, verifies it, swaps it
-              in and restarts — no SSH. Running game servers keep running and
+              Each node downloads the latest released agent, verifies it, swaps
+              it in and restarts — no SSH. Running game servers keep running and
               re-attach. Unreachable nodes are skipped and reported.
               {latestVersion && (
                 <span className="mt-2 block">
-                  Latest release: <span className="font-mono">{latestVersion}</span>
+                  Latest release:{" "}
+                  <span className="font-mono">{latestVersion}</span>
                 </span>
               )}
             </DialogDescription>
@@ -1187,17 +1602,23 @@ export default function AdminNodesPage() {
             <Button
               loading={updateAllMutation.isPending}
               onClick={() =>
-                updateAllMutation.mutate(selected.size ? Array.from(selected) : undefined)
+                updateAllMutation.mutate(
+                  selected.size ? Array.from(selected) : undefined,
+                )
               }
             >
-              <Download className="size-4" /> {selected.size ? "Update selected" : "Update all"}
+              <Download className="size-4" />{" "}
+              {selected.size ? "Update selected" : "Update all"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Update agent confirmation */}
-      <Dialog open={!!updateTarget} onOpenChange={(o) => !o && setUpdateTarget(null)}>
+      <Dialog
+        open={!!updateTarget}
+        onOpenChange={(o) => !o && setUpdateTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Update agent on {updateTarget?.name}?</DialogTitle>
@@ -1225,16 +1646,21 @@ export default function AdminNodesPage() {
       </Dialog>
 
       {/* Clear Steam cache confirmation */}
-      <Dialog open={!!steamClearTarget} onOpenChange={(o) => !o && setSteamClearTarget(null)}>
+      <Dialog
+        open={!!steamClearTarget}
+        onOpenChange={(o) => !o && setSteamClearTarget(null)}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Clear Steam cache on {steamClearTarget?.name}?</DialogTitle>
+            <DialogTitle>
+              Clear Steam cache on {steamClearTarget?.name}?
+            </DialogTitle>
             <DialogDescription>
-              Wipes every cached steamcmd session on this node — use after changing
-              or deauthorising a Steam game-download account so no old account&apos;s
-              session lingers. Running servers are <b>not</b> affected. The next
-              install re-authenticates the current account, which may ask for a
-              one-time Steam Guard code again.
+              Wipes every cached steamcmd session on this node — use after
+              changing or deauthorising a Steam game-download account so no old
+              account&apos;s session lingers. Running servers are <b>not</b>{" "}
+              affected. The next install re-authenticates the current account,
+              which may ask for a one-time Steam Guard code again.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -1244,7 +1670,8 @@ export default function AdminNodesPage() {
             <Button
               loading={clearSteamCacheMutation.isPending}
               onClick={() =>
-                steamClearTarget && clearSteamCacheMutation.mutate(steamClearTarget.id)
+                steamClearTarget &&
+                clearSteamCacheMutation.mutate(steamClearTarget.id)
               }
             >
               <Boxes className="size-4" /> Clear Steam cache
@@ -1261,7 +1688,13 @@ export default function AdminNodesPage() {
  * 10s interval while the dialog is open. Falls back to the row's cached node
  * until the first refetch lands.
  */
-function NodeDetailLive({ nodeId, fallback }: { nodeId: string; fallback: Node }) {
+function NodeDetailLive({
+  nodeId,
+  fallback,
+}: {
+  nodeId: string;
+  fallback: Node;
+}) {
   const { data } = useQuery({
     queryKey: ["admin", "node", nodeId],
     queryFn: () => api.admin.node(nodeId),
@@ -1351,7 +1784,8 @@ function NodeServersPower({ nodeId }: { nodeId: string }) {
         ) : (
           <div className="divide-y divide-border">
             {servers.map((s) => {
-              const busy = powerMutation.isPending && pending?.startsWith(`${s.id}:`);
+              const busy =
+                powerMutation.isPending && pending?.startsWith(`${s.id}:`);
               return (
                 <div
                   key={s.id}
@@ -1370,7 +1804,9 @@ function NodeServersPower({ nodeId }: { nodeId: string }) {
                       size="icon-sm"
                       aria-label="Start"
                       title="Start"
-                      disabled={busy || s.state === "RUNNING" || s.state === "STARTING"}
+                      disabled={
+                        busy || s.state === "RUNNING" || s.state === "STARTING"
+                      }
                       onClick={() =>
                         powerMutation.mutate({ id: s.id, signal: "start" })
                       }
@@ -1394,7 +1830,9 @@ function NodeServersPower({ nodeId }: { nodeId: string }) {
                       size="icon-sm"
                       aria-label="Stop"
                       title="Stop"
-                      disabled={busy || s.state === "OFFLINE" || s.state === "STOPPING"}
+                      disabled={
+                        busy || s.state === "OFFLINE" || s.state === "STOPPING"
+                      }
                       onClick={() =>
                         powerMutation.mutate({ id: s.id, signal: "stop" })
                       }
@@ -1449,22 +1887,53 @@ function NodeHeartbeatChart({ nodeId }: { nodeId: string }) {
   return (
     <div className="h-56">
       <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: -16 }}>
+        <AreaChart
+          data={points}
+          margin={{ top: 8, right: 8, bottom: 0, left: -16 }}
+        >
           <defs>
             <linearGradient id="node-cpu" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+              <stop
+                offset="0%"
+                stopColor="hsl(var(--primary))"
+                stopOpacity={0.35}
+              />
+              <stop
+                offset="100%"
+                stopColor="hsl(var(--primary))"
+                stopOpacity={0}
+              />
             </linearGradient>
             <linearGradient id="node-mem" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--success))" stopOpacity={0.3} />
-              <stop offset="100%" stopColor="hsl(var(--success))" stopOpacity={0} />
+              <stop
+                offset="0%"
+                stopColor="hsl(var(--success))"
+                stopOpacity={0.3}
+              />
+              <stop
+                offset="100%"
+                stopColor="hsl(var(--success))"
+                stopOpacity={0}
+              />
             </linearGradient>
             <linearGradient id="node-disk" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--warning))" stopOpacity={0.25} />
-              <stop offset="100%" stopColor="hsl(var(--warning))" stopOpacity={0} />
+              <stop
+                offset="0%"
+                stopColor="hsl(var(--warning))"
+                stopOpacity={0.25}
+              />
+              <stop
+                offset="100%"
+                stopColor="hsl(var(--warning))"
+                stopOpacity={0}
+              />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+          <CartesianGrid
+            strokeDasharray="3 3"
+            stroke="hsl(var(--border))"
+            vertical={false}
+          />
           <XAxis dataKey="t" hide />
           <YAxis
             domain={[0, 100]}
@@ -1483,10 +1952,7 @@ function NodeHeartbeatChart({ nodeId }: { nodeId: string }) {
             }}
             formatter={(v, name) => [`${v}%`, String(name)] as [string, string]}
           />
-          <Legend
-            iconType="plainline"
-            wrapperStyle={{ fontSize: 11 }}
-          />
+          <Legend iconType="plainline" wrapperStyle={{ fontSize: 11 }} />
           <Area
             type="monotone"
             dataKey="cpu"

@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
 import {
   IsArray,
   IsBoolean,
@@ -9,8 +9,8 @@ import {
   IsOptional,
   IsString,
   Min,
-} from 'class-validator';
-import { NodeOs } from '@prisma/client';
+} from "class-validator";
+import { NodeOs } from "@prisma/client";
 
 export class CreateNodeDto {
   @ApiProperty()
@@ -54,13 +54,21 @@ export class CreateNodeDto {
   @IsInt()
   sftpPort?: number;
 
-  @ApiPropertyOptional({ default: 25565, description: 'Start of the public port range allocated to servers on this node.' })
+  @ApiPropertyOptional({
+    default: 25565,
+    description:
+      "Start of the public port range allocated to servers on this node.",
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   allocationPortStart?: number;
 
-  @ApiPropertyOptional({ default: 25999, description: 'End of the public port range allocated to servers on this node.' })
+  @ApiPropertyOptional({
+    default: 25999,
+    description:
+      "End of the public port range allocated to servers on this node.",
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -77,11 +85,35 @@ export class CreateNodeDto {
   @ApiPropertyOptional({
     default: false,
     description:
-      'Whether this node can host web servers (runs Caddy on :80/:443). The scheduler only places web hosting on supportsWeb nodes.',
+      "Whether this node can host web servers (runs Caddy on :80/:443). The scheduler only places web hosting on supportsWeb nodes.",
   })
   @IsOptional()
   @IsBoolean()
   supportsWeb?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "What this node costs you per month, in minor units (cents). Drives the admin margin view. Omit if you don't want to track cost.",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  monthlyCostMinor?: number;
+
+  @ApiPropertyOptional({
+    default: "USD",
+    description: "ISO currency of monthlyCostMinor.",
+  })
+  @IsOptional()
+  @IsString()
+  costCurrency?: string;
+
+  @ApiPropertyOptional({
+    description: 'Free-text provider/box label, e.g. "OVH Rise-3 · Hillsboro".',
+  })
+  @IsOptional()
+  @IsString()
+  provider?: string;
 }
 
 export class UpdateNodeDto {
@@ -90,23 +122,27 @@ export class UpdateNodeDto {
   @IsString()
   name?: string;
 
-  @ApiPropertyOptional({ description: 'Address the panel reaches the agent at (IP or hostname).' })
+  @ApiPropertyOptional({
+    description: "Address the panel reaches the agent at (IP or hostname).",
+  })
   @IsOptional()
   @IsString()
   fqdn?: string;
 
-  @ApiPropertyOptional({ enum: ['http', 'https'] })
+  @ApiPropertyOptional({ enum: ["http", "https"] })
   @IsOptional()
-  @IsIn(['http', 'https'])
+  @IsIn(["http", "https"])
   scheme?: string;
 
-  @ApiPropertyOptional({ description: 'Agent control-API port (default 8443).' })
+  @ApiPropertyOptional({
+    description: "Agent control-API port (default 8443).",
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   daemonPort?: number;
 
-  @ApiPropertyOptional({ description: 'Agent SFTP port (default 2022).' })
+  @ApiPropertyOptional({ description: "Agent SFTP port (default 2022)." })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -163,11 +199,33 @@ export class UpdateNodeDto {
   gameDomain?: string;
 
   @ApiPropertyOptional({
-    description: 'Whether this node can host web servers (runs Caddy on :80/:443).',
+    description:
+      "Whether this node can host web servers (runs Caddy on :80/:443).",
   })
   @IsOptional()
   @IsBoolean()
   supportsWeb?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "What this node costs you per month, in minor units (cents). Drives the admin margin view.",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  monthlyCostMinor?: number;
+
+  @ApiPropertyOptional({ description: "ISO currency of monthlyCostMinor." })
+  @IsOptional()
+  @IsString()
+  costCurrency?: string;
+
+  @ApiPropertyOptional({
+    description: 'Free-text provider/box label, e.g. "OVH Rise-3 · Hillsboro".',
+  })
+  @IsOptional()
+  @IsString()
+  provider?: string;
 }
 
 export class HeartbeatDto {
@@ -202,7 +260,7 @@ export class HeartbeatDto {
 }
 
 export class NodeRegisterDto {
-  @ApiProperty({ description: 'One-time bootstrap token issued by an admin' })
+  @ApiProperty({ description: "One-time bootstrap token issued by an admin" })
   @IsString()
   bootstrapToken!: string;
 
@@ -214,7 +272,7 @@ export class NodeRegisterDto {
 
 export class UpdateAgentsDto {
   @ApiPropertyOptional({
-    description: 'Node ids to update; omit/empty to update every node.',
+    description: "Node ids to update; omit/empty to update every node.",
     type: [String],
   })
   @IsOptional()

@@ -81,6 +81,7 @@ import type {
   IncidentImpact,
   IncidentStatusStage,
   NodeCapacity,
+  NodeEconomics,
 } from "@/lib/types";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
@@ -1104,12 +1105,17 @@ export const api = {
         maintenance: boolean;
         gameDomain: string;
         supportsWeb: boolean;
+        monthlyCostMinor: number;
+        costCurrency: string;
+        provider: string;
       }>,
     ) => http.patch<Node>(`/admin/nodes/${id}`, input),
     deleteNode: (id: string) => http.delete<void>(`/admin/nodes/${id}`),
     /** A node's aggregate capacity vs current allocation (cpu/mem/disk). */
     nodeCapacity: (id: string) =>
       http.get<NodeCapacity>(`/nodes/${id}/capacity`),
+    /** Portfolio margin view: per-node cost vs. estimated revenue. */
+    nodeEconomics: () => http.get<NodeEconomics>("/admin/nodes/economics"),
 
     // Database hosts (shared MySQL/MariaDB for per-server databases).
     databaseHosts: () => getList<DatabaseHost>("/admin/database-hosts"),

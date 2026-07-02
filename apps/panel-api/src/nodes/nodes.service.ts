@@ -2,27 +2,34 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Node, Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CryptoService } from '../common/crypto/crypto.service';
-import { NodeAgentClient } from '../agent/agent.client';
-import { deriveSigningKey } from '../agent/agent.signing';
-import { isJavaImage, resolveJavaImage } from '../common/util/java-version.util';
-import { uuidv7 } from '../common/util/uuid';
-import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Node, Prisma } from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { CryptoService } from "../common/crypto/crypto.service";
+import { NodeAgentClient } from "../agent/agent.client";
+import { deriveSigningKey } from "../agent/agent.signing";
+import {
+  isJavaImage,
+  resolveJavaImage,
+} from "../common/util/java-version.util";
+import { uuidv7 } from "../common/util/uuid";
+import {
+  Paginated,
+  PaginationDto,
+  paginate,
+} from "../common/dto/pagination.dto";
 import {
   PORT_RANGE_START,
   PORT_RANGE_END,
   normalizeGameDomain,
-} from '../servers/allocation-port.util';
+} from "../servers/allocation-port.util";
 import {
   CreateNodeDto,
   HeartbeatDto,
   NodeRegisterDto,
   UpdateNodeDto,
-} from './dto/node.dto';
+} from "./dto/node.dto";
 
 /** Loose UUID shape check (any version), used to avoid Prisma P2023 on bad ids. */
 const UUID_RE =
@@ -39,6 +46,30 @@ function isUuid(v: string): boolean {
  */
 const BOOTSTRAP_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+/**
+ * Normalize a recurring price (in minor units) to an equivalent MONTHLY amount,
+ * so revenue across mixed billing intervals is comparable on the margin view.
+ * A month is treated as 1/12 of a year (weeks annualized at 52/12).
+ */
+function toMonthlyMinor(amountMinor: number, interval: string): number {
+  switch (interval) {
+    case "WEEKLY":
+      return (amountMinor * 52) / 12;
+    case "BIWEEKLY":
+      return (amountMinor * 26) / 12;
+    case "MONTHLY":
+      return amountMinor;
+    case "QUARTERLY":
+      return amountMinor / 3;
+    case "SEMIANNUAL":
+      return amountMinor / 6;
+    case "ANNUAL":
+      return amountMinor / 12;
+    default:
+      return amountMinor;
+  }
+}
+
 @Injectable()
 export class NodesService {
   private readonly secretsEncKey: string;
@@ -49,7 +80,7 @@ export class NodesService {
     private readonly agent: NodeAgentClient,
     config: ConfigService,
   ) {
-    this.secretsEncKey = config.get<string>('secretsEncKey')!;
+    this.secretsEncKey = config.get<string>("secretsEncKey")!;
   }
 
   private readonly regionSelect = {
@@ -63,7 +94,7 @@ export class NodesService {
   listRegions() {
     return this.prisma.region.findMany({
       select: this.regionSelect,
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
   }
 
@@ -72,10 +103,17 @@ export class NodesService {
     const code = dto.code.trim().toLowerCase();
     const existing = await this.prisma.region.findUnique({ where: { code } });
     if (existing) {
-      throw new BadRequestException(`A location with code "${code}" already exists`);
+      throw new BadRequestException(
+        `A location with code "${code}" already exists`,
+      );
     }
     return this.prisma.region.create({
-      data: { id: uuidv7(), code, name: dto.name.trim(), country: dto.country.trim() },
+      data: {
+        id: uuidv7(),
+        code,
+        name: dto.name.trim(),
+        country: dto.country.trim(),
+      },
       select: this.regionSelect,
     });
   }
@@ -85,7 +123,7 @@ export class NodesService {
     dto: { code?: string; name?: string; country?: string },
   ) {
     const region = await this.prisma.region.findUnique({ where: { id } });
-    if (!region) throw new NotFoundException('Location not found');
+    if (!region) throw new NotFoundException("Location not found");
     const data: { code?: string; name?: string; country?: string } = {};
     if (dto.name !== undefined) data.name = dto.name.trim();
     if (dto.country !== undefined) data.country = dto.country.trim();
@@ -95,7 +133,9 @@ export class NodesService {
         where: { code, id: { not: id } },
       });
       if (clash) {
-        throw new BadRequestException(`A location with code "${code}" already exists`);
+        throw new BadRequestException(
+          `A location with code "${code}" already exists`,
+        );
       }
       data.code = code;
     }
@@ -108,7 +148,7 @@ export class NodesService {
 
   async deleteRegion(id: string): Promise<void> {
     const region = await this.prisma.region.findUnique({ where: { id } });
-    if (!region) throw new NotFoundException('Location not found');
+    if (!region) throw new NotFoundException("Location not found");
 
     // Active nodes block deletion — move or delete them first.
     const active = await this.prisma.node.count({
@@ -116,7 +156,7 @@ export class NodesService {
     });
     if (active > 0) {
       throw new BadRequestException(
-        'Cannot delete a location that still has nodes; move or delete them first',
+        "Cannot delete a location that still has nodes; move or delete them first",
       );
     }
 
@@ -132,11 +172,11 @@ export class NodesService {
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2003'
+        e.code === "P2003"
       ) {
         // A removed node still has servers attached (Server→Node is RESTRICT).
         throw new BadRequestException(
-          'A removed node in this location still has servers attached — delete those servers first.',
+          "A removed node in this location still has servers attached — delete those servers first.",
         );
       }
       throw e;
@@ -161,14 +201,16 @@ export class NodesService {
     return region.id;
   }
 
-  async create(dto: CreateNodeDto): Promise<{ node: Node; bootstrapToken: string }> {
+  async create(
+    dto: CreateNodeDto,
+  ): Promise<{ node: Node; bootstrapToken: string }> {
     const bootstrapToken = this.crypto.token(32);
     const regionId = await this.resolveRegionId(dto.regionId);
     const portStart = dto.allocationPortStart ?? PORT_RANGE_START;
     const portEnd = dto.allocationPortEnd ?? PORT_RANGE_END;
     if (portStart > portEnd) {
       throw new BadRequestException(
-        'allocationPortStart must be <= allocationPortEnd',
+        "allocationPortStart must be <= allocationPortEnd",
       );
     }
     const node = await this.prisma.node.create({
@@ -194,7 +236,10 @@ export class NodesService {
         allocationPortEnd: portEnd,
         gameDomain: normalizeGameDomain(dto.gameDomain),
         supportsWeb: dto.supportsWeb ?? false,
-        state: 'PROVISIONING',
+        monthlyCostMinor: dto.monthlyCostMinor ?? null,
+        costCurrency: dto.costCurrency ?? "USD",
+        provider: dto.provider ?? null,
+        state: "PROVISIONING",
       },
     });
     return { node, bootstrapToken };
@@ -208,15 +253,13 @@ export class NodesService {
   private readonly adminNodeInclude = {
     region: { select: { id: true, code: true, name: true, country: true } },
     heartbeats: {
-      orderBy: { recordedAt: 'desc' as const },
+      orderBy: { recordedAt: "desc" as const },
       take: 1,
     },
   };
 
   /** Flatten the `heartbeats` array into a single `latestHeartbeat` field. */
-  private decorate<
-    T extends { heartbeats?: { recordedAt: Date }[] },
-  >(node: T) {
+  private decorate<T extends { heartbeats?: { recordedAt: Date }[] }>(node: T) {
     const { heartbeats, ...rest } = node;
     return { ...rest, latestHeartbeat: heartbeats?.[0] ?? null };
   }
@@ -228,12 +271,16 @@ export class NodesService {
         where,
         skip: pagination.skip,
         take: pagination.take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         include: this.adminNodeInclude,
       }),
       this.prisma.node.count({ where }),
     ]);
-    return paginate(data.map((n) => this.decorate(n)), total, pagination);
+    return paginate(
+      data.map((n) => this.decorate(n)),
+      total,
+      pagination,
+    );
   }
 
   async get(id: string): Promise<Node> {
@@ -241,7 +288,7 @@ export class NodesService {
       where: { id, deletedAt: null },
       include: this.adminNodeInclude,
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
     return this.decorate(node) as unknown as Node;
   }
 
@@ -260,9 +307,9 @@ export class NodesService {
   }> {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
-      include: { heartbeats: { orderBy: { recordedAt: 'desc' }, take: 1 } },
+      include: { heartbeats: { orderBy: { recordedAt: "desc" }, take: 1 } },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
     const hb = node.heartbeats[0];
     const heartbeatAgeMs = hb
       ? Date.now() - new Date(hb.recordedAt).getTime()
@@ -285,7 +332,7 @@ export class NodesService {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
     let captured: { pem: string; sha256: string };
     try {
       captured = await this.agent.captureCert(node);
@@ -317,7 +364,7 @@ export class NodesService {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
     await this.agent.restartAgent(node);
     return { restarting: true };
   }
@@ -331,7 +378,7 @@ export class NodesService {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
     await this.agent.clearSteamCache(node);
     return { cleared: true };
   }
@@ -350,7 +397,7 @@ export class NodesService {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
     return this.agent.steamLogin(node, creds);
   }
 
@@ -368,7 +415,7 @@ export class NodesService {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
     await this.agent.updateAgent(node, this.githubToken());
     return { updating: true };
   }
@@ -392,11 +439,11 @@ export class NodesService {
     try {
       const token = this.githubToken();
       const res = await fetch(
-        'https://api.github.com/repos/refxfrank/refxhosting/releases/latest',
+        "https://api.github.com/repos/refxfrank/refxhosting/releases/latest",
         {
           headers: {
-            Accept: 'application/vnd.github+json',
-            'User-Agent': 'ReFx-Panel',
+            Accept: "application/vnd.github+json",
+            "User-Agent": "ReFx-Panel",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           signal: AbortSignal.timeout(6000),
@@ -438,7 +485,7 @@ export class NodesService {
         failed.push({
           id: node.id,
           name: node.name,
-          reason: e instanceof Error ? e.message : 'unreachable',
+          reason: e instanceof Error ? e.message : "unreachable",
         });
       }
     }
@@ -452,7 +499,7 @@ export class NodesService {
       dto.allocationPortStart > dto.allocationPortEnd
     ) {
       throw new BadRequestException(
-        'allocationPortStart must be <= allocationPortEnd',
+        "allocationPortStart must be <= allocationPortEnd",
       );
     }
     const data: UpdateNodeDto = { ...dto };
@@ -467,9 +514,9 @@ export class NodesService {
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
+        e.code === "P2002"
       ) {
-        throw new BadRequestException('Another node already uses that FQDN');
+        throw new BadRequestException("Another node already uses that FQDN");
       }
       throw e;
     }
@@ -478,7 +525,7 @@ export class NodesService {
   setMaintenance(id: string, on: boolean): Promise<Node> {
     return this.prisma.node.update({
       where: { id },
-      data: { maintenance: on, state: on ? 'MAINTENANCE' : 'ONLINE' },
+      data: { maintenance: on, state: on ? "MAINTENANCE" : "ONLINE" },
     });
   }
 
@@ -486,20 +533,20 @@ export class NodesService {
     const node = await this.prisma.node.findFirst({
       where: { id, deletedAt: null },
     });
-    if (!node) throw new NotFoundException('Node not found');
+    if (!node) throw new NotFoundException("Node not found");
     const servers = await this.prisma.server.count({
       where: { nodeId: id, deletedAt: null },
     });
     if (servers > 0) {
       throw new BadRequestException(
-        'Cannot delete a node that still has servers; migrate them first',
+        "Cannot delete a node that still has servers; migrate them first",
       );
     }
     await this.prisma.node.update({
       where: { id },
       data: {
         deletedAt: new Date(),
-        state: 'OFFLINE',
+        state: "OFFLINE",
         // Release the globally-unique fqdn so a replacement node can reuse the
         // same address; the soft-deleted row is retained for history/FKs.
         fqdn: `${node.fqdn}#deleted-${Date.now()}`,
@@ -552,7 +599,159 @@ export class NodesService {
         used: usedMem,
         free: node.memoryMb * node.memOvercommit - usedMem,
       },
-      disk: { total: node.diskMb, used: usedDisk, free: node.diskMb - usedDisk },
+      disk: {
+        total: node.diskMb,
+        used: usedDisk,
+        free: node.diskMb - usedDisk,
+      },
+    };
+  }
+
+  /**
+   * Portfolio economics: per-node monthly cost (what YOU pay) vs the ESTIMATED
+   * monthly revenue of the servers placed on it, plus allocation and a
+   * break-even fill point. Revenue is derived from the ACTIVE subscriptions of
+   * servers on the node, each subscription's price normalized to monthly and
+   * shared across its servers (a game-switch keeps identity, so usually 1:1).
+   *
+   * It is deliberately labelled an ESTIMATE: staff comps / free servers carry no
+   * subscription, and per-slot (voice) plans price by slot, so it won't match
+   * the books to the cent — but it's exact enough to flag an underwater node.
+   */
+  async economics() {
+    const nodes = await this.prisma.node.findMany({
+      where: { deletedAt: null },
+      include: {
+        region: { select: { code: true, name: true, country: true } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    // One pass over active, server-bearing subscriptions; attribute each to the
+    // node(s) its servers live on. Cheaper than N per-node queries.
+    const subs = await this.prisma.subscription.findMany({
+      where: { state: "ACTIVE", servers: { some: { deletedAt: null } } },
+      select: {
+        priceId: true,
+        slots: true,
+        servers: {
+          where: { deletedAt: null },
+          select: { nodeId: true },
+        },
+      },
+    });
+    const priceIds = [...new Set(subs.map((s) => s.priceId))];
+    const prices = priceIds.length
+      ? await this.prisma.price.findMany({
+          where: { id: { in: priceIds } },
+          select: {
+            id: true,
+            amountMinor: true,
+            interval: true,
+            currency: true,
+          },
+        })
+      : [];
+    const priceById = new Map(prices.map((p) => [p.id, p]));
+
+    // nodeId -> { revenueMinor, paidServers }
+    const revByNode = new Map<
+      string,
+      { revenueMinor: number; paidServers: number }
+    >();
+    for (const sub of subs) {
+      const price = priceById.get(sub.priceId);
+      if (!price || sub.servers.length === 0) continue;
+      const monthly =
+        toMonthlyMinor(price.amountMinor, price.interval) * (sub.slots || 1);
+      const perServer = monthly / sub.servers.length;
+      for (const srv of sub.servers) {
+        const cur = revByNode.get(srv.nodeId) ?? {
+          revenueMinor: 0,
+          paidServers: 0,
+        };
+        cur.revenueMinor += perServer;
+        cur.paidServers += 1;
+        revByNode.set(srv.nodeId, cur);
+      }
+    }
+
+    // Allocated resources per node (sum of provisioned server limits).
+    const allocs = await this.prisma.server.groupBy({
+      by: ["nodeId"],
+      where: { deletedAt: null },
+      _sum: { cpuCores: true, memoryMb: true, diskMb: true },
+      _count: { _all: true },
+    });
+    const allocByNode = new Map(allocs.map((a) => [a.nodeId, a]));
+
+    const rows = nodes.map((node) => {
+      const alloc = allocByNode.get(node.id);
+      const rev = revByNode.get(node.id) ?? { revenueMinor: 0, paidServers: 0 };
+      const revenueMinor = Math.round(rev.revenueMinor);
+      const costMinor = node.monthlyCostMinor ?? null;
+      const marginMinor = costMinor != null ? revenueMinor - costMinor : null;
+      const allocMemMb = alloc?._sum.memoryMb ?? 0;
+      const allocMemGb = allocMemMb / 1024;
+      // What you actually earn per GB of RAM allocated right now.
+      const effectivePerGbMinor =
+        allocMemGb > 0 ? revenueMinor / allocMemGb : null;
+      // At that rate, how many GB you'd need allocated to cover the node's cost.
+      const breakEvenMemGb =
+        costMinor != null && effectivePerGbMinor && effectivePerGbMinor > 0
+          ? costMinor / effectivePerGbMinor
+          : null;
+
+      return {
+        id: node.id,
+        name: node.name,
+        provider: node.provider,
+        region: node.region,
+        monthlyCostMinor: costMinor,
+        costCurrency: node.costCurrency,
+        monthlyRevenueMinorEstimated: revenueMinor,
+        marginMinor,
+        profitable: costMinor != null ? revenueMinor >= costMinor : null,
+        serverCount: alloc?._count._all ?? 0,
+        paidServerCount: rev.paidServers,
+        allocated: {
+          cpuCores: alloc?._sum.cpuCores ?? 0,
+          memoryMb: allocMemMb,
+          diskMb: alloc?._sum.diskMb ?? 0,
+        },
+        capacity: {
+          cpuCores: node.cpuCores * node.cpuOvercommit,
+          memoryMb: node.memoryMb * node.memOvercommit,
+          diskMb: node.diskMb,
+        },
+        effectivePerGbMinor:
+          effectivePerGbMinor != null ? Math.round(effectivePerGbMinor) : null,
+        breakEvenMemGb:
+          breakEvenMemGb != null ? Math.round(breakEvenMemGb * 10) / 10 : null,
+      };
+    });
+
+    // Portfolio totals. Cost only sums nodes that actually have a cost set.
+    const nodesWithCost = rows.filter((r) => r.monthlyCostMinor != null);
+    const totalCostMinor = nodesWithCost.reduce(
+      (s, r) => s + (r.monthlyCostMinor ?? 0),
+      0,
+    );
+    const totalRevenueMinor = rows.reduce(
+      (s, r) => s + r.monthlyRevenueMinorEstimated,
+      0,
+    );
+
+    return {
+      currency: "USD",
+      totals: {
+        monthlyCostMinor: totalCostMinor,
+        monthlyRevenueMinorEstimated: totalRevenueMinor,
+        marginMinor: totalRevenueMinor - totalCostMinor,
+        nodeCount: rows.length,
+        nodesWithCost: nodesWithCost.length,
+      },
+      nodes: rows,
     };
   }
 
@@ -572,7 +771,7 @@ export class NodesService {
     const candidates = await this.prisma.node.findMany({
       where: {
         deletedAt: null,
-        state: 'ONLINE',
+        state: "ONLINE",
         maintenance: false,
         ...(regionId ? { regionId } : {}),
         ...(requiresWeb ? { supportsWeb: true } : {}),
@@ -606,13 +805,13 @@ export class NodesService {
     const candidates = await this.prisma.node.findMany({
       where: {
         deletedAt: null,
-        state: 'ONLINE',
+        state: "ONLINE",
         maintenance: false,
         regionId,
         ...(requiresWeb ? { supportsWeb: true } : {}),
       },
       select: { id: true, name: true },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
     const out: Array<{ id: string; name: string }> = [];
     for (const n of candidates) {
@@ -649,16 +848,20 @@ export class NodesService {
         supportsWeb: true,
       },
     });
-    if (!node) throw new BadRequestException('Selected node is unavailable');
-    if (node.state !== 'ONLINE' || node.maintenance) {
-      throw new BadRequestException('Selected node is not accepting new servers');
+    if (!node) throw new BadRequestException("Selected node is unavailable");
+    if (node.state !== "ONLINE" || node.maintenance) {
+      throw new BadRequestException(
+        "Selected node is not accepting new servers",
+      );
     }
     if (regionId && node.regionId !== regionId) {
-      throw new BadRequestException('Selected node is not in the chosen region');
+      throw new BadRequestException(
+        "Selected node is not in the chosen region",
+      );
     }
     if (requiresWeb && !node.supportsWeb) {
       throw new BadRequestException(
-        'Selected node does not host web servers — pick a web-enabled node.',
+        "Selected node does not host web servers — pick a web-enabled node.",
       );
     }
     const cap = await this.capacity(nodeId);
@@ -667,7 +870,9 @@ export class NodesService {
       cap.memory.free < limits.memoryMb ||
       cap.disk.free < limits.diskMb
     ) {
-      throw new BadRequestException('Selected node no longer has capacity for this plan');
+      throw new BadRequestException(
+        "Selected node no longer has capacity for this plan",
+      );
     }
   }
 
@@ -683,22 +888,29 @@ export class NodesService {
       diskMb: number;
     },
     requiresWeb = false,
-  ): Promise<Array<{ id: string; code: string; name: string; country: string }>> {
+  ): Promise<
+    Array<{ id: string; code: string; name: string; country: string }>
+  > {
     const regions = await this.prisma.region.findMany({
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
       select: { id: true, code: true, name: true, country: true },
     });
     const nodes = await this.prisma.node.findMany({
       where: {
         deletedAt: null,
-        state: 'ONLINE',
+        state: "ONLINE",
         maintenance: false,
         ...(requiresWeb ? { supportsWeb: true } : {}),
       },
       select: { id: true, regionId: true },
     });
 
-    const out: Array<{ id: string; code: string; name: string; country: string }> = [];
+    const out: Array<{
+      id: string;
+      code: string;
+      name: string;
+      country: string;
+    }> = [];
     for (const region of regions) {
       const regionNodes = nodes.filter((n) => n.regionId === region.id);
       let fits = false;
@@ -741,10 +953,10 @@ export class NodesService {
       },
     });
     const online = candidates.filter(
-      (n) => n.state === 'ONLINE' && !n.maintenance,
+      (n) => n.state === "ONLINE" && !n.maintenance,
     );
     const needs = `Plan reserves ${limits.cpuCores} vCPU / ${limits.memoryMb} MB RAM / ${limits.diskMb} MB disk.`;
-    const webNote = requiresWeb ? ' web-enabled' : '';
+    const webNote = requiresWeb ? " web-enabled" : "";
 
     if (candidates.length === 0)
       return `${needs} No${webNote} nodes exist yet.`;
@@ -753,7 +965,7 @@ export class NodesService {
     }
 
     // Report the most-free node so the operator can see the gap.
-    let bestLine = '';
+    let bestLine = "";
     let bestFree = -Infinity;
     for (const node of online) {
       const cap = await this.capacity(node.id);
@@ -776,25 +988,25 @@ export class NodesService {
    * Heartbeat history for a node within a relative range ("1h" | "6h" | "24h" |
    * "7d"), newest first. Powers the admin node detail graphs.
    */
-  async listHeartbeats(id: string, range = '1h'): Promise<unknown[]> {
+  async listHeartbeats(id: string, range = "1h"): Promise<unknown[]> {
     await this.get(id);
     const ms = this.rangeToMs(range);
     const since = new Date(Date.now() - ms);
     return this.prisma.nodeHeartbeat.findMany({
       where: { nodeId: id, recordedAt: { gte: since } },
-      orderBy: { recordedAt: 'desc' },
+      orderBy: { recordedAt: "desc" },
       take: 5000,
     });
   }
 
   private rangeToMs(range: string): number {
     const map: Record<string, number> = {
-      '1h': 60 * 60 * 1000,
-      '6h': 6 * 60 * 60 * 1000,
-      '24h': 24 * 60 * 60 * 1000,
-      '7d': 7 * 24 * 60 * 60 * 1000,
+      "1h": 60 * 60 * 1000,
+      "6h": 6 * 60 * 60 * 1000,
+      "24h": 24 * 60 * 60 * 1000,
+      "7d": 7 * 24 * 60 * 60 * 1000,
     };
-    return map[range] ?? map['1h'];
+    return map[range] ?? map["1h"];
   }
 
   // ---- agent-facing endpoints --------------------------------------------
@@ -818,12 +1030,12 @@ export class NodesService {
     const node = await this.prisma.node.findFirst({
       where: { tokenHash, deletedAt: null },
     });
-    if (!node) throw new BadRequestException('Invalid bootstrap token');
+    if (!node) throw new BadRequestException("Invalid bootstrap token");
 
     // Single-use: a token that has already been redeemed is dead. The operator
     // must rotate it (admin "regenerate bootstrap token") to register again.
     if (node.bootstrapTokenUsedAt) {
-      throw new BadRequestException('Bootstrap token already used');
+      throw new BadRequestException("Bootstrap token already used");
     }
     // Time-boxed: reject an expired token. A null expiry (legacy rows created
     // before this field) is treated as non-expiring for backward compatibility.
@@ -831,7 +1043,7 @@ export class NodesService {
       node.bootstrapTokenExpiresAt &&
       node.bootstrapTokenExpiresAt.getTime() < Date.now()
     ) {
-      throw new BadRequestException('Bootstrap token expired');
+      throw new BadRequestException("Bootstrap token expired");
     }
 
     // Consume the token atomically: only flip it when it is STILL unused, so two
@@ -840,13 +1052,13 @@ export class NodesService {
     const consumed = await this.prisma.node.updateMany({
       where: { id: node.id, bootstrapTokenUsedAt: null },
       data: {
-        state: 'ONLINE',
+        state: "ONLINE",
         agentVersion: dto.agentVersion ?? node.agentVersion,
         bootstrapTokenUsedAt: new Date(),
       },
     });
     if (consumed.count === 0) {
-      throw new BadRequestException('Bootstrap token already used');
+      throw new BadRequestException("Bootstrap token already used");
     }
 
     const servers = await this.buildServerInstallSpecs(node.id);
@@ -902,12 +1114,12 @@ export class NodesService {
       for (const [k, val] of Object.entries(serverEnv)) env[k] = String(val);
       for (const ov of server.variables) env[ov.envName] = ov.value;
 
-      let sftpPassword = '';
+      let sftpPassword = "";
       if (server.sftpPasswordEnc) {
         try {
           sftpPassword = this.crypto.decrypt(server.sftpPasswordEnc);
         } catch {
-          sftpPassword = '';
+          sftpPassword = "";
         }
       }
 
@@ -915,10 +1127,10 @@ export class NodesService {
       // MINECRAFT_VERSION (handles servers created before this image, and
       // "latest" pins). The agent runs the install script in this image too, so
       // install + runtime share one compatible JVM. Non-Java images untouched.
-      let dockerImage = server.dockerImage ?? '';
+      let dockerImage = server.dockerImage ?? "";
       if (isJavaImage(dockerImage)) {
         dockerImage =
-          resolveJavaImage(dockerImage, env['MINECRAFT_VERSION'], 'jre') ??
+          resolveJavaImage(dockerImage, env["MINECRAFT_VERSION"], "jre") ??
           dockerImage;
       }
 
@@ -927,9 +1139,9 @@ export class NodesService {
         shortId: server.shortId,
         deployMethod: server.deployMethod,
         dockerImage,
-        startupCommand: server.startupCommand ?? template?.startupCommand ?? '',
-        startupDetect: template?.startupDetect ?? '',
-        stopCommand: template?.stopCommand ?? '',
+        startupCommand: server.startupCommand ?? template?.startupCommand ?? "",
+        startupDetect: template?.startupDetect ?? "",
+        stopCommand: template?.stopCommand ?? "",
         environment: env,
         limits: {
           cpuCores: server.cpuCores,
@@ -956,31 +1168,31 @@ export class NodesService {
   async registerAgent(nodeId: string, dto: NodeRegisterDto) {
     const node = await this.prisma.node.findUnique({ where: { id: nodeId } });
     if (!node || node.tokenHash !== this.crypto.hash(dto.bootstrapToken)) {
-      throw new BadRequestException('Invalid bootstrap token');
+      throw new BadRequestException("Invalid bootstrap token");
     }
     // Same single-use + time-boxed lifecycle as registerAgentByToken — this
     // legacy path must NOT let a used/expired token be replayed.
     if (node.bootstrapTokenUsedAt) {
-      throw new BadRequestException('Bootstrap token already used');
+      throw new BadRequestException("Bootstrap token already used");
     }
     if (
       node.bootstrapTokenExpiresAt &&
       node.bootstrapTokenExpiresAt.getTime() < Date.now()
     ) {
-      throw new BadRequestException('Bootstrap token expired');
+      throw new BadRequestException("Bootstrap token expired");
     }
     // Consume atomically (only while still unused) so concurrent replays of one
     // valid token can't both succeed.
     const consumed = await this.prisma.node.updateMany({
       where: { id: node.id, bootstrapTokenUsedAt: null },
       data: {
-        state: 'ONLINE',
+        state: "ONLINE",
         agentVersion: dto.agentVersion ?? node.agentVersion,
         bootstrapTokenUsedAt: new Date(),
       },
     });
     if (consumed.count === 0) {
-      throw new BadRequestException('Bootstrap token already used');
+      throw new BadRequestException("Bootstrap token already used");
     }
     const updated = await this.prisma.node.findUniqueOrThrow({
       where: { id: nodeId },
@@ -1014,7 +1226,7 @@ export class NodesService {
       this.prisma.node.update({
         where: { id: nodeId },
         data: {
-          state: 'ONLINE',
+          state: "ONLINE",
           agentVersion: dto.agentVersion ?? undefined,
         },
       }),

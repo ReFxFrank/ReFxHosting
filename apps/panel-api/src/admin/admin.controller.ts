@@ -246,6 +246,14 @@ export class AdminController {
     return { latest: await this.nodes.latestAgentVersion() };
   }
 
+  /** Portfolio margin view: per-node cost vs. estimated revenue + break-even.
+   *  Static route — must precede `nodes/:id`. */
+  @Get("nodes/economics")
+  @RequirePerm("nodes.read")
+  nodeEconomics() {
+    return this.nodes.economics();
+  }
+
   @Get("nodes/:id")
   @RequirePerm("nodes.read")
   getNode(@Param("id") id: string) {
