@@ -1,44 +1,45 @@
-import { Module } from '@nestjs/common';
-import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { GraphQLModule } from '@nestjs/graphql';
-import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
-import { BullModule } from '@nestjs/bullmq';
-import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { Module } from "@nestjs/common";
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
+import { ConfigModule, ConfigService } from "@nestjs/config";
+import { GraphQLModule } from "@nestjs/graphql";
+import { ApolloDriver, ApolloDriverConfig } from "@nestjs/apollo";
+import { BullModule } from "@nestjs/bullmq";
+import { ScheduleModule } from "@nestjs/schedule";
+import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
+import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
 
-import configuration, { AppConfig } from './config/configuration';
-import { PrismaModule } from './prisma/prisma.module';
-import { CryptoModule } from './common/crypto/crypto.module';
-import { EmailModule } from './email/email.module';
-import { PushModule } from './push/push.module';
-import { AuditInterceptor } from './common/interceptors/audit.interceptor';
-import { PasswordChangeInterceptor } from './common/interceptors/password-change.interceptor';
-import { ApiKeyWriteScopeInterceptor } from './common/interceptors/api-key-write-scope.interceptor';
+import configuration, { AppConfig } from "./config/configuration";
+import { PrismaModule } from "./prisma/prisma.module";
+import { CryptoModule } from "./common/crypto/crypto.module";
+import { EmailModule } from "./email/email.module";
+import { PushModule } from "./push/push.module";
+import { AuditInterceptor } from "./common/interceptors/audit.interceptor";
+import { PasswordChangeInterceptor } from "./common/interceptors/password-change.interceptor";
+import { ApiKeyWriteScopeInterceptor } from "./common/interceptors/api-key-write-scope.interceptor";
 
-import { AgentModule } from './agent/agent.module';
-import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
-import { AccountModule } from './account/account.module';
-import { NodesModule } from './nodes/nodes.module';
-import { ServersModule } from './servers/servers.module';
-import { FilesModule } from './files/files.module';
-import { BackupsModule } from './backups/backups.module';
-import { DatabasesModule } from './databases/databases.module';
-import { StatsModule } from './stats/stats.module';
-import { SftpModule } from './sftp/sftp.module';
-import { BillingModule } from './billing/billing.module';
-import { SupportModule } from './support/support.module';
-import { PlatformModule } from './platform/platform.module';
-import { TemplatesModule } from './templates/templates.module';
-import { AdminModule } from './admin/admin.module';
-import { CatalogModule } from './catalog/catalog.module';
-import { OrdersModule } from './orders/orders.module';
-import { DashboardModule } from './dashboard/dashboard.module';
-import { StatusModule } from './status/status.module';
-import { WebhooksModule } from './webhooks/webhooks.module';
-import { QueuesModule } from './queues/queues.module';
-import { MetricsInterceptor } from './platform/metrics.interceptor';
+import { AgentModule } from "./agent/agent.module";
+import { AuthModule } from "./auth/auth.module";
+import { UsersModule } from "./users/users.module";
+import { AccountModule } from "./account/account.module";
+import { NodesModule } from "./nodes/nodes.module";
+import { ServersModule } from "./servers/servers.module";
+import { FilesModule } from "./files/files.module";
+import { BackupsModule } from "./backups/backups.module";
+import { DatabasesModule } from "./databases/databases.module";
+import { StatsModule } from "./stats/stats.module";
+import { SftpModule } from "./sftp/sftp.module";
+import { BillingModule } from "./billing/billing.module";
+import { SupportModule } from "./support/support.module";
+import { PlatformModule } from "./platform/platform.module";
+import { TemplatesModule } from "./templates/templates.module";
+import { AdminModule } from "./admin/admin.module";
+import { CatalogModule } from "./catalog/catalog.module";
+import { OrdersModule } from "./orders/orders.module";
+import { DashboardModule } from "./dashboard/dashboard.module";
+import { StatusModule } from "./status/status.module";
+import { WebhooksModule } from "./webhooks/webhooks.module";
+import { QueuesModule } from "./queues/queues.module";
+import { MetricsInterceptor } from "./platform/metrics.interceptor";
 
 @Module({
   imports: [
@@ -55,7 +56,7 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const redis = config.get<AppConfig['redis']>('redis')!;
+        const redis = config.get<AppConfig["redis"]>("redis")!;
         return {
           connection: {
             host: redis.host,
@@ -65,7 +66,7 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
           },
           defaultJobOptions: {
             attempts: 3,
-            backoff: { type: 'exponential', delay: 5000 },
+            backoff: { type: "exponential", delay: 5000 },
             removeOnComplete: 1000,
             removeOnFail: 5000,
           },
@@ -73,12 +74,28 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
       },
     }),
 
-    // Rate limiting.
+    // Rate limiting. Counters live in Redis (already a hard dependency) so the
+    // limits are GLOBAL across panel-api replicas — with the default in-memory
+    // store each pod counted independently, letting the effective login/MFA
+    // brute-force ceiling scale with the replica count. Single-instance behaves
+    // identically; multi-instance is now correctly bounded.
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
-        const t = config.get<AppConfig['throttle']>('throttle')!;
-        return [{ ttl: t.ttl * 1000, limit: t.limit }];
+        const t = config.get<AppConfig["throttle"]>("throttle")!;
+        const r = config.get<AppConfig["redis"]>("redis")!;
+        return {
+          throttlers: [{ ttl: t.ttl * 1000, limit: t.limit }],
+          storage: new ThrottlerStorageRedisService({
+            host: r.host,
+            port: r.port,
+            password: r.password,
+            db: r.db,
+            // Throttling must never wedge a request path; ioredis retries in the
+            // background and the guard fails open if the store is briefly down.
+            maxRetriesPerRequest: 1,
+          }),
+        };
       },
     }),
 
@@ -90,7 +107,7 @@ import { MetricsInterceptor } from './platform/metrics.interceptor';
         // The Playground UI and schema introspection are powerful recon tools;
         // expose them only outside production. In production both are disabled so
         // the GraphQL schema isn't enumerable by anonymous clients.
-        const isProd = config.get<AppConfig['env']>('env') === 'production';
+        const isProd = config.get<AppConfig["env"]>("env") === "production";
         return {
           // Generate the schema in-memory: the production image has no writable
           // `src/` (runs as non-root, only `dist/` is shipped), and we don't need
