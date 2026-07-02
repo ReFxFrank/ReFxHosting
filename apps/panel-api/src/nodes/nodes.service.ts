@@ -307,6 +307,14 @@ export class NodesService {
    * → panel, outbound) so the UI can distinguish "agent alive but its API port
    * is unreachable" (firewall) from "agent down". `reachable` false on
    * timeout/connection failure.
+   *
+   * Methodology: the first request is an untimed WARM-UP — it pays DNS + TCP +
+   * the TLS handshake (the connection pool closes idle sockets between the
+   * UI's ~10-30s polls, so a naive single sample measures connection setup,
+   * ~3-4 round-trips, not latency — that's how a 20ms link used to read as
+   * 200-500ms and jump around). The timed samples then reuse the warm
+   * connection immediately, and we report the fastest of three: the minimum is
+   * the standard estimator for the latency floor, since noise is one-sided.
    */
   async ping(id: string): Promise<{
     ms: number | null;
@@ -322,10 +330,22 @@ export class NodesService {
     const heartbeatAgeMs = hb
       ? Date.now() - new Date(hb.recordedAt).getTime()
       : null;
-    const started = Date.now();
     try {
+      // Warm-up (untimed): establish DNS/TCP/TLS so the samples below measure
+      // the request round-trip on a pooled connection, not connection setup.
       await this.agent.fetchAgentStatus(node);
-      return { ms: Date.now() - started, reachable: true, heartbeatAgeMs };
+      const samples: number[] = [];
+      for (let i = 0; i < 3; i++) {
+        // performance.now() is monotonic (immune to NTP clock steps).
+        const started = performance.now();
+        await this.agent.fetchAgentStatus(node);
+        samples.push(performance.now() - started);
+      }
+      return {
+        ms: Math.max(1, Math.round(Math.min(...samples))),
+        reachable: true,
+        heartbeatAgeMs,
+      };
     } catch {
       return { ms: null, reachable: false, heartbeatAgeMs };
     }
