@@ -375,8 +375,8 @@ The node fleet (each is a separate OVH box you SSH into by name):
 | Node hostname | Region | OS | Role |
 |---------------|--------|----|------|
 | `refx-ca-east-bhs` | Canada East — OVH Beauharnois (BHS) | Ubuntu | game + voice |
-| `refx-us-east-va`  | US East — OVH Vint Hill, VA (VIN)   | Ubuntu | game + voice |
-| `refx-us-west-hil` | US West — OVH Hillsboro, OR (HIL) — Rise-3 (Ryzen 9 5900X, 128 GB) | Ubuntu | game + voice |
+| `refx-ca-east-bhs1` | Canada East — OVH Beauharnois (BHS) | Windows | game (Windows-only builds) |
+| `us-east-va` | US East — OVH Vint Hill, VA (VIN) — Rise-3 (Ryzen 9 5900X, 128 GB) | Ubuntu | game + voice |
 
 > The `systemctl` / `journalctl` commands below are for the **Ubuntu** nodes. For
 > a **Windows** node, manage the `refx-agent` service with PowerShell instead —
