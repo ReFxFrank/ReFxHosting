@@ -17,6 +17,7 @@ import {
   ArrowLeftRight,
   Loader2,
   TriangleAlert,
+  Mic,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -134,6 +135,38 @@ export default function AdminServersPage() {
     memoryMb: 1024,
     diskMb: 5120,
     swapMb: 0,
+  });
+
+  // Simple Voice Chat dedicated-port grant (off a support ticket).
+  const [voiceTarget, setVoiceTarget] = useState<AdminServer | null>(null);
+  const voiceStatus = useQuery({
+    queryKey: ["admin", "voice-chat", voiceTarget?.id],
+    queryFn: () => api.admin.voiceChatStatus(voiceTarget!.id),
+    enabled: !!voiceTarget,
+  });
+  const enableVoice = useMutation({
+    mutationFn: () => api.admin.enableVoiceChat(voiceTarget!.id),
+    onSuccess: (r) => {
+      toast.success(
+        r.alreadyEnabled
+          ? `Already enabled on port ${r.port}`
+          : `Voice chat enabled on port ${r.port}`,
+      );
+      voiceStatus.refetch();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to enable voice"),
+  });
+  const disableVoice = useMutation({
+    mutationFn: () => api.admin.disableVoiceChat(voiceTarget!.id),
+    onSuccess: () => {
+      toast.success("Voice chat port removed");
+      voiceStatus.refetch();
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to disable voice",
+      ),
   });
 
   const { data: servers, isLoading } = useQuery({
@@ -483,6 +516,14 @@ export default function AdminServersPage() {
                           onClick={() => openTransfer(s)}
                         >
                           <ArrowLeftRight className="size-4" /> Transfer
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Simple Voice Chat — grant a dedicated UDP port"
+                          onClick={() => setVoiceTarget(s)}
+                        >
+                          <Mic className="size-4" /> Voice
                         </Button>
                         <Button
                           variant="ghost"
@@ -998,6 +1039,77 @@ export default function AdminServersPage() {
             >
               Apply
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Simple Voice Chat — grant/revoke a dedicated UDP port */}
+      <Dialog
+        open={!!voiceTarget}
+        onOpenChange={(o) => !o && setVoiceTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Simple Voice Chat — {voiceTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Grant a dedicated UDP port so voice chat doesn&apos;t collide with
+              the game/query port. The port publishes on the server&apos;s next
+              restart.
+            </DialogDescription>
+          </DialogHeader>
+
+          {voiceStatus.isLoading ? (
+            <ListSkeleton rows={2} />
+          ) : voiceStatus.data?.enabled ? (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] p-3 text-sm">
+                Voice chat is <span className="font-medium">enabled</span> on
+                port{" "}
+                <span className="font-mono font-semibold">
+                  {voiceStatus.data.port}
+                </span>
+                .
+              </div>
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                <li>
+                  Have the customer set{" "}
+                  <span className="font-mono">
+                    port={voiceStatus.data.port}
+                  </span>{" "}
+                  and <span className="font-mono">bind_address=0.0.0.0</span> in{" "}
+                  <span className="font-mono">
+                    voicechat/voicechat-server.properties
+                  </span>
+                  .
+                </li>
+                <li>Restart the server so the new port is published.</li>
+              </ol>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              No dedicated voice port yet. Enabling reserves a free UDP port on
+              this server&apos;s node and marks it for Simple Voice Chat.
+            </p>
+          )}
+
+          <DialogFooter>
+            {voiceStatus.data?.enabled ? (
+              <Button
+                variant="outline"
+                loading={disableVoice.isPending}
+                onClick={() => disableVoice.mutate()}
+              >
+                Disable
+              </Button>
+            ) : (
+              <Button
+                loading={enableVoice.isPending}
+                disabled={voiceStatus.isLoading}
+                onClick={() => enableVoice.mutate()}
+              >
+                <Mic className="size-4" /> Enable voice chat
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

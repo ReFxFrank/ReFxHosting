@@ -394,6 +394,9 @@ model Allocation {
   ip        String
   port      Int
   alias     String?
+  // Purpose marker for secondary allocations (e.g. "voicechat" for a dedicated
+  // Simple Voice Chat UDP port). NULL for the primary game-port allocation.
+  label     String?
   serverId  String?  @db.Uuid
   server    Server?  @relation(fields: [serverId], references: [id])
   isPrimary Boolean  @default(false)

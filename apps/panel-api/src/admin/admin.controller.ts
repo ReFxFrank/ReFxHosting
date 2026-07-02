@@ -1090,6 +1090,36 @@ export class AdminController {
     return this.servers.resize(id, dto);
   }
 
+  // ---- Simple Voice Chat (dedicated UDP port, admin-granted) --------------
+
+  @Get("servers/:id/voice-chat")
+  @RequirePerm("servers.read")
+  voiceChatStatus(@Param("id") id: string) {
+    return this.servers.voiceChatStatus(id);
+  }
+
+  @Post("servers/:id/voice-chat")
+  @RequirePerm("servers.manage")
+  @Audit({
+    action: "admin.server.voicechat.enable",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  enableVoiceChat(@Param("id") id: string) {
+    return this.servers.enableVoiceChat(id);
+  }
+
+  @Delete("servers/:id/voice-chat")
+  @RequirePerm("servers.manage")
+  @Audit({
+    action: "admin.server.voicechat.disable",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  disableVoiceChat(@Param("id") id: string) {
+    return this.servers.disableVoiceChat(id);
+  }
+
   /**
    * Transfer a server to another node (Pterodactyl-style). Stops + snapshots on
    * the source, provisions + restores on the destination, then repoints the

@@ -1372,6 +1372,17 @@ export const api = {
         diskMb?: number;
       },
     ) => http.patch<AdminServer>(`/admin/servers/${id}/resize`, input),
+    /** Simple Voice Chat dedicated-port grant (admin, off a support ticket). */
+    voiceChatStatus: (id: string) =>
+      http.get<{ enabled: boolean; port: number | null; ip: string | null }>(
+        `/admin/servers/${id}/voice-chat`,
+      ),
+    enableVoiceChat: (id: string) =>
+      http.post<{ port: number; ip: string; alreadyEnabled: boolean }>(
+        `/admin/servers/${id}/voice-chat`,
+      ),
+    disableVoiceChat: (id: string) =>
+      http.delete<{ disabled: boolean }>(`/admin/servers/${id}/voice-chat`),
     /** Move a server to another node (Pterodactyl-style). Returns the queued transfer. */
     transferServer: (id: string, toNodeId: string) =>
       http.post<ServerTransfer>(`/admin/servers/${id}/transfer`, { toNodeId }),

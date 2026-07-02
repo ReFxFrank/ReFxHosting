@@ -1,16 +1,20 @@
-import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { Node } from '@prisma/client';
-import * as tls from 'node:tls';
-import { isIP } from 'node:net';
-import { createHash } from 'node:crypto';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { Node } from "@prisma/client";
+import * as tls from "node:tls";
+import { isIP } from "node:net";
+import { createHash } from "node:crypto";
 import {
   Agent as UndiciAgent,
   fetch as undiciFetch,
   type Dispatcher,
-} from 'undici';
-import { AppConfig } from '../config/configuration';
-import { CryptoService } from '../common/crypto/crypto.service';
+} from "undici";
+import { AppConfig } from "../config/configuration";
+import { CryptoService } from "../common/crypto/crypto.service";
 import {
   SIGN_HEADER_NODE,
   SIGN_HEADER_SIGNATURE,
@@ -18,7 +22,7 @@ import {
   deriveSigningKey,
   signRequest,
   signRequestRaw,
-} from './agent.signing';
+} from "./agent.signing";
 
 /** The agent caps signed request bodies at 32 MiB; stay under it for uploads. */
 export const AGENT_MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
@@ -32,7 +36,7 @@ export const AGENT_MAX_UPLOAD_BYTES = 30 * 1024 * 1024;
 export const sniServerName = (host: string): string | undefined =>
   isIP(host) ? undefined : host;
 
-export type PowerSignal = 'start' | 'stop' | 'restart' | 'kill';
+export type PowerSignal = "start" | "stop" | "restart" | "kill";
 
 export interface InstallSpec {
   serverId: string;
@@ -64,7 +68,7 @@ export interface InstallSpec {
 
 export interface ReconfigureSpec {
   serverId: string;
-  limits: InstallSpec['limits'];
+  limits: InstallSpec["limits"];
 }
 
 /** A single directory entry returned by the agent's jailed file manager. */
@@ -116,10 +120,11 @@ export class NodeAgentClient {
     config: ConfigService,
     private readonly crypto: CryptoService,
   ) {
-    this.timeoutMs = config.get<AppConfig['agent']>('agent')!.requestTimeoutMs;
-    this.signQuery = config.get<AppConfig['agent']>('agent')!.signQuery;
-    this.secretsEncKey = config.get<string>('secretsEncKey')!;
-    this.pinningEnabled = config.get<AppConfig['agentTlsPinning']>('agentTlsPinning')!;
+    this.timeoutMs = config.get<AppConfig["agent"]>("agent")!.requestTimeoutMs;
+    this.signQuery = config.get<AppConfig["agent"]>("agent")!.signQuery;
+    this.secretsEncKey = config.get<string>("secretsEncKey")!;
+    this.pinningEnabled =
+      config.get<AppConfig["agentTlsPinning"]>("agentTlsPinning")!;
   }
 
   /**
@@ -131,7 +136,7 @@ export class NodeAgentClient {
    */
   private dispatcherFor(node: Node): Dispatcher | undefined {
     if (!this.pinningEnabled || !node.agentCertPem) return undefined;
-    const key = `${node.id}:${node.agentCertSha256 ?? ''}`;
+    const key = `${node.id}:${node.agentCertSha256 ?? ""}`;
     let agent = this.dispatchers.get(key);
     if (!agent) {
       agent = new UndiciAgent({
@@ -173,22 +178,26 @@ export class NodeAgentClient {
           const cert = socket.getPeerCertificate();
           if (!cert || !cert.raw) {
             socket.destroy();
-            reject(new Error('Agent presented no certificate'));
+            reject(new Error("Agent presented no certificate"));
             return;
           }
           const der = cert.raw;
-          const b64 = der.toString('base64').match(/.{1,64}/g)?.join('\n') ?? '';
+          const b64 =
+            der
+              .toString("base64")
+              .match(/.{1,64}/g)
+              ?.join("\n") ?? "";
           const pem = `-----BEGIN CERTIFICATE-----\n${b64}\n-----END CERTIFICATE-----\n`;
-          const sha256 = createHash('sha256').update(der).digest('hex');
+          const sha256 = createHash("sha256").update(der).digest("hex");
           socket.end();
           resolve({ pem, sha256 });
         },
       );
-      socket.on('timeout', () => {
+      socket.on("timeout", () => {
         socket.destroy();
-        reject(new Error('Timed out connecting to the agent'));
+        reject(new Error("Timed out connecting to the agent"));
       });
-      socket.on('error', (e) => reject(e));
+      socket.on("error", (e) => reject(e));
     });
   }
 
@@ -199,28 +208,28 @@ export class NodeAgentClient {
    * (`POST /api/v1/servers`) and reads the id from the spec body.
    */
   install(node: Node, spec: InstallSpec) {
-    return this.request(node, 'POST', `/api/v1/servers`, spec);
+    return this.request(node, "POST", `/api/v1/servers`, spec);
   }
 
   power(node: Node, serverId: string, signal: PowerSignal) {
     // The agent's power handler expects { action, timeout }.
-    return this.request(node, 'POST', `/api/v1/servers/${serverId}/power`, {
+    return this.request(node, "POST", `/api/v1/servers/${serverId}/power`, {
       action: signal,
     });
   }
 
   sendCommand(node: Node, serverId: string, command: string) {
-    return this.request(node, 'POST', `/api/v1/servers/${serverId}/command`, {
+    return this.request(node, "POST", `/api/v1/servers/${serverId}/command`, {
       command,
     });
   }
 
   reinstall(node: Node, spec: InstallSpec) {
     // The agent triggers a wipe via ?wipe=true rather than a body flag.
-    const wipe = spec.wipe ? '?wipe=true' : '';
+    const wipe = spec.wipe ? "?wipe=true" : "";
     return this.request(
       node,
-      'POST',
+      "POST",
       `/api/v1/servers/${spec.serverId}/reinstall${wipe}`,
       spec,
     );
@@ -230,14 +239,29 @@ export class NodeAgentClient {
     // The agent's reconfigure handler decodes a bare Limits object.
     return this.request(
       node,
-      'PATCH',
+      "PATCH",
       `/api/v1/servers/${spec.serverId}/reconfigure`,
       spec.limits,
     );
   }
 
+  /**
+   * Push an updated server spec (e.g. a newly-added port allocation) to the
+   * agent WITHOUT reinstalling. The agent re-registers the server; the change
+   * takes effect on the server's next container recreate (its next
+   * Start/restart). Requires agent v1.2.4+.
+   */
+  reloadServer(node: Node, spec: InstallSpec) {
+    return this.request(
+      node,
+      "POST",
+      `/api/v1/servers/${spec.serverId}/reload`,
+      spec,
+    );
+  }
+
   deleteServer(node: Node, serverId: string) {
-    return this.request(node, 'DELETE', `/api/v1/servers/${serverId}`);
+    return this.request(node, "DELETE", `/api/v1/servers/${serverId}`);
   }
 
   /**
@@ -246,12 +270,12 @@ export class NodeAgentClient {
    * replies before re-executing, so this resolves quickly.
    */
   restartAgent(node: Node) {
-    return this.request(node, 'POST', `/api/v1/system/restart`);
+    return this.request(node, "POST", `/api/v1/system/restart`);
   }
 
   /** Wipe the node's cached steamcmd sessions (per-account home). */
   clearSteamCache(node: Node) {
-    return this.request(node, 'POST', `/api/v1/system/steam-cache/clear`);
+    return this.request(node, "POST", `/api/v1/system/steam-cache/clear`);
   }
 
   /** Authenticate + cache the node's game-download Steam account on demand
@@ -263,7 +287,7 @@ export class NodeAgentClient {
   ) {
     return this.request<{ ok: boolean; output: string }>(
       node,
-      'POST',
+      "POST",
       `/api/v1/system/steam-login`,
       body,
       // steamcmd self-update + login takes well over the 15s default; give it room.
@@ -276,7 +300,7 @@ export class NodeAgentClient {
   updateAgent(node: Node, githubToken?: string) {
     return this.request(
       node,
-      'POST',
+      "POST",
       `/api/v1/system/update`,
       githubToken ? { githubToken } : {},
       { timeoutMs: 120_000 },
@@ -287,7 +311,7 @@ export class NodeAgentClient {
   proxyAddSite(node: Node, domain: string, upstream: string) {
     return this.request<{ ok: boolean; domain: string }>(
       node,
-      'POST',
+      "POST",
       `/api/v1/proxy/site`,
       { domain, upstream },
     );
@@ -297,7 +321,7 @@ export class NodeAgentClient {
   proxyRemoveSite(node: Node, domain: string) {
     return this.request(
       node,
-      'DELETE',
+      "DELETE",
       `/api/v1/proxy/site/${encodeURIComponent(domain)}`,
     );
   }
@@ -309,7 +333,7 @@ export class NodeAgentClient {
     username: string,
     password: string,
   ) {
-    return this.request(node, 'POST', `/api/v1/servers/${serverId}/sftp`, {
+    return this.request(node, "POST", `/api/v1/servers/${serverId}/sftp`, {
       username,
       password,
     });
@@ -325,16 +349,20 @@ export class NodeAgentClient {
     // The agent responds with { entries: [...] }; unwrap to the bare array.
     const res = await this.request<{ entries?: FileEntry[] } | FileEntry[]>(
       node,
-      'GET',
+      "GET",
       `/api/v1/servers/${serverId}/files/list?path=${encodeURIComponent(path)}`,
     );
     return Array.isArray(res) ? res : (res?.entries ?? []);
   }
 
-  readFile(node: Node, serverId: string, path: string): Promise<{ content: string }> {
+  readFile(
+    node: Node,
+    serverId: string,
+    path: string,
+  ): Promise<{ content: string }> {
     return this.request(
       node,
-      'GET',
+      "GET",
       `/api/v1/servers/${serverId}/files/read?path=${encodeURIComponent(path)}`,
     );
   }
@@ -343,7 +371,7 @@ export class NodeAgentClient {
     // The agent writes the raw request body to ?path=.
     return this.request(
       node,
-      'POST',
+      "POST",
       `/api/v1/servers/${serverId}/files/write?path=${encodeURIComponent(path)}`,
       content,
       { rawBody: true },
@@ -369,7 +397,7 @@ export class NodeAgentClient {
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const signature = signRequestRaw(
       this.signingKey(node),
-      'POST',
+      "POST",
       path,
       timestamp,
       bytes,
@@ -383,9 +411,9 @@ export class NodeAgentClient {
     );
     try {
       const res = await undiciFetch(url, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'content-type': 'application/octet-stream',
+          "content-type": "application/octet-stream",
           [SIGN_HEADER_NODE]: node.id,
           [SIGN_HEADER_TIMESTAMP]: timestamp,
           [SIGN_HEADER_SIGNATURE]: signature,
@@ -395,7 +423,7 @@ export class NodeAgentClient {
         dispatcher: this.dispatcherFor(node),
       });
       if (!res.ok) {
-        const text = await res.text().catch(() => '');
+        const text = await res.text().catch(() => "");
         throw new ServiceUnavailableException(
           `Node agent upload error ${res.status}: ${text || res.statusText}`,
         );
@@ -416,7 +444,7 @@ export class NodeAgentClient {
       paths.map((p) =>
         this.request(
           node,
-          'DELETE',
+          "DELETE",
           `/api/v1/servers/${serverId}/files/?path=${encodeURIComponent(p)}`,
         ),
       ),
@@ -424,16 +452,21 @@ export class NodeAgentClient {
   }
 
   renameFile(node: Node, serverId: string, from: string, to: string) {
-    return this.request(node, 'POST', `/api/v1/servers/${serverId}/files/rename`, {
-      from,
-      to,
-    });
+    return this.request(
+      node,
+      "POST",
+      `/api/v1/servers/${serverId}/files/rename`,
+      {
+        from,
+        to,
+      },
+    );
   }
 
   mkdir(node: Node, serverId: string, path: string) {
     return this.request(
       node,
-      'POST',
+      "POST",
       `/api/v1/servers/${serverId}/files/mkdir?path=${encodeURIComponent(path)}`,
     );
   }
@@ -452,7 +485,7 @@ export class NodeAgentClient {
   ): Promise<{ status: string; bytes?: number }> {
     return this.request(
       node,
-      'POST',
+      "POST",
       `/api/v1/servers/${serverId}/files/pull`,
       { path: relPath, url },
       // Large files stream synchronously through the agent — allow plenty of time.
@@ -463,7 +496,7 @@ export class NodeAgentClient {
   chmod(node: Node, serverId: string, path: string, mode: string) {
     return this.request(
       node,
-      'POST',
+      "POST",
       `/api/v1/servers/${serverId}/files/chmod?path=${encodeURIComponent(
         path,
       )}&mode=${encodeURIComponent(mode)}`,
@@ -477,21 +510,36 @@ export class NodeAgentClient {
     destination?: string,
   ): Promise<{ dest: string }> {
     // The agent expects { dest, sources }.
-    return this.request(node, 'POST', `/api/v1/servers/${serverId}/files/compress`, {
-      dest: destination,
-      sources: paths,
-    });
+    return this.request(
+      node,
+      "POST",
+      `/api/v1/servers/${serverId}/files/compress`,
+      {
+        dest: destination,
+        sources: paths,
+      },
+    );
   }
 
   /**
    * Extract an archive. Canonical name on BOTH sides is "extract" (the agent
    * serves /files/extract; the panel formerly called /files/decompress).
    */
-  decompressFile(node: Node, serverId: string, path: string, destination?: string) {
-    return this.request(node, 'POST', `/api/v1/servers/${serverId}/files/extract`, {
-      source: path,
-      dest: destination ?? '.',
-    });
+  decompressFile(
+    node: Node,
+    serverId: string,
+    path: string,
+    destination?: string,
+  ) {
+    return this.request(
+      node,
+      "POST",
+      `/api/v1/servers/${serverId}/files/extract`,
+      {
+        source: path,
+        dest: destination ?? ".",
+      },
+    );
   }
 
   /** Ask the agent for a short-lived, signed one-time download URL. */
@@ -502,7 +550,7 @@ export class NodeAgentClient {
   ): Promise<{ url: string }> {
     return this.request(
       node,
-      'GET',
+      "GET",
       `/api/v1/servers/${serverId}/files/download-url?path=${encodeURIComponent(path)}`,
     );
   }
@@ -515,15 +563,20 @@ export class NodeAgentClient {
   ): Promise<{ url: string }> {
     return this.request(
       node,
-      'POST',
+      "POST",
       `/api/v1/servers/${serverId}/files/upload-url?path=${encodeURIComponent(path)}`,
     );
   }
 
   // ---- backups ------------------------------------------------------------
 
-  createBackup(node: Node, serverId: string, backupId: string, ignored: string[]) {
-    return this.request(node, 'POST', `/api/v1/servers/${serverId}/backups`, {
+  createBackup(
+    node: Node,
+    serverId: string,
+    backupId: string,
+    ignored: string[],
+  ) {
+    return this.request(node, "POST", `/api/v1/servers/${serverId}/backups`, {
       backupId,
       ignoredFiles: ignored,
     });
@@ -537,9 +590,9 @@ export class NodeAgentClient {
   ) {
     return this.request(
       node,
-      'POST',
+      "POST",
       `/api/v1/servers/${serverId}/backups/${backupId}/restore`,
-      { location: location ?? '' },
+      { location: location ?? "" },
     );
   }
 
@@ -551,9 +604,9 @@ export class NodeAgentClient {
   ) {
     return this.request(
       node,
-      'DELETE',
+      "DELETE",
       `/api/v1/servers/${serverId}/backups/${backupId}`,
-      { location: location ?? '' },
+      { location: location ?? "" },
     );
   }
 
@@ -565,7 +618,7 @@ export class NodeAgentClient {
   ): Promise<{ url: string }> {
     return this.request(
       node,
-      'GET',
+      "GET",
       `/api/v1/servers/${serverId}/backups/${backupId}/download-url`,
     );
   }
@@ -574,7 +627,7 @@ export class NodeAgentClient {
 
   /** Current live resource usage for a running server. */
   fetchStats(node: Node, serverId: string): Promise<LiveStats> {
-    return this.request(node, 'GET', `/api/v1/servers/${serverId}/stats`);
+    return this.request(node, "GET", `/api/v1/servers/${serverId}/stats`);
   }
 
   // ---- agent config -------------------------------------------------------
@@ -583,7 +636,9 @@ export class NodeAgentClient {
     // /healthz is the agent's always-available liveness route (unauthenticated);
     // used for the panel->agent ping. A short timeout keeps "offline" snappy
     // rather than hanging on the full request timeout.
-    return this.request(node, 'GET', `/healthz`, undefined, { timeoutMs: 6000 });
+    return this.request(node, "GET", `/healthz`, undefined, {
+      timeoutMs: 6000,
+    });
   }
 
   // ---- internals ----------------------------------------------------------
@@ -610,7 +665,7 @@ export class NodeAgentClient {
     const url = `${this.baseUrl(node)}${path}`;
     const serialized =
       body === undefined || body === null
-        ? ''
+        ? ""
         : opts?.rawBody
           ? String(body)
           : JSON.stringify(body);
@@ -625,15 +680,18 @@ export class NodeAgentClient {
     );
 
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), opts?.timeoutMs ?? this.timeoutMs);
+    const timer = setTimeout(
+      () => controller.abort(),
+      opts?.timeoutMs ?? this.timeoutMs,
+    );
 
     try {
       const res = await undiciFetch(url, {
         method,
         headers: {
-          'content-type': opts?.rawBody
-            ? 'application/octet-stream'
-            : 'application/json',
+          "content-type": opts?.rawBody
+            ? "application/octet-stream"
+            : "application/json",
           [SIGN_HEADER_NODE]: node.id,
           [SIGN_HEADER_TIMESTAMP]: timestamp,
           [SIGN_HEADER_SIGNATURE]: signature,
@@ -648,16 +706,18 @@ export class NodeAgentClient {
       });
 
       if (!res.ok) {
-        const text = await res.text().catch(() => '');
+        const text = await res.text().catch(() => "");
         this.logger.warn(`agent ${method} ${path} -> ${res.status} ${text}`);
         throw new ServiceUnavailableException(
           `Node agent error ${res.status}: ${text || res.statusText}`,
         );
       }
-      const ct = res.headers.get('content-type') ?? '';
-      return (ct.includes('application/json')
-        ? await res.json()
-        : ((await res.text()) as unknown)) as T;
+      const ct = res.headers.get("content-type") ?? "";
+      return (
+        ct.includes("application/json")
+          ? await res.json()
+          : ((await res.text()) as unknown)
+      ) as T;
     } catch (err: any) {
       if (err instanceof ServiceUnavailableException) throw err;
       this.logger.error(`agent ${method} ${path} failed: ${err.message}`);

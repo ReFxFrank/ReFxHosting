@@ -65,6 +65,17 @@ function toMonthlyMinor(amountMinor: number, interval: string): number {
   }
 }
 
+/** Server include shape needed to build a wire ServerInstallSpec. */
+const INSTALL_SPEC_INCLUDE = {
+  template: { include: { variables: true } },
+  allocations: true,
+  variables: true,
+} satisfies Prisma.ServerInclude;
+
+type ServerWithSpec = Prisma.ServerGetPayload<{
+  include: typeof INSTALL_SPEC_INCLUDE;
+}>;
+
 @Injectable()
 export class NodesService {
   private readonly secretsEncKey: string;
@@ -1122,73 +1133,84 @@ export class NodesService {
   async buildServerInstallSpecs(nodeId: string) {
     const servers = await this.prisma.server.findMany({
       where: { nodeId, deletedAt: null },
-      include: {
-        template: { include: { variables: true } },
-        allocations: true,
-        variables: true,
+      include: INSTALL_SPEC_INCLUDE,
+    });
+    return servers.map((server) => this.toServerInstallSpec(server));
+  }
+
+  /**
+   * Build the wire-format ServerInstallSpec for ONE server. Used to push a spec
+   * change (e.g. a new port allocation) to the agent via reloadServer without a
+   * full reinstall.
+   */
+  async buildServerInstallSpec(serverId: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      include: INSTALL_SPEC_INCLUDE,
+    });
+    if (!server) throw new NotFoundException("Server not found");
+    return this.toServerInstallSpec(server);
+  }
+
+  private toServerInstallSpec(server: ServerWithSpec) {
+    const template = server.template;
+
+    const env: Record<string, string> = {};
+    if (template) {
+      for (const v of template.variables) {
+        if (v.defaultValue != null) env[v.envName] = v.defaultValue;
+      }
+    }
+    const serverEnv = (server.environment ?? {}) as Record<string, unknown>;
+    for (const [k, val] of Object.entries(serverEnv)) env[k] = String(val);
+    for (const ov of server.variables) env[ov.envName] = ov.value;
+
+    let sftpPassword = "";
+    if (server.sftpPasswordEnc) {
+      try {
+        sftpPassword = this.crypto.decrypt(server.sftpPasswordEnc);
+      } catch {
+        sftpPassword = "";
+      }
+    }
+
+    // Auto-correct the JVM for Minecraft servers from the resolved
+    // MINECRAFT_VERSION (handles servers created before this image, and
+    // "latest" pins). The agent runs the install script in this image too, so
+    // install + runtime share one compatible JVM. Non-Java images untouched.
+    let dockerImage = server.dockerImage ?? "";
+    if (isJavaImage(dockerImage)) {
+      dockerImage =
+        resolveJavaImage(dockerImage, env["MINECRAFT_VERSION"], "jre") ??
+        dockerImage;
+    }
+
+    return {
+      serverId: server.id,
+      shortId: server.shortId,
+      deployMethod: server.deployMethod,
+      dockerImage,
+      startupCommand: server.startupCommand ?? template?.startupCommand ?? "",
+      startupDetect: template?.startupDetect ?? "",
+      stopCommand: template?.stopCommand ?? "",
+      environment: env,
+      limits: {
+        cpuCores: server.cpuCores,
+        memoryMb: server.memoryMb,
+        swapMb: server.swapMb,
+        diskMb: server.diskMb,
+        ioWeight: server.ioWeight,
       },
-    });
-
-    return servers.map((server) => {
-      const template = server.template;
-
-      const env: Record<string, string> = {};
-      if (template) {
-        for (const v of template.variables) {
-          if (v.defaultValue != null) env[v.envName] = v.defaultValue;
-        }
-      }
-      const serverEnv = (server.environment ?? {}) as Record<string, unknown>;
-      for (const [k, val] of Object.entries(serverEnv)) env[k] = String(val);
-      for (const ov of server.variables) env[ov.envName] = ov.value;
-
-      let sftpPassword = "";
-      if (server.sftpPasswordEnc) {
-        try {
-          sftpPassword = this.crypto.decrypt(server.sftpPasswordEnc);
-        } catch {
-          sftpPassword = "";
-        }
-      }
-
-      // Auto-correct the JVM for Minecraft servers from the resolved
-      // MINECRAFT_VERSION (handles servers created before this image, and
-      // "latest" pins). The agent runs the install script in this image too, so
-      // install + runtime share one compatible JVM. Non-Java images untouched.
-      let dockerImage = server.dockerImage ?? "";
-      if (isJavaImage(dockerImage)) {
-        dockerImage =
-          resolveJavaImage(dockerImage, env["MINECRAFT_VERSION"], "jre") ??
-          dockerImage;
-      }
-
-      return {
-        serverId: server.id,
-        shortId: server.shortId,
-        deployMethod: server.deployMethod,
-        dockerImage,
-        startupCommand: server.startupCommand ?? template?.startupCommand ?? "",
-        startupDetect: template?.startupDetect ?? "",
-        stopCommand: template?.stopCommand ?? "",
-        environment: env,
-        limits: {
-          cpuCores: server.cpuCores,
-          memoryMb: server.memoryMb,
-          swapMb: server.swapMb,
-          diskMb: server.diskMb,
-          ioWeight: server.ioWeight,
-        },
-        allocations: server.allocations.map((a) => ({
-          ip: a.ip,
-          port: a.port,
-          isPrimary: a.isPrimary,
-        })),
-        installScript: template?.installScript ?? {},
-        configFiles: template?.configFiles ?? [],
-        preserveData: true,
-        sftpUsername: server.shortId,
-        sftpPassword,
-      };
-    });
+      allocations: server.allocations.map((a) => ({
+        ip: a.ip,
+        port: a.port,
+        isPrimary: a.isPrimary,
+      })),
+      installScript: template?.installScript ?? {},
+      configFiles: template?.configFiles ?? [],
+      preserveData: true,
+      sftpUsername: server.shortId,
+      sftpPassword,
+    };
   }
 }

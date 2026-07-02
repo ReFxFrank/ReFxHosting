@@ -1833,6 +1833,154 @@ export class ServersService {
     return port;
   }
 
+  // ---- Simple Voice Chat (admin-granted dedicated UDP port) ---------------
+
+  /** Label used to mark a server's dedicated Simple Voice Chat allocation. */
+  private static readonly VOICE_LABEL = "voicechat";
+
+  /**
+   * Current voice-chat state for a server: whether a dedicated port is
+   * allocated, and if so its host + port.
+   */
+  async voiceChatStatus(
+    serverId: string,
+  ): Promise<{ enabled: boolean; port: number | null; ip: string | null }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+    const alloc = await this.prisma.allocation.findFirst({
+      where: { serverId, label: ServersService.VOICE_LABEL },
+      select: { port: true, ip: true },
+    });
+    return {
+      enabled: !!alloc,
+      port: alloc?.port ?? null,
+      ip: alloc?.ip ?? null,
+    };
+  }
+
+  /**
+   * Grant a server a dedicated UDP port for Simple Voice Chat (admin action,
+   * typically off a support ticket). Reserves a free port on the server's node,
+   * marks it `voicechat`, and pushes the updated spec to the agent so the port
+   * publishes on the server's NEXT restart. Idempotent — returns the existing
+   * port if already enabled. The customer then sets `port=<port>` in
+   * voicechat-server.properties (see the KB article) and restarts.
+   */
+  async enableVoiceChat(
+    serverId: string,
+  ): Promise<{ port: number; ip: string; alreadyEnabled: boolean }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: {
+        id: true,
+        nodeId: true,
+        node: true,
+      },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+
+    // Idempotent: reuse an existing voice allocation.
+    const existing = await this.prisma.allocation.findFirst({
+      where: { serverId, label: ServersService.VOICE_LABEL },
+      select: { port: true, ip: true },
+    });
+    if (existing) {
+      return { port: existing.port, ip: existing.ip, alreadyEnabled: true };
+    }
+
+    const node = server.node;
+    const rangeStart = node.allocationPortStart || PORT_RANGE_START;
+    const rangeEnd = node.allocationPortEnd || PORT_RANGE_END;
+
+    const MAX_ATTEMPTS = 5;
+    let port = 0;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      const taken = await this.prisma.allocation.findMany({
+        where: {
+          nodeId: server.nodeId,
+          port: { gte: rangeStart, lte: rangeEnd },
+        },
+        select: { port: true },
+      });
+      const candidate = pickFreePort(
+        taken.map((a) => a.port),
+        rangeStart,
+        rangeEnd,
+      );
+      try {
+        await this.prisma.allocation.create({
+          data: {
+            id: uuidv7(),
+            nodeId: server.nodeId,
+            ip: node.fqdn,
+            port: candidate,
+            serverId,
+            isPrimary: false,
+            label: ServersService.VOICE_LABEL,
+          },
+        });
+        port = candidate;
+        break;
+      } catch (e) {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === "P2002" &&
+          attempt < MAX_ATTEMPTS - 1
+        ) {
+          continue;
+        }
+        throw e;
+      }
+    }
+    if (!port) {
+      throw new ConflictException("No free port available on the node");
+    }
+
+    await this.pushSpecReload(server.nodeId, serverId);
+    return { port, ip: node.fqdn, alreadyEnabled: false };
+  }
+
+  /** Remove a server's dedicated voice-chat port. Publishes on next restart. */
+  async disableVoiceChat(serverId: string): Promise<{ disabled: boolean }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: { id: true, nodeId: true },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+    const res = await this.prisma.allocation.deleteMany({
+      where: { serverId, label: ServersService.VOICE_LABEL },
+    });
+    if (res.count > 0) await this.pushSpecReload(server.nodeId, serverId);
+    return { disabled: res.count > 0 };
+  }
+
+  /**
+   * Push a server's current spec (post allocation change) to its agent without a
+   * reinstall. Best-effort: an offline node/agent just means the change applies
+   * on the agent's next reconnect. Requires agent v1.2.4+ for /reload; older
+   * agents pick the change up on reconnect regardless.
+   */
+  private async pushSpecReload(
+    nodeId: string,
+    serverId: string,
+  ): Promise<void> {
+    try {
+      const node = await this.prisma.node.findUnique({ where: { id: nodeId } });
+      if (!node) return;
+      const spec = await this.nodes.buildServerInstallSpec(serverId);
+      await this.agent.reloadServer(node, spec as never);
+    } catch (e) {
+      this.logger.warn(
+        `spec reload push failed for server ${serverId} (applies on next agent reconnect): ${
+          (e as Error).message
+        }`,
+      );
+    }
+  }
+
   /**
    * Surface the server's connection address by flattening its allocations into a
    * single `primaryAllocation` (the one flagged primary, else the first). The web
