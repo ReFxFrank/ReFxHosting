@@ -430,7 +430,7 @@ export class AdminController {
    * password ONCE. Can only create accounts below your own privilege level.
    */
   @Post("users")
-  @RequirePerm("users.manage")
+  @RequirePerm("users.create")
   @Audit({ action: "admin.user.create", targetType: "User" })
   createUser(
     @CurrentUser() actor: AuthUser,
@@ -454,7 +454,7 @@ export class AdminController {
   }
 
   @Patch("users/:id")
-  @RequirePerm("users.manage")
+  @RequirePerm("users.suspend")
   @Audit({ action: "admin.user.update", targetType: "User", targetParam: "id" })
   async updateUser(@Param("id") id: string, @Body() dto: UpdateUserDto) {
     if (dto.state === "BANNED") return this.users.banUser(id);
@@ -466,7 +466,7 @@ export class AdminController {
   /** Manually mark a user's email verified (stand-in until SMTP is configured). */
   @Post("users/:id/verify-email")
   @HttpCode(200)
-  @RequirePerm("users.manage")
+  @RequirePerm("users.verify-email")
   @Audit({
     action: "admin.user.verify-email",
     targetType: "User",
@@ -484,7 +484,7 @@ export class AdminController {
   }
 
   @Delete("users/:id")
-  @RequirePerm("users.manage")
+  @RequirePerm("users.delete")
   @HttpCode(204)
   @Audit({ action: "admin.user.delete", targetType: "User", targetParam: "id" })
   deleteUser(@Param("id") id: string) {
@@ -494,7 +494,7 @@ export class AdminController {
   /** GDPR erasure: anonymize personal data + remove auth material (keeps invoices). */
   @Post("users/:id/purge")
   @HttpCode(204)
-  @RequirePerm("users.manage")
+  @RequirePerm("users.delete")
   @Audit({ action: "admin.user.purge", targetType: "User", targetParam: "id" })
   purgeUser(@Param("id") id: string) {
     return this.users.purgeUser(id);
@@ -503,7 +503,7 @@ export class AdminController {
   /** Email the user a password-reset link (admin never sees the password). */
   @Post("users/:id/send-password-reset")
   @HttpCode(200)
-  @RequirePerm("users.manage")
+  @RequirePerm("users.password")
   @Audit({
     action: "admin.user.password.send-reset",
     targetType: "User",
@@ -524,7 +524,7 @@ export class AdminController {
    */
   @Post("users/:id/set-password")
   @HttpCode(200)
-  @RequirePerm("users.manage")
+  @RequirePerm("users.password")
   @Audit({
     action: "admin.user.password.set-temporary",
     targetType: "User",
@@ -552,7 +552,7 @@ export class AdminController {
   /** Grant (or deduct, with a negative amount) store credit for a user. */
   @Post("users/:id/credit")
   @HttpCode(200)
-  @RequirePerm("users.manage")
+  @RequirePerm("users.credit")
   @Audit({ action: "admin.user.credit", targetType: "User", targetParam: "id" })
   grantCredit(
     @Param("id") id: string,
@@ -730,7 +730,7 @@ export class AdminController {
   /** Refund a paid invoice back to the customer's payment method (full or partial). */
   @Post("invoices/:id/refund")
   @HttpCode(200)
-  @RequirePerm("billing.manage")
+  @RequirePerm("billing.refund")
   @Audit({
     action: "admin.invoice.refund",
     targetType: "Invoice",

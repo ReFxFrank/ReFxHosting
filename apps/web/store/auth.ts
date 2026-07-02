@@ -98,7 +98,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   hasPermission(perm) {
     const perms = get().user?.permissions ?? [];
-    return perms.includes("*") || perms.includes(perm);
+    // Mirrors the server hierarchy (common/permissions.ts): "*" grants all, an
+    // "<area>.*" or "<area>.manage" grant implies every granular action under
+    // that area — so a coarse role still reveals the nav items/buttons gated on
+    // the finer permissions. The server is still the authoritative check.
+    if (perms.includes("*") || perms.includes(perm)) return true;
+    const area = perm.split(".")[0];
+    if (perms.includes(`${area}.*`)) return true;
+    if (perm !== `${area}.manage` && perms.includes(`${area}.manage`))
+      return true;
+    return false;
   },
 
   isAdmin() {

@@ -61,7 +61,7 @@ export class UsersController {
   @Post(":id/ban")
   @HttpCode(200)
   @UseGuards(AdminPermissionGuard)
-  @RequirePerm("users.manage")
+  @RequirePerm("users.suspend")
   @Audit({ action: "user.ban", targetType: "User", targetParam: "id" })
   ban(@Param("id") id: string, @CurrentUser("id") actorId: string) {
     return this.users.banUser(id, actorId);
@@ -70,7 +70,7 @@ export class UsersController {
   @Post(":id/suspend")
   @HttpCode(200)
   @UseGuards(AdminPermissionGuard)
-  @RequirePerm("users.manage")
+  @RequirePerm("users.suspend")
   @Audit({ action: "user.suspend", targetType: "User", targetParam: "id" })
   suspend(@Param("id") id: string, @CurrentUser("id") actorId: string) {
     return this.users.suspendUser(id, actorId);
@@ -79,7 +79,7 @@ export class UsersController {
   @Post(":id/reactivate")
   @HttpCode(200)
   @UseGuards(AdminPermissionGuard)
-  @RequirePerm("users.manage")
+  @RequirePerm("users.suspend")
   @Audit({ action: "user.reactivate", targetType: "User", targetParam: "id" })
   reactivate(@Param("id") id: string) {
     return this.users.reactivateUser(id);

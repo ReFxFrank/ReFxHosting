@@ -1128,8 +1128,12 @@ export const api = {
     testDatabaseHost: (id: string) =>
       http.post<{ ok: true }>(`/admin/database-hosts/${id}/test`),
 
-    users: (query?: { q?: string; role?: string; state?: string }) =>
-      http.get<Paginated<User>>("/admin/users", { query }),
+    users: (query?: {
+      q?: string;
+      role?: string;
+      state?: string;
+      take?: number;
+    }) => http.get<Paginated<User>>("/admin/users", { query }),
     /** Create an account (e.g. an iOS test/reviewer login). Returns the password once. */
     createUser: (input: {
       email: string;
