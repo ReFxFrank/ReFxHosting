@@ -69,6 +69,33 @@ func (s *Server) handleReinstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "reinstalling"})
 }
 
+// handleReload re-registers a server's spec WITHOUT reinstalling. The panel uses
+// it to push spec changes that only affect the next container (re)create — e.g.
+// a newly-added port allocation — so they don't require a disruptive reinstall.
+// The updated ports/env take effect on the server's next Start (the Docker
+// runtime always recreates the container from the current spec).
+func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
+	var dto panel.ServerInstallSpec
+	if err := json.NewDecoder(r.Body).Decode(&dto); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid spec: "+err.Error())
+		return
+	}
+	if dto.ServerID == "" {
+		writeError(w, http.StatusBadRequest, "serverId is required")
+		return
+	}
+	srv := s.deps.Manager.Register(dto.ToSpec())
+	// Keep the SFTP credential in sync if one was sent (mirrors handleInstall).
+	if s.deps.SFTPAuth != nil && dto.SFTPUsername != "" {
+		s.deps.SFTPAuth.Upsert(sftp.Credential{
+			Username: dto.SFTPUsername,
+			Password: dto.SFTPPassword,
+			JailDir:  srv.DataDir,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded", "id": srv.ID()})
+}
+
 // runInstall drives the runtime installer, forwarding progress lines.
 func (s *Server) runInstall(srv *server.Server) {
 	ctx := contextForServer()

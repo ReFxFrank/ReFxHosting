@@ -135,6 +135,7 @@ func (s *Server) routes() chi.Router {
 				r.Post("/command", s.handleCommand)
 				r.Post("/reinstall", s.handleReinstall)
 				r.Patch("/reconfigure", s.handleReconfigure)
+				r.Post("/reload", s.handleReload)
 				r.Post("/sftp", s.handleSetSftpCred)
 
 				r.Route("/files", func(r chi.Router) {
