@@ -1132,7 +1132,9 @@ export const api = {
       q?: string;
       role?: string;
       state?: string;
-      take?: number;
+      // Server pagination is page/pageSize (PaginationDto); pageSize maxes at 100.
+      page?: number;
+      pageSize?: number;
     }) => http.get<Paginated<User>>("/admin/users", { query }),
     /** Create an account (e.g. an iOS test/reviewer login). Returns the password once. */
     createUser: (input: {

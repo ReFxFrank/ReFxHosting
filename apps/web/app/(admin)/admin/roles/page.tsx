@@ -125,10 +125,11 @@ export default function AdminRolesPage() {
   });
   const usersQ = useQuery({
     queryKey: ["admin", "roles-users", search],
-    // take:100 so the "who has this role" member filter sees the whole staff/
-    // owner set (default page is 25) — the assign list is a management surface.
+    // pageSize:100 so the "who has this role" member filter sees the whole
+    // staff/owner set (default page is 25) — the assign list is a management
+    // surface. (`take` is not a valid query param — the DTO uses page/pageSize.)
     queryFn: () =>
-      api.admin.users({ take: 100, ...(search ? { q: search } : {}) }),
+      api.admin.users({ pageSize: 100, ...(search ? { q: search } : {}) }),
   });
 
   const roles = rolesQ.data ?? [];

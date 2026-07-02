@@ -51,7 +51,10 @@ import { toast } from "@/components/ui/sonner";
 import { formatDate, copyToClipboard } from "@/lib/utils";
 import type { GlobalRole, User, UserState } from "@/lib/types";
 
-const stateMeta: Record<UserState, { label: string; variant: BadgeProps["variant"] }> = {
+const stateMeta: Record<
+  UserState,
+  { label: string; variant: BadgeProps["variant"] }
+> = {
   ACTIVE: { label: "Active", variant: "success" },
   SUSPENDED: { label: "Suspended", variant: "warning" },
   BANNED: { label: "Banned", variant: "destructive" },
@@ -77,23 +80,24 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
 
   // Confirm dialog for destructive transitions (ban / suspend).
-  const [confirm, setConfirm] = useState<{ user: User; state: UserState } | null>(null);
+  const [confirm, setConfirm] = useState<{
+    user: User;
+    state: UserState;
+  } | null>(null);
 
   // Create-user dialog.
   const emptyCreate = { email: "", password: "", firstName: "", lastName: "" };
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState(emptyCreate);
-  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  const [created, setCreated] = useState<{
+    email: string;
+    password: string;
+  } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "users", search, page],
-    // `page` is forwarded as a raw query param by the REST client.
-    queryFn: () =>
-      api.admin.users({ q: search || undefined, page } as {
-        q?: string;
-        page?: number;
-      }),
+    queryFn: () => api.admin.users({ q: search || undefined, page }),
   });
 
   // SUPPORT staff get a read-only list; account actions are ADMIN+.
@@ -135,7 +139,9 @@ export default function AdminUsersPage() {
     setCreateForm(emptyCreate);
   };
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.total / data.perPage)) : 1;
+  const totalPages = data
+    ? Math.max(1, Math.ceil(data.total / data.perPage))
+    : 1;
 
   return (
     <div className="space-y-6">
@@ -194,7 +200,9 @@ export default function AdminUsersPage() {
                   const meta = stateMeta[user.state];
                   return (
                     <TableRow key={user.id}>
-                      <TableCell className="font-medium">{user.email}</TableCell>
+                      <TableCell className="font-medium">
+                        {user.email}
+                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {userName(user)}
                       </TableCell>
@@ -228,14 +236,19 @@ export default function AdminUsersPage() {
                                 <DropdownMenuItem
                                   disabled={user.state === "ACTIVE"}
                                   onSelect={() =>
-                                    setStateMutation.mutate({ id: user.id, state: "ACTIVE" })
+                                    setStateMutation.mutate({
+                                      id: user.id,
+                                      state: "ACTIVE",
+                                    })
                                   }
                                 >
                                   <ShieldCheck /> Activate
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   disabled={user.state === "SUSPENDED"}
-                                  onSelect={() => setConfirm({ user, state: "SUSPENDED" })}
+                                  onSelect={() =>
+                                    setConfirm({ user, state: "SUSPENDED" })
+                                  }
                                 >
                                   <ShieldOff /> Suspend
                                 </DropdownMenuItem>
@@ -243,7 +256,9 @@ export default function AdminUsersPage() {
                                 <DropdownMenuItem
                                   destructive
                                   disabled={user.state === "BANNED"}
-                                  onSelect={() => setConfirm({ user, state: "BANNED" })}
+                                  onSelect={() =>
+                                    setConfirm({ user, state: "BANNED" })
+                                  }
                                 >
                                   <Ban /> Ban
                                 </DropdownMenuItem>
@@ -320,7 +335,10 @@ export default function AdminUsersPage() {
               loading={setStateMutation.isPending}
               onClick={() =>
                 confirm &&
-                setStateMutation.mutate({ id: confirm.user.id, state: confirm.state })
+                setStateMutation.mutate({
+                  id: confirm.user.id,
+                  state: confirm.state,
+                })
               }
             >
               {confirm?.state === "BANNED" ? "Ban user" : "Suspend user"}
@@ -330,15 +348,19 @@ export default function AdminUsersPage() {
       </Dialog>
 
       {/* Create a new account (e.g. an iOS test/reviewer login) */}
-      <Dialog open={createOpen} onOpenChange={(o) => (o ? setCreateOpen(true) : closeCreate())}>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(o) => (o ? setCreateOpen(true) : closeCreate())}
+      >
         <DialogContent>
           {created ? (
             <>
               <DialogHeader>
                 <DialogTitle>User created</DialogTitle>
                 <DialogDescription>
-                  Copy the password now — it won&apos;t be shown again. The account is
-                  active and email-verified, so it can sign in immediately.
+                  Copy the password now — it won&apos;t be shown again. The
+                  account is active and email-verified, so it can sign in
+                  immediately.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
@@ -349,7 +371,11 @@ export default function AdminUsersPage() {
                 <div className="space-y-1.5">
                   <Label>Password</Label>
                   <div className="flex items-center gap-2">
-                    <Input readOnly value={created.password} className="font-mono" />
+                    <Input
+                      readOnly
+                      value={created.password}
+                      className="font-mono"
+                    />
                     <Button
                       type="button"
                       variant="outline"
@@ -379,8 +405,8 @@ export default function AdminUsersPage() {
               <DialogHeader>
                 <DialogTitle>Create user</DialogTitle>
                 <DialogDescription>
-                  Creates an active, email-verified customer account. Leave the password
-                  blank to auto-generate a strong one.
+                  Creates an active, email-verified customer account. Leave the
+                  password blank to auto-generate a strong one.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
@@ -403,7 +429,10 @@ export default function AdminUsersPage() {
                       id="cu-first"
                       value={createForm.firstName}
                       onChange={(e) =>
-                        setCreateForm((f) => ({ ...f, firstName: e.target.value }))
+                        setCreateForm((f) => ({
+                          ...f,
+                          firstName: e.target.value,
+                        }))
                       }
                     />
                   </div>
@@ -413,7 +442,10 @@ export default function AdminUsersPage() {
                       id="cu-last"
                       value={createForm.lastName}
                       onChange={(e) =>
-                        setCreateForm((f) => ({ ...f, lastName: e.target.value }))
+                        setCreateForm((f) => ({
+                          ...f,
+                          lastName: e.target.value,
+                        }))
                       }
                     />
                   </div>
