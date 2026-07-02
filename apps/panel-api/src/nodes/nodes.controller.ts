@@ -16,14 +16,8 @@ import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { RolesGuard } from "../auth/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { Audit } from "../common/decorators/audit.decorator";
-import { Public } from "../common/decorators/public.decorator";
 import { PaginationDto } from "../common/dto/pagination.dto";
-import {
-  CreateNodeDto,
-  HeartbeatDto,
-  NodeRegisterDto,
-  UpdateNodeDto,
-} from "./dto/node.dto";
+import { CreateNodeDto, UpdateNodeDto } from "./dto/node.dto";
 
 @ApiTags("nodes")
 @ApiBearerAuth()
@@ -83,27 +77,8 @@ export class NodesController {
   }
 }
 
-/**
- * Endpoints the node-agent itself calls. These authenticate via the bootstrap
- * token in the body / signed requests rather than a user JWT, so they are
- * @Public() at the JWT layer and validate the token inside the service.
- */
-@ApiTags("nodes-agent")
-@Controller("nodes")
-export class NodeAgentController {
-  constructor(private readonly nodes: NodesService) {}
-
-  @Public()
-  @Post(":id/register")
-  register(@Param("id") id: string, @Body() dto: NodeRegisterDto) {
-    return this.nodes.registerAgent(id, dto);
-  }
-
-  @Public()
-  @Post(":id/heartbeat")
-  heartbeat(@Param("id") id: string, @Body() dto: HeartbeatDto) {
-    // TODO(impl): verify the signed request header against node.tokenHash here
-    // (the NodeAgentClient HMAC scheme) before accepting the heartbeat.
-    return this.nodes.ingestHeartbeat(id, dto);
-  }
-}
+// NB: the node-agent's inbound surface (register/heartbeat/stats/…) lives at
+// /api/v1/agent/* (AgentCallbacksController) — token-gated registration and
+// HMAC-signed telemetry. A legacy unauthenticated /nodes/:id/register +
+// /nodes/:id/heartbeat surface used to live here; it was removed because the
+// agent no longer calls it and unsigned heartbeats could spoof node telemetry.

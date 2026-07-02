@@ -228,48 +228,6 @@ export class UpdateNodeDto {
   provider?: string;
 }
 
-export class HeartbeatDto {
-  @ApiProperty()
-  @IsNumber()
-  cpuPct!: number;
-
-  @ApiProperty()
-  @IsInt()
-  memUsedMb!: number;
-
-  @ApiProperty()
-  @IsInt()
-  diskUsedMb!: number;
-
-  @ApiProperty()
-  @IsInt()
-  netRxBytes!: number;
-
-  @ApiProperty()
-  @IsInt()
-  netTxBytes!: number;
-
-  @ApiProperty()
-  @IsInt()
-  containers!: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  agentVersion?: string;
-}
-
-export class NodeRegisterDto {
-  @ApiProperty({ description: "One-time bootstrap token issued by an admin" })
-  @IsString()
-  bootstrapToken!: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  agentVersion?: string;
-}
-
 export class UpdateAgentsDto {
   @ApiPropertyOptional({
     description: "Node ids to update; omit/empty to update every node.",

@@ -1,10 +1,10 @@
-import { Module } from '@nestjs/common';
-import { NodesService } from './nodes.service';
-import { NodesController, NodeAgentController } from './nodes.controller';
-import { NodesResolver } from './nodes.resolver';
+import { Module } from "@nestjs/common";
+import { NodesService } from "./nodes.service";
+import { NodesController } from "./nodes.controller";
+import { NodesResolver } from "./nodes.resolver";
 
 @Module({
-  controllers: [NodesController, NodeAgentController],
+  controllers: [NodesController],
   providers: [NodesService, NodesResolver],
   exports: [NodesService],
 })

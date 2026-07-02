@@ -24,12 +24,7 @@ import {
   PORT_RANGE_END,
   normalizeGameDomain,
 } from "../servers/allocation-port.util";
-import {
-  CreateNodeDto,
-  HeartbeatDto,
-  NodeRegisterDto,
-  UpdateNodeDto,
-} from "./dto/node.dto";
+import { CreateNodeDto, UpdateNodeDto } from "./dto/node.dto";
 
 /** Loose UUID shape check (any version), used to avoid Prisma P2023 on bad ids. */
 const UUID_RE =
@@ -1175,74 +1170,5 @@ export class NodesService {
         sftpPassword,
       };
     });
-  }
-
-  /** The agent calls this with its bootstrap token to register & get config. */
-  async registerAgent(nodeId: string, dto: NodeRegisterDto) {
-    const node = await this.prisma.node.findUnique({ where: { id: nodeId } });
-    if (!node || node.tokenHash !== this.crypto.hash(dto.bootstrapToken)) {
-      throw new BadRequestException("Invalid bootstrap token");
-    }
-    // Same single-use + time-boxed lifecycle as registerAgentByToken — this
-    // legacy path must NOT let a used/expired token be replayed.
-    if (node.bootstrapTokenUsedAt) {
-      throw new BadRequestException("Bootstrap token already used");
-    }
-    if (
-      node.bootstrapTokenExpiresAt &&
-      node.bootstrapTokenExpiresAt.getTime() < Date.now()
-    ) {
-      throw new BadRequestException("Bootstrap token expired");
-    }
-    // Consume atomically (only while still unused) so concurrent replays of one
-    // valid token can't both succeed.
-    const consumed = await this.prisma.node.updateMany({
-      where: { id: node.id, bootstrapTokenUsedAt: null },
-      data: {
-        state: "ONLINE",
-        agentVersion: dto.agentVersion ?? node.agentVersion,
-        bootstrapTokenUsedAt: new Date(),
-      },
-    });
-    if (consumed.count === 0) {
-      throw new BadRequestException("Bootstrap token already used");
-    }
-    const updated = await this.prisma.node.findUniqueOrThrow({
-      where: { id: nodeId },
-    });
-    return {
-      nodeId: updated.id,
-      name: updated.name,
-      os: updated.os,
-      sftpPort: updated.sftpPort,
-      daemonPort: updated.daemonPort,
-      // Scoped, denormalized config the agent needs. Full server manifests are
-      // delivered per-install via the agent install endpoint.
-      // TODO(impl): include S3 backup creds, network config, log shipping URL.
-    };
-  }
-
-  async ingestHeartbeat(nodeId: string, dto: HeartbeatDto): Promise<void> {
-    await this.prisma.$transaction([
-      this.prisma.nodeHeartbeat.create({
-        data: {
-          id: uuidv7(),
-          nodeId,
-          cpuPct: dto.cpuPct,
-          memUsedMb: dto.memUsedMb,
-          diskUsedMb: dto.diskUsedMb,
-          netRxBytes: BigInt(dto.netRxBytes),
-          netTxBytes: BigInt(dto.netTxBytes),
-          containers: dto.containers,
-        },
-      }),
-      this.prisma.node.update({
-        where: { id: nodeId },
-        data: {
-          state: "ONLINE",
-          agentVersion: dto.agentVersion ?? undefined,
-        },
-      }),
-    ]);
   }
 }
