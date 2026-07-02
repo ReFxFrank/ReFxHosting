@@ -133,13 +133,17 @@ function UsageBar({
 }) {
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between text-[0.6875rem] text-muted-foreground">
+      <div className="flex items-center justify-between gap-2 text-[0.6875rem] text-muted-foreground">
         <span className="flex items-center gap-1">
           <Icon className="size-3" /> {label}
         </span>
-        <span className="tabular-nums">{detail}</span>
+        <span className="whitespace-nowrap tabular-nums">{detail}</span>
       </div>
-      <Progress value={value} indicatorClassName={usageIndicator(value)} />
+      <Progress
+        value={value}
+        className="h-1.5"
+        indicatorClassName={usageIndicator(value)}
+      />
     </div>
   );
 }
@@ -490,7 +494,7 @@ function NodePing({ nodeId, poll }: { nodeId: string; poll?: boolean }) {
     if (recentHeartbeat) {
       return (
         <span
-          className="flex items-center gap-1 text-xs font-medium text-warning"
+          className="flex items-center gap-1 whitespace-nowrap text-xs font-medium text-warning"
           title="The agent is alive (heartbeat received in the last 2 min) but the panel can't reach its API port. Check the node's firewall on the daemon port (default 8443) and that the agent binds to a public interface."
         >
           <AlertTriangle className="size-3" /> unreachable
@@ -499,7 +503,7 @@ function NodePing({ nodeId, poll }: { nodeId: string; poll?: boolean }) {
     }
     return (
       <span
-        className="flex items-center gap-1 text-xs font-medium text-destructive"
+        className="flex items-center gap-1 whitespace-nowrap text-xs font-medium text-destructive"
         title="No response from the agent and no recent heartbeat — the agent is likely down or the node is unreachable."
       >
         <WifiOff className="size-3" /> offline
@@ -516,7 +520,7 @@ function NodePing({ nodeId, poll }: { nodeId: string; poll?: boolean }) {
   return (
     <span
       className={cn(
-        "flex items-center gap-1 text-xs font-medium tabular-nums",
+        "flex items-center gap-1 whitespace-nowrap text-xs font-medium tabular-nums",
         tint,
       )}
     >
@@ -541,13 +545,19 @@ function AgentVersionBadge({
   const behind = latest != null && norm(current) !== norm(latest);
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-xs">{current}</span>
+      <span className="whitespace-nowrap font-mono text-xs">{current}</span>
       {behind ? (
-        <Badge variant="warning" className="w-fit text-[10px]">
+        <Badge
+          variant="warning"
+          className="w-fit whitespace-nowrap text-[10px]"
+        >
           Update available
         </Badge>
       ) : latest != null ? (
-        <Badge variant="success" className="w-fit text-[10px]">
+        <Badge
+          variant="success"
+          className="w-fit whitespace-nowrap text-[10px]"
+        >
           Up to date
         </Badge>
       ) : null}
@@ -569,7 +579,7 @@ function NodeUsage({ node, compact }: { node: Node; compact?: boolean }) {
   const memPct = pct(hb.memUsedMb, node.memoryMb);
   const diskPct = pct(hb.diskUsedMb, node.diskMb);
   return (
-    <div className={cn("space-y-2", compact ? "w-44" : "w-full")}>
+    <div className={cn(compact ? "w-44 space-y-1.5" : "w-full space-y-2")}>
       <UsageBar
         icon={Cpu}
         label="CPU"
@@ -1060,14 +1070,19 @@ export default function AdminNodesPage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{node.name}</div>
-                      <div className="font-mono text-xs text-muted-foreground">
+                      <div className="whitespace-nowrap font-medium">
+                        {node.name}
+                      </div>
+                      <div
+                        className="max-w-[180px] truncate font-mono text-xs text-muted-foreground"
+                        title={node.fqdn}
+                      >
                         {node.fqdn}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="flex items-center gap-1.5 text-sm">
-                        <MapPin className="size-3.5 text-muted-foreground" />
+                      <span className="flex items-center gap-1.5 whitespace-nowrap text-sm">
+                        <MapPin className="size-3.5 shrink-0 text-muted-foreground" />
                         <span>
                           {node.region?.name ?? "—"}
                           {node.region?.country && (
@@ -1088,7 +1103,7 @@ export default function AdminNodesPage() {
                     <TableCell>
                       <NodePing nodeId={node.id} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-3">
                       <NodeUsage node={node} compact />
                     </TableCell>
                     <TableCell className="tabular-nums">
