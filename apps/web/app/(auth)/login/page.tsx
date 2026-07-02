@@ -12,6 +12,7 @@ import { Input, Label } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "@/components/ui/sonner";
 import { api, ApiError } from "@/lib/api";
+import { safeNextPath } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 
 const schema = z.object({
@@ -23,7 +24,9 @@ type FormValues = z.infer<typeof schema>;
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const next = params.get("next") || "/dashboard";
+  // Sanitized to a same-origin relative path — blocks ?next=https://evil.tld
+  // open-redirect phishing after a successful login / MFA.
+  const next = safeNextPath(params.get("next"));
   const setSession = useAuthStore((s) => s.setSession);
   const [submitting, setSubmitting] = useState(false);
   const [remember, setRemember] = useState(true);

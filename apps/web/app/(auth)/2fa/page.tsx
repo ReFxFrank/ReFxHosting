@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { toast } from "@/components/ui/sonner";
 import { api, ApiError } from "@/lib/api";
+import { safeNextPath } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 
 interface MfaState {
@@ -44,8 +45,9 @@ export default function TwoFactorPage() {
         await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 }, undefined, mfa?.remember ?? true);
         {
           const staff = useAuthStore.getState().isStaff();
+          const dest = safeNextPath(mfa.next);
           router.replace(
-            mfa.next && mfa.next !== "/dashboard" ? mfa.next : staff ? "/admin" : "/dashboard",
+            dest !== "/dashboard" ? dest : staff ? "/admin" : "/dashboard",
           );
         }
       }
@@ -73,8 +75,9 @@ export default function TwoFactorPage() {
           mfa?.remember ?? true,
         );
         const staff = useAuthStore.getState().isStaff();
+        const dest = safeNextPath(mfa.next);
         router.replace(
-          mfa.next && mfa.next !== "/dashboard" ? mfa.next : staff ? "/admin" : "/dashboard",
+          dest !== "/dashboard" ? dest : staff ? "/admin" : "/dashboard",
         );
       }
     } catch (e) {

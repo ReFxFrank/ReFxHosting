@@ -1,20 +1,41 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { GlobalRole, Prisma, SubUser, User, UserState } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
+} from "@nestjs/common";
+import { GlobalRole, Prisma, SubUser, User, UserState } from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
 import {
   Paginated,
   PaginationDto,
   paginate,
-} from '../common/dto/pagination.dto';
-import { uuidv7 } from '../common/util/uuid';
-import { deriveGlobalRole } from '../common/permissions';
-import { AddSubUserDto } from './dto/add-sub-user.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
+} from "../common/dto/pagination.dto";
+import { uuidv7 } from "../common/util/uuid";
+import { deriveGlobalRole } from "../common/permissions";
+import { AddSubUserDto } from "./dto/add-sub-user.dto";
+import { UpdateProfileDto } from "./dto/update-profile.dto";
+
+/**
+ * Secret columns that must NEVER leave the server. Applied as a Prisma `omit`
+ * to every User read/write that returns a row to a client (profile, avatar,
+ * admin list). The Argon2id password hash and the encrypted TOTP seed have no
+ * business in an API response — admin.service already strips them for the
+ * single-user staff view; this keeps the profile + list endpoints in line.
+ */
+const USER_SECRET_OMIT = {
+  passwordHash: true,
+  totpSecretEnc: true,
+} as const;
+
+/** Coarse global-role tiers, ranked for actor-vs-target comparisons. */
+const ROLE_RANK: Record<GlobalRole, number> = {
+  [GlobalRole.CUSTOMER]: 0,
+  [GlobalRole.SUPPORT]: 1,
+  [GlobalRole.ADMIN]: 2,
+  [GlobalRole.OWNER]: 3,
+};
 
 @Injectable()
 export class UsersService {
@@ -26,9 +47,12 @@ export class UsersService {
   async getProfile(userId: string): Promise<User> {
     let user: User | null;
     try {
-      user = await this.prisma.user.findFirst({
+      // `omit` strips the secret columns; the row is otherwise complete, so the
+      // cast back to User is safe (callers only read public profile fields).
+      user = (await this.prisma.user.findFirst({
         where: { id: userId, deletedAt: null },
-      });
+        omit: USER_SECRET_OMIT,
+      })) as User | null;
     } catch {
       // Defense-in-depth: if newer additive columns (roleId / contact address)
       // aren't present yet — e.g. migrations haven't been applied — a full-column
@@ -53,7 +77,7 @@ export class UsersService {
         },
       })) as User | null;
     }
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
     return user;
   }
 
@@ -61,10 +85,11 @@ export class UsersService {
   /** Set the avatar from an uploaded (already-downscaled) base64 data URL. */
   async setAvatar(userId: string, dataUrl: string): Promise<User> {
     await this.getProfile(userId);
-    return this.prisma.user.update({
+    return (await this.prisma.user.update({
       where: { id: userId },
       data: { avatarUrl: dataUrl },
-    });
+      omit: USER_SECRET_OMIT,
+    })) as User;
   }
 
   async updateProfile(userId: string, dto: UpdateProfileDto): Promise<User> {
@@ -86,7 +111,11 @@ export class UsersService {
     if (dto.postalCode !== undefined) data.postalCode = dto.postalCode;
     if (dto.country !== undefined) data.country = dto.country;
 
-    return this.prisma.user.update({ where: { id: userId }, data });
+    return (await this.prisma.user.update({
+      where: { id: userId },
+      data,
+      omit: USER_SECRET_OMIT,
+    })) as User;
   }
 
   // ---- Admin: listing & lifecycle ---------------------------------------
@@ -105,9 +134,9 @@ export class UsersService {
     }
     if (pagination.q) {
       where.OR = [
-        { email: { contains: pagination.q, mode: 'insensitive' } },
-        { firstName: { contains: pagination.q, mode: 'insensitive' } },
-        { lastName: { contains: pagination.q, mode: 'insensitive' } },
+        { email: { contains: pagination.q, mode: "insensitive" } },
+        { firstName: { contains: pagination.q, mode: "insensitive" } },
+        { lastName: { contains: pagination.q, mode: "insensitive" } },
       ];
     }
 
@@ -116,22 +145,23 @@ export class UsersService {
         where,
         skip: pagination.skip,
         take: pagination.take,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
+        omit: USER_SECRET_OMIT,
       }),
       this.prisma.user.count({ where }),
     ]);
 
-    return paginate(data, total, pagination);
+    return paginate(data as User[], total, pagination);
   }
 
   /** Permanently bar a user from the platform. */
-  banUser(id: string): Promise<User> {
-    return this.setState(id, UserState.BANNED);
+  banUser(id: string, actorId?: string): Promise<User> {
+    return this.setState(id, UserState.BANNED, actorId);
   }
 
   /** Temporarily suspend a user (e.g. payment / abuse hold). */
-  suspendUser(id: string): Promise<User> {
-    return this.setState(id, UserState.SUSPENDED);
+  suspendUser(id: string, actorId?: string): Promise<User> {
+    return this.setState(id, UserState.SUSPENDED, actorId);
   }
 
   /** Return a suspended/banned user to good standing. */
@@ -149,7 +179,7 @@ export class UsersService {
       where: { id, deletedAt: null },
       select: { id: true, state: true, emailVerifiedAt: true },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
     return this.prisma.user.update({
       where: { id },
       data: {
@@ -167,19 +197,16 @@ export class UsersService {
    * the matching system role). Keeps globalRole in sync with the role's tier for
    * the coarse hierarchy/display, and refuses to remove the last OWNER.
    */
-  async setRole(
-    id: string,
-    role?: GlobalRole,
-    roleId?: string,
-  ): Promise<User> {
+  async setRole(id: string, role?: GlobalRole, roleId?: string): Promise<User> {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
       select: { id: true, globalRole: true },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
 
     // Resolve the target Role row.
-    let target: { id: string; key: string; permissions: string[] } | null = null;
+    let target: { id: string; key: string; permissions: string[] } | null =
+      null;
     if (roleId) {
       target = await this.prisma.role.findUnique({
         where: { id: roleId },
@@ -191,20 +218,23 @@ export class UsersService {
         select: { id: true, key: true, permissions: true },
       });
     }
-    if (!target) throw new BadRequestException('Unknown role');
+    if (!target) throw new BadRequestException("Unknown role");
 
     const newGlobal = deriveGlobalRole(
       target.permissions,
       target.key,
     ) as GlobalRole;
 
-    if (user.globalRole === GlobalRole.OWNER && newGlobal !== GlobalRole.OWNER) {
+    if (
+      user.globalRole === GlobalRole.OWNER &&
+      newGlobal !== GlobalRole.OWNER
+    ) {
       const owners = await this.prisma.user.count({
         where: { globalRole: GlobalRole.OWNER, deletedAt: null },
       });
       if (owners <= 1) {
         throw new BadRequestException(
-          'Cannot demote the last owner — promote another owner first',
+          "Cannot demote the last owner — promote another owner first",
         );
       }
     }
@@ -214,12 +244,32 @@ export class UsersService {
     });
   }
 
-  private async setState(id: string, state: UserState): Promise<User> {
+  private async setState(
+    id: string,
+    state: UserState,
+    actorId?: string,
+  ): Promise<User> {
     const user = await this.prisma.user.findFirst({
       where: { id, deletedAt: null },
-      select: { id: true },
+      select: { id: true, globalRole: true },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
+
+    // Rank guard: an actor may not ban/suspend a peer of equal-or-higher tier.
+    // Without this, any ADMIN-tier staff (including a custom role that derived
+    // to ADMIN) could ban another admin or an OWNER. Skipped for internal calls
+    // that pass no actorId (e.g. billing-driven suspensions).
+    if (actorId && actorId !== id) {
+      const actor = await this.prisma.user.findUnique({
+        where: { id: actorId },
+        select: { globalRole: true },
+      });
+      if (actor && ROLE_RANK[user.globalRole] >= ROLE_RANK[actor.globalRole]) {
+        throw new ForbiddenException(
+          "Cannot change the state of an account at or above your role.",
+        );
+      }
+    }
 
     return this.prisma.user.update({ where: { id }, data: { state } });
     // TODO(impl): emit a notification / lifecycle event so the user (and any
@@ -239,13 +289,13 @@ export class UsersService {
         _count: { select: { ownedServers: true } },
       },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
     const servers = await this.prisma.server.count({
       where: { ownerId: id, deletedAt: null },
     });
     if (servers > 0) {
       throw new BadRequestException(
-        'Cannot delete a user who still owns servers; delete or transfer their servers first',
+        "Cannot delete a user who still owns servers; delete or transfer their servers first",
       );
     }
     // Release the email so it can be registered again. The address is unique, so
@@ -272,10 +322,10 @@ export class UsersService {
       where: { id: userId, deletedAt: null },
       select: { globalRole: true },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
     if (user.globalRole === GlobalRole.OWNER) {
       throw new BadRequestException(
-        'Transfer ownership to another user before deleting your account',
+        "Transfer ownership to another user before deleting your account",
       );
     }
     await this.deleteUser(userId);
@@ -287,58 +337,106 @@ export class UsersService {
    * Secrets (password hash, TOTP seed, gateway refs) are never included.
    */
   async exportData(userId: string): Promise<Record<string, unknown>> {
-    const [user, subscriptions, invoices, servers, paymentMethods, tickets, credit, apiKeys] =
-      await this.prisma.$transaction([
-        this.prisma.user.findUnique({
-          where: { id: userId },
-          select: {
-            id: true, email: true, firstName: true, lastName: true,
-            globalRole: true, state: true, locale: true, timezone: true,
-            phone: true, addressLine1: true, addressLine2: true, city: true,
-            region: true, postalCode: true, country: true,
-            emailVerifiedAt: true, totpEnabledAt: true, creditBalanceMinor: true,
-            createdAt: true,
+    const [
+      user,
+      subscriptions,
+      invoices,
+      servers,
+      paymentMethods,
+      tickets,
+      credit,
+      apiKeys,
+    ] = await this.prisma.$transaction([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          email: true,
+          firstName: true,
+          lastName: true,
+          globalRole: true,
+          state: true,
+          locale: true,
+          timezone: true,
+          phone: true,
+          addressLine1: true,
+          addressLine2: true,
+          city: true,
+          region: true,
+          postalCode: true,
+          country: true,
+          emailVerifiedAt: true,
+          totpEnabledAt: true,
+          creditBalanceMinor: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.subscription.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          interval: true,
+          slots: true,
+          state: true,
+          currentPeriodStart: true,
+          currentPeriodEnd: true,
+          gateway: true,
+          createdAt: true,
+          product: { select: { name: true } },
+        },
+      }),
+      this.prisma.invoice.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          number: true,
+          state: true,
+          currency: true,
+          subtotalMinor: true,
+          discountMinor: true,
+          taxMinor: true,
+          totalMinor: true,
+          amountPaidMinor: true,
+          createdAt: true,
+          paidAt: true,
+          lineItems: {
+            select: { description: true, quantity: true, amountMinor: true },
           },
-        }),
-        this.prisma.subscription.findMany({
-          where: { userId },
-          select: {
-            id: true, interval: true, slots: true, state: true,
-            currentPeriodStart: true, currentPeriodEnd: true, gateway: true,
-            createdAt: true, product: { select: { name: true } },
-          },
-        }),
-        this.prisma.invoice.findMany({
-          where: { userId },
-          select: {
-            id: true, number: true, state: true, currency: true,
-            subtotalMinor: true, discountMinor: true, taxMinor: true,
-            totalMinor: true, amountPaidMinor: true, createdAt: true, paidAt: true,
-            lineItems: { select: { description: true, quantity: true, amountMinor: true } },
-          },
-        }),
-        this.prisma.server.findMany({
-          where: { ownerId: userId, deletedAt: null },
-          select: { id: true, shortId: true, name: true, state: true },
-        }),
-        this.prisma.paymentMethod.findMany({
-          where: { userId },
-          select: { gateway: true, brand: true, last4: true, expMonth: true, expYear: true },
-        }),
-        this.prisma.ticket.findMany({
-          where: { requesterId: userId },
-          select: { number: true, subject: true, state: true, createdAt: true },
-        }),
-        this.prisma.creditTransaction.findMany({
-          where: { userId },
-          select: { amountMinor: true, reason: true, note: true, createdAt: true },
-        }),
-        this.prisma.apiKey.findMany({
-          where: { userId },
-          select: { name: true, prefix: true, scopes: true, createdAt: true },
-        }),
-      ]);
-    if (!user) throw new NotFoundException('User not found');
+        },
+      }),
+      this.prisma.server.findMany({
+        where: { ownerId: userId, deletedAt: null },
+        select: { id: true, shortId: true, name: true, state: true },
+      }),
+      this.prisma.paymentMethod.findMany({
+        where: { userId },
+        select: {
+          gateway: true,
+          brand: true,
+          last4: true,
+          expMonth: true,
+          expYear: true,
+        },
+      }),
+      this.prisma.ticket.findMany({
+        where: { requesterId: userId },
+        select: { number: true, subject: true, state: true, createdAt: true },
+      }),
+      this.prisma.creditTransaction.findMany({
+        where: { userId },
+        select: {
+          amountMinor: true,
+          reason: true,
+          note: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.apiKey.findMany({
+        where: { userId },
+        select: { name: true, prefix: true, scopes: true, createdAt: true },
+      }),
+    ]);
+    if (!user) throw new NotFoundException("User not found");
     return {
       exportedAt: new Date().toISOString(),
       account: user,
@@ -362,16 +460,16 @@ export class UsersService {
       where: { id },
       select: { id: true, email: true, deletedAt: true },
     });
-    if (!user) throw new NotFoundException('User not found');
+    if (!user) throw new NotFoundException("User not found");
     const servers = await this.prisma.server.count({
       where: { ownerId: id, deletedAt: null },
     });
     if (servers > 0) {
       throw new BadRequestException(
-        'Cannot purge a user who still owns servers; delete or transfer them first',
+        "Cannot purge a user who still owns servers; delete or transfer them first",
       );
     }
-    const tombstone = user.email.startsWith('deleted:')
+    const tombstone = user.email.startsWith("deleted:")
       ? user.email
       : `deleted:${Date.now()}:${user.email}`;
     await this.prisma.$transaction([
@@ -414,7 +512,7 @@ export class UsersService {
     await this.assertServerExists(serverId);
     return this.prisma.subUser.findMany({
       where: { serverId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
     });
   }
 
@@ -429,11 +527,11 @@ export class UsersService {
       where: { email: dto.email, deletedAt: null },
       select: { id: true },
     });
-    if (!user) throw new NotFoundException('No user found with that email');
+    if (!user) throw new NotFoundException("No user found with that email");
 
     if (user.id === server.ownerId) {
       throw new ConflictException(
-        'The server owner already has full access and cannot be a sub-user',
+        "The server owner already has full access and cannot be a sub-user",
       );
     }
 
@@ -442,15 +540,15 @@ export class UsersService {
     });
 
     if (existing) {
-      if (existing.state === 'ACTIVE') {
+      if (existing.state === "ACTIVE") {
         throw new ConflictException(
-          'This user is already a sub-user on this server',
+          "This user is already a sub-user on this server",
         );
       }
       // Reinstate a revoked grant with the new permission set.
       const reinstated = await this.prisma.subUser.update({
         where: { id: existing.id },
-        data: { state: 'ACTIVE', permissions: dto.permissions },
+        data: { state: "ACTIVE", permissions: dto.permissions },
       });
       // TODO(impl): send a notification email letting the user know access was restored.
       return reinstated;
@@ -462,7 +560,7 @@ export class UsersService {
         serverId,
         userId: user.id,
         permissions: dto.permissions,
-        state: 'ACTIVE',
+        state: "ACTIVE",
       },
     });
     // TODO(impl): send a notification email inviting the user to the server.
@@ -487,7 +585,7 @@ export class UsersService {
     const sub = await this.getServerSubUser(serverId, subUserId);
     return this.prisma.subUser.update({
       where: { id: sub.id },
-      data: { state: 'REVOKED' },
+      data: { state: "REVOKED" },
     });
   }
 
@@ -500,7 +598,7 @@ export class UsersService {
       where: { id: serverId, deletedAt: null },
       select: { id: true, ownerId: true },
     });
-    if (!server) throw new NotFoundException('Server not found');
+    if (!server) throw new NotFoundException("Server not found");
     return server;
   }
 
@@ -511,7 +609,7 @@ export class UsersService {
     const sub = await this.prisma.subUser.findFirst({
       where: { id: subUserId, serverId },
     });
-    if (!sub) throw new NotFoundException('Sub-user not found on this server');
+    if (!sub) throw new NotFoundException("Sub-user not found on this server");
     return sub;
   }
 }

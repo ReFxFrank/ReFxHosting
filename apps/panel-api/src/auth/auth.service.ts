@@ -6,24 +6,24 @@ import {
   Logger,
   NotFoundException,
   UnauthorizedException,
-} from '@nestjs/common';
-import { randomInt } from 'crypto';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import * as argon2 from 'argon2';
+} from "@nestjs/common";
+import { randomInt } from "crypto";
+import { ConfigService } from "@nestjs/config";
+import { JwtService } from "@nestjs/jwt";
+import * as argon2 from "argon2";
 import {
   createGuardrails,
   generateSecret,
   generateURI,
   verifySync,
-} from 'otplib';
-import { GlobalRole, Prisma, User } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { CryptoService } from '../common/crypto/crypto.service';
-import { EmailService } from '../email/email.service';
-import { uuidv7 } from '../common/util/uuid';
-import { AppConfig } from '../config/configuration';
-import { LoginDto, RegisterDto, TokenResponseDto } from './dto/auth.dto';
+} from "otplib";
+import { GlobalRole, Prisma, User } from "@prisma/client";
+import { PrismaService } from "../prisma/prisma.service";
+import { CryptoService } from "../common/crypto/crypto.service";
+import { EmailService } from "../email/email.service";
+import { uuidv7 } from "../common/util/uuid";
+import { AppConfig } from "../config/configuration";
+import { LoginDto, RegisterDto, TokenResponseDto } from "./dto/auth.dto";
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
 const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -52,7 +52,7 @@ const TOTP_GUARDRAILS = createGuardrails({ MIN_SECRET_BYTES: 8 });
 /** Claims carried by the short-lived MFA login-challenge JWT. */
 interface MfaChallengeClaims {
   sub: string;
-  type: 'mfa';
+  type: "mfa";
   /** "Remember this device" choice, carried through the MFA step. */
   rmb?: boolean;
 }
@@ -86,7 +86,7 @@ export class AuthService {
       // holds this address (e.g. deleted before the address was tombstoned) is
       // released here so the address becomes available again.
       if (!existing.deletedAt) {
-        throw new ConflictException('Email already registered');
+        throw new ConflictException("Email already registered");
       }
       await this.prisma.user.update({
         where: { id: existing.id },
@@ -109,7 +109,7 @@ export class AuthService {
           region: dto.region,
           postalCode: dto.postalCode,
           country: dto.country.toUpperCase(),
-          state: 'PENDING_VERIFICATION',
+          state: "PENDING_VERIFICATION",
         },
         select: { id: true, email: true, firstName: true },
       });
@@ -119,9 +119,9 @@ export class AuthService {
       // 409 instead of a raw 500.
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
+        e.code === "P2002"
       ) {
-        throw new ConflictException('Email already registered');
+        throw new ConflictException("Email already registered");
       }
       throw e;
     }
@@ -136,9 +136,11 @@ export class AuthService {
    * Create a single-use, hashed email-verification token for the user and email
    * the verify link. The plaintext token is never persisted.
    */
-  private async issueEmailVerification(
-    user: { id: string; email: string; firstName?: string | null },
-  ): Promise<void> {
+  private async issueEmailVerification(user: {
+    id: string;
+    email: string;
+    firstName?: string | null;
+  }): Promise<void> {
     const token = this.crypto.token(32);
     await this.prisma.emailVerificationToken.create({
       data: {
@@ -165,12 +167,15 @@ export class AuthService {
     // user/credential is missing) so response time doesn't reveal whether an
     // email is registered.
     const ok = await argon2
-      .verify(user?.passwordHash ?? (await this.dummyPasswordHash()), dto.password)
+      .verify(
+        user?.passwordHash ?? (await this.dummyPasswordHash()),
+        dto.password,
+      )
       .catch(() => false);
     if (!user || !user.passwordHash || !ok) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
-    if (user.state === 'BANNED' || user.state === 'SUSPENDED') {
+    if (user.state === "BANNED" || user.state === "SUSPENDED") {
       throw new UnauthorizedException(`Account ${user.state.toLowerCase()}`);
     }
 
@@ -183,20 +188,23 @@ export class AuthService {
       // Fast path: a valid TOTP code supplied inline clears the challenge.
       if (totpOn && dto.totp) {
         const secret = this.crypto.decrypt(user.totpSecretEnc!);
-        if (!verifySync({ token: dto.totp, secret, guardrails: TOTP_GUARDRAILS }).valid) {
-          throw new UnauthorizedException('Invalid MFA code');
+        if (
+          !verifySync({ token: dto.totp, secret, guardrails: TOTP_GUARDRAILS })
+            .valid
+        ) {
+          throw new UnauthorizedException("Invalid MFA code");
         }
         return this.issueTokens(user, ctx, { trusted: !!dto.rememberMe });
       }
       // Otherwise hand back a short-lived, signed challenge token bound to this
       // (already password-verified) principal. The raw user id is NEVER returned.
-      const methods: ('totp' | 'recovery' | 'webauthn')[] = [
-        ...(totpOn ? (['totp', 'recovery'] as const) : []),
-        ...(passkeyCount > 0 ? (['webauthn'] as const) : []),
+      const methods: ("totp" | "recovery" | "webauthn")[] = [
+        ...(totpOn ? (["totp", "recovery"] as const) : []),
+        ...(passkeyCount > 0 ? (["webauthn"] as const) : []),
       ];
       return {
-        accessToken: '',
-        refreshToken: '',
+        accessToken: "",
+        refreshToken: "",
         expiresIn: 0,
         mfaRequired: true,
         mfaToken: await this.issueMfaChallenge(user.id, !!dto.rememberMe),
@@ -220,7 +228,7 @@ export class AuthService {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
     });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) throw new UnauthorizedException("Invalid credentials");
     return this.issueTokens(user, ctx, { trusted });
   }
 
@@ -233,9 +241,9 @@ export class AuthService {
    * tokens and cannot be forged by a client.
    */
   async issueMfaChallenge(userId: string, trusted = false): Promise<string> {
-    const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
+    const jwtCfg = this.config.get<AppConfig["jwt"]>("jwt")!;
     return this.jwt.signAsync(
-      { sub: userId, type: 'mfa', rmb: trusted },
+      { sub: userId, type: "mfa", rmb: trusted },
       { secret: jwtCfg.mfaSecret, expiresIn: jwtCfg.mfaTtl },
     );
   }
@@ -247,17 +255,17 @@ export class AuthService {
   async verifyMfaChallenge(
     challengeToken: string,
   ): Promise<{ userId: string; trusted: boolean }> {
-    const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
+    const jwtCfg = this.config.get<AppConfig["jwt"]>("jwt")!;
     let payload: MfaChallengeClaims;
     try {
       payload = await this.jwt.verifyAsync<MfaChallengeClaims>(challengeToken, {
         secret: jwtCfg.mfaSecret,
       });
     } catch {
-      throw new UnauthorizedException('Invalid or expired MFA challenge');
+      throw new UnauthorizedException("Invalid or expired MFA challenge");
     }
-    if (payload.type !== 'mfa' || !payload.sub) {
-      throw new UnauthorizedException('Invalid MFA challenge');
+    if (payload.type !== "mfa" || !payload.sub) {
+      throw new UnauthorizedException("Invalid MFA challenge");
     }
     return { userId: payload.sub, trusted: !!payload.rmb };
   }
@@ -265,24 +273,31 @@ export class AuthService {
   // ---- token issuance + refresh rotation --------------------------------
 
   async issueTokens(
-    user: Pick<User, 'id' | 'email' | 'globalRole'>,
+    user: Pick<User, "id" | "email" | "globalRole">,
     ctx: { ip?: string; userAgent?: string },
     opts?: { trusted?: boolean },
   ): Promise<TokenResponseDto> {
-    const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
+    const jwtCfg = this.config.get<AppConfig["jwt"]>("jwt")!;
     const trusted = !!opts?.trusted;
     // Trusted ("remember this device") sessions live longer; the flag rides in
     // the refresh token so it survives rotation without a schema change.
-    const refreshTtl = trusted ? TRUSTED_REFRESH_TTL_SECONDS : jwtCfg.refreshTtl;
+    const refreshTtl = trusted
+      ? TRUSTED_REFRESH_TTL_SECONDS
+      : jwtCfg.refreshTtl;
 
     const accessToken = await this.jwt.signAsync(
-      { sub: user.id, email: user.email, role: user.globalRole, type: 'access' },
+      {
+        sub: user.id,
+        email: user.email,
+        role: user.globalRole,
+        type: "access",
+      },
       { secret: jwtCfg.accessSecret, expiresIn: jwtCfg.accessTtl },
     );
 
     const sessionId = uuidv7();
     const refreshToken = await this.jwt.signAsync(
-      { sub: user.id, sid: sessionId, type: 'refresh', trusted },
+      { sub: user.id, sid: sessionId, type: "refresh", trusted },
       { secret: jwtCfg.refreshSecret, expiresIn: refreshTtl },
     );
 
@@ -304,17 +319,17 @@ export class AuthService {
     refreshToken: string,
     ctx: { ip?: string; userAgent?: string },
   ): Promise<TokenResponseDto> {
-    const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
+    const jwtCfg = this.config.get<AppConfig["jwt"]>("jwt")!;
     let payload: { sub: string; sid: string; type: string; trusted?: boolean };
     try {
       payload = await this.jwt.verifyAsync(refreshToken, {
         secret: jwtCfg.refreshSecret,
       });
     } catch {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new UnauthorizedException("Invalid refresh token");
     }
-    if (payload.type !== 'refresh') {
-      throw new UnauthorizedException('Invalid token type');
+    if (payload.type !== "refresh") {
+      throw new UnauthorizedException("Invalid token type");
     }
 
     const now = new Date();
@@ -331,7 +346,7 @@ export class AuthService {
       if (session && hashOk) {
         await this.revokeFamily(session.userId);
       }
-      throw new UnauthorizedException('Refresh token rejected');
+      throw new UnauthorizedException("Refresh token rejected");
     }
 
     // The presented token is genuine (hash matches an unexpired session).
@@ -343,10 +358,11 @@ export class AuthService {
       // is real reuse, so revoke the family.
       const rotatedRecently =
         session.rotatedAt &&
-        now.getTime() - session.rotatedAt.getTime() <= REFRESH_ROTATION_GRACE_MS;
+        now.getTime() - session.rotatedAt.getTime() <=
+          REFRESH_ROTATION_GRACE_MS;
       if (!rotatedRecently) {
         await this.revokeFamily(session.userId);
-        throw new UnauthorizedException('Refresh token rejected');
+        throw new UnauthorizedException("Refresh token rejected");
       }
       const user = await this.prisma.user.findFirstOrThrow({
         where: { id: payload.sub, deletedAt: null },
@@ -373,7 +389,7 @@ export class AuthService {
   private async dummyPasswordHash(): Promise<string> {
     if (!this.dummyHashCache) {
       this.dummyHashCache = await argon2.hash(
-        'refx-login-timing-equalizer',
+        "refx-login-timing-equalizer",
         ARGON_OPTS,
       );
     }
@@ -390,7 +406,7 @@ export class AuthService {
 
   async logout(refreshToken: string): Promise<void> {
     try {
-      const jwtCfg = this.config.get<AppConfig['jwt']>('jwt')!;
+      const jwtCfg = this.config.get<AppConfig["jwt"]>("jwt")!;
       const payload = await this.jwt.verifyAsync(refreshToken, {
         secret: jwtCfg.refreshSecret,
       });
@@ -405,7 +421,9 @@ export class AuthService {
 
   // ---- TOTP enrollment ---------------------------------------------------
 
-  async totpEnroll(userId: string): Promise<{ otpauthUrl: string; secret: string }> {
+  async totpEnroll(
+    userId: string,
+  ): Promise<{ otpauthUrl: string; secret: string }> {
     const user = await this.prisma.user.findFirstOrThrow({
       where: { id: userId },
     });
@@ -417,26 +435,34 @@ export class AuthService {
     });
     const otpauthUrl = generateURI({
       label: user.email,
-      issuer: this.config.get<AppConfig['rpName']>('rpName')!,
+      issuer: this.config.get<AppConfig["rpName"]>("rpName")!,
       secret,
     });
     return { otpauthUrl, secret };
   }
 
-  async totpVerify(userId: string, code: string): Promise<{ recoveryCodes: string[] }> {
+  async totpVerify(
+    userId: string,
+    code: string,
+  ): Promise<{ recoveryCodes: string[] }> {
     const user = await this.prisma.user.findFirstOrThrow({
       where: { id: userId },
     });
-    if (!user.totpSecretEnc) throw new BadRequestException('No TOTP enrollment in progress');
+    if (!user.totpSecretEnc)
+      throw new BadRequestException("No TOTP enrollment in progress");
     const secret = this.crypto.decrypt(user.totpSecretEnc);
-    if (!verifySync({ token: code, secret, guardrails: TOTP_GUARDRAILS }).valid) {
-      throw new BadRequestException('Invalid TOTP code');
+    if (
+      !verifySync({ token: code, secret, guardrails: TOTP_GUARDRAILS }).valid
+    ) {
+      throw new BadRequestException("Invalid TOTP code");
     }
 
-    // Generate one-time recovery codes.
-    const plainCodes = Array.from({ length: 10 }, () =>
-      this.crypto.token(5).slice(0, 10).toUpperCase(),
-    );
+    // Generate one-time recovery codes. token(10) yields ~14 base64url chars
+    // (80 bits) with the full case-sensitive alphabet. The previous
+    // token(5).slice(0,10).toUpperCase() was buggy: token(5) is only ~7 chars
+    // so the slice was a no-op, and toUpperCase() folded the base64url alphabet
+    // (a-z → A-Z), collapsing ~40 bits of source entropy toward ~34.
+    const plainCodes = Array.from({ length: 10 }, () => this.crypto.token(10));
     await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: userId },
@@ -471,33 +497,35 @@ export class AuthService {
   async mfaVerify(
     userId: string,
     code: string,
-    method: 'totp' | 'recovery',
+    method: "totp" | "recovery",
     ctx: { ip?: string; userAgent?: string },
     trusted = false,
   ): Promise<TokenResponseDto> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, deletedAt: null },
     });
-    if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (!user) throw new UnauthorizedException("Invalid credentials");
 
-    if (method === 'recovery') {
+    if (method === "recovery") {
       const codes = await this.prisma.recoveryCode.findMany({
         where: { userId, usedAt: null },
       });
       const hash = this.crypto.hash(code.toUpperCase());
       const match = codes.find((c) => c.codeHash === hash);
-      if (!match) throw new UnauthorizedException('Invalid recovery code');
+      if (!match) throw new UnauthorizedException("Invalid recovery code");
       await this.prisma.recoveryCode.update({
         where: { id: match.id },
         data: { usedAt: new Date() },
       });
     } else {
       if (!user.totpSecretEnc) {
-        throw new UnauthorizedException('MFA is not configured');
+        throw new UnauthorizedException("MFA is not configured");
       }
       const secret = this.crypto.decrypt(user.totpSecretEnc);
-      if (!verifySync({ token: code, secret, guardrails: TOTP_GUARDRAILS }).valid) {
-        throw new UnauthorizedException('Invalid MFA code');
+      if (
+        !verifySync({ token: code, secret, guardrails: TOTP_GUARDRAILS }).valid
+      ) {
+        throw new UnauthorizedException("Invalid MFA code");
       }
     }
 
@@ -556,14 +584,14 @@ export class AuthService {
   ): void {
     if (actor.id === target.id) {
       throw new ForbiddenException(
-        'Use your own account settings to change your password.',
+        "Use your own account settings to change your password.",
       );
     }
     const a = AuthService.ROLE_RANK[actor.globalRole] ?? 0;
     const t = AuthService.ROLE_RANK[target.globalRole] ?? 0;
     if (a <= t) {
       throw new ForbiddenException(
-        'You cannot manage the credentials of an account at or above your privilege level.',
+        "You cannot manage the credentials of an account at or above your privilege level.",
       );
     }
   }
@@ -573,7 +601,7 @@ export class AuthService {
       where: { id: targetId, deletedAt: null },
       select: { id: true, email: true, firstName: true, globalRole: true },
     });
-    if (!target) throw new NotFoundException('User not found');
+    if (!target) throw new NotFoundException("User not found");
     return target;
   }
 
@@ -640,7 +668,10 @@ export class AuthService {
 
     // Best-effort security notice so the owner sees an admin reset.
     await this.email
-      .sendPasswordChangedByAdmin({ email: target.email, firstName: target.firstName })
+      .sendPasswordChangedByAdmin({
+        email: target.email,
+        firstName: target.firstName,
+      })
       .catch(() => undefined);
 
     return { password: plaintext };
@@ -673,7 +704,7 @@ export class AuthService {
     const t = AuthService.ROLE_RANK[role] ?? 0;
     if (a <= t) {
       throw new ForbiddenException(
-        'You cannot create an account at or above your privilege level.',
+        "You cannot create an account at or above your privilege level.",
       );
     }
 
@@ -682,7 +713,7 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
       if (!existing.deletedAt) {
-        throw new ConflictException('Email already registered');
+        throw new ConflictException("Email already registered");
       }
       await this.prisma.user.update({
         where: { id: existing.id },
@@ -700,7 +731,7 @@ export class AuthService {
           firstName: dto.firstName?.trim() || null,
           lastName: dto.lastName?.trim() || null,
           globalRole: role,
-          state: 'ACTIVE',
+          state: "ACTIVE",
           // Default to verified so the account works for sign-in right away.
           emailVerifiedAt: dto.emailVerified === false ? null : new Date(),
         },
@@ -710,9 +741,9 @@ export class AuthService {
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
-        e.code === 'P2002'
+        e.code === "P2002"
       ) {
-        throw new ConflictException('Email already registered');
+        throw new ConflictException("Email already registered");
       }
       throw e;
     }
@@ -720,10 +751,10 @@ export class AuthService {
 
   /** A strong, policy-compliant random password (10+ chars, all classes). */
   private generateTempPassword(): string {
-    const lower = 'abcdefghijkmnpqrstuvwxyz';
-    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-    const nums = '23456789';
-    const syms = '!@#$%^&*?-_';
+    const lower = "abcdefghijkmnpqrstuvwxyz";
+    const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const nums = "23456789";
+    const syms = "!@#$%^&*?-_";
     const all = lower + upper + nums + syms;
     const pick = (set: string) => set[randomInt(set.length)];
     const chars = [pick(lower), pick(upper), pick(nums), pick(syms)];
@@ -733,7 +764,7 @@ export class AuthService {
       const j = randomInt(i + 1);
       [chars[i], chars[j]] = [chars[j], chars[i]];
     }
-    return chars.join('');
+    return chars.join("");
   }
 
   /**
@@ -746,7 +777,7 @@ export class AuthService {
       where: { tokenHash },
     });
     if (!record || record.usedAt || record.expiresAt < new Date()) {
-      throw new BadRequestException('Invalid or expired reset token');
+      throw new BadRequestException("Invalid or expired reset token");
     }
 
     // Don't allow reusing the current or a recent past password.
@@ -797,7 +828,7 @@ export class AuthService {
   ): Promise<void> {
     const history = await this.prisma.passwordHistory.findMany({
       where: { userId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: PASSWORD_HISTORY_DEPTH - 1,
       select: { passwordHash: true },
     });
@@ -836,7 +867,7 @@ export class AuthService {
       });
       const keep = await this.prisma.passwordHistory.findMany({
         where: { userId },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: "desc" },
         take: PASSWORD_HISTORY_DEPTH - 1,
         select: { id: true },
       });
@@ -876,13 +907,13 @@ export class AuthService {
       where: { tokenHash },
     });
     if (!record || record.usedAt || record.expiresAt < new Date()) {
-      throw new BadRequestException('Invalid or expired verification token');
+      throw new BadRequestException("Invalid or expired verification token");
     }
 
     const [user] = await this.prisma.$transaction([
       this.prisma.user.update({
         where: { id: record.userId },
-        data: { emailVerifiedAt: new Date(), state: 'ACTIVE' },
+        data: { emailVerifiedAt: new Date(), state: "ACTIVE" },
         select: { email: true, firstName: true },
       }),
       this.prisma.emailVerificationToken.update({
@@ -892,7 +923,10 @@ export class AuthService {
     ]);
 
     // Welcome the freshly-verified customer (best-effort).
-    await this.email.sendWelcome({ email: user.email, firstName: user.firstName });
+    await this.email.sendWelcome({
+      email: user.email,
+      firstName: user.firstName,
+    });
   }
 
   /**
@@ -922,10 +956,10 @@ export class AuthService {
       where: { id: userId, deletedAt: null },
     });
     if (!user || !user.passwordHash) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException("Invalid credentials");
     }
     const ok = await argon2.verify(user.passwordHash, currentPassword);
-    if (!ok) throw new BadRequestException('Current password is incorrect');
+    if (!ok) throw new BadRequestException("Current password is incorrect");
 
     // New password must differ from the current one AND recent past ones.
     await this.assertPasswordNotReused(userId, user.passwordHash, newPassword);
@@ -957,7 +991,7 @@ export class AuthService {
   async listSessions(userId: string) {
     const sessions = await this.prisma.session.findMany({
       where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       select: {
         id: true,
         ip: true,
@@ -974,7 +1008,7 @@ export class AuthService {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, userId },
     });
-    if (!session) throw new NotFoundException('Session not found');
+    if (!session) throw new NotFoundException("Session not found");
     await this.prisma.session.updateMany({
       where: { id: sessionId, userId, revokedAt: null },
       data: { revokedAt: new Date() },

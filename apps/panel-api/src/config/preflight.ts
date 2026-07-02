@@ -138,6 +138,21 @@ export function evaluatePreflight(
     );
   }
 
+  // --- Global TLS validation -------------------------------------------------
+  // NODE_TLS_REJECT_UNAUTHORIZED=0 disables certificate validation for EVERY
+  // outbound TLS connection the process makes (Stripe, PayPal, SMTP, S3), not
+  // just the node-agent channel — enabling MITM and payment-webhook forgery.
+  // Never acceptable in production; the agent's self-signed cert is handled
+  // per-request inside NodeAgentClient instead.
+  if (process.env.NODE_TLS_REJECT_UNAUTHORIZED === "0") {
+    errors.push(
+      "NODE_TLS_REJECT_UNAUTHORIZED=0 disables TLS certificate validation for " +
+        "ALL outbound connections (Stripe/PayPal/SMTP/S3) — a MITM can forge " +
+        "payment webhooks. Remove it; the node-agent's self-signed cert is " +
+        "trusted per-request by NodeAgentClient (set AGENT_TLS_PINNING=true).",
+    );
+  }
+
   // --- WebAuthn relying party ------------------------------------------------
   if (config.rpId === "localhost") {
     warnings.push(

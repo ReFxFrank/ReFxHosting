@@ -9,21 +9,21 @@ import {
   Query,
   Req,
   UseGuards,
-} from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { Throttle } from '@nestjs/throttler';
-import { AuthService } from './auth.service';
-import { WebAuthnService } from './webauthn.service';
-import { ApiKeyService } from './api-key.service';
-import { UsersService } from '../users/users.service';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { Public } from '../common/decorators/public.decorator';
+} from "@nestjs/common";
+import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
+import { AuthService } from "./auth.service";
+import { WebAuthnService } from "./webauthn.service";
+import { ApiKeyService } from "./api-key.service";
+import { UsersService } from "../users/users.service";
+import { JwtAuthGuard } from "./guards/jwt-auth.guard";
+import { Public } from "../common/decorators/public.decorator";
 import {
   CurrentUser,
   AuthUser,
-} from '../common/decorators/current-user.decorator';
-import { Audit } from '../common/decorators/audit.decorator';
-import { AllowWhenPasswordExpired } from '../common/decorators/allow-when-password-expired.decorator';
+} from "../common/decorators/current-user.decorator";
+import { Audit } from "../common/decorators/audit.decorator";
+import { AllowWhenPasswordExpired } from "../common/decorators/allow-when-password-expired.decorator";
 import {
   CreateApiKeyDto,
   ForgotPasswordDto,
@@ -38,14 +38,14 @@ import {
   WebAuthnVerifyDto,
   WebAuthnLoginOptionsDto,
   WebAuthnLoginVerifyDto,
-} from './dto/auth.dto';
+} from "./dto/auth.dto";
 import type {
   PublicKeyCredentialCreationOptionsJSON,
   PublicKeyCredentialRequestOptionsJSON,
-} from '@simplewebauthn/server';
+} from "@simplewebauthn/server";
 
-@ApiTags('auth')
-@Controller('auth')
+@ApiTags("auth")
+@Controller("auth")
 // Protect the controller by default; @Public() opts the login/register/refresh/
 // password-reset/email-verify/mfa-challenge routes back out. Without this guard
 // the authenticated routes (me, totp, webauthn, api-keys) would run with no
@@ -62,7 +62,7 @@ export class AuthController {
   // ---- Current user / password reset / MFA verify -----------------------
 
   @ApiBearerAuth()
-  @Get('me')
+  @Get("me")
   // Allowed while a password change is pending so the web can bootstrap the
   // session (and render the forced-change modal) instead of erroring.
   @AllowWhenPasswordExpired()
@@ -74,7 +74,7 @@ export class AuthController {
   }
 
   @Public()
-  @Post('forgot-password')
+  @Post("forgot-password")
   @HttpCode(200)
   async forgotPassword(@Body() dto: ForgotPasswordDto) {
     await this.auth.forgotPassword(dto.email);
@@ -83,9 +83,9 @@ export class AuthController {
   }
 
   @Public()
-  @Post('reset-password')
+  @Post("reset-password")
   @HttpCode(200)
-  @Audit({ action: 'auth.password.reset', targetType: 'User' })
+  @Audit({ action: "auth.password.reset", targetType: "User" })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.auth.resetPassword(dto.token, dto.newPassword);
     return { ok: true };
@@ -96,22 +96,22 @@ export class AuthController {
    * page can show an "expired/used link" state on open. Returns only validity.
    */
   @Public()
-  @Get('reset-password/valid')
-  async resetPasswordValid(@Query('token') token = '') {
+  @Get("reset-password/valid")
+  async resetPasswordValid(@Query("token") token = "") {
     return { valid: await this.auth.resetTokenValid(token) };
   }
 
   @Public()
-  @Post('verify-email')
+  @Post("verify-email")
   @HttpCode(200)
-  @Audit({ action: 'auth.email.verify', targetType: 'User' })
+  @Audit({ action: "auth.email.verify", targetType: "User" })
   async verifyEmail(@Body() dto: VerifyEmailDto) {
     await this.auth.verifyEmail(dto.token);
     return { ok: true };
   }
 
   @Public()
-  @Post('resend-verification')
+  @Post("resend-verification")
   @HttpCode(200)
   // Tighter than the global limit: this sends an email, so cap re-requests.
   @Throttle({ default: { limit: 3, ttl: 60_000 } })
@@ -122,25 +122,34 @@ export class AuthController {
   }
 
   @Public()
-  @Post('mfa/verify')
+  // Second-factor verification must be at least as rate-limited as /login (10/min)
+  // — tighter, since an attacker here already holds the password and is guessing a
+  // 6-digit TOTP. Caps online TOTP brute-force to 5 attempts/min/IP.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post("mfa/verify")
   @HttpCode(200)
   async mfaVerify(@Body() dto: MfaVerifyDto, @Req() req: any) {
     // Verify + decode the signed, short-lived MFA challenge token issued at
     // login. This rejects expired / tampered / wrong-type tokens; the raw user
     // id is never accepted as a challenge token.
-    const { userId, trusted } = await this.auth.verifyMfaChallenge(dto.mfaToken);
+    const { userId, trusted } = await this.auth.verifyMfaChallenge(
+      dto.mfaToken,
+    );
     return this.auth.mfaVerify(
       userId,
       dto.code,
-      dto.method === 'recovery' ? 'recovery' : 'totp',
-      { ip: req.ip, userAgent: req.headers['user-agent'] },
+      dto.method === "recovery" ? "recovery" : "totp",
+      { ip: req.ip, userAgent: req.headers["user-agent"] },
       trusted,
     );
   }
 
   @Public()
-  @Post('register')
-  @Audit({ action: 'auth.register', targetType: 'User' })
+  // Rate-limit registration to blunt email-enumeration (the 409 on an existing
+  // address is a membership oracle) and automated signup abuse. Mirrors resend.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post("register")
+  @Audit({ action: "auth.register", targetType: "User" })
   register(@Body() dto: RegisterDto) {
     return this.auth.register(dto);
   }
@@ -149,28 +158,28 @@ export class AuthController {
   // Tighter than the global per-IP limit: blunts password brute-forcing while
   // still allowing a legitimate user a few retries.
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  @Post('login')
+  @Post("login")
   @HttpCode(200)
   login(@Body() dto: LoginDto, @Req() req: any) {
     return this.auth.login(dto, {
       ip: req.ip,
-      userAgent: req.headers['user-agent'],
+      userAgent: req.headers["user-agent"],
     });
   }
 
   @Public()
-  @Post('refresh')
+  @Post("refresh")
   @HttpCode(200)
   @AllowWhenPasswordExpired()
   refresh(@Body() dto: RefreshDto, @Req() req: any) {
     return this.auth.refresh(dto.refreshToken, {
       ip: req.ip,
-      userAgent: req.headers['user-agent'],
+      userAgent: req.headers["user-agent"],
     });
   }
 
   @Public()
-  @Post('logout')
+  @Post("logout")
   @HttpCode(204)
   @AllowWhenPasswordExpired()
   async logout(@Body() dto: RefreshDto) {
@@ -180,75 +189,83 @@ export class AuthController {
   // ---- TOTP --------------------------------------------------------------
 
   @ApiBearerAuth()
-  @Post('mfa/totp/enroll')
-  totpEnroll(@CurrentUser('id') userId: string) {
+  @Post("mfa/totp/enroll")
+  totpEnroll(@CurrentUser("id") userId: string) {
     return this.auth.totpEnroll(userId);
   }
 
   @ApiBearerAuth()
-  @Post('mfa/totp/verify')
-  @Audit({ action: 'auth.mfa.totp.enable', targetType: 'User' })
-  totpVerify(@CurrentUser('id') userId: string, @Body() dto: TotpVerifyDto) {
+  @Post("mfa/totp/verify")
+  @Audit({ action: "auth.mfa.totp.enable", targetType: "User" })
+  totpVerify(@CurrentUser("id") userId: string, @Body() dto: TotpVerifyDto) {
     return this.auth.totpVerify(userId, dto.code);
   }
 
   @ApiBearerAuth()
-  @Delete('mfa/totp')
+  @Delete("mfa/totp")
   @HttpCode(204)
-  @Audit({ action: 'auth.mfa.totp.disable', targetType: 'User' })
-  totpDisable(@CurrentUser('id') userId: string) {
+  @Audit({ action: "auth.mfa.totp.disable", targetType: "User" })
+  totpDisable(@CurrentUser("id") userId: string) {
     return this.auth.totpDisable(userId);
   }
 
   // ---- WebAuthn ----------------------------------------------------------
 
   @ApiBearerAuth()
-  @Post('mfa/webauthn/register/options')
+  @Post("mfa/webauthn/register/options")
   webauthnRegOptions(
-    @CurrentUser('id') userId: string,
-    @CurrentUser('email') email: string,
+    @CurrentUser("id") userId: string,
+    @CurrentUser("email") email: string,
   ): Promise<PublicKeyCredentialCreationOptionsJSON> {
     return this.webauthn.registrationOptions(userId, email);
   }
 
   @ApiBearerAuth()
-  @Post('mfa/webauthn/register/verify')
+  @Post("mfa/webauthn/register/verify")
   webauthnRegVerify(
-    @CurrentUser('id') userId: string,
+    @CurrentUser("id") userId: string,
     @Body() dto: WebAuthnVerifyDto,
   ) {
-    return this.webauthn.verifyRegistration(userId, dto.response as any, dto.label);
+    return this.webauthn.verifyRegistration(
+      userId,
+      dto.response as any,
+      dto.label,
+    );
   }
 
   @ApiBearerAuth()
-  @Get('mfa/webauthn/credentials')
-  webauthnList(@CurrentUser('id') userId: string) {
+  @Get("mfa/webauthn/credentials")
+  webauthnList(@CurrentUser("id") userId: string) {
     return this.webauthn.listCredentials(userId);
   }
 
   @ApiBearerAuth()
-  @Delete('mfa/webauthn/credentials/:id')
+  @Delete("mfa/webauthn/credentials/:id")
   @HttpCode(204)
-  @Audit({ action: 'auth.mfa.webauthn.remove', targetType: 'WebAuthnCredential', targetParam: 'id' })
+  @Audit({
+    action: "auth.mfa.webauthn.remove",
+    targetType: "WebAuthnCredential",
+    targetParam: "id",
+  })
   async webauthnRemove(
-    @CurrentUser('id') userId: string,
-    @Param('id') id: string,
+    @CurrentUser("id") userId: string,
+    @Param("id") id: string,
   ) {
     await this.webauthn.removeCredential(userId, id);
   }
 
   @ApiBearerAuth()
-  @Post('mfa/webauthn/auth/options')
+  @Post("mfa/webauthn/auth/options")
   webauthnAuthOptions(
-    @CurrentUser('id') userId: string,
+    @CurrentUser("id") userId: string,
   ): Promise<PublicKeyCredentialRequestOptionsJSON> {
     return this.webauthn.authenticationOptions(userId);
   }
 
   @ApiBearerAuth()
-  @Post('mfa/webauthn/auth/verify')
+  @Post("mfa/webauthn/auth/verify")
   webauthnAuthVerify(
-    @CurrentUser('id') userId: string,
+    @CurrentUser("id") userId: string,
     @Body() dto: WebAuthnVerifyDto,
   ) {
     return this.webauthn.verifyAuthentication(userId, dto.response as any);
@@ -257,7 +274,8 @@ export class AuthController {
   // ---- WebAuthn login (passkey as a second factor at sign-in) ------------
 
   @Public()
-  @Post('mfa/webauthn/login/options')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post("mfa/webauthn/login/options")
   @HttpCode(200)
   async webauthnLoginOptions(
     @Body() dto: WebAuthnLoginOptionsDto,
@@ -267,15 +285,21 @@ export class AuthController {
   }
 
   @Public()
-  @Post('mfa/webauthn/login/verify')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post("mfa/webauthn/login/verify")
   @HttpCode(200)
-  @Audit({ action: 'auth.mfa.webauthn.login', targetType: 'User' })
-  async webauthnLoginVerify(@Body() dto: WebAuthnLoginVerifyDto, @Req() req: any) {
-    const { userId, trusted } = await this.auth.verifyMfaChallenge(dto.mfaToken);
+  @Audit({ action: "auth.mfa.webauthn.login", targetType: "User" })
+  async webauthnLoginVerify(
+    @Body() dto: WebAuthnLoginVerifyDto,
+    @Req() req: any,
+  ) {
+    const { userId, trusted } = await this.auth.verifyMfaChallenge(
+      dto.mfaToken,
+    );
     await this.webauthn.verifyAuthentication(userId, dto.response as any);
     return this.auth.issueSessionForUser(
       userId,
-      { ip: req.ip, userAgent: req.headers['user-agent'] },
+      { ip: req.ip, userAgent: req.headers["user-agent"] },
       trusted,
     );
   }
@@ -283,10 +307,10 @@ export class AuthController {
   // ---- API keys ----------------------------------------------------------
 
   @ApiBearerAuth()
-  @Post('api-keys')
-  @Audit({ action: 'auth.apikey.create', targetType: 'ApiKey' })
+  @Post("api-keys")
+  @Audit({ action: "auth.apikey.create", targetType: "ApiKey" })
   async createApiKey(
-    @CurrentUser('id') userId: string,
+    @CurrentUser("id") userId: string,
     @Body() dto: CreateApiKeyDto,
   ) {
     const { plaintext, record } = await this.apiKeys.issue(

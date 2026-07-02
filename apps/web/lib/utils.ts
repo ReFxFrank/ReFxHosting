@@ -153,3 +153,21 @@ export function imageToAvatarDataUrl(file: File, size = 256): Promise<string> {
     reader.readAsDataURL(file);
   });
 }
+
+/**
+ * Sanitize a post-login `?next=` redirect to a SAME-ORIGIN relative path. Blocks
+ * open-redirect phishing: an absolute URL (`https://evil.tld`), protocol-relative
+ * (`//evil.tld`) or backslash (`/\evil.tld`, which some browsers treat as `//`)
+ * value falls back to `/dashboard`. Only a plain single-slash path is allowed.
+ */
+export function safeNextPath(raw: string | null | undefined): string {
+  if (
+    raw &&
+    raw.startsWith("/") &&
+    !raw.startsWith("//") &&
+    !raw.startsWith("/\\")
+  ) {
+    return raw;
+  }
+  return "/dashboard";
+}
