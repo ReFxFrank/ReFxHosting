@@ -1,10 +1,10 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { PrismaService } from '../prisma/prisma.service';
-import { AppConfig } from '../config/configuration';
-import { IncidentsService } from '../platform/incidents.service';
+import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { PrismaService } from "../prisma/prisma.service";
+import { AppConfig } from "../config/configuration";
+import { IncidentsService } from "../platform/incidents.service";
 
-export type StatusLevel = 'operational' | 'maintenance' | 'degraded' | 'outage';
+export type StatusLevel = "operational" | "maintenance" | "degraded" | "outage";
 
 export interface ComponentStatus {
   key: string;
@@ -109,14 +109,16 @@ export class StatusService {
 
   async getStatus(): Promise<SystemStatus> {
     const now = Date.now();
-    if (this.cache && now - this.cache.at < CACHE_TTL_MS) return this.cache.value;
+    if (this.cache && now - this.cache.at < CACHE_TTL_MS)
+      return this.cache.value;
 
-    const [nodes, webStatus, activeIncidents, publicIncidents] = await Promise.all([
-      this.loadNodes(),
-      this.checkWeb(),
-      this.incidents.activeIncidents(),
-      this.incidents.listPublic(),
-    ]);
+    const [nodes, webStatus, activeIncidents, publicIncidents] =
+      await Promise.all([
+        this.loadNodes(),
+        this.checkWeb(),
+        this.incidents.activeIncidents(),
+        this.incidents.listPublic(),
+      ]);
 
     // Worst active-incident impact per affected component key.
     const incidentLevel = new Map<string, StatusLevel>();
@@ -124,25 +126,39 @@ export class StatusService {
       const level = IncidentsService.impactLevel(inc.impact);
       for (const key of inc.components) {
         const prev = incidentLevel.get(key);
-        if (!prev || SEVERITY[level] > SEVERITY[prev]) incidentLevel.set(key, level);
+        if (!prev || SEVERITY[level] > SEVERITY[prev])
+          incidentLevel.set(key, level);
       }
     }
 
     // Group nodes by region.
     const byRegion = new Map<
       string,
-      { name: string; country: string; nodes: { name: string; status: StatusLevel }[] }
+      {
+        name: string;
+        country: string;
+        nodes: { name: string; status: StatusLevel }[];
+      }
     >();
     for (const n of nodes) {
       if (!n.region) continue;
       const fresh =
         n.heartbeats[0] != null &&
-        now - new Date(n.heartbeats[0].recordedAt).getTime() < STALE_HEARTBEAT_MS;
+        now - new Date(n.heartbeats[0].recordedAt).getTime() <
+          STALE_HEARTBEAT_MS;
       const nodeStatus = this.nodeStatus(n.state, n.maintenance, fresh);
-      const entry =
-        byRegion.get(n.region.code) ??
-        { name: n.region.name, country: n.region.country, nodes: [] };
-      entry.nodes.push({ name: n.name, status: nodeStatus });
+      const entry = byRegion.get(n.region.code) ?? {
+        name: n.region.name,
+        country: n.region.country,
+        nodes: [],
+      };
+      // Public pages show the friendly "Provider / box label" when set (e.g.
+      // "OVH Rise-3 · Vint Hill") instead of the internal node name — nicer
+      // for customers and keeps internal hostnames off the status page.
+      entry.nodes.push({
+        name: n.provider?.trim() || n.name,
+        status: nodeStatus,
+      });
       byRegion.set(n.region.code, entry);
     }
 
@@ -154,7 +170,7 @@ export class StatusService {
           name,
           country,
           status: this.rollup(statuses),
-          nodesUp: statuses.filter((s) => s === 'operational').length,
+          nodesUp: statuses.filter((s) => s === "operational").length,
           nodesTotal: rNodes.length,
           nodes: rNodes.sort((a, b) => a.name.localeCompare(b.name)),
         };
@@ -163,16 +179,16 @@ export class StatusService {
 
     const nodesStatus: StatusLevel = regions.length
       ? this.worst(regions.map((r) => r.status))
-      : 'operational';
+      : "operational";
 
     // Auto-derived base status per component. iOS App has no server-side signal,
     // so it is operational unless an active incident says otherwise.
     const base: ComponentStatus[] = [
       // This code is serving the request, so the API itself is operational.
-      { key: 'panel-api', name: 'Control Panel API', status: 'operational' },
-      { key: 'web', name: 'Web Dashboard', status: webStatus },
-      { key: 'nodes', name: 'Game Server Nodes', status: nodesStatus },
-      { key: 'ios-app', name: 'iOS App', status: 'operational' },
+      { key: "panel-api", name: "Control Panel API", status: "operational" },
+      { key: "web", name: "Web Dashboard", status: webStatus },
+      { key: "nodes", name: "Game Server Nodes", status: nodesStatus },
+      { key: "ios-app", name: "iOS App", status: "operational" },
     ];
 
     // Overlay active incidents: a component is at least as bad as any incident
@@ -222,9 +238,12 @@ export class StatusService {
       if (!n.region) continue;
       const hb = n.heartbeats[0];
       const fresh =
-        hb != null && now - new Date(hb.recordedAt).getTime() < STALE_HEARTBEAT_MS;
+        hb != null &&
+        now - new Date(hb.recordedAt).getTime() < STALE_HEARTBEAT_MS;
       const node: NodeMetrics = {
-        name: n.name,
+        // Same display rule as the public status page: prefer the friendly
+        // "Provider / box label" over the internal node name when set.
+        name: n.provider?.trim() || n.name,
         status: this.nodeStatus(n.state, n.maintenance, fresh),
         serversOnline: serversByNode.get(n.id) ?? 0,
       };
@@ -239,7 +258,10 @@ export class StatusService {
         node.diskTotalGb = Math.round(n.diskMb / 1024);
         node.diskPercent = Math.min(100, pct1(hb.diskUsedMb, n.diskMb));
       }
-      const entry = byRegion.get(n.region.code) ?? { name: n.region.name, nodes: [] };
+      const entry = byRegion.get(n.region.code) ?? {
+        name: n.region.name,
+        nodes: [],
+      };
       entry.nodes.push(node);
       byRegion.set(n.region.code, entry);
     }
@@ -251,7 +273,7 @@ export class StatusService {
           code,
           name,
           status: this.rollup(statuses),
-          nodesUp: statuses.filter((s) => s === 'operational').length,
+          nodesUp: statuses.filter((s) => s === "operational").length,
           nodesTotal: rNodes.length,
           nodes: rNodes.sort((a, b) => a.name.localeCompare(b.name)),
         };
@@ -274,13 +296,14 @@ export class StatusService {
         select: {
           id: true,
           name: true,
+          provider: true,
           state: true,
           maintenance: true,
           memoryMb: true,
           diskMb: true,
           region: { select: { code: true, name: true } },
           heartbeats: {
-            orderBy: { recordedAt: 'desc' },
+            orderBy: { recordedAt: "desc" },
             take: 1,
             select: {
               cpuPct: true,
@@ -298,11 +321,13 @@ export class StatusService {
   private async runningServersByNode(): Promise<Map<string, number>> {
     const rows = await this.prisma.server
       .groupBy({
-        by: ['nodeId'],
-        where: { deletedAt: null, state: 'RUNNING' },
+        by: ["nodeId"],
+        where: { deletedAt: null, state: "RUNNING" },
         _count: { _all: true },
       })
-      .catch(() => [] as Array<{ nodeId: string | null; _count: { _all: number } }>);
+      .catch(
+        () => [] as Array<{ nodeId: string | null; _count: { _all: number } }>,
+      );
     const m = new Map<string, number>();
     for (const r of rows) if (r.nodeId) m.set(r.nodeId, r._count._all);
     return m;
@@ -314,11 +339,14 @@ export class StatusService {
         where: { deletedAt: null },
         select: {
           name: true,
+          // Public display label ("Provider / box label" in the admin node
+          // form). Preferred over the internal node name on the status page.
+          provider: true,
           state: true,
           maintenance: true,
           region: { select: { code: true, name: true, country: true } },
           heartbeats: {
-            orderBy: { recordedAt: 'desc' },
+            orderBy: { recordedAt: "desc" },
             take: 1,
             select: { recordedAt: true },
           },
@@ -329,40 +357,45 @@ export class StatusService {
 
   /** Ping the web container's health route; unreachable/non-200 = outage. */
   private async checkWeb(): Promise<StatusLevel> {
-    const url = this.config.get<AppConfig['web']>('web')?.healthUrl;
-    if (!url) return 'operational';
+    const url = this.config.get<AppConfig["web"]>("web")?.healthUrl;
+    if (!url) return "operational";
     try {
       const res = await fetch(url, {
         signal: AbortSignal.timeout(WEB_PING_TIMEOUT_MS),
       });
-      return res.ok ? 'operational' : 'outage';
+      return res.ok ? "operational" : "outage";
     } catch {
-      return 'outage';
+      return "outage";
     }
   }
 
-  private nodeStatus(state: string, maintenance: boolean, fresh: boolean): StatusLevel {
-    if (maintenance || state === 'MAINTENANCE' || state === 'PROVISIONING') return 'maintenance';
-    if (state === 'OFFLINE') return 'outage';
-    if (state === 'DEGRADED') return 'degraded';
-    if (state === 'ONLINE') return fresh ? 'operational' : 'degraded';
-    return 'degraded';
+  private nodeStatus(
+    state: string,
+    maintenance: boolean,
+    fresh: boolean,
+  ): StatusLevel {
+    if (maintenance || state === "MAINTENANCE" || state === "PROVISIONING")
+      return "maintenance";
+    if (state === "OFFLINE") return "outage";
+    if (state === "DEGRADED") return "degraded";
+    if (state === "ONLINE") return fresh ? "operational" : "degraded";
+    return "degraded";
   }
 
   /** Reduce a region's node statuses to one label (partial failure = degraded). */
   private rollup(statuses: StatusLevel[]): StatusLevel {
-    if (!statuses.length) return 'operational';
+    if (!statuses.length) return "operational";
     const allSame = (s: StatusLevel) => statuses.every((x) => x === s);
-    if (allSame('operational')) return 'operational';
-    if (allSame('maintenance')) return 'maintenance';
-    if (allSame('outage')) return 'outage';
-    return 'degraded';
+    if (allSame("operational")) return "operational";
+    if (allSame("maintenance")) return "maintenance";
+    if (allSame("outage")) return "outage";
+    return "degraded";
   }
 
   private worst(statuses: StatusLevel[]): StatusLevel {
     return statuses.reduce<StatusLevel>(
       (acc, s) => (SEVERITY[s] > SEVERITY[acc] ? s : acc),
-      'operational',
+      "operational",
     );
   }
 }
