@@ -39,6 +39,7 @@ import {
   ResizeServerDto,
   SendCommandDto,
   SetVariableDto,
+  SetJavaVersionDto,
   SwitchGameDto,
   UpdateStartupDto,
   UpgradeServerDto,
@@ -656,6 +657,32 @@ export class ServersController {
     @Param("envName") envName: string,
   ) {
     return this.resources.deleteVariable(id, envName);
+  }
+
+  // ---- Java version selector (Minecraft/Java servers) --------------------
+
+  @Get(":serverId/java-version")
+  @RequirePermissions("server.read")
+  getJavaVersion(@Param("serverId") id: string) {
+    return this.resources.getJavaVersion(id);
+  }
+
+  @Put(":serverId/java-version")
+  @RequirePermissions("settings.update")
+  @Audit({
+    action: "server.java-version.set",
+    targetType: "Server",
+    targetParam: "serverId",
+  })
+  async setJavaVersion(
+    @Param("serverId") id: string,
+    @Body() dto: SetJavaVersionDto,
+  ) {
+    const state = await this.resources.setJavaVersion(id, dto.version);
+    // Refresh the agent's cached spec so a plain restart picks the new JVM
+    // image (best-effort; otherwise it applies on the agent's next reconnect).
+    await this.servers.reloadSpec(id);
+    return state;
   }
 
   // ---- allocations -------------------------------------------------------

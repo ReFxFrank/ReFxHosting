@@ -116,6 +116,14 @@ export class SetVariableDto {
   value!: string;
 }
 
+export class SetJavaVersionDto {
+  // "auto" (clear the override) or a supported Java major, e.g. "21".
+  @ApiProperty({ example: "auto" })
+  @IsString()
+  @MaxLength(8)
+  version!: string;
+}
+
 export class CreateAllocationDto {
   @ApiProperty()
   @IsString()

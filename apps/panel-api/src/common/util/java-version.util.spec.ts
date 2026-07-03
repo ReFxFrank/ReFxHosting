@@ -1,7 +1,9 @@
 import {
   NEWEST_JAVA,
+  SUPPORTED_JAVA_MAJORS,
   isJavaImage,
   javaImage,
+  parseJavaOverride,
   requiredJavaMajor,
   resolveJavaImage,
 } from './java-version.util';
@@ -76,6 +78,27 @@ describe('java-version util', () => {
       expect(resolveJavaImage('ghcr.io/refx/rust:latest', '1.20.4')).toBe(
         'ghcr.io/refx/rust:latest',
       );
+    });
+  });
+
+  describe('parseJavaOverride', () => {
+    it('accepts every supported major', () => {
+      for (const m of SUPPORTED_JAVA_MAJORS) {
+        expect(parseJavaOverride(String(m))).toBe(m);
+      }
+    });
+
+    it('treats unset / auto / junk / unsupported as no override', () => {
+      expect(parseJavaOverride(undefined)).toBeUndefined();
+      expect(parseJavaOverride('')).toBeUndefined();
+      expect(parseJavaOverride('auto')).toBeUndefined();
+      expect(parseJavaOverride('AUTO')).toBeUndefined();
+      expect(parseJavaOverride('banana')).toBeUndefined();
+      expect(parseJavaOverride('19')).toBeUndefined(); // not one we ship
+    });
+
+    it('includes Java 8 for legacy Forge packs', () => {
+      expect(parseJavaOverride('8')).toBe(8);
     });
   });
 });

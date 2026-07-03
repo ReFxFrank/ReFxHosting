@@ -11,6 +11,9 @@ import { NodeAgentClient } from "../agent/agent.client";
 import { deriveSigningKey } from "../agent/agent.signing";
 import {
   isJavaImage,
+  javaImage,
+  JAVA_VERSION_VAR,
+  parseJavaOverride,
   resolveJavaImage,
 } from "../common/util/java-version.util";
 import { uuidv7 } from "../common/util/uuid";
@@ -1186,15 +1189,18 @@ export class NodesService {
       }
     }
 
-    // Auto-correct the JVM for Minecraft servers from the resolved
-    // MINECRAFT_VERSION (handles servers created before this image, and
-    // "latest" pins). The agent runs the install script in this image too, so
-    // install + runtime share one compatible JVM. Non-Java images untouched.
+    // Pick the JVM image for Minecraft servers. A customer JAVA_VERSION override
+    // (the Java selector) wins; otherwise auto-select from the resolved
+    // MINECRAFT_VERSION (handles servers created before this image, and "latest"
+    // pins). The agent runs the install script in this image too, so install +
+    // runtime share one compatible JVM. Non-Java images are untouched.
     let dockerImage = server.dockerImage ?? "";
     if (isJavaImage(dockerImage)) {
-      dockerImage =
-        resolveJavaImage(dockerImage, env["MINECRAFT_VERSION"], "jre") ??
-        dockerImage;
+      const override = parseJavaOverride(env[JAVA_VERSION_VAR]);
+      dockerImage = override
+        ? javaImage(override, "jre")
+        : (resolveJavaImage(dockerImage, env["MINECRAFT_VERSION"], "jre") ??
+          dockerImage);
     }
 
     return {

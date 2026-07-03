@@ -23,6 +23,30 @@
 export const NEWEST_JAVA = 25;
 
 /**
+ * Java majors we publish `eclipse-temurin:<major>-jre` images for and let a
+ * customer force via the Java selector. Java 8 matters for legacy Forge packs
+ * (1.7.10 / 1.12.2) that refuse to run on 11+; the rest track the LTS line.
+ */
+export const SUPPORTED_JAVA_MAJORS = [8, 11, 17, 21, 25] as const;
+
+/** Env var holding a customer's Java-major override ("auto" or a major). */
+export const JAVA_VERSION_VAR = 'JAVA_VERSION';
+
+/**
+ * Parse a `JAVA_VERSION` override into a supported major, or `undefined` when
+ * it's unset / "auto" / not one we ship — in which case the caller falls back
+ * to version-based auto-selection.
+ */
+export function parseJavaOverride(value?: string | null): number | undefined {
+  const t = (value ?? '').trim().toLowerCase();
+  if (!t || t === 'auto') return undefined;
+  const n = Number(t);
+  return (SUPPORTED_JAVA_MAJORS as readonly number[]).includes(n)
+    ? n
+    : undefined;
+}
+
+/**
  * Minimum Java major version for a Minecraft (Java Edition) version string.
  * Accepts "1.20.4", "1.21", calendar-style "26.1.2", "latest", or junk.
  *

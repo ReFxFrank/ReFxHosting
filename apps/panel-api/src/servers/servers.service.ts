@@ -1963,6 +1963,19 @@ export class ServersService {
    * on the agent's next reconnect. Requires agent v1.2.4+ for /reload; older
    * agents pick the change up on reconnect regardless.
    */
+  /**
+   * Public entry point to refresh a server's cached agent spec after an
+   * out-of-band config change (e.g. the Java selector), so the next restart
+   * uses it without a full reinstall. Best-effort — see {@link pushSpecReload}.
+   */
+  async reloadSpec(serverId: string): Promise<void> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: { nodeId: true },
+    });
+    if (server?.nodeId) await this.pushSpecReload(server.nodeId, serverId);
+  }
+
   private async pushSpecReload(
     nodeId: string,
     serverId: string,

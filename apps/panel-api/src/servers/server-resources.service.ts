@@ -10,6 +10,13 @@ import { uuidv7 } from "../common/util/uuid";
 import { isValidCron, nextCronRun } from "./cron.util";
 import { jvmHeapMb, SERVER_MEMORY_VAR } from "./server-memory.util";
 import {
+  isJavaImage,
+  JAVA_VERSION_VAR,
+  parseJavaOverride,
+  requiredJavaMajor,
+  SUPPORTED_JAVA_MAJORS,
+} from "../common/util/java-version.util";
+import {
   AddSubUserDto,
   CreateAllocationDto,
   CreateScheduleDto,
@@ -199,6 +206,96 @@ export class ServerResourcesService {
     await this.prisma.serverVariable.deleteMany({
       where: { serverId, envName },
     });
+  }
+
+  // ---- Java version selector ---------------------------------------------
+
+  /**
+   * Read the effective JVM major for a Java/Minecraft server: the customer's
+   * override if set, else the version auto-selected from MINECRAFT_VERSION.
+   */
+  async getJavaVersion(serverId: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: {
+        dockerImage: true,
+        environment: true,
+        variables: { select: { envName: true, value: true } },
+        template: {
+          select: {
+            variables: {
+              where: { envName: "MINECRAFT_VERSION" },
+              select: { defaultValue: true },
+            },
+          },
+        },
+      },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+    if (!isJavaImage(server.dockerImage)) {
+      throw new BadRequestException("This server does not run on Java");
+    }
+
+    const vars = new Map(server.variables.map((v) => [v.envName, v.value]));
+    const env = (server.environment ?? {}) as Record<string, unknown>;
+    const readVar = (name: string): string | undefined =>
+      vars.get(name) ?? (env[name] != null ? String(env[name]) : undefined);
+
+    const mcVersion =
+      readVar("MINECRAFT_VERSION") ??
+      server.template?.variables[0]?.defaultValue ??
+      undefined;
+    const override = parseJavaOverride(readVar(JAVA_VERSION_VAR));
+    const auto = requiredJavaMajor(mcVersion);
+
+    return {
+      selected: override ? String(override) : "auto",
+      effective: override ?? auto,
+      auto,
+      options: [...SUPPORTED_JAVA_MAJORS],
+    };
+  }
+
+  /**
+   * Pin (or clear, with "auto") the JVM major for a Java/Minecraft server.
+   * Stored as a JAVA_VERSION override the install-spec builder honors on the
+   * next (re)install/restart. Returns the refreshed selector state.
+   */
+  async setJavaVersion(serverId: string, value: string) {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: { id: true, dockerImage: true },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+    if (!isJavaImage(server.dockerImage)) {
+      throw new BadRequestException("This server does not run on Java");
+    }
+
+    const t = (value ?? "").trim().toLowerCase();
+    if (t === "" || t === "auto") {
+      await this.prisma.serverVariable.deleteMany({
+        where: { serverId, envName: JAVA_VERSION_VAR },
+      });
+      return this.getJavaVersion(serverId);
+    }
+
+    const major = parseJavaOverride(t);
+    if (!major) {
+      throw new BadRequestException(
+        `Unsupported Java version. Choose auto or one of: ${SUPPORTED_JAVA_MAJORS.join(", ")}`,
+      );
+    }
+    await this.prisma.serverVariable.upsert({
+      where: { serverId_envName: { serverId, envName: JAVA_VERSION_VAR } },
+      create: {
+        id: uuidv7(),
+        serverId,
+        envName: JAVA_VERSION_VAR,
+        value: String(major),
+      },
+      update: { value: String(major) },
+    });
+    return this.getJavaVersion(serverId);
   }
 
   // ---- allocations -------------------------------------------------------

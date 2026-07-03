@@ -474,6 +474,18 @@ export interface ServerVariableField {
   isSet?: boolean;
 }
 
+/** Java-version selector state for a Minecraft/Java server. */
+export interface JavaVersionState {
+  /** "auto" or a pinned major, e.g. "21". */
+  selected: string;
+  /** The Java major the server will actually run (override or auto). */
+  effective: number;
+  /** The major auto-selected from the Minecraft version. */
+  auto: number;
+  /** Majors the customer can pick from. */
+  options: number[];
+}
+
 /** A shared MySQL/MariaDB host the panel provisions per-server databases on. */
 export interface DatabaseHost {
   id: string;

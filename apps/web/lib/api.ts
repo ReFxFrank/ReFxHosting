@@ -40,6 +40,7 @@ import type {
   StaffMember,
   User,
   FileEntry,
+  JavaVersionState,
   AuditLog,
   GlobalAlert,
   AdminServer,
@@ -479,6 +480,11 @@ export const api = {
       ),
     disableVoiceChat: (id: string) =>
       http.delete<{ disabled: boolean }>(`/servers/${id}/voice-chat`),
+    /** Java version selector (Minecraft/Java servers). */
+    getJavaVersion: (id: string) =>
+      http.get<JavaVersionState>(`/servers/${id}/java-version`),
+    setJavaVersion: (id: string, version: string) =>
+      http.put<JavaVersionState>(`/servers/${id}/java-version`, { version }),
     variables: (id: string) =>
       http.get<ServerVariableField[]>(`/servers/${id}/variables`),
     setVariable: (id: string, envName: string, value: string) =>

@@ -266,11 +266,87 @@ function StartupTab({ server }: { server: Server }) {
 
       <VariablesCard id={server.id} />
 
-      {/* Simple Voice Chat is a Minecraft feature — only surface it there. */}
+      {/* Minecraft-only features — only surface them there. */}
       {server.template?.slug?.startsWith("minecraft") && (
-        <VoiceChatCard id={server.id} />
+        <>
+          <JavaVersionCard id={server.id} />
+          <VoiceChatCard id={server.id} />
+        </>
       )}
     </div>
+  );
+}
+
+/**
+ * Java version selector: force a specific JVM (Temurin) major for the instance,
+ * or leave it on Auto (picked from the Minecraft version). Handy for legacy
+ * Forge packs that need Java 8, or to pin a newer JVM. Applies on next restart.
+ */
+function JavaVersionCard({ id }: { id: string }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["server-java-version", id],
+    queryFn: () => api.servers.getJavaVersion(id),
+  });
+
+  const setVersion = useMutation({
+    mutationFn: (version: string) => api.servers.setJavaVersion(id, version),
+    onSuccess: (state) => {
+      qc.setQueryData(["server-java-version", id], state);
+      toast.success(
+        state.selected === "auto"
+          ? `Java set to Auto (currently Java ${state.effective})`
+          : `Java pinned to ${state.selected}`,
+      );
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to set Java version"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Java version</CardTitle>
+        <CardDescription>
+          Choose which Java runtime this server uses. Leave it on{" "}
+          <span className="font-medium">Auto</span> to match your Minecraft
+          version, or pin one — e.g. Java 8 for legacy Forge packs (1.7.10 /
+          1.12.2). Takes effect on the next restart.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading || !data ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                aria-label="Java version"
+                value={data.selected}
+                disabled={setVersion.isPending}
+                onChange={(e) => setVersion.mutate(e.target.value)}
+                className={cn(
+                  "h-9 rounded-md border border-input bg-background px-3 text-sm",
+                  "focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50",
+                )}
+              >
+                <option value="auto">Auto (Java {data.auto})</option>
+                {data.options.map((major) => (
+                  <option key={major} value={String(major)}>
+                    Java {major}
+                  </option>
+                ))}
+              </select>
+              <Badge variant="muted">Running: Java {data.effective}</Badge>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Picking a JVM your Minecraft version doesn&apos;t support can stop
+              the server from starting. When unsure, use Auto.
+            </p>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
