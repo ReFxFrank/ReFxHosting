@@ -663,8 +663,8 @@ function SftpTab({ id }: { id: string }) {
       <CardHeader>
         <CardTitle>SFTP access</CardTitle>
         <CardDescription>
-          Connect with any SFTP client using the host, port and username below.
-          Click “Rotate password” to generate your SFTP password (shown once).
+          Connect with any SFTP client using the details below. Click “Rotate
+          password” to generate your SFTP password (shown once).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -676,6 +676,49 @@ function SftpTab({ id }: { id: string }) {
           </div>
         ) : (
           <>
+            {/* This is an SFTP (SSH) endpoint, not FTP. FileZilla's Quickconnect
+                bar defaults to plain FTP and fails with "Cannot establish FTP
+                connection to an SFTP server" — so lead with the protocol and a
+                paste-ready sftp:// string that forces the right protocol. */}
+            <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+              <ServerIcon className="mt-0.5 size-4 shrink-0 text-foreground" />
+              <span>
+                This is an <span className="font-medium text-foreground">SFTP (SSH)</span>{" "}
+                connection on port{" "}
+                <span className="font-mono text-foreground">{sftp.port}</span> —
+                not FTP. In your client pick{" "}
+                <span className="font-medium text-foreground">
+                  “SFTP - SSH File Transfer Protocol”
+                </span>
+                , or paste the connection string below into FileZilla’s
+                Quickconnect bar (the <span className="font-mono">sftp://</span>{" "}
+                prefix selects the protocol for you). Plain FTP will not work.
+              </span>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">
+                Connection string
+              </Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={`sftp://${sftp.username}@${sftp.host}:${sftp.port}`}
+                  className="font-mono"
+                />
+                <CopyButton
+                  value={`sftp://${sftp.username}@${sftp.host}:${sftp.port}`}
+                  label="connection string"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Protocol</Label>
+              <Input
+                readOnly
+                value="SFTP - SSH File Transfer Protocol"
+                className="font-mono"
+              />
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Host</Label>
               <div className="flex items-center gap-2">
