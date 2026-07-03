@@ -247,6 +247,33 @@ export class SetMinecraftConfigDto {
   freshStart?: boolean;
 }
 
+export class InstallServerPackDto {
+  @ApiProperty({
+    description:
+      "Path (in the server) to the uploaded server-pack .zip, e.g. 'serverpack.zip'.",
+  })
+  @IsString()
+  zipPath!: string;
+
+  @ApiProperty({ description: "vanilla | paper | fabric | forge | neoforge" })
+  @IsString()
+  loader!: string;
+
+  @ApiPropertyOptional({
+    description: "Minecraft version the pack targets ('latest' or e.g. '1.20.1').",
+  })
+  @IsOptional()
+  @IsString()
+  version?: string;
+
+  @ApiPropertyOptional({
+    description: "Loader build ('latest' or the exact build the pack ships).",
+  })
+  @IsOptional()
+  @IsString()
+  loaderVersion?: string;
+}
+
 export class ModInstallDto {
   @ApiPropertyOptional({
     description: "Modrinth project id/slug (installs latest compatible).",

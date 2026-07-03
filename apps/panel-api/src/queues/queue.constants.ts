@@ -88,6 +88,18 @@ export interface ModpackInstallJob {
   title?: string;
 }
 
+/** Install a modpack from an already-uploaded server-pack .zip. */
+export interface ServerPackInstallJob {
+  serverId: string;
+  /** Path (in the server data dir) to the uploaded server-pack .zip. */
+  zipPath: string;
+  loader: string;
+  version?: string;
+  loaderVersion?: string;
+  /** Display title for notifications. */
+  title?: string;
+}
+
 export interface ModpackUninstallJob {
   serverId: string;
   /** Display title for notifications. */
@@ -134,6 +146,7 @@ export const JOB = {
   DUNNING: "dunning",
   SUSPEND: "suspend",
   INSTALL_MODPACK: "install-modpack",
+  INSTALL_SERVER_PACK: "install-server-pack",
   UNINSTALL_MODPACK: "uninstall-modpack",
   TRANSFER: "transfer",
   DELIVER_WEBHOOK: "deliver-webhook",

@@ -11,6 +11,7 @@ import {
   JOB,
   ModpackInstallJob,
   ModpackUninstallJob,
+  ServerPackInstallJob,
   QUEUE,
 } from '../queues/queue.constants';
 import { ModrinthService } from './modrinth.service';
@@ -103,6 +104,63 @@ export class ModpackService {
     await this.modpackQueue.add(
       JOB.INSTALL_MODPACK,
       { serverId, versionId, title } satisfies ModpackInstallJob,
+      { attempts: 1, removeOnComplete: 50, removeOnFail: 50 },
+    );
+    return { accepted: true };
+  }
+
+  /**
+   * Install a modpack from a server-pack .zip the customer already uploaded to
+   * the server (via SFTP for large packs, or the file manager). Provisions the
+   * chosen loader, extracts the pack, strips client-only mods. Background job.
+   */
+  async installServerPack(
+    serverId: string,
+    dto: {
+      zipPath: string;
+      loader: string;
+      version?: string;
+      loaderVersion?: string;
+    },
+  ): Promise<{ accepted: true }> {
+    const server = await this.loadServer(serverId);
+    if (!STOPPED.includes(server.state) && server.state !== 'RUNNING') {
+      throw new ConflictException(
+        `Cannot install a server pack while the server is ${server.state}`,
+      );
+    }
+    const zipPath = dto.zipPath?.trim();
+    if (!zipPath) {
+      throw new BadRequestException(
+        'Provide the path to the uploaded server-pack .zip (e.g. serverpack.zip).',
+      );
+    }
+    if (!zipPath.toLowerCase().endsWith('.zip')) {
+      throw new BadRequestException('The server pack must be a .zip file.');
+    }
+    if (zipPath.includes('..')) {
+      throw new BadRequestException('Invalid path.');
+    }
+    const title = (zipPath.split('/').pop() || 'Server pack').replace(
+      /\.zip$/i,
+      '',
+    );
+
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { state: 'REINSTALLING' },
+    });
+
+    await this.modpackQueue.add(
+      JOB.INSTALL_SERVER_PACK,
+      {
+        serverId,
+        zipPath,
+        loader: dto.loader,
+        version: dto.version,
+        loaderVersion: dto.loaderVersion,
+        title,
+      } satisfies ServerPackInstallJob,
       { attempts: 1, removeOnComplete: 50, removeOnFail: 50 },
     );
     return { accepted: true };

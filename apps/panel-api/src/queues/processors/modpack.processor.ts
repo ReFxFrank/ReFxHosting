@@ -15,6 +15,7 @@ import {
   JOB,
   ModpackInstallJob,
   ModpackUninstallJob,
+  ServerPackInstallJob,
   QUEUE,
 } from '../queue.constants';
 import { buildInstallSpec } from './install-spec.util';
@@ -111,9 +112,16 @@ export class ModpackProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<ModpackInstallJob | ModpackUninstallJob>): Promise<void> {
+  async process(
+    job: Job<
+      ModpackInstallJob | ModpackUninstallJob | ServerPackInstallJob
+    >,
+  ): Promise<void> {
     if (job.name === JOB.UNINSTALL_MODPACK) {
       return this.processUninstall(job as Job<ModpackUninstallJob>);
+    }
+    if (job.name === JOB.INSTALL_SERVER_PACK) {
+      return this.processServerPack(job as Job<ServerPackInstallJob>);
     }
     if (job.name !== JOB.INSTALL_MODPACK) return;
     const { serverId, versionId, title } = job.data as ModpackInstallJob;
@@ -141,6 +149,37 @@ export class ModpackProcessor extends WorkerHost {
         serverId,
         `Modpack install failed: ${label}`,
         `Installing "${label}" failed: ${message}. Your server was not changed beyond any loader switch already applied.`,
+      );
+    }
+  }
+
+  private async processServerPack(
+    job: Job<ServerPackInstallJob>,
+  ): Promise<void> {
+    const { serverId } = job.data;
+    const label = job.data.title || 'server pack';
+    try {
+      await this.installServerPack(job.data);
+      await this.prisma.server.update({
+        where: { id: serverId },
+        data: { state: 'OFFLINE' },
+      });
+      await this.notify(
+        serverId,
+        `Server pack installed: ${label}`,
+        `"${label}" was extracted and your server was switched to ${job.data.loader}. Client-only mods were removed. Start it when ready.`,
+      );
+      this.logger.log(`server-pack install complete for ${serverId} (${label})`);
+    } catch (err) {
+      const message = (err as Error).message ?? 'unknown error';
+      this.logger.error(`server-pack install failed for ${serverId}: ${message}`);
+      await this.prisma.server
+        .update({ where: { id: serverId }, data: { state: 'CRASHED' } })
+        .catch(() => undefined);
+      await this.notify(
+        serverId,
+        `Server pack install failed: ${label}`,
+        `Installing "${label}" failed: ${message}.`,
       );
     }
   }
@@ -324,6 +363,136 @@ export class ModpackProcessor extends WorkerHost {
           ? `, possible duplicates: ${duplicates.join(', ')}`
           : ''),
     );
+  }
+
+  /**
+   * Install a modpack from a server-pack .zip the user already uploaded (via
+   * SFTP or the file manager). We provision the chosen loader with our own egg
+   * (so the startup command + JVM are known-good), wipe stale mods, extract the
+   * pack's content over the top, flatten a wrapper folder if the zip has one,
+   * strip client-only mods, then remove the zip.
+   */
+  private async installServerPack(job: ServerPackInstallJob): Promise<void> {
+    const { serverId, zipPath, loader, version, loaderVersion } = job;
+
+    // 1. Confirm the uploaded zip is actually there before we touch anything.
+    const slash = zipPath.replace(/^\/+/, '').lastIndexOf('/');
+    const dir = slash > 0 ? zipPath.replace(/^\/+/, '').slice(0, slash) : '';
+    const base = zipPath.replace(/^\/+/, '').slice(slash + 1);
+    const server0 = await this.prisma.server.findUnique({
+      where: { id: serverId },
+      include: { node: true },
+    });
+    if (!server0) throw new Error('Server not found');
+    const listing = await this.agent
+      .listFiles(server0.node, server0.id, dir || '/')
+      .catch(() => [] as { name: string }[]);
+    if (!listing.some((e) => e.name === base)) {
+      throw new Error(
+        `Server-pack zip not found at "${zipPath}". Upload it to the server first (SFTP for large packs), then install.`,
+      );
+    }
+    if (!base.toLowerCase().endsWith('.zip')) {
+      throw new Error('Server pack must be a .zip file');
+    }
+
+    // 2. Apply the chosen loader/version, then provision it WITHOUT wiping (so
+    //    the uploaded zip survives) — this lays down our known-good launcher.
+    await this.servers.applyMinecraftEnv(serverId, {
+      loader,
+      version,
+      loaderVersion,
+    });
+    const server = await this.prisma.server.findUnique({
+      where: { id: serverId },
+      include: {
+        node: true,
+        template: { include: { variables: true } },
+        allocations: true,
+        variables: true,
+      },
+    });
+    if (!server || !server.template) throw new Error('Server missing template');
+    const sftpPassword = server.sftpPasswordEnc
+      ? this.crypto.decrypt(server.sftpPasswordEnc)
+      : undefined;
+    await this.agent.reinstall(
+      server.node,
+      buildInstallSpec(server, { wipe: false, sftpPassword }),
+    );
+
+    // 3. Clear stale pack content, then extract the pack over the top.
+    await this.clearPackContent(server.node, server.id);
+    const before = new Set(
+      (await this.agent.listFiles(server.node, server.id, '/').catch(() => []))
+        .map((e) => e.name),
+    );
+    await this.agent.decompressFile(server.node, server.id, zipPath, '.');
+
+    // 4. Server packs sometimes extract into a single wrapper folder — flatten it
+    //    so mods/ and config/ end up at the server root.
+    await this.flattenServerPack(server.node, server.id, before);
+
+    // 5. Strip client-only mods (Forge/NeoForge would crash on them) and remove
+    //    the now-extracted zip.
+    const stripped = await this.stripClientOnlyMods(server.node, server.id);
+    await this.agent
+      .deleteFiles(server.node, server.id, [zipPath])
+      .catch(() => undefined);
+
+    // 6. Marker so the Modpacks tab shows what's installed.
+    const marker = {
+      title: job.title || base.replace(/\.zip$/i, ''),
+      source: 'server-pack',
+      mcVersion: version ?? 'latest',
+      loader,
+      loaderVersion: loaderVersion ?? 'latest',
+      installedAt: new Date().toISOString(),
+    };
+    await this.writeFile(
+      server.node,
+      server.id,
+      MODPACK_MARKER,
+      new TextEncoder().encode(JSON.stringify(marker, null, 2)),
+      new Set<string>(),
+    ).catch((e) => this.logger.warn(`failed to write marker: ${String(e)}`));
+
+    this.logger.log(
+      `server-pack ${serverId}: extracted ${base}` +
+        (stripped.length ? `, ${stripped.length} client-only jar(s) stripped` : ''),
+    );
+  }
+
+  /**
+   * If a server-pack zip extracted its contents into a single top-level wrapper
+   * folder (no mods/ at the server root), move that folder's children up to the
+   * root. `before` is the set of root entry names captured just before extraction.
+   */
+  private async flattenServerPack(
+    node: any,
+    serverId: string,
+    before: Set<string>,
+  ): Promise<void> {
+    const root = await this.agent
+      .listFiles(node, serverId, '/')
+      .catch(() => [] as { name: string; isDir?: boolean }[]);
+    if (root.some((e) => e.isDir && e.name === 'mods')) return; // already at root
+    const newDirs = root.filter((e) => e.isDir && !before.has(e.name));
+    for (const d of newDirs) {
+      const inner = await this.agent
+        .listFiles(node, serverId, d.name)
+        .catch(() => [] as { name: string; isDir?: boolean }[]);
+      if (!inner.some((e) => e.isDir && e.name === 'mods')) continue;
+      for (const child of inner) {
+        await this.agent
+          .renameFile(node, serverId, `${d.name}/${child.name}`, child.name)
+          .catch(() => undefined);
+      }
+      await this.agent
+        .deleteFiles(node, serverId, [d.name])
+        .catch(() => undefined);
+      return;
+    }
   }
 
   /**

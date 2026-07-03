@@ -580,6 +580,22 @@ export const api = {
         ),
       uninstall: (id: string) =>
         http.post<{ accepted: true }>(`/servers/${id}/modpacks/uninstall`),
+      // Install from a server-pack .zip the user already uploaded (SFTP/file
+      // manager) — the correct path for CurseForge/Forge packs that ship a
+      // dedicated server pack.
+      installServerPack: (
+        id: string,
+        input: {
+          zipPath: string;
+          loader: string;
+          version?: string;
+          loaderVersion?: string;
+        },
+      ) =>
+        http.post<{ accepted: true }>(
+          `/servers/${id}/modpacks/server-pack`,
+          input,
+        ),
     },
     sftp: (id: string) =>
       http.get<{ host: string; port: number; username: string }>(

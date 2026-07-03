@@ -40,6 +40,7 @@ import {
   PowerActionDto,
   ModInstallDto,
   ModpackInstallDto,
+  InstallServerPackDto,
   ResizeServerDto,
   SendCommandDto,
   SetVariableDto,
@@ -351,6 +352,20 @@ export class ServersController {
   })
   modpacksInstall(@Param("id") id: string, @Body() dto: ModpackInstallDto) {
     return this.modpacks.install(id, dto.versionId);
+  }
+
+  @Post(":id/modpacks/server-pack")
+  @RequirePermissions("control.reinstall")
+  @Audit({
+    action: "server.modpack.server-pack",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  modpacksServerPack(
+    @Param("id") id: string,
+    @Body() dto: InstallServerPackDto,
+  ) {
+    return this.modpacks.installServerPack(id, dto);
   }
 
   @Post(":id/modpacks/uninstall")

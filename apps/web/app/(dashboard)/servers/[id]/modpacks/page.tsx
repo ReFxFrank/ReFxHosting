@@ -16,7 +16,14 @@ import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, Label } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -98,6 +105,8 @@ export default function ModpacksPage() {
         <InstalledCard serverId={id} pack={installed.data.installed} />
       )}
 
+      <ServerPackCard serverId={id} />
+
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -127,8 +136,9 @@ export default function ModpacksPage() {
         >
           Modrinth
         </a>
-        . CurseForge-exclusive packs (from curseforge.com) aren&apos;t supported
-        yet — but many popular packs are on both, so try searching by name.
+        . For CurseForge-exclusive or big Forge packs, use{" "}
+        <strong>Install a server pack (.zip)</strong> above — that&apos;s the
+        reliable path for those.
       </p>
 
       {search.isLoading ? (
@@ -193,6 +203,124 @@ export default function ModpacksPage() {
         onClose={() => setPicker(null)}
       />
     </div>
+  );
+}
+
+/** Install a modpack from a dedicated server-pack .zip the user uploaded — the
+ * reliable path for CurseForge / big Forge packs (client mods removed). */
+function ServerPackCard({ serverId }: { serverId: string }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [zipPath, setZipPath] = useState("");
+  const [loader, setLoader] = useState("forge");
+  const [version, setVersion] = useState("");
+  const [loaderVersion, setLoaderVersion] = useState("");
+
+  const install = useMutation({
+    mutationFn: () =>
+      api.servers.modpacks.installServerPack(serverId, {
+        zipPath: zipPath.trim(),
+        loader,
+        version: version.trim() || undefined,
+        loaderVersion: loaderVersion.trim() || undefined,
+      }),
+    onSuccess: () => {
+      toast.success(
+        "Installing server pack — you'll be notified when it's done",
+      );
+      queryClient.invalidateQueries({ queryKey: ["server", serverId] });
+      setOpen(false);
+      setZipPath("");
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to start the install",
+      ),
+  });
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Package className="size-4 text-primary" />
+            <p className="font-semibold">Install a server pack (.zip)</p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setOpen((o) => !o)}>
+            {open ? "Close" : "Use a server pack"}
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Big Forge/CurseForge packs (Medieval MC, All the Mods, …) ship a
+          dedicated <strong>server pack</strong> — the correct download for a
+          server (client-only mods removed, complete set). Upload its{" "}
+          <span className="font-mono">.zip</span> to this server over SFTP (or
+          the File manager for small packs), then install it here. We provision
+          the loader, extract the pack, and strip any client-only mods.
+        </p>
+
+        {open && (
+          <div className="space-y-3 rounded-lg border p-3">
+            <div className="space-y-1.5">
+              <Label>Uploaded .zip path</Label>
+              <Input
+                value={zipPath}
+                onChange={(e) => setZipPath(e.target.value)}
+                placeholder="serverpack.zip"
+                className="font-mono"
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1.5">
+                <Label>Loader</Label>
+                <Select value={loader} onValueChange={setLoader}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["forge", "neoforge", "fabric"].map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {l}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>MC version</Label>
+                <Input
+                  value={version}
+                  onChange={(e) => setVersion(e.target.value)}
+                  placeholder="1.20.1"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Loader build</Label>
+                <Input
+                  value={loaderVersion}
+                  onChange={(e) => setLoaderVersion(e.target.value)}
+                  placeholder="latest"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Match these to the pack&apos;s page (e.g. Forge 47.3.12 · MC
+              1.20.1). The server reinstalls — back up anything you want to keep
+              first.
+            </p>
+            <div className="flex justify-end">
+              <Button
+                loading={install.isPending}
+                disabled={!zipPath.trim()}
+                onClick={() => install.mutate()}
+              >
+                Install server pack
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

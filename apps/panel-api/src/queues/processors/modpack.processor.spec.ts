@@ -13,6 +13,7 @@ describe('ModpackProcessor (install hardening)', () => {
     listFiles: jest.Mock;
     deleteFiles: jest.Mock;
     downloadToPath: jest.Mock;
+    renameFile: jest.Mock;
   };
   let proc: ModpackProcessor;
 
@@ -21,6 +22,7 @@ describe('ModpackProcessor (install hardening)', () => {
       listFiles: jest.fn(),
       deleteFiles: jest.fn().mockResolvedValue(undefined),
       downloadToPath: jest.fn().mockResolvedValue(undefined),
+      renameFile: jest.fn().mockResolvedValue(undefined),
     };
     proc = new ModpackProcessor(
       {} as any,
@@ -158,6 +160,50 @@ describe('ModpackProcessor (install hardening)', () => {
       const stripped = await (proc as any).stripClientOnlyMods(NODE, 's1');
       expect(stripped).toEqual([]);
       expect(agent.deleteFiles).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('flattenServerPack', () => {
+    it('does nothing when the zip extracted mods/ at the server root', async () => {
+      agent.listFiles.mockResolvedValue([
+        { name: 'mods', isDir: true },
+        { name: 'config', isDir: true },
+      ]);
+      await (proc as any).flattenServerPack(NODE, 's1', new Set(['config']));
+      expect(agent.renameFile).not.toHaveBeenCalled();
+      expect(agent.deleteFiles).not.toHaveBeenCalled();
+    });
+
+    it('moves a single wrapper folder\'s contents up to the root', async () => {
+      agent.listFiles.mockImplementation((_n: any, _s: any, path: string) => {
+        if (path === '/')
+          return Promise.resolve([
+            { name: 'config', isDir: true }, // pre-existing (in `before`)
+            { name: 'ServerPack', isDir: true }, // the wrapper from the zip
+          ]);
+        if (path === 'ServerPack')
+          return Promise.resolve([
+            { name: 'mods', isDir: true },
+            { name: 'config', isDir: true },
+            { name: 'start.sh' },
+          ]);
+        return Promise.resolve([]);
+      });
+      await (proc as any).flattenServerPack(NODE, 's1', new Set(['config']));
+      expect(agent.renameFile).toHaveBeenCalledWith(
+        NODE,
+        's1',
+        'ServerPack/mods',
+        'mods',
+      );
+      expect(agent.renameFile).toHaveBeenCalledWith(
+        NODE,
+        's1',
+        'ServerPack/start.sh',
+        'start.sh',
+      );
+      expect(agent.renameFile).toHaveBeenCalledTimes(3);
+      expect(agent.deleteFiles).toHaveBeenCalledWith(NODE, 's1', ['ServerPack']);
     });
   });
 
