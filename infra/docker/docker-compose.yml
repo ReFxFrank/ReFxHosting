@@ -25,6 +25,17 @@ name: refx
 x-restart: &restart
   restart: unless-stopped
 
+# Cap per-container log size so `docker logs` keeps real history instead of only
+# a few minutes: 5 files x 20 MB ~= 100 MB retained, then rotates. Merge with
+# `<<: *logging` on a service. Without this a chatty service can roll an incident
+# out of view before you can read it.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
 networks:
   refx:
     driver: bridge
@@ -347,7 +358,7 @@ services:
     build:
       context: ../../
       dockerfile: apps/panel-api/Dockerfile
-    <<: *restart
+    <<: [*restart, *logging]
     env_file:
       - ../../.env
     environment:
@@ -402,7 +413,7 @@ services:
         # .env to the URL the *browser* will hit (e.g. http://<vps-ip>:4000)
         # BEFORE `docker compose build web`.
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
-    <<: *restart
+    <<: [*restart, *logging]
     env_file:
       - ../../.env
     environment:

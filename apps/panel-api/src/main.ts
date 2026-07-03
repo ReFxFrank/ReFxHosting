@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { ValidationPipe } from "@nestjs/common";
+import { ValidationPipe, LogLevel } from "@nestjs/common";
 import { NestFactory, HttpAdapterHost, Reflector } from "@nestjs/core";
 import { ConfigService } from "@nestjs/config";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
@@ -22,8 +22,36 @@ import { PrismaService } from "./prisma/prisma.service";
   return Number(this);
 };
 
+/**
+ * Which Nest log levels to emit. `LOG_LEVEL` (error|warn|info|debug|verbose)
+ * picks a threshold — that level plus everything more severe. Defaults to
+ * `debug` in development and `info` in production, so prod isn't drowned in
+ * per-poll debug tracing (e.g. the agent push-trace lines) by default.
+ */
+function resolveLogLevels(): LogLevel[] {
+  const bySeverity: LogLevel[] = [
+    "verbose",
+    "debug",
+    "log",
+    "warn",
+    "error",
+    "fatal",
+  ];
+  const isProd = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
+  const requested = (process.env.LOG_LEVEL ?? "").toLowerCase();
+  const alias: Record<string, LogLevel> = { info: "log", trace: "verbose" };
+  const threshold = (alias[requested] ??
+    (requested as LogLevel)) as LogLevel;
+  const start = bySeverity.indexOf(threshold);
+  if (start >= 0) return bySeverity.slice(start);
+  return isProd ? ["log", "warn", "error", "fatal"] : bySeverity;
+}
+
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: false });
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: false,
+    logger: resolveLogLevels(),
+  });
   const config = app.get(ConfigService);
   const reflector = app.get(Reflector);
 
