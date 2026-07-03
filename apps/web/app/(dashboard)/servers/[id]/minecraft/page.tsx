@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MinecraftConfigCard } from "@/components/server/minecraft-config-card";
+import { WorldRecoveryCard } from "@/components/server/world-recovery-card";
 
 export default function MinecraftPage() {
   const { id } = useParams<{ id: string }>();
@@ -29,7 +30,10 @@ export default function MinecraftPage() {
       {isLoading || !server ? (
         <Skeleton className="h-64 w-full" />
       ) : isMinecraft ? (
-        <MinecraftConfigCard server={server} />
+        <>
+          <MinecraftConfigCard server={server} />
+          <WorldRecoveryCard server={server} />
+        </>
       ) : (
         <Card>
           <CardContent className="p-8 text-center text-sm text-muted-foreground">

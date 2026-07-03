@@ -40,6 +40,8 @@ import type {
   StaffMember,
   User,
   FileEntry,
+  LevelDatStatus,
+  LevelDatRestoreResult,
   JavaVersionState,
   AuditLog,
   GlobalAlert,
@@ -509,6 +511,14 @@ export const api = {
       http.patch<{ accepted: true; loader: string; version: string }>(
         `/servers/${id}/minecraft`,
         input,
+      ),
+    // World recovery — restore a corrupt level.dat from Minecraft's own
+    // level.dat_old backup ("Failed to load datapacks" / empty world-gen).
+    levelDatStatus: (id: string) =>
+      http.get<LevelDatStatus>(`/servers/${id}/world/level-dat-status`),
+    restoreLevelDat: (id: string) =>
+      http.post<LevelDatRestoreResult>(
+        `/servers/${id}/world/restore-level-dat`,
       ),
     mods: {
       context: (id: string) =>

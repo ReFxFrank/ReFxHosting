@@ -886,6 +886,28 @@ export interface FileEntry {
   modified: string;
 }
 
+/** State of the level.dat / level.dat_old pair for the world-recovery card. */
+export interface LevelDatStatus {
+  world: string;
+  hasLevelDat: boolean;
+  levelDatBytes: number | null;
+  hasBackup: boolean;
+  backupBytes: number | null;
+  /** The current level.dat is missing or empty — likely the crash cause. */
+  looksCorrupt: boolean;
+  /** A plausibly-valid level.dat_old exists, so a restore can proceed. */
+  restorable: boolean;
+}
+
+/** Outcome of promoting level.dat_old back to level.dat. */
+export interface LevelDatRestoreResult {
+  world: string;
+  restored: boolean;
+  /** Where the corrupt level.dat was preserved, if one existed. */
+  preservedAs: string | null;
+  restoredBytes: number | null;
+}
+
 // Billing
 export type BillingInterval =
   "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";

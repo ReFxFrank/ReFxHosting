@@ -17,6 +17,7 @@ import { ServerResourcesService } from "./server-resources.service";
 import { ScheduleRunner } from "./schedule.runner";
 import { ModsService } from "./mods.service";
 import { ModpackService } from "./modpack.service";
+import { WorldRecoveryService } from "./world-recovery.service";
 import { WorkshopService } from "./workshop.service";
 import { VoiceService } from "./voice.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -71,6 +72,7 @@ export class ServersController {
     private readonly voice: VoiceService,
     private readonly scheduleRunner: ScheduleRunner,
     private readonly domains: DomainsService,
+    private readonly worldRecovery: WorldRecoveryService,
   ) {}
 
   // ---- collection --------------------------------------------------------
@@ -296,6 +298,25 @@ export class ServersController {
   })
   modsRemove(@Param("id") id: string, @Param("filename") filename: string) {
     return this.mods.remove(id, filename);
+  }
+
+  // ---- world recovery (corrupt level.dat) -------------------------------
+
+  @Get(":id/world/level-dat-status")
+  @RequirePermissions("files.read")
+  levelDatStatus(@Param("id") id: string) {
+    return this.worldRecovery.status(id);
+  }
+
+  @Post(":id/world/restore-level-dat")
+  @RequirePermissions("files.write")
+  @Audit({
+    action: "server.world.restore-level-dat",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  restoreLevelDat(@Param("id") id: string) {
+    return this.worldRecovery.restoreLevelDat(id);
   }
 
   // ---- modpacks (Modrinth) ----------------------------------------------
