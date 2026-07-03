@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  PayloadTooLargeException,
+} from '@nestjs/common';
 import { Node, Server } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodeAgentClient } from '../agent/agent.client';
@@ -19,6 +24,9 @@ import {
  */
 @Injectable()
 export class FilesService {
+  /** Matches the node agent's signed-body cap (32 MiB) on /files/write. */
+  private static readonly MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly agent: NodeAgentClient,
@@ -93,5 +101,28 @@ export class FilesService {
   async uploadUrl(serverId: string, path: string) {
     const server = await this.serverWithNode(serverId);
     return this.agent.fileUploadUrl(server.node, serverId, path);
+  }
+
+  /**
+   * Stream an uploaded file straight to the agent's jailed file manager. The
+   * agent HMAC-verifies and caps the body at 32 MiB, so we reject anything
+   * larger here with a clear message rather than letting the agent silently
+   * truncate the body into a signature failure.
+   */
+  async upload(serverId: string, path: string, bytes: Buffer) {
+    if (!path || !path.trim()) {
+      throw new BadRequestException('Destination path is required');
+    }
+    if (!Buffer.isBuffer(bytes) || bytes.length === 0) {
+      throw new BadRequestException('Empty upload');
+    }
+    if (bytes.length > FilesService.MAX_UPLOAD_BYTES) {
+      throw new PayloadTooLargeException(
+        'File exceeds the 32 MiB direct-upload limit. Use SFTP for larger files.',
+      );
+    }
+    const server = await this.serverWithNode(serverId);
+    await this.agent.uploadFileBytes(server.node, serverId, path, bytes);
+    return { status: 'uploaded', path, bytes: bytes.length };
   }
 }

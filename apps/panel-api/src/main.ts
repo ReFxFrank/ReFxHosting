@@ -67,6 +67,14 @@ async function bootstrap(): Promise<void> {
   // everything else uses parsed JSON.
   app.use("/api/v1/billing/webhooks/stripe", raw({ type: "*/*" }));
   app.use("/api/v1/billing/webhooks/paypal", raw({ type: "*/*" }));
+  // Direct file uploads stream raw binary straight through to the node agent's
+  // jailed file manager. The agent verifies its HMAC over — and caps — the body
+  // at 32 MiB, so we buffer a little above that and let FilesService return a
+  // clean 413 (pointing at SFTP) for anything larger.
+  app.use(
+    "/api/v1/servers/:id/files/upload",
+    raw({ type: () => true, limit: "40mb" }),
+  );
   app.use(
     json({
       limit: "5mb",

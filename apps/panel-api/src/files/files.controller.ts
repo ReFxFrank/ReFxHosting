@@ -5,8 +5,10 @@ import {
   Param,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -97,5 +99,19 @@ export class FilesController {
   @RequirePermissions('files.write')
   uploadUrl(@Param('id') id: string, @Body() dto: UploadUrlDto) {
     return this.files.uploadUrl(id, dto.path);
+  }
+
+  // Direct upload: the raw request body (registered as a binary body parser in
+  // main.ts) is the file's bytes; `path` is the absolute destination inside the
+  // server's jail (e.g. /mods/Foo.jar).
+  @Post('upload')
+  @RequirePermissions('files.write')
+  @Audit({ action: 'files.upload', targetType: 'Server', targetParam: 'id' })
+  upload(
+    @Param('id') id: string,
+    @Query('path') path: string,
+    @Req() req: Request,
+  ) {
+    return this.files.upload(id, path, req.body as Buffer);
   }
 }

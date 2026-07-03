@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -79,12 +79,20 @@ function isArchive(name: string) {
   return /\.(zip|tar|tar\.gz|tgz|tar\.bz2|gz|rar|7z)$/i.test(name);
 }
 
+/** Direct-upload ceiling — matches the node agent's 32 MiB signed-body cap. */
+const MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
+
 export default function FilesPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
 
   const [path, setPath] = useState("/");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Upload state.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   // Inline editor view state.
   const [editing, setEditing] = useState<FileEntry | null>(null);
@@ -211,10 +219,56 @@ export default function FilesPage() {
     }
   }
 
+  // -- upload ---------------------------------------------------------------
+  async function uploadFiles(files: File[]) {
+    if (!files.length || uploading) return;
+
+    const tooBig = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
+    const ok = files.filter((f) => f.size > 0 && f.size <= MAX_UPLOAD_BYTES);
+    if (tooBig.length) {
+      toast.error(
+        `${tooBig.length} file${tooBig.length > 1 ? "s" : ""} over 32 MiB — ` +
+          "upload those over SFTP instead.",
+      );
+    }
+    if (!ok.length) return;
+
+    setUploading(true);
+    const toastId = toast.loading(`Uploading 0/${ok.length}…`);
+    let done = 0;
+    let failed = 0;
+    for (const file of ok) {
+      try {
+        await api.servers.files.upload(id, joinPath(path, file.name), file);
+        done++;
+      } catch (e) {
+        failed++;
+        toast.error(
+          `${file.name}: ${e instanceof ApiError ? e.message : "upload failed"}`,
+        );
+      }
+      toast.loading(`Uploading ${done + failed}/${ok.length}…`, { id: toastId });
+    }
+    setUploading(false);
+    if (failed && done) {
+      toast.error(`${done} uploaded, ${failed} failed`, { id: toastId });
+    } else if (failed) {
+      toast.error(`Upload failed`, { id: toastId });
+    } else {
+      toast.success(`${done} file${done > 1 ? "s" : ""} uploaded`, { id: toastId });
+    }
+    invalidate();
+  }
+
   function handleUpload() {
-    // TODO(impl): request a signed URL via api.servers.files.uploadUrl(id, path)
-    // and PUT the selected File to it (tus/multipart). Placeholder for now.
-    toast.info("Direct upload is coming soon. Use SFTP for large files in the meantime.");
+    fileInputRef.current?.click();
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragActive(false);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length) void uploadFiles(files);
   }
 
   // -- selection helpers ----------------------------------------------------
@@ -264,7 +318,27 @@ export default function FilesPage() {
 
   // -- file browser view ----------------------------------------------------
   return (
-    <div className="space-y-6">
+    <div
+      className="relative space-y-6"
+      onDragOver={(e) => {
+        e.preventDefault();
+        if (!dragActive) setDragActive(true);
+      }}
+      onDragLeave={(e) => {
+        // Only clear when the pointer actually leaves the container, not when it
+        // crosses a child element.
+        if (e.currentTarget === e.target) setDragActive(false);
+      }}
+      onDrop={onDrop}
+    >
+      {dragActive && (
+        <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-background/80 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <Upload className="size-8" />
+            <span className="text-sm font-medium">Drop files to upload to {path}</span>
+          </div>
+        </div>
+      )}
       <PageHeader
         title="File manager"
         description="Browse, edit and manage your server files."
@@ -273,9 +347,26 @@ export default function FilesPage() {
             <Button variant="outline" size="sm" onClick={() => setMkdirOpen(true)}>
               <FolderPlus className="size-4" /> New folder
             </Button>
-            <Button variant="outline" size="sm" onClick={handleUpload}>
+            <Button
+              variant="outline"
+              size="sm"
+              loading={uploading}
+              disabled={uploading}
+              onClick={handleUpload}
+            >
               <Upload className="size-4" /> Upload
             </Button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) void uploadFiles(files);
+                e.target.value = ""; // allow re-selecting the same file
+              }}
+            />
             <Button
               variant="ghost"
               size="icon-sm"

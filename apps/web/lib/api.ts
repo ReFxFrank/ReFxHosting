@@ -182,6 +182,15 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   if (body !== undefined) {
     if (body instanceof FormData) {
       payload = body; // let the browser set the multipart boundary
+    } else if (
+      body instanceof Blob || // File extends Blob (direct file uploads)
+      body instanceof ArrayBuffer ||
+      ArrayBuffer.isView(body)
+    ) {
+      payload = body as BodyInit; // raw binary — stream as-is, no JSON encoding
+      if (!finalHeaders["Content-Type"]) {
+        finalHeaders["Content-Type"] = "application/octet-stream";
+      }
     } else {
       finalHeaders["Content-Type"] = "application/json";
       payload = JSON.stringify(body);
@@ -734,6 +743,15 @@ export const api = {
         http.post<void>(`/servers/${id}/files/decompress`, { path }),
       chmod: (id: string, path: string, mode: string) =>
         http.post<void>(`/servers/${id}/files/chmod`, { path, mode }),
+      // Stream a file's bytes straight through the panel to the node agent.
+      // `path` is the absolute destination inside the server's jail. Capped at
+      // 32 MiB (the agent's signed-body limit); larger files go over SFTP.
+      upload: (id: string, path: string, file: File) =>
+        http.post<{ status: string; path: string; bytes: number }>(
+          `/servers/${id}/files/upload`,
+          file,
+          { query: { path } },
+        ),
       // Returns a signed URL for direct upload to the node. TODO(impl): tus/multipart.
       uploadUrl: (id: string, path: string) =>
         http.post<{ url: string }>(`/servers/${id}/files/upload-url`, { path }),
