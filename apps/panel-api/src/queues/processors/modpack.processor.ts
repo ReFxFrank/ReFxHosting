@@ -51,9 +51,19 @@ interface MrpackIndex {
  * Installs a Modrinth modpack (.mrpack) onto a Minecraft server:
  *   1. resolve the pack's required MC version + loader (+ loader version),
  *   2. switch the server to it and reinstall (preserving worlds),
- *   3. clear stale mods, then download every server-side mod and apply the
- *      pack's config overrides.
+ *   3. wipe pack-managed content (mods/ + leftover worldgen datapacks) so nothing
+ *      from a previous pack/loader can linger,
+ *   4. download EVERY server-required mod (with retries), verify the set is
+ *      complete, then apply the pack's config overrides.
  * Runs as a background job because it touches many files and the network.
+ *
+ * A partial install is treated as a failure, not a success: a modpack missing
+ * a server-required jar boots into "Unbound values in registry
+ * worldgen/structure … Failed to load datapacks", because a leftover/undelivered
+ * structure_set references structures whose provider mod isn't present. The old
+ * flow cleared only top-level mods/*.jar and counted failed downloads as silent
+ * skips, so a dirty/incomplete mods/ could masquerade as a good install — this
+ * processor closes both gaps.
  */
 @Processor(QUEUE.MODPACK)
 export class ModpackProcessor extends WorkerHost {
@@ -188,36 +198,34 @@ export class ModpackProcessor extends WorkerHost {
       buildInstallSpec(server, { wipe: false, sftpPassword }),
     );
 
-    // 5. Clear stale mods so a previous loader's jars don't conflict.
-    await this.clearMods(server.node, server.id);
+    // 5. Clean pack-managed content so nothing from a previous pack or loader can
+    //    linger. A leftover/duplicate/version-skewed mod jar (or a stale worldgen
+    //    datapack) still ships a structure_set that references structures the new
+    //    jar set no longer defines, which fails the whole registry load at boot
+    //    ("Unbound values in registry worldgen/structure"). Aborts if the wipe
+    //    itself fails — layering new jars over a partial wipe is what creates the
+    //    dirty union.
+    await this.clearPackContent(server.node, server.id);
 
-    // 6. Download every server-side mod listed in the index. Mods are pulled by
-    //    the agent directly from Modrinth and streamed to disk, so large jars
-    //    (e.g. Cobblemon's ~130 MiB) aren't limited by the signed-upload cap.
+    // 6. Download every server-required mod (with retries), and record exactly
+    //    which files must land so a partial install can't masquerade as success.
     const createdDirs = new Set<string>();
-    let installed = 0;
-    let skipped = 0;
-    for (const f of index.files ?? []) {
-      if (f.env?.server === 'unsupported') continue;
-      const url = f.downloads?.[0];
-      if (!url || !this.isModrinthHost(url)) {
-        skipped++;
-        continue;
-      }
-      if (f.fileSize && f.fileSize > MAX_MOD_BYTES) {
-        this.logger.warn(
-          `skipping oversized pack file ${f.path} (${f.fileSize} bytes)`,
-        );
-        skipped++;
-        continue;
-      }
-      try {
-        await this.agent.downloadToPath(server.node, server.id, f.path, url);
-        installed++;
-      } catch (e) {
-        this.logger.warn(`failed to install ${f.path}: ${String(e)}`);
-        skipped++;
-      }
+    const { installed, clientOnly, missing } = await this.downloadServerFiles(
+      server.node,
+      server.id,
+      index,
+    );
+
+    // 6b. Completeness gate: refuse to finish a half-installed pack. A modpack
+    //     missing server-required files WILL crash on boot with dangling registry
+    //     references, so fail loudly (state -> CRASHED via the caller, no success
+    //     marker) with the list instead of reporting success.
+    if (missing.length) {
+      const sample = missing.slice(0, 8).join(', ');
+      throw new Error(
+        `Incomplete install: ${missing.length} required file(s) could not be downloaded ` +
+          `(${sample}${missing.length > 8 ? ', …' : ''}). Nothing was marked installed — retry the install.`,
+      );
     }
 
     // 7. Apply config overrides bundled in the .mrpack (server + shared, not client).
@@ -244,6 +252,11 @@ export class ModpackProcessor extends WorkerHost {
       }
     }
 
+    // 7b. Belt-and-suspenders: warn (don't fail) if two jars for the same mod at
+    //     different versions ended up in mods/ — a pack-index quirk; the
+    //     pre-install wipe already prevents leftover duplicates from a prior pack.
+    const duplicates = await this.warnOnDuplicateJars(server.node, server.id);
+
     // 8. Record what's installed so the Modpacks tab can show it + offer removal.
     const marker = {
       projectId: version.projectId,
@@ -267,7 +280,10 @@ export class ModpackProcessor extends WorkerHost {
     );
 
     this.logger.log(
-      `modpack ${serverId}: ${installed} files installed, ${skipped} skipped`,
+      `modpack ${serverId}: ${installed} files installed, ${clientOnly} client-only skipped` +
+        (duplicates.length
+          ? `, possible duplicates: ${duplicates.join(', ')}`
+          : ''),
     );
   }
 
@@ -282,7 +298,7 @@ export class ModpackProcessor extends WorkerHost {
       include: { node: true },
     });
     if (!server) throw new Error('Server not found');
-    await this.clearMods(server.node, server.id);
+    await this.wipeModsDir(server.node, server.id);
     await this.agent
       .deleteFiles(server.node, server.id, [MODPACK_MARKER])
       .catch(() => undefined);
@@ -306,16 +322,167 @@ export class ModpackProcessor extends WorkerHost {
     return { loader: 'vanilla', loaderVersion: 'latest' };
   }
 
-  private async clearMods(node: any, serverId: string): Promise<void> {
-    try {
-      const entries = await this.agent.listFiles(node, serverId, 'mods');
-      const jars = (entries ?? [])
-        .filter((e) => !e.isDir && e.name.toLowerCase().endsWith('.jar'))
-        .map((e) => `mods/${e.name}`);
-      if (jars.length) await this.agent.deleteFiles(node, serverId, jars);
-    } catch {
-      // mods/ may not exist yet — nothing to clear.
+  /**
+   * Download every server-required file in the index, with retries. Returns the
+   * count installed, the count of legitimately-skipped client-only files, and
+   * the list of server-required files that could NOT be delivered (no usable
+   * Modrinth URL, too big, or failed after retries) — the caller fails the job
+   * if that list is non-empty.
+   */
+  private async downloadServerFiles(
+    node: any,
+    serverId: string,
+    index: MrpackIndex,
+  ): Promise<{ installed: number; clientOnly: number; missing: string[] }> {
+    const missing: string[] = [];
+    let installed = 0;
+    let clientOnly = 0;
+    for (const f of index.files ?? []) {
+      // Client-only files (env.server === 'unsupported') are legitimately skipped.
+      if (f.env?.server === 'unsupported') {
+        clientOnly++;
+        continue;
+      }
+      const url = f.downloads?.[0];
+      // A server-required file we can't fetch (no url / non-Modrinth host / too
+      // big) is a hard MISS, not a silent skip — its absence is exactly what
+      // dangles a structure reference at boot.
+      if (!url || !this.isModrinthHost(url)) {
+        this.logger.warn(
+          `cannot fetch required file ${f.path} (no usable Modrinth URL)`,
+        );
+        missing.push(f.path);
+        continue;
+      }
+      if (f.fileSize && f.fileSize > MAX_MOD_BYTES) {
+        this.logger.warn(
+          `required file ${f.path} exceeds the size cap (${f.fileSize} bytes)`,
+        );
+        missing.push(f.path);
+        continue;
+      }
+      try {
+        await this.withRetry(
+          () => this.agent.downloadToPath(node, serverId, f.path, url),
+          3,
+          f.path,
+        );
+        installed++;
+      } catch (e) {
+        this.logger.warn(`failed to install ${f.path}: ${String(e)}`);
+        missing.push(f.path);
+      }
     }
+    return { installed, clientOnly, missing };
+  }
+
+  /**
+   * Wipe EVERYTHING under mods/ (nested folders, *.jar, *.jar.disabled), so no
+   * jar from a previous pack or loader — including a version-skewed duplicate —
+   * can linger. The agent deletes recursively (os.RemoveAll). Throws if the wipe
+   * fails: layering a new pack over a half-cleared mods/ is what dangles a stale
+   * structure_set against absent structures. No-op if mods/ doesn't exist yet.
+   */
+  private async wipeModsDir(node: any, serverId: string): Promise<void> {
+    let entries;
+    try {
+      entries = await this.agent.listFiles(node, serverId, 'mods');
+    } catch {
+      return; // mods/ not created yet — nothing to clear
+    }
+    const paths = (entries ?? []).map((e) => `mods/${e.name}`);
+    if (paths.length) await this.agent.deleteFiles(node, serverId, paths);
+  }
+
+  /**
+   * Clean all pack-managed content before applying a new pack: wipe mods/ and
+   * remove leftover global worldgen datapacks (the pack re-adds its own via
+   * overrides). config/ is intentionally left in place — a pack ships its own
+   * config via overrides, and wiping it would discard user customization.
+   */
+  private async clearPackContent(node: any, serverId: string): Promise<void> {
+    await this.wipeModsDir(node, serverId);
+    // Best-effort: leftover datapacks that could reference a now-absent mod's
+    // structures. Deleting a missing path is harmless.
+    await this.agent
+      .deleteFiles(node, serverId, ['datapacks', 'world/datapacks'])
+      .catch(() => undefined);
+  }
+
+  /**
+   * Run `fn` with up to `attempts` tries and exponential backoff — smooths over
+   * Modrinth rate-limiting when a big pack bulk-downloads hundreds of mods.
+   */
+  private async withRetry<T>(
+    fn: () => Promise<T>,
+    attempts: number,
+    label: string,
+  ): Promise<T> {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastErr = e;
+        if (i < attempts - 1) {
+          this.logger.warn(
+            `retry ${i + 1}/${attempts - 1} for ${label}: ${String(e)}`,
+          );
+          await this.sleep(500 * 2 ** i);
+        }
+      }
+    }
+    throw lastErr;
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Return jar filenames in mods/ that look like the SAME mod at different
+   * versions (a boot-crash risk). Best-effort, warn-only — the pre-install wipe
+   * already prevents leftover duplicates, so this only catches a pack-index quirk.
+   */
+  private async warnOnDuplicateJars(
+    node: any,
+    serverId: string,
+  ): Promise<string[]> {
+    let entries;
+    try {
+      entries = await this.agent.listFiles(node, serverId, 'mods');
+    } catch {
+      return [];
+    }
+    const byKey = new Map<string, string[]>();
+    for (const e of entries ?? []) {
+      if (e.isDir || !e.name.toLowerCase().endsWith('.jar')) continue;
+      const key = this.modKey(e.name);
+      if (!key) continue;
+      const arr = byKey.get(key) ?? [];
+      arr.push(e.name);
+      byKey.set(key, arr);
+    }
+    const dups = [...byKey.values()].filter((v) => v.length > 1).flat();
+    if (dups.length) {
+      this.logger.warn(
+        `mods/ has possible same-mod duplicates (different versions): ${dups.join(', ')}`,
+      );
+    }
+    return dups;
+  }
+
+  /**
+   * Collapse a jar filename to a rough mod key by stripping version + loader/mc
+   * tags, so two builds of one mod map to the same key.
+   */
+  private modKey(filename: string): string {
+    return filename
+      .replace(/\.jar$/i, '')
+      .toLowerCase()
+      .replace(/[-_+ ]v?\d[\w.]*/g, ' ')
+      .replace(/\b(fabric|forge|neoforge|quilt|mc)\b/g, ' ')
+      .replace(/[^a-z]+/g, '');
   }
 
   /** Write a file, best-effort creating its parent directory first (deduped). */
