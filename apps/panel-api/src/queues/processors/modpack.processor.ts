@@ -34,6 +34,38 @@ const MAX_MOD_BYTES = 1024 * 1024 * 1024;
 // via the agent's file manager (same pattern as TeamSpeak's refx-voice.json).
 const MODPACK_MARKER = '.refx-modpack.json';
 
+// Well-known CLIENT-ONLY mods (rendering, shaders, UI, texture/model tweaks).
+// Fabric silently skips env=client mods on a dedicated server, but Forge/NeoForge
+// try to load them and HARD-CRASH ("clientside only mod … refusing" / "invalid
+// dist DEDICATED_SERVER"). Packs that bundle these as overrides (no env metadata)
+// or don't flag env.server=unsupported would otherwise ship them to the server.
+// We strip any jar whose normalized name contains one of these slugs. Best-effort
+// safety net — the authoritative fix for big packs is the author's server pack.
+const CLIENT_ONLY_MOD_SLUGS = [
+  'entitymodelfeatures',
+  'entitytexturefeatures',
+  'citresewn',
+  'oculus',
+  'iris',
+  'sodium',
+  'rubidium',
+  'embeddium',
+  'reesessodiumoptions',
+  'sodiumextra',
+  'indium',
+  'modmenu',
+  'controlify',
+  'fancymenu',
+  'drippyloadingscreen',
+  'skinlayers3d',
+  '3dskinlayers',
+  'legendarytooltips',
+  'badoptimizations',
+  'yungsmenutweaks',
+  'notenoughanimations',
+  'betterthirdperson',
+];
+
 /** A single entry in modrinth.index.json. */
 interface MrpackFile {
   path: string;
@@ -252,6 +284,12 @@ export class ModpackProcessor extends WorkerHost {
       }
     }
 
+    // 7a. Strip well-known client-only mods. Fabric self-skips them, but on
+    //     Forge/NeoForge they crash the dedicated server on boot ("clientside
+    //     only mod … refusing"). Packs that bundle them as overrides or don't
+    //     flag env.server=unsupported would otherwise leave them on the server.
+    const stripped = await this.stripClientOnlyMods(server.node, server.id);
+
     // 7b. Belt-and-suspenders: warn (don't fail) if two jars for the same mod at
     //     different versions ended up in mods/ — a pack-index quirk; the
     //     pre-install wipe already prevents leftover duplicates from a prior pack.
@@ -281,6 +319,7 @@ export class ModpackProcessor extends WorkerHost {
 
     this.logger.log(
       `modpack ${serverId}: ${installed} files installed, ${clientOnly} client-only skipped` +
+        (stripped.length ? `, ${stripped.length} client-only jar(s) stripped` : '') +
         (duplicates.length
           ? `, possible duplicates: ${duplicates.join(', ')}`
           : ''),
@@ -374,6 +413,42 @@ export class ModpackProcessor extends WorkerHost {
       }
     }
     return { installed, clientOnly, missing };
+  }
+
+  /**
+   * Remove well-known client-only mod jars from mods/. Returns the filenames
+   * stripped. On Forge/NeoForge these crash a dedicated server on boot; Fabric
+   * ignores them, so stripping is safe on every loader. Best-effort: matches a
+   * curated slug denylist against the normalized filename.
+   */
+  private async stripClientOnlyMods(
+    node: any,
+    serverId: string,
+  ): Promise<string[]> {
+    let entries;
+    try {
+      entries = await this.agent.listFiles(node, serverId, 'mods');
+    } catch {
+      return [];
+    }
+    const toRemove: string[] = [];
+    for (const e of entries ?? []) {
+      if (e.isDir || !e.name.toLowerCase().endsWith('.jar')) continue;
+      const norm = e.name.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (CLIENT_ONLY_MOD_SLUGS.some((slug) => norm.includes(slug))) {
+        toRemove.push(`mods/${e.name}`);
+      }
+    }
+    if (toRemove.length) {
+      this.logger.warn(
+        `stripping ${toRemove.length} client-only mod(s) so the server can boot: ${toRemove.join(', ')}`,
+      );
+      // Best-effort: a failed strip shouldn't abort a completed install.
+      await this.agent
+        .deleteFiles(node, serverId, toRemove)
+        .catch((e) => this.logger.warn(`failed to strip client mods: ${String(e)}`));
+    }
+    return toRemove;
   }
 
   /**

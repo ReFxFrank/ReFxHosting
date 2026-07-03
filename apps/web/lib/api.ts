@@ -506,7 +506,12 @@ export const api = {
       ),
     setMinecraft: (
       id: string,
-      input: { loader: string; version?: string; loaderVersion?: string },
+      input: {
+        loader: string;
+        version?: string;
+        loaderVersion?: string;
+        freshStart?: boolean;
+      },
     ) =>
       http.patch<{ accepted: true; loader: string; version: string }>(
         `/servers/${id}/minecraft`,

@@ -234,6 +234,17 @@ export class SetMinecraftConfigDto {
   @IsOptional()
   @IsString()
   loaderVersion?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Reset the world + files (clean reinstall) instead of preserving them. ' +
+      'Recommended when the loader family changes (e.g. Forge↔Fabric): the ' +
+      'existing world and mods are not compatible across ecosystems and will ' +
+      'crash the new loader.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  freshStart?: boolean;
 }
 
 export class ModInstallDto {

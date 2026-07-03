@@ -807,7 +807,12 @@ export class ServersService {
    */
   async setMinecraftConfig(
     id: string,
-    dto: { loader: string; version?: string; loaderVersion?: string },
+    dto: {
+      loader: string;
+      version?: string;
+      loaderVersion?: string;
+      freshStart?: boolean;
+    },
   ): Promise<{ accepted: true; loader: string; version: string }> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
@@ -826,9 +831,12 @@ export class ServersService {
 
     const { concrete } = await this.applyMinecraftEnv(id, dto, "REINSTALLING");
 
+    // A loader-family change (e.g. Forge↔Fabric, or modded↔vanilla) leaves the
+    // old mods/world incompatible with the new loader — the caller opts into a
+    // clean slate via freshStart, otherwise we preserve the world as before.
     await this.reinstallQueue.add(JOB.REINSTALL, {
       serverId: id,
-      preserveData: true,
+      preserveData: !dto.freshStart,
     } satisfies ReinstallJob);
 
     return { accepted: true, loader: dto.loader, version: concrete };

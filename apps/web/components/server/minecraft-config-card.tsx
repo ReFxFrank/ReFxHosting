@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Blocks } from "lucide-react";
+import { Blocks, TriangleAlert } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import {
   Card,
@@ -41,6 +41,17 @@ const MC_LOADERS = [
 
 const LOADER_NEEDS_BUILD = new Set(["fabric", "forge", "neoforge"]);
 
+/** Mod ecosystems that are NOT world/mod-compatible with each other. Switching
+ * between families means the current world + mods won't load on the new loader
+ * (Forge jars won't run on Fabric; modded worldgen won't load on vanilla, …). */
+function loaderFamily(loader: string): string {
+  if (loader === "fabric" || loader === "quilt") return "fabric";
+  if (loader === "forge") return "forge";
+  if (loader === "neoforge") return "neoforge";
+  if (loader === "paper") return "paper";
+  return "vanilla";
+}
+
 /**
  * Loader + version control for Minecraft servers. For the unified `minecraft`
  * egg it offers the full loader picker (vanilla/paper/fabric/forge/neoforge);
@@ -59,8 +70,15 @@ export function MinecraftConfigCard({ server }: { server: Server }) {
   const [version, setVersion] = useState(currentVersion);
   const [loaderVersion, setLoaderVersion] = useState(currentLoaderVersion);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [freshStart, setFreshStart] = useState(false);
 
   const needsBuild = LOADER_NEEDS_BUILD.has(loader);
+
+  // Switching mod ecosystem (e.g. Forge↔Fabric, modded↔vanilla) leaves the old
+  // world + mods incompatible with the new loader — they'll crash it. We warn and
+  // default the "start fresh" reset ON for that case.
+  const familyChanged =
+    unified && loaderFamily(loader) !== loaderFamily(currentLoader);
 
   // Minecraft versions for the SELECTED loader (forge/fabric/neoforge each
   // support a different set), refetched whenever the loader changes.
@@ -93,10 +111,19 @@ export function MinecraftConfigCard({ server }: { server: Server }) {
   const changeMutation = useMutation({
     mutationFn: () =>
       unified
-        ? api.servers.setMinecraft(server.id, { loader, version, loaderVersion })
+        ? api.servers.setMinecraft(server.id, {
+            loader,
+            version,
+            loaderVersion,
+            freshStart,
+          })
         : api.servers.changeMinecraftVersion(server.id, version),
     onSuccess: () => {
-      toast.success("Reinstalling — your world is preserved");
+      toast.success(
+        freshStart
+          ? "Reinstalling with a fresh world & files"
+          : "Reinstalling — your world is preserved",
+      );
       queryClient.invalidateQueries({ queryKey: ["server", server.id] });
       setConfirmOpen(false);
     },
@@ -196,7 +223,15 @@ export function MinecraftConfigCard({ server }: { server: Server }) {
               {currentVersion}
             </span>
           </p>
-          <Button disabled={!dirty} onClick={() => setConfirmOpen(true)}>
+          <Button
+            disabled={!dirty}
+            onClick={() => {
+              // Default the reset ON when the loader family changes (incompatible
+              // world/mods), OFF for a same-family version bump.
+              setFreshStart(familyChanged);
+              setConfirmOpen(true);
+            }}
+          >
             Apply &amp; reinstall
           </Button>
         </div>
@@ -212,19 +247,56 @@ export function MinecraftConfigCard({ server }: { server: Server }) {
                 {unified ? `${loader} ` : ""}
                 {version}
               </span>{" "}
-              and be briefly offline. Your world and files are preserved, but a
-              backup first is always wise.
+              and be briefly offline.
             </DialogDescription>
           </DialogHeader>
+
+          {familyChanged && (
+            <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" />
+              <span>
+                You&apos;re switching from{" "}
+                <span className="font-medium text-foreground">
+                  {currentLoader}
+                </span>{" "}
+                to{" "}
+                <span className="font-medium text-foreground">{loader}</span> —
+                a different mod ecosystem. Your existing world and mods
+                won&apos;t load on the new loader and will crash it. Starting
+                fresh is strongly recommended.
+              </span>
+            </div>
+          )}
+
+          <label className="flex cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 accent-[hsl(var(--primary))]"
+              checked={freshStart}
+              onChange={(e) => setFreshStart(e.target.checked)}
+            />
+            <span className="space-y-0.5">
+              <span className="block font-medium">
+                Reset the world &amp; files (start fresh)
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {freshStart
+                  ? "The server will be wiped and reinstalled clean — no world or files carry over."
+                  : "Your world and files are preserved. Back up first — a backup is always wise."}
+              </span>
+            </span>
+          </label>
+
           <DialogFooter>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
               Cancel
             </Button>
             <Button
+              variant={freshStart ? "destructive" : "default"}
               loading={changeMutation.isPending}
               onClick={() => changeMutation.mutate()}
             >
-              Apply &amp; reinstall
+              {freshStart ? "Reset & reinstall" : "Apply & reinstall"}
             </Button>
           </DialogFooter>
         </DialogContent>

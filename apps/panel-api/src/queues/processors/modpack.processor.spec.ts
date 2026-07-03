@@ -131,6 +131,36 @@ describe('ModpackProcessor (install hardening)', () => {
     });
   });
 
+  describe('stripClientOnlyMods', () => {
+    it('removes known client-only jars (Forge server crash) and keeps server mods', async () => {
+      agent.listFiles.mockResolvedValue([
+        { name: 'oculus-mc1.20.1-1.7.0.jar' },
+        { name: 'entity_model_features_forge_1.20.1-2.2.2.jar' },
+        { name: 'citresewn-1.1.3+1.20.1.jar' },
+        { name: 'DungeonsAriseSevenSeas-1.20.x-1.0.2-forge.jar' },
+        { name: 'fabric-api-0.92.2.jar' },
+        { name: 'config', isDir: true },
+      ]);
+      const stripped = await (proc as any).stripClientOnlyMods(NODE, 's1');
+      expect(stripped.sort()).toEqual([
+        'mods/citresewn-1.1.3+1.20.1.jar',
+        'mods/entity_model_features_forge_1.20.1-2.2.2.jar',
+        'mods/oculus-mc1.20.1-1.7.0.jar',
+      ]);
+      expect(agent.deleteFiles).toHaveBeenCalledWith(NODE, 's1', stripped);
+    });
+
+    it('is a no-op when there are no client-only jars', async () => {
+      agent.listFiles.mockResolvedValue([
+        { name: 'DungeonsAriseSevenSeas-1.20.x-1.0.2-fabric.jar' },
+        { name: 'fabric-api-0.92.2.jar' },
+      ]);
+      const stripped = await (proc as any).stripClientOnlyMods(NODE, 's1');
+      expect(stripped).toEqual([]);
+      expect(agent.deleteFiles).not.toHaveBeenCalled();
+    });
+  });
+
   describe('warnOnDuplicateJars', () => {
     it('flags two versions of the same mod and ignores distinct mods', async () => {
       agent.listFiles.mockResolvedValue([
