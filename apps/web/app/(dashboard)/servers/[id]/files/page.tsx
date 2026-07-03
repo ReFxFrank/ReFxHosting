@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -83,6 +83,11 @@ function isArchive(name: string) {
 /** Direct-upload ceiling — matches the node agent's 32 MiB signed-body cap. */
 const MAX_UPLOAD_BYTES = 32 * 1024 * 1024;
 
+/** Hard per-file ceiling so a stalled upload can never hang forever (and tie up
+ * a server connection). 32 MiB in 3 min is only ~180 KB/s, so this never trips
+ * a legitimately slow upload — it only kills a truly stuck one. */
+const UPLOAD_TIMEOUT_MS = 180_000;
+
 export default function FilesPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
@@ -94,6 +99,24 @@ export default function FilesPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  // Controllers for in-flight uploads, so we can cancel them if the user leaves
+  // or refreshes the page. A stalled POST that isn't cancelled lingers as a
+  // zombie connection and — with request buffering upstream — can tie up the
+  // API for everyone (this is what took logins down).
+  const activeUploads = useRef<Set<AbortController>>(new Set());
+  useEffect(() => {
+    const controllers = activeUploads.current;
+    const abortAll = () => {
+      for (const c of controllers) c.abort();
+      controllers.clear();
+    };
+    // pagehide covers refresh, tab close and back/forward navigation.
+    window.addEventListener("pagehide", abortAll);
+    return () => {
+      window.removeEventListener("pagehide", abortAll);
+      abortAll(); // also cancel when navigating away within the app
+    };
+  }, []);
 
   // Inline editor view state.
   const [editing, setEditing] = useState<FileEntry | null>(null);
@@ -255,23 +278,54 @@ export default function FilesPage() {
     const toastId = toast.loading(`Uploading 0/${ok.length}…`);
     let done = 0;
     let failed = 0;
-    for (const file of ok) {
-      try {
-        await api.servers.files.upload(id, joinPath(path, file.name), file);
-        done++;
-      } catch (e) {
-        failed++;
-        toast.error(
-          `${file.name}: ${e instanceof ApiError ? e.message : "upload failed"}`,
-        );
+    let cancelled = false;
+    try {
+      for (const file of ok) {
+        // Each upload gets its own controller + stall timeout, tracked so the
+        // page-unload / unmount handler can cancel it. `finally` guarantees the
+        // timeout is cleared and the controller is untracked even on abort.
+        const controller = new AbortController();
+        activeUploads.current.add(controller);
+        const timer = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+        try {
+          await api.servers.files.upload(
+            id,
+            joinPath(path, file.name),
+            file,
+            controller.signal,
+          );
+          done++;
+        } catch (e) {
+          failed++;
+          if (controller.signal.aborted) {
+            cancelled = true;
+            toast.error(
+              `${file.name}: upload stalled and was cancelled — try again, or use SFTP for large files.`,
+            );
+          } else {
+            toast.error(
+              `${file.name}: ${e instanceof ApiError ? e.message : "upload failed"}`,
+            );
+          }
+        } finally {
+          clearTimeout(timer);
+          activeUploads.current.delete(controller);
+        }
+        toast.loading(`Uploading ${done + failed}/${ok.length}…`, {
+          id: toastId,
+        });
       }
-      toast.loading(`Uploading ${done + failed}/${ok.length}…`, { id: toastId });
+    } finally {
+      // Always clear the busy state — a hung/aborted upload must never leave the
+      // manager stuck on "uploading".
+      setUploading(false);
     }
-    setUploading(false);
     if (failed && done) {
       toast.error(`${done} uploaded, ${failed} failed`, { id: toastId });
     } else if (failed) {
-      toast.error(`Upload failed`, { id: toastId });
+      toast.error(cancelled ? "Upload cancelled" : "Upload failed", {
+        id: toastId,
+      });
     } else {
       toast.success(`${done} file${done > 1 ? "s" : ""} uploaded`, { id: toastId });
     }

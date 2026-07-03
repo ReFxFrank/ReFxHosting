@@ -162,6 +162,19 @@ async function bootstrap(): Promise<void> {
   await prisma.enableShutdownHooks(app);
 
   await app.listen(port, "0.0.0.0");
+
+  // Bound how long a single connection may tie up the server so a stalled or
+  // slow client (e.g. an in-browser file upload that hangs mid-stream) can't
+  // hold a socket open indefinitely and starve everyone else — the failure that
+  // took logins down. `requestTimeout` caps the whole request incl. body upload
+  // (the browser client caps a file upload at 180s, so 240s leaves margin);
+  // `headersTimeout` is the slow-loris guard on the header phase;
+  // `keepAliveTimeout` sits just above the proxy's keep-alive to avoid races.
+  const httpServer = app.getHttpServer();
+  httpServer.requestTimeout = 240_000;
+  httpServer.headersTimeout = 60_000;
+  httpServer.keepAliveTimeout = 65_000;
+
   // eslint-disable-next-line no-console
   console.log(
     `panel-api listening on :${port}` +

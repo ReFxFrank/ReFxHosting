@@ -762,11 +762,11 @@ export const api = {
       // Stream a file's bytes straight through the panel to the node agent.
       // `path` is the absolute destination inside the server's jail. Capped at
       // 32 MiB (the agent's signed-body limit); larger files go over SFTP.
-      upload: (id: string, path: string, file: File) =>
+      upload: (id: string, path: string, file: File, signal?: AbortSignal) =>
         http.post<{ status: string; path: string; bytes: number }>(
           `/servers/${id}/files/upload`,
           file,
-          { query: { path } },
+          { query: { path }, signal },
         ),
       // Returns a signed URL for direct upload to the node. TODO(impl): tus/multipart.
       uploadUrl: (id: string, path: string) =>

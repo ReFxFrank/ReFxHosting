@@ -73,6 +73,11 @@ server {
 
     # In-browser file-manager uploads; raise if you allow larger uploads.
     client_max_body_size 64m;
+    # Slow-client guard: if an upload stalls mid-body, return 408 instead of
+    # holding the worker connection open until the long proxy_read_timeout below.
+    # Without this a hung browser upload can pin connections and starve the API.
+    client_body_timeout 60s;
+    client_header_timeout 60s;
 
     gzip on;
     gzip_types application/json text/plain;
