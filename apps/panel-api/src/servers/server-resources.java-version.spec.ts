@@ -69,7 +69,8 @@ describe("ServerResourcesService java version", () => {
 
   it("rejects an unsupported major", async () => {
     prisma.server.findFirst.mockResolvedValue(javaServer());
-    await expect(svc.setJavaVersion("srv-1", "19")).rejects.toBeInstanceOf(
+    // 16 has no Temurin JRE image; reject it (and any other unshipped major).
+    await expect(svc.setJavaVersion("srv-1", "16")).rejects.toBeInstanceOf(
       BadRequestException,
     );
     expect(prisma.serverVariable.upsert).not.toHaveBeenCalled();

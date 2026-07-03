@@ -23,11 +23,16 @@
 export const NEWEST_JAVA = 25;
 
 /**
- * Java majors we publish `eclipse-temurin:<major>-jre` images for and let a
- * customer force via the Java selector. Java 8 matters for legacy Forge packs
- * (1.7.10 / 1.12.2) that refuse to run on 11+; the rest track the LTS line.
+ * Java majors a customer can force via the Java selector. Every entry has a
+ * published `eclipse-temurin:<major>-jre` image (verified against Docker Hub).
+ * Java 8 matters for legacy Forge packs (1.7.10 / 1.12.2) that refuse to run on
+ * 11+; the LTS releases (8/11/17/21/25) are the common picks, and the non-LTS
+ * majors (18/19/20/22/23/24) are here for completeness. Note: there is no
+ * Temurin 16 JRE image — Minecraft 1.17 runs fine on Java 17, which Auto picks.
  */
-export const SUPPORTED_JAVA_MAJORS = [8, 11, 17, 21, 25] as const;
+export const SUPPORTED_JAVA_MAJORS = [
+  8, 11, 17, 18, 19, 20, 21, 22, 23, 24, 25,
+] as const;
 
 /** Env var holding a customer's Java-major override ("auto" or a major). */
 export const JAVA_VERSION_VAR = 'JAVA_VERSION';

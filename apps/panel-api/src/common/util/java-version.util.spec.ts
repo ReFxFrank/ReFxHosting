@@ -94,7 +94,8 @@ describe('java-version util', () => {
       expect(parseJavaOverride('auto')).toBeUndefined();
       expect(parseJavaOverride('AUTO')).toBeUndefined();
       expect(parseJavaOverride('banana')).toBeUndefined();
-      expect(parseJavaOverride('19')).toBeUndefined(); // not one we ship
+      expect(parseJavaOverride('16')).toBeUndefined(); // no Temurin 16 JRE image
+      expect(parseJavaOverride('99')).toBeUndefined(); // not one we ship
     });
 
     it('includes Java 8 for legacy Forge packs', () => {
