@@ -118,7 +118,7 @@ export class ModpackService {
     serverId: string,
     dto: {
       zipPath: string;
-      loader: string;
+      loader?: string;
       version?: string;
       loaderVersion?: string;
     },

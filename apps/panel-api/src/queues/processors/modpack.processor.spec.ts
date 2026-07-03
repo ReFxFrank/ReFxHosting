@@ -14,15 +14,17 @@ describe('ModpackProcessor (install hardening)', () => {
     deleteFiles: jest.Mock;
     downloadToPath: jest.Mock;
     renameFile: jest.Mock;
+    readFile: jest.Mock;
   };
   let proc: ModpackProcessor;
 
   beforeEach(() => {
     agent = {
-      listFiles: jest.fn(),
+      listFiles: jest.fn().mockResolvedValue([]),
       deleteFiles: jest.fn().mockResolvedValue(undefined),
       downloadToPath: jest.fn().mockResolvedValue(undefined),
       renameFile: jest.fn().mockResolvedValue(undefined),
+      readFile: jest.fn().mockRejectedValue(new Error('not found')),
     };
     proc = new ModpackProcessor(
       {} as any,
@@ -160,6 +162,69 @@ describe('ModpackProcessor (install hardening)', () => {
       const stripped = await (proc as any).stripClientOnlyMods(NODE, 's1');
       expect(stripped).toEqual([]);
       expect(agent.deleteFiles).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('detectPackMeta', () => {
+    it('reads loader + versions from a CurseForge manifest.json', async () => {
+      agent.readFile.mockImplementation((_n: any, _s: any, path: string) => {
+        if (path === 'manifest.json')
+          return Promise.resolve({
+            content: JSON.stringify({
+              minecraft: {
+                version: '1.20.1',
+                modLoaders: [{ id: 'forge-47.3.12', primary: true }],
+              },
+            }),
+          });
+        return Promise.reject(new Error('not found'));
+      });
+      const meta = await (proc as any).detectPackMeta(NODE, 's1');
+      expect(meta).toEqual({
+        loader: 'forge',
+        version: '1.20.1',
+        loaderVersion: '47.3.12',
+      });
+    });
+
+    it('reads loader from a Prism mmc-pack.json when no manifest', async () => {
+      agent.readFile.mockImplementation((_n: any, _s: any, path: string) => {
+        if (path === 'mmc-pack.json')
+          return Promise.resolve({
+            content: JSON.stringify({
+              components: [
+                { uid: 'net.minecraft', version: '1.20.1' },
+                { uid: 'net.fabricmc.fabric-loader', version: '0.16.9' },
+              ],
+            }),
+          });
+        return Promise.reject(new Error('not found'));
+      });
+      const meta = await (proc as any).detectPackMeta(NODE, 's1');
+      expect(meta).toEqual({
+        loader: 'fabric',
+        version: '1.20.1',
+        loaderVersion: '0.16.9',
+      });
+    });
+
+    it('falls back to the forge libraries dir on disk', async () => {
+      agent.listFiles.mockImplementation((_n: any, _s: any, path: string) => {
+        if (path === 'libraries/net/minecraftforge/forge')
+          return Promise.resolve([{ name: '1.20.1-47.3.12', isDir: true }]);
+        return Promise.resolve([]);
+      });
+      const meta = await (proc as any).detectPackMeta(NODE, 's1');
+      expect(meta).toEqual({
+        loader: 'forge',
+        version: '1.20.1',
+        loaderVersion: '47.3.12',
+      });
+    });
+
+    it('returns empty when nothing is detectable', async () => {
+      const meta = await (proc as any).detectPackMeta(NODE, 's1');
+      expect(meta).toEqual({});
     });
   });
 

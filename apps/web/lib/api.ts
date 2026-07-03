@@ -587,7 +587,7 @@ export const api = {
         id: string,
         input: {
           zipPath: string;
-          loader: string;
+          loader?: string;
           version?: string;
           loaderVersion?: string;
         },

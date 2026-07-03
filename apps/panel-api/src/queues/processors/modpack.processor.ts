@@ -367,42 +367,19 @@ export class ModpackProcessor extends WorkerHost {
 
   /**
    * Install a modpack from a server-pack .zip the user already uploaded (via
-   * SFTP or the file manager). We provision the chosen loader with our own egg
-   * (so the startup command + JVM are known-good), wipe stale mods, extract the
-   * pack's content over the top, flatten a wrapper folder if the zip has one,
-   * strip client-only mods, then remove the zip.
+   * SFTP or the file manager). We EXTRACT first, auto-detect the loader/version
+   * from the pack (manifest.json / mmc-pack.json / on-disk markers) unless the
+   * caller specified them, then provision that loader with our own egg (so the
+   * startup command + JVM are known-good), strip client-only mods, remove the zip.
    */
   private async installServerPack(job: ServerPackInstallJob): Promise<void> {
-    const { serverId, zipPath, loader, version, loaderVersion } = job;
+    const { serverId, zipPath } = job;
 
     // 1. Confirm the uploaded zip is actually there before we touch anything.
-    const slash = zipPath.replace(/^\/+/, '').lastIndexOf('/');
-    const dir = slash > 0 ? zipPath.replace(/^\/+/, '').slice(0, slash) : '';
-    const base = zipPath.replace(/^\/+/, '').slice(slash + 1);
-    const server0 = await this.prisma.server.findUnique({
-      where: { id: serverId },
-      include: { node: true },
-    });
-    if (!server0) throw new Error('Server not found');
-    const listing = await this.agent
-      .listFiles(server0.node, server0.id, dir || '/')
-      .catch(() => [] as { name: string }[]);
-    if (!listing.some((e) => e.name === base)) {
-      throw new Error(
-        `Server-pack zip not found at "${zipPath}". Upload it to the server first (SFTP for large packs), then install.`,
-      );
-    }
-    if (!base.toLowerCase().endsWith('.zip')) {
-      throw new Error('Server pack must be a .zip file');
-    }
-
-    // 2. Apply the chosen loader/version, then provision it WITHOUT wiping (so
-    //    the uploaded zip survives) — this lays down our known-good launcher.
-    await this.servers.applyMinecraftEnv(serverId, {
-      loader,
-      version,
-      loaderVersion,
-    });
+    const clean = zipPath.replace(/^\/+/, '');
+    const slash = clean.lastIndexOf('/');
+    const dir = slash > 0 ? clean.slice(0, slash) : '';
+    const base = clean.slice(slash + 1);
     const server = await this.prisma.server.findUnique({
       where: { id: serverId },
       include: {
@@ -413,34 +390,74 @@ export class ModpackProcessor extends WorkerHost {
       },
     });
     if (!server || !server.template) throw new Error('Server missing template');
-    const sftpPassword = server.sftpPasswordEnc
-      ? this.crypto.decrypt(server.sftpPasswordEnc)
+    const node = server.node;
+    const listing = await this.agent
+      .listFiles(node, server.id, dir || '/')
+      .catch(() => [] as { name: string }[]);
+    if (!listing.some((e) => e.name === base)) {
+      throw new Error(
+        `Server-pack zip not found at "${zipPath}". Upload it to the server first (SFTP for large packs), then install.`,
+      );
+    }
+
+    // 2. Clear stale content, then extract the pack over the top (the zip is at
+    //    the root, not in mods/, so clearing mods/ leaves it in place).
+    await this.clearPackContent(node, server.id);
+    const before = new Set(
+      (await this.agent.listFiles(node, server.id, '/').catch(() => [])).map(
+        (e) => e.name,
+      ),
+    );
+    await this.agent.decompressFile(node, server.id, zipPath, '.');
+
+    // 3. Flatten a single wrapper folder so mods/ + the manifest land at the root.
+    await this.flattenServerPack(node, server.id, before);
+
+    // 4. Resolve loader/version: caller-supplied wins, else auto-detect from the
+    //    extracted pack. Bail with a clear message if we still can't tell.
+    const detected = await this.detectPackMeta(node, server.id);
+    const loader = job.loader || detected.loader;
+    const version = job.version || detected.version;
+    const loaderVersion = job.loaderVersion || detected.loaderVersion;
+    if (!loader) {
+      throw new Error(
+        'Could not auto-detect the mod loader from the pack. Re-run and pick the loader (and Minecraft version) manually.',
+      );
+    }
+
+    // 5. Provision the loader over the extracted files (wipe:false keeps them).
+    await this.servers.applyMinecraftEnv(serverId, {
+      loader,
+      version,
+      loaderVersion,
+    });
+    const provisioned = await this.prisma.server.findUnique({
+      where: { id: serverId },
+      include: {
+        node: true,
+        template: { include: { variables: true } },
+        allocations: true,
+        variables: true,
+      },
+    });
+    if (!provisioned || !provisioned.template) {
+      throw new Error('Server missing template');
+    }
+    const sftpPassword = provisioned.sftpPasswordEnc
+      ? this.crypto.decrypt(provisioned.sftpPasswordEnc)
       : undefined;
     await this.agent.reinstall(
-      server.node,
-      buildInstallSpec(server, { wipe: false, sftpPassword }),
+      provisioned.node,
+      buildInstallSpec(provisioned, { wipe: false, sftpPassword }),
     );
 
-    // 3. Clear stale pack content, then extract the pack over the top.
-    await this.clearPackContent(server.node, server.id);
-    const before = new Set(
-      (await this.agent.listFiles(server.node, server.id, '/').catch(() => []))
-        .map((e) => e.name),
-    );
-    await this.agent.decompressFile(server.node, server.id, zipPath, '.');
-
-    // 4. Server packs sometimes extract into a single wrapper folder — flatten it
-    //    so mods/ and config/ end up at the server root.
-    await this.flattenServerPack(server.node, server.id, before);
-
-    // 5. Strip client-only mods (Forge/NeoForge would crash on them) and remove
-    //    the now-extracted zip.
-    const stripped = await this.stripClientOnlyMods(server.node, server.id);
+    // 6. Strip client-only mods (Forge/NeoForge would crash on them), remove zip.
+    const stripped = await this.stripClientOnlyMods(node, server.id);
     await this.agent
-      .deleteFiles(server.node, server.id, [zipPath])
+      .deleteFiles(node, server.id, [zipPath])
       .catch(() => undefined);
 
-    // 6. Marker so the Modpacks tab shows what's installed.
+    // 7. Marker so the Modpacks tab shows what's installed.
     const marker = {
       title: job.title || base.replace(/\.zip$/i, ''),
       source: 'server-pack',
@@ -450,7 +467,7 @@ export class ModpackProcessor extends WorkerHost {
       installedAt: new Date().toISOString(),
     };
     await this.writeFile(
-      server.node,
+      node,
       server.id,
       MODPACK_MARKER,
       new TextEncoder().encode(JSON.stringify(marker, null, 2)),
@@ -458,9 +475,105 @@ export class ModpackProcessor extends WorkerHost {
     ).catch((e) => this.logger.warn(`failed to write marker: ${String(e)}`));
 
     this.logger.log(
-      `server-pack ${serverId}: extracted ${base}` +
+      `server-pack ${serverId}: extracted ${base}, loader ${loader} ${version ?? ''}` +
         (stripped.length ? `, ${stripped.length} client-only jar(s) stripped` : ''),
     );
+  }
+
+  /**
+   * Detect a server pack's loader + Minecraft/loader version from files it left
+   * on disk after extraction: CurseForge `manifest.json`, Prism/MultiMC
+   * `mmc-pack.json`, or the forge/neoforge libraries + fabric launcher markers.
+   * Any field may be absent; caller supplies fallbacks.
+   */
+  private async detectPackMeta(
+    node: any,
+    serverId: string,
+  ): Promise<{ loader?: string; version?: string; loaderVersion?: string }> {
+    // 1. CurseForge manifest.json
+    const manifest = await this.readJson(node, serverId, 'manifest.json');
+    if (manifest?.minecraft) {
+      const version: string | undefined = manifest.minecraft.version;
+      const loaders: Array<{ id?: string; primary?: boolean }> =
+        manifest.minecraft.modLoaders ?? [];
+      const ml = loaders.find((m) => m.primary) ?? loaders[0];
+      if (ml?.id) {
+        const idx = ml.id.indexOf('-');
+        const fam = idx >= 0 ? ml.id.slice(0, idx) : ml.id;
+        const lv = idx >= 0 ? ml.id.slice(idx + 1) : undefined;
+        const loader = this.normalizeLoaderFamily(fam);
+        if (loader) return { loader, version, loaderVersion: lv || undefined };
+      }
+      if (version) return { version };
+    }
+
+    // 2. Prism / MultiMC mmc-pack.json
+    const mmc = await this.readJson(node, serverId, 'mmc-pack.json');
+    if (Array.isArray(mmc?.components)) {
+      const comp = (uid: string): string | undefined =>
+        mmc.components.find((c: { uid?: string }) => c.uid === uid)?.version;
+      const version = comp('net.minecraft');
+      if (comp('net.neoforged'))
+        return { loader: 'neoforge', version, loaderVersion: comp('net.neoforged') };
+      if (comp('net.minecraftforge'))
+        return { loader: 'forge', version, loaderVersion: comp('net.minecraftforge') };
+      if (comp('net.fabricmc.fabric-loader'))
+        return {
+          loader: 'fabric',
+          version,
+          loaderVersion: comp('net.fabricmc.fabric-loader'),
+        };
+      if (version) return { version };
+    }
+
+    // 3. On-disk markers left by the loader's own installer.
+    const root = await this.agent
+      .listFiles(node, serverId, '/')
+      .catch(() => [] as { name: string; isDir?: boolean }[]);
+    const forgeDir = (
+      await this.agent
+        .listFiles(node, serverId, 'libraries/net/minecraftforge/forge')
+        .catch(() => [] as { name: string; isDir?: boolean }[])
+    ).find((e) => e.isDir);
+    if (forgeDir) {
+      const [mc, fv] = forgeDir.name.split('-');
+      return { loader: 'forge', version: mc, loaderVersion: fv };
+    }
+    const neoDir = (
+      await this.agent
+        .listFiles(node, serverId, 'libraries/net/neoforged/neoforge')
+        .catch(() => [] as { name: string; isDir?: boolean }[])
+    ).find((e) => e.isDir);
+    if (neoDir) return { loader: 'neoforge', loaderVersion: neoDir.name };
+    if (root.some((e) => !e.isDir && e.name === 'fabric-server-launch.jar')) {
+      return { loader: 'fabric' };
+    }
+    return {};
+  }
+
+  /** Read + parse a JSON file from the server, or null on any failure. */
+  private async readJson(
+    node: any,
+    serverId: string,
+    path: string,
+  ): Promise<any | null> {
+    try {
+      const res = await this.agent.readFile(node, serverId, path);
+      const raw =
+        typeof res === 'string' ? res : ((res as { content?: string })?.content ?? '');
+      return raw.trim() ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Map a loader-family token (forge/neoforge/fabric/quilt) to a supported loader. */
+  private normalizeLoaderFamily(fam: string): string | undefined {
+    const f = fam.toLowerCase();
+    if (f === 'forge') return 'forge';
+    if (f === 'neoforge') return 'neoforge';
+    if (f === 'fabric' || f === 'quilt') return 'fabric';
+    return undefined;
   }
 
   /**

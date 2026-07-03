@@ -212,7 +212,7 @@ function ServerPackCard({ serverId }: { serverId: string }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [zipPath, setZipPath] = useState("");
-  const [loader, setLoader] = useState("forge");
+  const [loader, setLoader] = useState("auto");
   const [version, setVersion] = useState("");
   const [loaderVersion, setLoaderVersion] = useState("");
 
@@ -220,7 +220,7 @@ function ServerPackCard({ serverId }: { serverId: string }) {
     mutationFn: () =>
       api.servers.modpacks.installServerPack(serverId, {
         zipPath: zipPath.trim(),
-        loader,
+        loader: loader === "auto" ? undefined : loader,
         version: version.trim() || undefined,
         loaderVersion: loaderVersion.trim() || undefined,
       }),
@@ -256,7 +256,8 @@ function ServerPackCard({ serverId }: { serverId: string }) {
           server (client-only mods removed, complete set). Upload its{" "}
           <span className="font-mono">.zip</span> to this server over SFTP (or
           the File manager for small packs), then install it here. We provision
-          the loader, extract the pack, and strip any client-only mods.
+          the loader (auto-detected from the pack), extract it, and strip any
+          client-only mods.
         </p>
 
         {open && (
@@ -278,6 +279,7 @@ function ServerPackCard({ serverId }: { serverId: string }) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="auto">Auto-detect</SelectItem>
                     {["forge", "neoforge", "fabric"].map((l) => (
                       <SelectItem key={l} value={l}>
                         {l}
@@ -291,7 +293,7 @@ function ServerPackCard({ serverId }: { serverId: string }) {
                 <Input
                   value={version}
                   onChange={(e) => setVersion(e.target.value)}
-                  placeholder="1.20.1"
+                  placeholder="auto-detect"
                 />
               </div>
               <div className="space-y-1.5">
@@ -299,14 +301,14 @@ function ServerPackCard({ serverId }: { serverId: string }) {
                 <Input
                   value={loaderVersion}
                   onChange={(e) => setLoaderVersion(e.target.value)}
-                  placeholder="latest"
+                  placeholder="auto-detect"
                 />
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Match these to the pack&apos;s page (e.g. Forge 47.3.12 · MC
-              1.20.1). The server reinstalls — back up anything you want to keep
-              first.
+              Leave these on <strong>Auto-detect</strong> — we read the pack&apos;s
+              manifest to figure out the loader &amp; version. Only set them if
+              detection fails. The server reinstalls, so back up first.
             </p>
             <div className="flex justify-end">
               <Button

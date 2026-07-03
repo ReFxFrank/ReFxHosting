@@ -255,12 +255,17 @@ export class InstallServerPackDto {
   @IsString()
   zipPath!: string;
 
-  @ApiProperty({ description: "vanilla | paper | fabric | forge | neoforge" })
+  @ApiPropertyOptional({
+    description:
+      "Loader to force (fabric | forge | neoforge). Omit to auto-detect from the pack.",
+  })
+  @IsOptional()
   @IsString()
-  loader!: string;
+  loader?: string;
 
   @ApiPropertyOptional({
-    description: "Minecraft version the pack targets ('latest' or e.g. '1.20.1').",
+    description:
+      "Minecraft version the pack targets ('1.20.1'). Omit to auto-detect.",
   })
   @IsOptional()
   @IsString()

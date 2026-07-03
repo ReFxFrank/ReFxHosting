@@ -93,7 +93,8 @@ export interface ServerPackInstallJob {
   serverId: string;
   /** Path (in the server data dir) to the uploaded server-pack .zip. */
   zipPath: string;
-  loader: string;
+  /** Loader/version to force; when omitted they're auto-detected from the pack. */
+  loader?: string;
   version?: string;
   loaderVersion?: string;
   /** Display title for notifications. */
