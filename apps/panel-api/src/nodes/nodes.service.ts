@@ -24,6 +24,7 @@ import {
   PORT_RANGE_END,
   normalizeGameDomain,
 } from "../servers/allocation-port.util";
+import { jvmHeapMb, SERVER_MEMORY_VAR } from "../servers/server-memory.util";
 import { CreateNodeDto, UpdateNodeDto } from "./dto/node.dto";
 
 /** Loose UUID shape check (any version), used to avoid Prisma P2023 on bad ids. */
@@ -1164,6 +1165,17 @@ export class NodesService {
     const serverEnv = (server.environment ?? {}) as Record<string, unknown>;
     for (const [k, val] of Object.entries(serverEnv)) env[k] = String(val);
     for (const ov of server.variables) env[ov.envName] = ov.value;
+
+    // SERVER_MEMORY (-Xmx) is a read-only, system-managed variable: keep it in
+    // lock-step with the server's actual RAM allocation instead of the frozen
+    // template default, so plan upgrades actually raise the JVM heap. Only
+    // override when the template declares it non-editable (ours to manage).
+    const memVar = template?.variables?.find(
+      (v) => v.envName === SERVER_MEMORY_VAR,
+    );
+    if (memVar && !memVar.userEditable && server.memoryMb > 0) {
+      env[SERVER_MEMORY_VAR] = String(jvmHeapMb(server.memoryMb));
+    }
 
     let sftpPassword = "";
     if (server.sftpPasswordEnc) {

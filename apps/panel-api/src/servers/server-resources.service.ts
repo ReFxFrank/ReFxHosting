@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { uuidv7 } from "../common/util/uuid";
 import { isValidCron, nextCronRun } from "./cron.util";
+import { jvmHeapMb, SERVER_MEMORY_VAR } from "./server-memory.util";
 import {
   AddSubUserDto,
   CreateAllocationDto,
@@ -45,6 +46,7 @@ export class ServerResourcesService {
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
       select: {
+        memoryMb: true,
         variables: { select: { envName: true, value: true } },
         template: {
           select: {
@@ -74,9 +76,19 @@ export class ServerResourcesService {
     return (server.template?.variables ?? [])
       .filter((v) => v.userViewable || v.userEditable)
       .map((v) => {
-        const stored = overrides.has(v.envName)
+        let stored = overrides.has(v.envName)
           ? overrides.get(v.envName)!
           : (v.defaultValue ?? "");
+        // SERVER_MEMORY (-Xmx) is system-managed from the RAM allocation, not
+        // the stored/default value — show the effective heap so the Startup tab
+        // matches what the JVM actually launches with.
+        if (
+          v.envName === SERVER_MEMORY_VAR &&
+          !v.userEditable &&
+          server.memoryMb > 0
+        ) {
+          stored = String(jvmHeapMb(server.memoryMb));
+        }
         const writeOnly = !v.userViewable;
         return {
           envName: v.envName,
