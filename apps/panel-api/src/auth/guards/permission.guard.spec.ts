@@ -263,6 +263,38 @@ describe("PermissionGuard", () => {
     ).rejects.toThrow(/Missing permissions: file\.write/);
   });
 
+  it("honors an area wildcard grant (files.*) for a sub-user", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
+    prisma.subUser.findFirst.mockResolvedValue({ permissions: ["files.*"] });
+    const result = await guard.canActivate(
+      ctx({
+        user: { id: "sub-1", globalRole: "USER" },
+        params: { serverId: SERVER_ID },
+        required: ["files.read", "files.write", "files.delete"],
+      }),
+    );
+    expect(result).toBe(true);
+  });
+
+  it("grants a sub-user implicit server.read even with no explicit grants", async () => {
+    prisma.server.findFirst.mockResolvedValue({
+      id: SERVER_ID,
+      ownerId: OWNER_ID,
+    });
+    prisma.subUser.findFirst.mockResolvedValue({ permissions: [] });
+    const result = await guard.canActivate(
+      ctx({
+        user: { id: "sub-1", globalRole: "USER" },
+        params: { serverId: SERVER_ID },
+        required: ["server.read"],
+      }),
+    );
+    expect(result).toBe(true);
+  });
+
   it("grants a sub-user when no specific permissions are required (membership only)", async () => {
     prisma.server.findFirst.mockResolvedValue({
       id: SERVER_ID,

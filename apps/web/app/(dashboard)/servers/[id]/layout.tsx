@@ -40,8 +40,17 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
   // apply and are hidden — leaving Overview, Files, Backups and Settings.
   // Web apps get Domains + the relevant subset (Console for logs, Files, Backups,
   // Settings, Upgrade); the game-specific sections are hidden.
+  // Per-server permission gating: a sub-user only sees the tabs their granted
+  // permissions cover. Owners and staff receive the full catalog in
+  // viewerPermissions, so every tab shows. While the server is still loading
+  // (viewerPermissions undefined) we don't filter, to avoid a flicker.
+  const viewerPermissions = server?.viewerPermissions;
+  const canSeeTab = (perm?: string) =>
+    !perm || !viewerPermissions || viewerPermissions.includes(perm);
+
   const WEB_TABS = ["/console", "/files", "/domains", "/backups", "/settings", "/upgrade"];
   const filtered = serverTabs(id).filter((t) => {
+    if (!canSeeTab(t.perm)) return false;
     if (t.href.endsWith("/domains")) return isWeb;
     if (isWeb) return WEB_TABS.some((s) => t.href.endsWith(s));
     if (t.href.endsWith("/minecraft")) return isMinecraft;

@@ -98,13 +98,13 @@ export class SubUsersController {
   constructor(private readonly users: UsersService) {}
 
   @Get()
-  @RequirePermissions("user.read")
+  @RequirePermissions("subuser.read")
   list(@Param("serverId") serverId: string) {
     return this.users.listSubUsers(serverId);
   }
 
   @Post()
-  @RequirePermissions("user.create")
+  @RequirePermissions("subuser.create")
   @Audit({
     action: "server.subuser.add",
     targetType: "Server",
@@ -115,7 +115,7 @@ export class SubUsersController {
   }
 
   @Patch(":subUserId")
-  @RequirePermissions("user.update")
+  @RequirePermissions("subuser.update")
   @Audit({
     action: "server.subuser.update",
     targetType: "Server",
@@ -135,7 +135,7 @@ export class SubUsersController {
 
   @Delete(":subUserId")
   @HttpCode(200)
-  @RequirePermissions("user.delete")
+  @RequirePermissions("subuser.delete")
   @Audit({
     action: "server.subuser.revoke",
     targetType: "Server",

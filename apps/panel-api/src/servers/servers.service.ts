@@ -24,6 +24,11 @@ import {
   paginate,
 } from "../common/dto/pagination.dto";
 import { AuthUser } from "../common/decorators/current-user.decorator";
+import { hasPermission } from "../common/permissions";
+import {
+  ALL_SERVER_PERMISSIONS,
+  expandServerPermissions,
+} from "../common/server-permissions";
 import { NodesService } from "../nodes/nodes.service";
 import { NodeAgentClient, PowerSignal } from "../agent/agent.client";
 import {
@@ -155,6 +160,42 @@ export class ServersService {
     });
     if (!server) throw new NotFoundException("Server not found");
     return this.withPrimaryAllocation(server);
+  }
+
+  /**
+   * Server detail plus the caller's effective per-server permissions
+   * (`viewerPermissions`). The web uses this to gate the tabs and per-action
+   * buttons a sub-user sees, so they get exactly the access the owner granted —
+   * no 403 walls, no hidden-but-clickable actions. Owners and staff with the
+   * admin `servers.manage` capability receive the full catalog.
+   */
+  async getWithViewer(
+    user: AuthUser,
+    id: string,
+  ): Promise<Server & { viewerPermissions: string[] }> {
+    const server = await this.get(id);
+    const viewerPermissions = await this.viewerPermissions(user, server);
+    return { ...(server as Server), viewerPermissions };
+  }
+
+  /** Concrete (wildcard-expanded) list of per-server permissions `user` holds
+   * on `server`: everything for the owner or `servers.manage` staff, otherwise
+   * the sub-user's granted set plus the implicit baseline. */
+  private async viewerPermissions(
+    user: AuthUser,
+    server: Server,
+  ): Promise<string[]> {
+    if (
+      hasPermission(user.permissions ?? [], "servers.manage") ||
+      server.ownerId === user.id
+    ) {
+      return [...ALL_SERVER_PERMISSIONS];
+    }
+    const sub = await this.prisma.subUser.findFirst({
+      where: { serverId: server.id, userId: user.id, state: "ACTIVE" },
+      select: { permissions: true },
+    });
+    return expandServerPermissions(sub?.permissions ?? []);
   }
 
   /**

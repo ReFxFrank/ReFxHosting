@@ -22,7 +22,10 @@ import { VoiceService } from "./voice.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
 import { PermissionGuard } from "../auth/guards/permission.guard";
 import { RequirePermissions } from "../common/decorators/permissions.decorator";
-import { CurrentUser } from "../common/decorators/current-user.decorator";
+import {
+  CurrentUser,
+  AuthUser,
+} from "../common/decorators/current-user.decorator";
 import { Audit } from "../common/decorators/audit.decorator";
 import { PaginationDto } from "../common/dto/pagination.dto";
 import {
@@ -85,8 +88,11 @@ export class ServersController {
 
   @Get(":serverId")
   @RequirePermissions("server.read")
-  get(@Param("serverId") id: string) {
-    return this.servers.get(id);
+  get(@Param("serverId") id: string, @CurrentUser() user: AuthUser) {
+    // Returns the server plus the caller's effective per-server permissions so
+    // the web can gate the tabs/actions a sub-user sees to exactly what the
+    // owner granted.
+    return this.servers.getWithViewer(user, id);
   }
 
   // ---- web-app domains (WEB_APP servers) ---------------------------------

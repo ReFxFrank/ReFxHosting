@@ -52,6 +52,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { cn, formatBytes, formatRelative } from "@/lib/utils";
 import type { FileEntry } from "@/lib/types";
+import { hasServerPermission } from "@/lib/server-permissions";
 
 /** Join a directory path with a child name into a normalized absolute path. */
 function joinPath(dir: string, name: string) {
@@ -116,6 +117,19 @@ export default function FilesPage() {
     queryFn: () => api.servers.files.list(id, path),
     retry: false,
   });
+
+  // The viewer's effective per-server permissions (shared react-query cache
+  // with the server layout). Sub-users reach this page with files.read (they can
+  // browse and download); write/delete/archive actions are hidden unless granted
+  // so they never click into a 403. The API enforces the same on every request.
+  const { data: server } = useQuery({
+    queryKey: ["server", id],
+    queryFn: () => api.servers.get(id),
+  });
+  const perms = server?.viewerPermissions;
+  const canWrite = hasServerPermission(perms, "files.write");
+  const canDelete = hasServerPermission(perms, "files.delete");
+  const canArchive = hasServerPermission(perms, "files.archive");
 
   const segments = useMemo(() => {
     const parts = path.split("/").filter(Boolean);
@@ -222,6 +236,10 @@ export default function FilesPage() {
   // -- upload ---------------------------------------------------------------
   async function uploadFiles(files: File[]) {
     if (!files.length || uploading) return;
+    if (!canWrite) {
+      toast.error("You don't have permission to upload files to this server.");
+      return;
+    }
 
     const tooBig = files.filter((f) => f.size > MAX_UPLOAD_BYTES);
     const ok = files.filter((f) => f.size > 0 && f.size <= MAX_UPLOAD_BYTES);
@@ -298,11 +316,16 @@ export default function FilesPage() {
           actions={
             <>
               <Button variant="ghost" onClick={() => setEditing(null)}>
-                <ArrowLeft className="size-4" /> Cancel
+                <ArrowLeft className="size-4" /> {canWrite ? "Cancel" : "Back"}
               </Button>
-              <Button loading={saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                <Save className="size-4" /> Save
-              </Button>
+              {canWrite && (
+                <Button
+                  loading={saveMutation.isPending}
+                  onClick={() => saveMutation.mutate()}
+                >
+                  <Save className="size-4" /> Save
+                </Button>
+              )}
             </>
           }
         />
@@ -310,6 +333,7 @@ export default function FilesPage() {
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           spellCheck={false}
+          readOnly={!canWrite}
           className="min-h-[60vh] resize-y font-mono text-xs leading-relaxed"
         />
       </div>
@@ -344,29 +368,37 @@ export default function FilesPage() {
         description="Browse, edit and manage your server files."
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setMkdirOpen(true)}>
-              <FolderPlus className="size-4" /> New folder
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              loading={uploading}
-              disabled={uploading}
-              onClick={handleUpload}
-            >
-              <Upload className="size-4" /> Upload
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              hidden
-              onChange={(e) => {
-                const files = Array.from(e.target.files ?? []);
-                if (files.length) void uploadFiles(files);
-                e.target.value = ""; // allow re-selecting the same file
-              }}
-            />
+            {canWrite && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setMkdirOpen(true)}
+                >
+                  <FolderPlus className="size-4" /> New folder
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={uploading}
+                  disabled={uploading}
+                  onClick={handleUpload}
+                >
+                  <Upload className="size-4" /> Upload
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length) void uploadFiles(files);
+                    e.target.value = ""; // allow re-selecting the same file
+                  }}
+                />
+              </>
+            )}
             <Button
               variant="ghost"
               size="icon-sm"
@@ -406,21 +438,25 @@ export default function FilesPage() {
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2 text-sm">
           <span className="text-muted-foreground">{selected.size} selected</span>
           <div className="ml-auto flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              loading={compressMutation.isPending}
-              onClick={() => compressMutation.mutate([...selected])}
-            >
-              <FileArchive className="size-4" /> Compress
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeleteTargets([...selected])}
-            >
-              <Trash2 className="size-4" /> Delete
-            </Button>
+            {canArchive && (
+              <Button
+                variant="outline"
+                size="sm"
+                loading={compressMutation.isPending}
+                onClick={() => compressMutation.mutate([...selected])}
+              >
+                <FileArchive className="size-4" /> Compress
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setDeleteTargets([...selected])}
+              >
+                <Trash2 className="size-4" /> Delete
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -517,49 +553,59 @@ export default function FilesPage() {
                       {formatRelative(entry.modified)}
                     </TableCell>
                     <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon-sm" aria-label="Actions">
-                            <MoreHorizontal className="size-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onSelect={() => {
-                              setRenameTarget(entry);
-                              setRenameValue(entry.name);
-                            }}
-                          >
-                            <Pencil /> Rename
-                          </DropdownMenuItem>
-                          {!entry.isDir && (
-                            <DropdownMenuItem
-                              onSelect={() => downloadMutation.mutate(entry.path)}
-                            >
-                              <Download /> Download
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onSelect={() => compressMutation.mutate([entry.path])}
-                          >
-                            <FileArchive /> Compress
-                          </DropdownMenuItem>
-                          {archive && (
-                            <DropdownMenuItem
-                              onSelect={() => decompressMutation.mutate(entry.path)}
-                            >
-                              <FolderInput /> Extract
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            destructive
-                            onSelect={() => setDeleteTargets([entry.path])}
-                          >
-                            <Trash2 /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {(canWrite || canDelete || canArchive || !entry.isDir) && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon-sm" aria-label="Actions">
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {canWrite && (
+                              <DropdownMenuItem
+                                onSelect={() => {
+                                  setRenameTarget(entry);
+                                  setRenameValue(entry.name);
+                                }}
+                              >
+                                <Pencil /> Rename
+                              </DropdownMenuItem>
+                            )}
+                            {!entry.isDir && (
+                              <DropdownMenuItem
+                                onSelect={() => downloadMutation.mutate(entry.path)}
+                              >
+                                <Download /> Download
+                              </DropdownMenuItem>
+                            )}
+                            {canArchive && (
+                              <DropdownMenuItem
+                                onSelect={() => compressMutation.mutate([entry.path])}
+                              >
+                                <FileArchive /> Compress
+                              </DropdownMenuItem>
+                            )}
+                            {canArchive && archive && (
+                              <DropdownMenuItem
+                                onSelect={() => decompressMutation.mutate(entry.path)}
+                              >
+                                <FolderInput /> Extract
+                              </DropdownMenuItem>
+                            )}
+                            {canDelete && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  destructive
+                                  onSelect={() => setDeleteTargets([entry.path])}
+                                >
+                                  <Trash2 /> Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </TableCell>
                   </TableRow>
                 );

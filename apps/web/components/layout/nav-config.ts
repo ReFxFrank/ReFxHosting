@@ -230,19 +230,42 @@ export const adminNav: NavSection[] = [
 /** Flattened admin items (for active-route matching / mobile nav). */
 export const adminNavItems: NavItem[] = adminNav.flatMap((s) => s.items);
 
-export const serverTabs = (id: string) => [
-  { label: "Console", href: `/servers/${id}/console` },
-  { label: "Files", href: `/servers/${id}/files` },
-  { label: "Databases", href: `/servers/${id}/databases` },
-  { label: "Backups", href: `/servers/${id}/backups` },
-  { label: "Schedules", href: `/servers/${id}/schedules` },
-  { label: "Minecraft", href: `/servers/${id}/minecraft` },
-  { label: "Mods", href: `/servers/${id}/mods` },
-  { label: "Modpacks", href: `/servers/${id}/modpacks` },
-  { label: "Workshop", href: `/servers/${id}/workshop` },
+/** A tab on the server detail screen. `perm` is the per-server permission a
+ * sub-user must hold to see it (owners/staff hold the full catalog). Omitted =
+ * always visible (baseline `server.read`, which every member has). The panel
+ * enforces the same permission on every underlying request, so hiding a tab is
+ * a UX affordance, not the security boundary. */
+export interface ServerTab {
+  label: string;
+  href: string;
+  perm?: string;
+}
+
+export const serverTabs = (id: string): ServerTab[] => [
+  { label: "Console", href: `/servers/${id}/console`, perm: "console.read" },
+  { label: "Files", href: `/servers/${id}/files`, perm: "files.read" },
+  {
+    label: "Databases",
+    href: `/servers/${id}/databases`,
+    perm: "database.read",
+  },
+  { label: "Backups", href: `/servers/${id}/backups`, perm: "backup.read" },
+  {
+    label: "Schedules",
+    href: `/servers/${id}/schedules`,
+    perm: "schedule.read",
+  },
+  { label: "Minecraft", href: `/servers/${id}/minecraft`, perm: "files.read" },
+  { label: "Mods", href: `/servers/${id}/mods`, perm: "files.read" },
+  { label: "Modpacks", href: `/servers/${id}/modpacks`, perm: "files.read" },
+  { label: "Workshop", href: `/servers/${id}/workshop`, perm: "files.read" },
   { label: "Voice", href: `/servers/${id}/voice` },
-  { label: "Domains", href: `/servers/${id}/domains` },
-  { label: "Switch Game", href: `/servers/${id}/switch-game` },
-  { label: "Upgrade", href: `/servers/${id}/upgrade` },
-  { label: "Settings", href: `/servers/${id}/settings` },
+  { label: "Domains", href: `/servers/${id}/domains`, perm: "settings.read" },
+  {
+    label: "Switch Game",
+    href: `/servers/${id}/switch-game`,
+    perm: "control.switch-game",
+  },
+  { label: "Upgrade", href: `/servers/${id}/upgrade`, perm: "control.resize" },
+  { label: "Settings", href: `/servers/${id}/settings`, perm: "settings.read" },
 ];

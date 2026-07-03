@@ -10,6 +10,7 @@ import { GqlExecutionContext } from "@nestjs/graphql";
 import { PERMISSIONS_KEY } from "../../common/decorators/permissions.decorator";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { hasPermission } from "../../common/permissions";
+import { hasServerPermission } from "../../common/server-permissions";
 import { PrismaService } from "../../prisma/prisma.service";
 
 /**
@@ -106,7 +107,12 @@ export class PermissionGuard implements CanActivate {
     });
     if (!sub) throw new ForbiddenException("Not a member of this server");
 
-    const missing = required.filter((p) => !sub.permissions.includes(p));
+    // Wildcard-aware check (`files.*`, `*`) plus the implicit baseline
+    // (`server.read`) every active sub-user holds — so the server pages load
+    // and area grants work as documented.
+    const missing = required.filter(
+      (p) => !hasServerPermission(sub.permissions, p),
+    );
     if (missing.length) {
       throw new ForbiddenException(
         `Missing permissions: ${missing.join(", ")}`,

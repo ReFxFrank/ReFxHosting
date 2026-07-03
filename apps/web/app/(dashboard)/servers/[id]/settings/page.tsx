@@ -42,17 +42,10 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { cn, copyToClipboard } from "@/lib/utils";
 import type { Server, SubUser } from "@/lib/types";
-
-const PERMISSIONS = [
-  "console.read",
-  "console.command",
-  "files.read",
-  "files.write",
-  "backup.create",
-  "backup.restore",
-  "database.read",
-  "settings.update",
-] as const;
+import {
+  PERMISSION_GROUPS,
+  ALL_GRANTABLE_KEYS,
+} from "@/lib/server-permissions";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -778,6 +771,15 @@ function SubUsersTab({ id }: { id: string }) {
       p.includes(perm) ? p.filter((x) => x !== perm) : [...p, perm],
     );
 
+  const setGroup = (keys: string[], on: boolean) =>
+    setPerms((p) => {
+      const without = p.filter((x) => !keys.includes(x));
+      return on ? [...without, ...keys] : without;
+    });
+
+  const allSelected = ALL_GRANTABLE_KEYS.every((k) => perms.includes(k));
+  const setAll = (on: boolean) => setPerms(on ? [...ALL_GRANTABLE_KEYS] : []);
+
   const inviteMutation = useMutation({
     mutationFn: () => api.servers.addSubUser(id, { email, permissions: perms }),
     onSuccess: () => {
@@ -825,25 +827,75 @@ function SubUsersTab({ id }: { id: string }) {
     setPerms(su.permissions);
   };
 
-  const PermissionGrid = (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      {PERMISSIONS.map((perm) => (
-        <label
-          key={perm}
-          className={cn(
-            "flex cursor-pointer items-center gap-2 rounded-lg border p-2.5 text-sm transition-colors",
-            perms.includes(perm) && "border-primary bg-primary/5",
-          )}
-        >
+  const PermissionEditor = (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2">
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium">Full access</p>
+          <p className="text-xs text-muted-foreground">
+            Grant everything — equivalent to a co-owner.
+          </p>
+        </div>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"
             className="size-4 accent-[hsl(var(--primary))]"
-            checked={perms.includes(perm)}
-            onChange={() => togglePerm(perm)}
+            checked={allSelected}
+            onChange={(e) => setAll(e.target.checked)}
           />
-          <span className="font-mono text-xs">{perm}</span>
+          Select all
         </label>
-      ))}
+      </div>
+
+      <div className="max-h-[45vh] space-y-4 overflow-y-auto pr-1">
+        {PERMISSION_GROUPS.map(({ group, hint, permissions }) => {
+          const keys = permissions.map((p) => p.key);
+          const groupAll = keys.every((k) => perms.includes(k));
+          return (
+            <div key={group} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{group}</p>
+                  <p className="text-xs text-muted-foreground">{hint}</p>
+                </div>
+                <button
+                  type="button"
+                  className="text-xs font-medium text-primary hover:underline"
+                  onClick={() => setGroup(keys, !groupAll)}
+                >
+                  {groupAll ? "Clear" : "Select all"}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {permissions.map((perm) => (
+                  <label
+                    key={perm.key}
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 text-sm transition-colors",
+                      perms.includes(perm.key) && "border-primary bg-primary/5",
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-0.5 size-4 shrink-0 accent-[hsl(var(--primary))]"
+                      checked={perms.includes(perm.key)}
+                      onChange={() => togglePerm(perm.key)}
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block font-medium leading-tight">
+                        {perm.label}
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {perm.description}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -918,7 +970,7 @@ function SubUsersTab({ id }: { id: string }) {
 
       {/* Invite dialog */}
       <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Invite sub-user</DialogTitle>
             <DialogDescription>
@@ -938,7 +990,7 @@ function SubUsersTab({ id }: { id: string }) {
             </div>
             <div className="space-y-1.5">
               <Label>Permissions</Label>
-              {PermissionGrid}
+              {PermissionEditor}
             </div>
           </div>
           <DialogFooter>
@@ -958,14 +1010,14 @@ function SubUsersTab({ id }: { id: string }) {
 
       {/* Edit dialog */}
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit permissions</DialogTitle>
             <DialogDescription>{editing?.email}</DialogDescription>
           </DialogHeader>
           <div className="space-y-1.5">
             <Label>Permissions</Label>
-            {PermissionGrid}
+            {PermissionEditor}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setEditing(null)}>

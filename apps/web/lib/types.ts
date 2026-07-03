@@ -164,6 +164,13 @@ export interface Server {
   suspendedAt: string | null;
   primaryAllocation?: Allocation | null;
   createdAt: string;
+  /**
+   * The caller's effective per-server permissions (present on the server detail
+   * response). Owners and staff receive the full catalog; a sub-user receives
+   * their granted set expanded from wildcards, plus the implicit `server.read`.
+   * The UI gates tabs and per-action buttons against this list.
+   */
+  viewerPermissions?: string[];
 }
 
 /** Server shape returned by the admin list (adds the owner relation). */
