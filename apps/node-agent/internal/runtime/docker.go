@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	goruntime "runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -46,6 +47,20 @@ type DockerRuntime struct {
 	// (sentry) here, so a Steam Guard code is only needed once per node rather than
 	// once per server. Empty disables the mount.
 	steamHome string
+
+	// Previous CPU sample per server, for computing CPU% from the delta between
+	// two one-shot reads (a single one-shot has no PreCPUStats, so the built-in
+	// delta is always zero). Guarded by cpuMu.
+	cpuMu   sync.Mutex
+	cpuPrev map[string]dockerCPUSample
+}
+
+// dockerCPUSample is one container CPU reading used to compute utilisation
+// across successive Stats() calls.
+type dockerCPUSample struct {
+	total uint64    // cumulative CPU time (nanoseconds)
+	at    time.Time // when it was read
+	pct   float64   // last computed % (of one core), reused between close reads
 }
 
 // containerLabel marks containers managed by this agent.
@@ -745,16 +760,12 @@ func (d *DockerRuntime) Stats(ctx context.Context, s *server.Server) (Stats, err
 		return st, fmt.Errorf("docker: decode stats: %w", err)
 	}
 
-	// CPU percentage relative to a single core.
-	cpuDelta := float64(ds.CPUStats.CPUUsage.TotalUsage) - float64(ds.PreCPUStats.CPUUsage.TotalUsage)
-	sysDelta := float64(ds.CPUStats.SystemUsage) - float64(ds.PreCPUStats.SystemUsage)
-	cores := float64(ds.CPUStats.OnlineCPUs)
-	if cores == 0 {
-		cores = float64(len(ds.CPUStats.CPUUsage.PercpuUsage))
-	}
-	if sysDelta > 0 && cpuDelta > 0 {
-		st.CPUPercent = (cpuDelta / sysDelta) * cores * 100.0
-	}
+	// CPU% (relative to one core). We read one-shot stats for speed, but that
+	// means PreCPUStats is empty and the daemon's own delta is always zero — so
+	// we compute it ourselves from the CPU-time delta between successive reads
+	// over wall-clock time. Independent of SystemUsage, which is unreliable/zero
+	// on some cgroup-v2 hosts (the reason CPU showed a stuck 0%).
+	st.CPUPercent = d.cpuPercent(s.ID(), ds.CPUStats.CPUUsage.TotalUsage, st.Timestamp)
 	st.MemUsedMB = int64(ds.MemoryStats.Usage) / (1024 * 1024)
 	for _, nw := range ds.Networks {
 		st.NetRxBytes += int64(nw.RxBytes)
@@ -762,6 +773,43 @@ func (d *DockerRuntime) Stats(ctx context.Context, s *server.Server) (Stats, err
 	}
 	st.DiskUsedMB = dirSizeMB(s.DataDir)
 	return st, nil
+}
+
+// cpuPercent returns the container's CPU utilisation as a percentage of one
+// core (may exceed 100 on multi-core use), computed from the change in cumulative
+// CPU time since the previous sample. The first sample for a server establishes
+// a baseline and reports 0; samples taken too close together (Stats is called
+// twice per cycle — once for the batch, once for the heartbeat) reuse the last
+// value so the prior baseline isn't reset to a noisy sub-second delta.
+func (d *DockerRuntime) cpuPercent(id string, total uint64, now time.Time) float64 {
+	d.cpuMu.Lock()
+	defer d.cpuMu.Unlock()
+	if d.cpuPrev == nil {
+		d.cpuPrev = make(map[string]dockerCPUSample)
+	}
+	prev, ok := d.cpuPrev[id]
+	if ok {
+		wall := now.Sub(prev.at)
+		if wall < 750*time.Millisecond {
+			return prev.pct // too soon to recompute; keep the baseline
+		}
+		pct := 0.0
+		if total >= prev.total { // guard against a counter reset (restart)
+			pct = float64(total-prev.total) / float64(wall.Nanoseconds()) * 100.0
+		}
+		d.cpuPrev[id] = dockerCPUSample{total: total, at: now, pct: pct}
+		return pct
+	}
+	d.cpuPrev[id] = dockerCPUSample{total: total, at: now, pct: 0}
+	return 0
+}
+
+// forgetCPU drops a server's stored CPU sample (call on stop/remove so a
+// restarted container starts from a fresh baseline).
+func (d *DockerRuntime) forgetCPU(id string) {
+	d.cpuMu.Lock()
+	delete(d.cpuPrev, id)
+	d.cpuMu.Unlock()
 }
 
 // Reconfigure applies new limits live via ContainerUpdate.
@@ -790,6 +838,7 @@ func (d *DockerRuntime) Reconfigure(ctx context.Context, s *server.Server, lim s
 // runtime container plus any ephemeral install/chown helper containers, so
 // deleting a server in the panel leaves nothing behind in Docker.
 func (d *DockerRuntime) Destroy(ctx context.Context, s *server.Server) error {
+	d.forgetCPU(s.ID())
 	var firstErr error
 	for _, name := range []string{
 		containerName(s),
