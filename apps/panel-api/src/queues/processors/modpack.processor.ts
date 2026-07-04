@@ -329,6 +329,10 @@ export class ModpackProcessor extends WorkerHost {
     //     flag env.server=unsupported would otherwise leave them on the server.
     const stripped = await this.stripClientOnlyMods(server.node, server.id);
 
+    // 7a2. Let the panel's RAM-derived heap win over any -Xmx a Forge/NeoForge
+    //      pack hardcoded in user_jvm_args.txt (otherwise OOM despite the plan RAM).
+    await this.neutralizeJvmArgs(server.node, server.id);
+
     // 7b. Belt-and-suspenders: warn (don't fail) if two jars for the same mod at
     //     different versions ended up in mods/ — a pack-index quirk; the
     //     pre-install wipe already prevents leftover duplicates from a prior pack.
@@ -451,8 +455,10 @@ export class ModpackProcessor extends WorkerHost {
       buildInstallSpec(provisioned, { wipe: false, sftpPassword }),
     );
 
-    // 6. Strip client-only mods (Forge/NeoForge would crash on them), remove zip.
+    // 6. Strip client-only mods (Forge/NeoForge would crash on them), let the
+    //    panel's RAM-derived heap win over any -Xmx the pack hardcoded, remove zip.
     const stripped = await this.stripClientOnlyMods(node, server.id);
+    await this.neutralizeJvmArgs(node, server.id);
     await this.agent
       .deleteFiles(node, server.id, [zipPath])
       .catch(() => undefined);
@@ -695,6 +701,50 @@ export class ModpackProcessor extends WorkerHost {
       }
     }
     return { installed, clientOnly, missing };
+  }
+
+  /**
+   * Comment out any hardcoded -Xmx/-Xms in a Forge/NeoForge pack's
+   * user_jvm_args.txt. That file is appended AFTER the panel's
+   * `-Xmx{{SERVER_MEMORY}}M` on the launch command, so a pack's own (usually
+   * low, e.g. 4G) heap line would win and cause OutOfMemoryError despite the
+   * plan's RAM. Neutralising it lets the panel's RAM-derived heap take effect.
+   * No-op when the file is absent (fabric/vanilla) or has no heap flags.
+   */
+  private async neutralizeJvmArgs(
+    node: any,
+    serverId: string,
+  ): Promise<boolean> {
+    let content: string;
+    try {
+      const res = await this.agent.readFile(node, serverId, 'user_jvm_args.txt');
+      content =
+        typeof res === 'string' ? res : ((res as { content?: string })?.content ?? '');
+    } catch {
+      return false;
+    }
+    if (!content) return false;
+    let changed = false;
+    const out = content.split(/\r?\n/).map((line) => {
+      const t = line.trim();
+      if (!t.startsWith('#') && /^-Xm[xs]/i.test(t)) {
+        changed = true;
+        return `# ${line}   # ReFx: heap managed by the panel (SERVER_MEMORY)`;
+      }
+      return line;
+    });
+    if (changed) {
+      await this.writeFile(
+        node,
+        serverId,
+        'user_jvm_args.txt',
+        new TextEncoder().encode(out.join('\n')),
+        new Set<string>(),
+      ).catch((e) =>
+        this.logger.warn(`failed to rewrite user_jvm_args.txt: ${String(e)}`),
+      );
+    }
+    return changed;
   }
 
   /**

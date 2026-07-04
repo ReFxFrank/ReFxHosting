@@ -15,6 +15,8 @@ describe('ModpackProcessor (install hardening)', () => {
     downloadToPath: jest.Mock;
     renameFile: jest.Mock;
     readFile: jest.Mock;
+    uploadFileBytes: jest.Mock;
+    mkdir: jest.Mock;
   };
   let proc: ModpackProcessor;
 
@@ -25,6 +27,8 @@ describe('ModpackProcessor (install hardening)', () => {
       downloadToPath: jest.fn().mockResolvedValue(undefined),
       renameFile: jest.fn().mockResolvedValue(undefined),
       readFile: jest.fn().mockRejectedValue(new Error('not found')),
+      uploadFileBytes: jest.fn().mockResolvedValue(undefined),
+      mkdir: jest.fn().mockResolvedValue(undefined),
     };
     proc = new ModpackProcessor(
       {} as any,
@@ -162,6 +166,33 @@ describe('ModpackProcessor (install hardening)', () => {
       const stripped = await (proc as any).stripClientOnlyMods(NODE, 's1');
       expect(stripped).toEqual([]);
       expect(agent.deleteFiles).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('neutralizeJvmArgs', () => {
+    it('comments out hardcoded -Xmx/-Xms so the panel heap wins, keeps other flags', async () => {
+      agent.readFile.mockResolvedValue({
+        content:
+          '# Default args\n-Xmx4G\n-Xms256M\n-XX:+UseG1GC\n--add-opens java.base/foo=ALL-UNNAMED\n',
+      });
+      const changed = await (proc as any).neutralizeJvmArgs(NODE, 's1');
+      expect(changed).toBe(true);
+      expect(agent.uploadFileBytes).toHaveBeenCalledTimes(1);
+      const written = Buffer.from(
+        agent.uploadFileBytes.mock.calls[0][3],
+      ).toString('utf8');
+      expect(written).toMatch(/^# -Xmx4G/m);
+      expect(written).toMatch(/^# -Xms256M/m);
+      expect(written).toContain('-XX:+UseG1GC');
+      expect(written).toContain('--add-opens java.base/foo=ALL-UNNAMED');
+    });
+
+    it('no-ops when there is no heap flag (or no file)', async () => {
+      agent.readFile.mockResolvedValue({ content: '-XX:+UseG1GC\n' });
+      expect(await (proc as any).neutralizeJvmArgs(NODE, 's1')).toBe(false);
+      agent.readFile.mockRejectedValue(new Error('missing'));
+      expect(await (proc as any).neutralizeJvmArgs(NODE, 's1')).toBe(false);
+      expect(agent.uploadFileBytes).not.toHaveBeenCalled();
     });
   });
 
