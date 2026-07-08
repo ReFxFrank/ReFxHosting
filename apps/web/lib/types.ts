@@ -886,6 +886,25 @@ export interface FileEntry {
   modified: string;
 }
 
+/** Status payload for the paid custom-server-address card. */
+export interface VanityAddressStatus {
+  /** Feature on AND the node has a branded game domain. */
+  enabled: boolean;
+  gameDomain: string | null;
+  feeMinor: number;
+  currency: string;
+  /** The purchased label, or null when on the default shortId address. */
+  currentLabel: string | null;
+  currentAddress: string | null;
+  pending: {
+    label: string;
+    address: string;
+    invoiceId: string | null;
+    amountMinor: number;
+    currency: string;
+  } | null;
+}
+
 /** State of the level.dat / level.dat_old pair for the world-recovery card. */
 export interface LevelDatStatus {
   world: string;

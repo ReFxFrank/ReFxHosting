@@ -19,6 +19,10 @@ describe("BillingService settlement engine", () => {
         create: jest.fn().mockResolvedValue({}),
       },
       pendingPlanChange: { findUnique: jest.fn().mockResolvedValue(null) },
+      pendingVanityAddress: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
       subscription: {
         findUnique: jest.fn(),
         update: jest.fn().mockResolvedValue({}),

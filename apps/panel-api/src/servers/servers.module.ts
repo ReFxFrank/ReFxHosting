@@ -7,6 +7,7 @@ import { ModrinthService } from "./modrinth.service";
 import { ModsService } from "./mods.service";
 import { ModpackService } from "./modpack.service";
 import { WorldRecoveryService } from "./world-recovery.service";
+import { VanityAddressService } from "./vanity-address.service";
 import { WorkshopService } from "./workshop.service";
 import { VoiceService } from "./voice.service";
 import { ScheduleRunner } from "./schedule.runner";
@@ -45,6 +46,7 @@ import { QUEUE } from "../queues/queue.constants";
     ModsService,
     ModpackService,
     WorldRecoveryService,
+    VanityAddressService,
     WorkshopService,
     VoiceService,
     ModpackProcessor,
@@ -55,6 +57,6 @@ import { QUEUE } from "../queues/queue.constants";
     DomainsService,
     ServersResolver,
   ],
-  exports: [ServersService, TransfersService],
+  exports: [ServersService, TransfersService, VanityAddressService],
 })
 export class ServersModule {}

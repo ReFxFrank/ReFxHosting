@@ -50,3 +50,17 @@ domain automatically.
   per-server and needs DNS automation (a DNS-provider API) — a future Tier-3
   enhancement; the wildcard approach here is portful (`name:port`).
 - **Clearing it:** blank the game domain to revert new servers to the node FQDN.
+
+## Paid custom addresses (vanity labels)
+
+Customers can replace the `<shortId>` part of their branded address with a
+purchased word (Server Settings → **Custom server address**): a one-time fee
+(default $2.00, `Admin → Settings → Custom server addresses`) invoiced through
+the normal billing flow, applied when the invoice is paid. The label lives on
+`Server.vanityLabel` (globally unique) so it survives node transfers (the
+domain part follows the destination node) and game switches. No DNS changes —
+the node wildcard already resolves any label. Validation enforces DNS-label
+rules, reserves infrastructure/brand words (extendable in admin settings), and
+blocks 8-hex-char names so labels can never collide with any server's shortId.
+Admin can strip a name (ToS enforcement) via
+`DELETE /api/v1/admin/servers/:id/vanity-address?refund=credit|none`.

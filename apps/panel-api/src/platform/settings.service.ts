@@ -25,6 +25,9 @@ const KEY = {
   steamUsername: 'steam.username',
   steamPassword: 'steam.password',
   steamGuardCode: 'steam.guardCode',
+  vanityEnabled: 'features.vanityAddress.enabled',
+  vanityFeeMinor: 'billing.vanityAddressFeeMinor',
+  vanityReservedWords: 'features.vanityAddress.reservedWords',
 } as const;
 
 export interface GatewayConfigInput {
@@ -305,5 +308,49 @@ export class SettingsService {
     if (!code) return undefined;
     await this.set(KEY.steamGuardCode, '');
     return code;
+  }
+
+  // ---- Custom server addresses (vanity labels) ---------------------------
+
+  /** Effective vanity-address config. Enabled by default at $2.00 one-time. */
+  async vanityConfig(): Promise<{
+    enabled: boolean;
+    feeMinor: number;
+    reservedWords: string[];
+  }> {
+    const enabledStr = await this.get(KEY.vanityEnabled);
+    const feeStr = await this.get(KEY.vanityFeeMinor);
+    const wordsStr = await this.get(KEY.vanityReservedWords);
+    const fee = feeStr ? Number(feeStr) : NaN;
+    return {
+      enabled: enabledStr ? enabledStr === 'true' : true,
+      feeMinor: Number.isFinite(fee) && fee >= 0 ? Math.round(fee) : 200,
+      reservedWords: (wordsStr ?? '')
+        .split(/[\n,]/)
+        .map((w) => w.trim().toLowerCase())
+        .filter(Boolean),
+    };
+  }
+
+  /** Apply owner edits to the vanity-address config; only provided fields change. */
+  async setVanityConfig(dto: {
+    enabled?: boolean;
+    feeMinor?: number;
+    reservedWords?: string[];
+  }): Promise<void> {
+    if (dto.enabled !== undefined)
+      await this.set(KEY.vanityEnabled, dto.enabled ? 'true' : 'false', false);
+    if (dto.feeMinor !== undefined)
+      await this.set(
+        KEY.vanityFeeMinor,
+        String(Math.max(0, Math.round(dto.feeMinor))),
+        false,
+      );
+    if (dto.reservedWords !== undefined)
+      await this.set(
+        KEY.vanityReservedWords,
+        dto.reservedWords.map((w) => w.trim().toLowerCase()).filter(Boolean).join('\n'),
+        false,
+      );
   }
 }

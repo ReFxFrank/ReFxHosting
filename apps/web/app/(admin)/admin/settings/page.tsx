@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Boxes, ShieldCheck } from "lucide-react";
+import { Mail, Send, Boxes, ShieldCheck, Globe } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, ListSkeleton } from "@/components/shared";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Label } from "@/components/ui/input";
+import { Input, Label, Textarea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -29,7 +29,124 @@ export default function AdminSettingsPage() {
       />
       <EmailSettingsCard />
       <SteamSettingsCard />
+      <VanitySettingsCard />
     </div>
+  );
+}
+
+/** Custom server addresses: enable/disable, one-time fee, extra reserved words. */
+function VanitySettingsCard() {
+  const queryClient = useQueryClient();
+  const { data: cfg, isLoading } = useQuery({
+    queryKey: ["admin", "vanity-config"],
+    queryFn: () => api.admin.vanityConfig(),
+  });
+
+  const [feeStr, setFeeStr] = useState<string | null>(null);
+  const [words, setWords] = useState<string | null>(null);
+
+  const feeV = feeStr ?? (cfg ? String(cfg.feeMinor) : "");
+  const wordsV = words ?? (cfg ? cfg.reservedWords.join("\n") : "");
+  const feeNum = Number(feeV);
+  const feeValid = Number.isInteger(feeNum) && feeNum >= 0 && feeNum <= 100000;
+
+  const save = useMutation({
+    mutationFn: (input: {
+      enabled?: boolean;
+      feeMinor?: number;
+      reservedWords?: string[];
+    }) => api.admin.setVanityConfig(input),
+    onSuccess: () => {
+      toast.success("Custom-address settings saved");
+      queryClient.invalidateQueries({ queryKey: ["admin", "vanity-config"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to save"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Globe className="size-4 text-primary" /> Custom server addresses
+        </CardTitle>
+        <CardDescription>
+          Let customers buy a custom name for their server&apos;s branded
+          address (e.g.{" "}
+          <span className="font-mono">whatever.virginia.rfx.refx.gg</span>).
+          Requires a game domain + wildcard DNS on the node.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading || !cfg ? (
+          <ListSkeleton rows={2} />
+        ) : (
+          <>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Enable purchases</p>
+                <p className="text-xs text-muted-foreground">
+                  Turn off to hide the card from customers (existing names keep
+                  working).
+                </p>
+              </div>
+              <Switch
+                checked={cfg.enabled}
+                onCheckedChange={(v) => save.mutate({ enabled: v })}
+              />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="vanity-fee">One-time fee (cents)</Label>
+                <Input
+                  id="vanity-fee"
+                  inputMode="numeric"
+                  value={feeV}
+                  onChange={(e) => setFeeStr(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {feeValid
+                    ? feeNum === 0
+                      ? "Free — applied instantly with no invoice."
+                      : `Customers pay ${(feeNum / 100).toFixed(2)} (their plan currency) per name.`
+                    : "Enter a whole number of cents (0-100000)."}
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="vanity-words">Extra reserved words</Label>
+                <Textarea
+                  id="vanity-words"
+                  rows={4}
+                  placeholder="one per line"
+                  value={wordsV}
+                  onChange={(e) => setWords(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Merged with the built-in infrastructure/brand list.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <Button
+                loading={save.isPending}
+                disabled={!feeValid}
+                onClick={() =>
+                  save.mutate({
+                    feeMinor: feeNum,
+                    reservedWords: wordsV
+                      .split(/\n/)
+                      .map((w) => w.trim())
+                      .filter(Boolean),
+                  })
+                }
+              >
+                Save
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -21,6 +21,7 @@ import { TemplatesService } from "../templates/templates.service";
 import { ServersService } from "../servers/servers.service";
 import { TransfersService } from "../servers/transfers.service";
 import { DatabaseHostsService } from "../databases/database-hosts.service";
+import { VanityAddressService } from "../servers/vanity-address.service";
 import { ResizeServerDto } from "../servers/dto/server.dto";
 import {
   CreateDatabaseHostDto,
@@ -106,6 +107,7 @@ import {
   SetEmailConfigDto,
   SetGatewayConfigDto,
   SetSteamConfigDto,
+  SetVanityConfigDto,
   VerifySteamLoginDto,
   SetUserPasswordDto,
   SetUserRoleDto,
@@ -150,6 +152,7 @@ export class AdminController {
     private readonly giftCards: GiftCardsService,
     private readonly credit: CreditService,
     private readonly dbHosts: DatabaseHostsService,
+    private readonly vanity: VanityAddressService,
   ) {}
 
   // ---- Coupons -----------------------------------------------------------
@@ -805,6 +808,41 @@ export class AdminController {
   @Audit({ action: "admin.email.test", targetType: "PlatformSetting" })
   sendTestEmail(@Body() dto: TestEmailDto) {
     return this.email.sendTest(dto.to);
+  }
+
+  // ---- Custom server addresses (vanity labels) ---------------------------
+
+  @Get("settings/vanity")
+  @RequirePerm("settings.manage")
+  vanityConfig() {
+    return this.settings.vanityConfig();
+  }
+
+  @Patch("settings/vanity")
+  @RequirePerm("settings.manage")
+  @Audit({ action: "admin.settings.vanity.update", targetType: "PlatformSetting" })
+  async setVanityConfig(@Body() dto: SetVanityConfigDto) {
+    await this.settings.setVanityConfig(dto);
+    return this.settings.vanityConfig();
+  }
+
+  /** ToS/impersonation enforcement: strip a purchased address (optional credit). */
+  @Delete("servers/:id/vanity-address")
+  @RequirePerm("servers.manage")
+  @Audit({
+    action: "admin.server.vanity.remove",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  adminRemoveVanity(
+    @Param("id") id: string,
+    @Query("refund") refund: string | undefined,
+    @CurrentUser("id") actorId: string,
+  ) {
+    return this.vanity.adminRemove(id, {
+      refundCredit: refund === "credit",
+      actorId,
+    });
   }
 
   // ---- Steam (central SteamCMD login + Web API key) ----------------------

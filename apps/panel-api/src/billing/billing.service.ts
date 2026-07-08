@@ -15,6 +15,7 @@ import {
   PaymentMethod,
   PaymentState,
   PendingPlanChange,
+  PendingVanityAddress,
   Price,
   Prisma,
   Product,
@@ -43,6 +44,10 @@ import { EmailService } from "../email/email.service";
 import { NotificationsService } from "../platform/notifications.service";
 import { PushService } from "../push/push.service";
 import { addInterval } from "./interval.util";
+import {
+  buildAllocationAlias,
+  normalizeGameDomain,
+} from "../servers/allocation-port.util";
 import { generateInvoiceNumber } from "./invoice-number.util";
 import { calculateTax } from "./tax.util";
 import { CreateProductDto } from "./dto/create-product.dto";
@@ -821,6 +826,10 @@ export class BillingService {
     // Voiding an upgrade invoice abandons the staged change (the server stays on
     // its current plan); the customer can request the upgrade again later.
     await this.prisma.pendingPlanChange.deleteMany({
+      where: { invoiceId: id },
+    });
+    // Likewise a voided vanity-address invoice releases the reserved name.
+    await this.prisma.pendingVanityAddress.deleteMany({
       where: { invoiceId: id },
     });
     // Release any server reserved by this unpaid order so it disappears from the
@@ -1661,6 +1670,78 @@ export class BillingService {
     }
   }
 
+  /**
+   * Apply a PAID custom-address purchase: set the server's vanityLabel and
+   * rewrite the advertised allocation aliases in place. Alias is panel-side
+   * display only (the node binds 0.0.0.0 and wildcard DNS resolves any label),
+   * so no agent call is needed. deleteMany keeps racing webhook deliveries
+   * no-ops, mirroring applyPendingPlanChange.
+   */
+  async applyPendingVanityAddress(
+    pending: PendingVanityAddress,
+  ): Promise<void> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: pending.serverId, deletedAt: null },
+      select: {
+        id: true,
+        ownerId: true,
+        node: { select: { gameDomain: true } },
+      },
+    });
+    if (!server) {
+      // Server deleted while the invoice was open — just release the name.
+      await this.prisma.pendingVanityAddress.deleteMany({
+        where: { id: pending.id },
+      });
+      return;
+    }
+    const gameDomain = normalizeGameDomain(server.node?.gameDomain);
+    const alias = buildAllocationAlias(pending.label, gameDomain);
+    try {
+      await this.prisma.$transaction([
+        this.prisma.server.update({
+          where: { id: server.id },
+          data: { vanityLabel: pending.label },
+        }),
+        ...(alias
+          ? [
+              this.prisma.allocation.updateMany({
+                where: { serverId: server.id, alias: { not: null } },
+                data: { alias },
+              }),
+            ]
+          : []),
+        this.prisma.pendingVanityAddress.deleteMany({
+          where: { id: pending.id },
+        }),
+      ]);
+    } catch (err) {
+      // Near-impossible (the pending row held the unique reservation), but if
+      // the label was snatched, don't fail the payment — release and tell them.
+      this.logger.error(
+        `apply vanity address failed for server ${server.id}: ${(err as Error).message}`,
+      );
+      await this.prisma.pendingVanityAddress
+        .deleteMany({ where: { id: pending.id } })
+        .catch(() => undefined);
+      await this.notifications
+        .createNotification(server.ownerId, {
+          title: "Custom address could not be applied",
+          body: `We couldn't apply "${pending.label}" to your server — please contact support for a credit.`,
+        })
+        .catch(() => undefined);
+      return;
+    }
+    await this.notifications
+      .createNotification(server.ownerId, {
+        title: "Custom server address active",
+        body: alias
+          ? `Your server address is now ${alias}.`
+          : `Your custom name "${pending.label}" was saved.`,
+      })
+      .catch(() => undefined);
+  }
+
   async createInvoiceForSubscription(
     subscriptionId: string,
     opts: { discountMinor?: number; couponCode?: string; noTax?: boolean } = {},
@@ -1902,6 +1983,14 @@ export class BillingService {
       });
       if (paidUpgrade) {
         await this.applyPendingPlanChange(paidUpgrade);
+      }
+      // A paid vanity-address purchase applies the same way: only on the real
+      // OPEN→PAID transition, so webhook re-deliveries can't re-apply it.
+      const paidVanity = await this.prisma.pendingVanityAddress.findUnique({
+        where: { invoiceId },
+      });
+      if (paidVanity) {
+        await this.applyPendingVanityAddress(paidVanity);
       }
     }
 

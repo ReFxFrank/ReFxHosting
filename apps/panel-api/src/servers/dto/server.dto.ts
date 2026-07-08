@@ -279,6 +279,17 @@ export class InstallServerPackDto {
   loaderVersion?: string;
 }
 
+export class PurchaseVanityAddressDto {
+  @ApiProperty({
+    description:
+      "Desired custom address label (3-32 chars, a-z 0-9 and hyphens). " +
+      "Becomes <label>.<node game domain>.",
+  })
+  @IsString()
+  @MaxLength(64)
+  label!: string;
+}
+
 export class ModInstallDto {
   @ApiPropertyOptional({
     description: "Modrinth project id/slug (installs latest compatible).",

@@ -40,11 +40,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { cn, copyToClipboard } from "@/lib/utils";
+import { cn, copyToClipboard, formatMoney } from "@/lib/utils";
 import type { Server, SubUser } from "@/lib/types";
 import {
   PERMISSION_GROUPS,
   ALL_GRANTABLE_KEYS,
+  hasServerPermission,
 } from "@/lib/server-permissions";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
@@ -109,7 +110,10 @@ export default function ServerSettingsPage() {
           </TabsList>
 
           <TabsContent value="general">
-            <GeneralTab server={server} />
+            <div className="space-y-6">
+              <GeneralTab server={server} />
+              <VanityAddressCard server={server} />
+            </div>
           </TabsContent>
           <TabsContent value="startup">
             <StartupTab server={server} />
@@ -186,6 +190,220 @@ function GeneralTab({ server }: { server: Server }) {
           </Button>
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Custom server address (paid vanity label)
+// ---------------------------------------------------------------------------
+
+/** Client-side preview of the label rules; the server is authoritative. */
+const VANITY_LABEL_RE = /^[a-z0-9]([a-z0-9-]{1,30}[a-z0-9])?$/;
+
+function VanityAddressCard({ server }: { server: Server }) {
+  const queryClient = useQueryClient();
+  const [label, setLabel] = useState("");
+  const [removeOpen, setRemoveOpen] = useState(false);
+
+  const isOwner = hasServerPermission(server.viewerPermissions, "settings.update");
+  const { data: status } = useQuery({
+    queryKey: ["server-vanity", server.id],
+    queryFn: () => api.servers.vanityStatus(server.id),
+    retry: false,
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["server-vanity", server.id] });
+    queryClient.invalidateQueries({ queryKey: ["server", server.id] });
+  };
+
+  const payInvoice = async (invoiceId: string) => {
+    const res = await api.billing.payInvoice(invoiceId);
+    if (res?.checkoutUrl) {
+      window.location.href = res.checkoutUrl;
+      return;
+    }
+    toast.success("Payment received — your new address is active");
+    invalidate();
+  };
+
+  const purchase = useMutation({
+    mutationFn: () => api.servers.purchaseVanity(server.id, label.trim()),
+    onSuccess: async (res) => {
+      if (res.status === "applied") {
+        toast.success(`Your server address is now ${res.address}`);
+        setLabel("");
+        invalidate();
+        return;
+      }
+      // Invoiced — take them straight into payment (credit/saved card settles
+      // instantly; otherwise we redirect to checkout).
+      try {
+        await payInvoice(res.invoiceId);
+      } catch (e) {
+        toast.error(
+          e instanceof ApiError
+            ? e.message
+            : "Invoice created — pay it from Billing to activate your address",
+        );
+        invalidate();
+      }
+      setLabel("");
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Purchase failed"),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: () => api.servers.removeVanity(server.id),
+    onSuccess: () => {
+      toast.success("Custom address removed");
+      setRemoveOpen(false);
+      invalidate();
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to remove"),
+  });
+
+  // Hidden entirely when the feature/location doesn't support it.
+  if (!status?.enabled) return null;
+
+  const normalized = label.trim().toLowerCase();
+  const valid = VANITY_LABEL_RE.test(normalized);
+  const preview = normalized ? `${normalized}.${status.gameDomain}` : "";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Custom server address</CardTitle>
+        <CardDescription>
+          Replace the random address with a name of your choice — one-time{" "}
+          {formatMoney(status.feeMinor, status.currency)} per name.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {status.currentLabel && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-success/40 bg-success/5 p-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">
+                {status.currentAddress ?? status.currentLabel}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Your custom address is active.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              {status.currentAddress && (
+                <CopyButton value={status.currentAddress} label="address" />
+              )}
+              {isOwner && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setRemoveOpen(true)}
+                >
+                  Remove
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {status.pending && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium">{status.pending.address}</p>
+              <p className="text-xs text-muted-foreground">
+                Awaiting payment (
+                {formatMoney(status.pending.amountMinor, status.pending.currency)}
+                ) — your address activates once paid.
+              </p>
+            </div>
+            {isOwner && (
+              <div className="flex items-center gap-2">
+                {status.pending.invoiceId && (
+                  <Button
+                    size="sm"
+                    onClick={() => void payInvoice(status.pending!.invoiceId!)}
+                  >
+                    Pay now
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  loading={removeMutation.isPending}
+                  onClick={() => removeMutation.mutate()}
+                >
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {isOwner && !status.pending && (
+          <div className="space-y-2 rounded-lg border border-dashed p-3">
+            <Label htmlFor="vanity-label">
+              {status.currentLabel ? "Change your address" : "Pick your address"}
+            </Label>
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  id="vanity-label"
+                  placeholder="whatever"
+                  value={label}
+                  onChange={(e) => setLabel(e.target.value)}
+                  className="font-mono"
+                />
+                <span className="shrink-0 text-sm text-muted-foreground">
+                  .{status.gameDomain}
+                </span>
+              </div>
+              <Button
+                loading={purchase.isPending}
+                disabled={!valid}
+                onClick={() => purchase.mutate()}
+              >
+                Buy for {formatMoney(status.feeMinor, status.currency)}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {normalized && !valid
+                ? "3-32 characters: lowercase letters, numbers and hyphens (not at the start or end)."
+                : preview
+                  ? `Your server will be reachable at ${preview} (same port).`
+                  : "3-32 characters: lowercase letters, numbers and hyphens. Each name change is a new purchase."}
+            </p>
+          </div>
+        )}
+      </CardContent>
+
+      <Dialog open={removeOpen} onOpenChange={setRemoveOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove custom address?</DialogTitle>
+            <DialogDescription>
+              Your server goes back to its default address. The name becomes
+              available for anyone to buy, and no refund is issued.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRemoveOpen(false)}>
+              Keep it
+            </Button>
+            <Button
+              variant="destructive"
+              loading={removeMutation.isPending}
+              onClick={() => removeMutation.mutate()}
+            >
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

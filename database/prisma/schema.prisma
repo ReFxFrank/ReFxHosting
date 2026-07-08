@@ -581,6 +581,9 @@ model Server {
   id              String        @id @db.Uuid
   // Short, user-facing identifier (e.g. "a1b2c3d4") used in URLs/SFTP user.
   shortId         String        @unique
+  // Purchased custom address label (replaces shortId in the advertised
+  // <label>.<node.gameDomain> alias). Globally unique; NULL = default address.
+  vanityLabel     String?       @unique
   name            String
   description     String?
 
@@ -633,6 +636,7 @@ model Server {
   steamGuardCode  String?
 
   allocations     Allocation[]
+  pendingVanityAddress PendingVanityAddress?
   backups         Backup[]
   databases       ServerDatabase[]
   schedules       Schedule[]
@@ -1090,6 +1094,23 @@ model Subscription {
 /// before the change applies — the server stays on its OLD configuration until
 /// then. DOWNGRADES carry no invoice and apply at the next renewal
 /// (`applyAtPeriodEnd`). At most one pending change per subscription.
+// A purchased-but-unpaid custom server address. Created when the customer
+// buys a vanity label; the label is reserved (unique) while the gating invoice
+// is OPEN. Applied by markInvoicePaid on the OPEN->PAID transition (sets
+// Server.vanityLabel + rewrites allocation aliases); released when the invoice
+// is voided. Mirrors the PendingPlanChange pay-then-apply pattern.
+model PendingVanityAddress {
+  id        String   @id @db.Uuid
+  serverId  String   @unique @db.Uuid
+  server    Server   @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  // The gating invoice; NULL only during the brief claim-then-invoice window.
+  invoiceId String?  @unique @db.Uuid
+  invoice   Invoice? @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  // Normalized label, reserved while payment is pending.
+  label     String   @unique
+  createdAt DateTime @default(now())
+}
+
 model PendingPlanChange {
   id               String        @id @db.Uuid
   subscriptionId   String        @unique @db.Uuid
@@ -1151,6 +1172,7 @@ model Invoice {
   lineItems      InvoiceLineItem[]
   payments       Payment[]
   pendingPlanChange PendingPlanChange?
+  pendingVanityAddress PendingVanityAddress?
 
   createdAt      DateTime      @default(now())
 

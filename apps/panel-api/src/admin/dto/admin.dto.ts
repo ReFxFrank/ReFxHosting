@@ -454,3 +454,29 @@ export class SetUserPasswordDto {
   @IsStrongPassword()
   password?: string;
 }
+
+/** Owner-editable custom-server-address (vanity label) settings. */
+export class SetVanityConfigDto {
+  @ApiPropertyOptional({ description: "Allow customers to buy custom addresses." })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: "One-time fee in minor units (e.g. 200 = $2.00). 0 = free.",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  feeMinor?: number;
+
+  @ApiPropertyOptional({
+    type: [String],
+    description: "Extra reserved words (merged with the built-in list).",
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  reservedWords?: string[];
+}

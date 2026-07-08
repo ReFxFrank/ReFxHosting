@@ -41,6 +41,7 @@ import type {
   User,
   FileEntry,
   LevelDatStatus,
+  VanityAddressStatus,
   LevelDatRestoreResult,
   JavaVersionState,
   AuditLog,
@@ -597,6 +598,24 @@ export const api = {
           input,
         ),
     },
+    // Custom server address (paid vanity label replacing the random shortId).
+    vanityStatus: (id: string) =>
+      http.get<VanityAddressStatus>(`/servers/${id}/vanity-address`),
+    purchaseVanity: (id: string, label: string) =>
+      http.post<
+        | { status: "applied"; label: string; address: string }
+        | {
+            status: "invoiced";
+            label: string;
+            address: string;
+            invoiceId: string;
+            amountMinor: number;
+            currency: string;
+          }
+      >(`/servers/${id}/vanity-address`, { label }),
+    removeVanity: (id: string) =>
+      http.delete<{ removed: boolean }>(`/servers/${id}/vanity-address`),
+
     sftp: (id: string) =>
       http.get<{ host: string; port: number; username: string }>(
         `/servers/${id}/sftp`,
@@ -1330,6 +1349,26 @@ export const api = {
     }) => http.patch<void>("/admin/settings/email", input),
     sendTestEmail: (to: string) =>
       http.post<{ delivered: boolean }>("/admin/settings/email/test", { to }),
+
+    // Custom server addresses (settings.manage)
+    vanityConfig: () =>
+      http.get<{ enabled: boolean; feeMinor: number; reservedWords: string[] }>(
+        "/admin/settings/vanity",
+      ),
+    setVanityConfig: (input: {
+      enabled?: boolean;
+      feeMinor?: number;
+      reservedWords?: string[];
+    }) =>
+      http.patch<{ enabled: boolean; feeMinor: number; reservedWords: string[] }>(
+        "/admin/settings/vanity",
+        input,
+      ),
+    removeServerVanity: (serverId: string, refundCredit: boolean) =>
+      http.delete<{ removed: boolean }>(
+        `/admin/servers/${serverId}/vanity-address`,
+        { query: refundCredit ? { refund: "credit" } : undefined },
+      ),
 
     // Coupons (billing.manage)
     coupons: () => getList<Coupon>("/admin/coupons"),

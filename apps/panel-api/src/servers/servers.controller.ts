@@ -18,6 +18,7 @@ import { ScheduleRunner } from "./schedule.runner";
 import { ModsService } from "./mods.service";
 import { ModpackService } from "./modpack.service";
 import { WorldRecoveryService } from "./world-recovery.service";
+import { VanityAddressService } from "./vanity-address.service";
 import { WorkshopService } from "./workshop.service";
 import { VoiceService } from "./voice.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -41,6 +42,7 @@ import {
   ModInstallDto,
   ModpackInstallDto,
   InstallServerPackDto,
+  PurchaseVanityAddressDto,
   ResizeServerDto,
   SendCommandDto,
   SetVariableDto,
@@ -74,6 +76,7 @@ export class ServersController {
     private readonly scheduleRunner: ScheduleRunner,
     private readonly domains: DomainsService,
     private readonly worldRecovery: WorldRecoveryService,
+    private readonly vanity: VanityAddressService,
   ) {}
 
   // ---- collection --------------------------------------------------------
@@ -377,6 +380,42 @@ export class ServersController {
   })
   modpacksUninstall(@Param("id") id: string) {
     return this.modpacks.uninstall(id);
+  }
+
+  // ---- Custom server address (paid vanity label) -------------------------
+
+  @Get(":id/vanity-address")
+  @RequirePermissions("server.read")
+  vanityStatus(@Param("id") id: string) {
+    return this.vanity.status(id);
+  }
+
+  // Owner-only (enforced in the service): buying raises an invoice on the
+  // owner's subscription, so sub-users and staff must not spend their money.
+  @Post(":id/vanity-address")
+  @RequirePermissions("settings.update")
+  @Audit({
+    action: "server.vanity.purchase",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  vanityPurchase(
+    @Param("id") id: string,
+    @CurrentUser("id") userId: string,
+    @Body() dto: PurchaseVanityAddressDto,
+  ) {
+    return this.vanity.purchase(id, userId, dto.label);
+  }
+
+  @Delete(":id/vanity-address")
+  @RequirePermissions("settings.update")
+  @Audit({
+    action: "server.vanity.remove",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  vanityRemove(@Param("id") id: string, @CurrentUser("id") userId: string) {
+    return this.vanity.remove(id, userId);
   }
 
   // ---- Steam Workshop ----------------------------------------------------
