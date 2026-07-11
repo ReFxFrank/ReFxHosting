@@ -567,7 +567,7 @@ function TierUpgradeCard({
       {tier.description && <p className="text-xs text-muted-foreground">{tier.description}</p>}
       <div className="space-y-1 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5"><MemoryStick className="size-3.5" /> {(tier.memoryMb / 1024).toFixed(tier.memoryMb % 1024 ? 1 : 0)} GB RAM</span>
-        <span className="flex items-center gap-1.5"><Cpu className="size-3.5" /> {tier.cpuCores} vCPU</span>
+        <span className="flex items-center gap-1.5"><Cpu className="size-3.5" /> {tier.cpuCores} vCPU · up to 2× burst</span>
         <span className="flex items-center gap-1.5"><HardDrive className="size-3.5" /> {(tier.diskMb / 1024).toFixed(0)} GB disk</span>
         {tier.recommendedPlayers != null && (
           <span className="flex items-center gap-1.5"><Users className="size-3.5" /> ~{tier.recommendedPlayers} players</span>

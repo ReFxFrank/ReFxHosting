@@ -37,6 +37,11 @@ we match the premium-tier rate while the headline still drops ~17% from the old
 $6/GB. (Floor: the guardrail below keeps us ≥ 1.5× the priciest node, i.e. ≥ $4.20;
 drop `PRICE_PER_GB_CENTS` toward 450 if you want to undercut more aggressively.)
 
+Note the "no overcommit" claim is about **RAM** — that stays 1:1 dedicated.
+**CPU** is deliberately different: plans sell fair-share vCPU with burst to 2×
+(see the CPU model in [06 — Node Agent](06-node-agent.md)), and nodes default
+to 2× CPU overcommit, which is what makes the burst headroom sustainable.
+
 ## Cost basis (snapshot — keep current)
 
 | Node | CPU | RAM | Cost/mo | $/GB |

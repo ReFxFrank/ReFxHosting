@@ -209,7 +209,7 @@ export function GameOrderSummaryPanel({
               <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <Cpu className="size-4 text-primary" /> {c.cpuCores ?? "—"}{" "}
-                  vCPU
+                  vCPU{c.cpuCores != null && " · up to 2× burst"}
                 </li>
                 <li className="flex items-center gap-2">
                   <MemoryStick className="size-4 text-primary" />{" "}

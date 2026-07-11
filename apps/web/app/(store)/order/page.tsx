@@ -932,7 +932,7 @@ export default function OrderPage() {
             {limits && (
               <Row
                 label="Resources"
-                value={`${limits.cpuCores} vCPU · ${(limits.memoryMb / 1024).toFixed(1)} GB · ${(limits.diskMb / 1024).toFixed(0)} GB`}
+                value={`${limits.cpuCores} vCPU (2× burst) · ${(limits.memoryMb / 1024).toFixed(1)} GB · ${(limits.diskMb / 1024).toFixed(0)} GB`}
               />
             )}
             <Row
@@ -1235,7 +1235,7 @@ function TierCard({
           {(tier.memoryMb / 1024).toFixed(tier.memoryMb % 1024 ? 1 : 0)} GB RAM
         </span>
         <span className="flex items-center gap-1.5">
-          <Cpu className="size-3.5" /> {tier.cpuCores} vCPU
+          <Cpu className="size-3.5" /> {tier.cpuCores} vCPU · up to 2× burst
         </span>
         <span className="flex items-center gap-1.5">
           <HardDrive className="size-3.5" /> {(tier.diskMb / 1024).toFixed(0)}{" "}
