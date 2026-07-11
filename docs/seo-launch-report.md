@@ -33,19 +33,12 @@ was written against).
 - Registry (`data/games/index.ts`) is static imports — content ships in the
   build, no API dependency.
 
-### Phase 3 — comparison pages (commit `f25727d`)
+### Phase 3 — comparison pages (commit `f25727d`) — REMOVED
 
-- `/compare` hub + 6 pages: Apex Hosting, Shockbyte, BisectHosting,
-  G-Portal, Nitrado, PebbleHost.
-- Factually conservative by construction: ReFx cells state only allow-list
-  capabilities; competitor cells are qualitative ("Advertised" / "Not
-  advertised"), no prices, no invented specifics; G-Portal's Gamecloud and
-  Nitrado's switchable servers are acknowledged honestly; every page has a
-  "when they might fit better" section and a last-reviewed note with a
-  correction CTA.
-- `FAQPage` + `BreadcrumbList` JSON-LD; "Compare hosts" footer link.
-- **Ships `noindex, follow` and excluded from the sitemap** until
-  `NEXT_PUBLIC_INDEX_COMPARE=true` (see TODO list).
+Built (6 competitor pages + hub, noindex-gated) and then **removed at
+Frank's request** before ever being indexed — the feature was decided
+against. The removal commit deletes the routes, data, sitemap wiring and
+footer link. Nothing external ever linked to `/compare`.
 
 ### Phase 4 — knowledge-base tutorials (commits `f4c2ed9`, `18fdbec`)
 
@@ -65,8 +58,6 @@ was written against).
 | `npm run build` (web, production) | exit 0 |
 | `npm run typecheck` (web) | clean |
 | panel-api jest | 523/523 pass |
-| `/compare`, `/compare/[slug]` crawl | 200; invalid slug 404 |
-| compare `noindex, follow` + sitemap exclusion (flag off) | confirmed |
 | JSON-LD spot checks (WebSite/SearchAction, FAQPage, BreadcrumbList, Product, HowTo) | present |
 | `/opengraph-image` | 200 `image/png` |
 | game pages with panel API down | 200, graceful fallback |
@@ -84,17 +75,10 @@ was written against).
    DATABASE_URL="postgresql://refx:refx@127.0.0.1:5432/refx?schema=public" \
      npx tsx database/seed/seed-kb.ts
    ```
-3. **Review the comparison pages** at `/compare` (they're live but noindex).
-   Read all 6 with a competitor-claims eye — the copy only says
-   "advertised/not advertised", but you own the risk. When happy, set
-   `NEXT_PUBLIC_INDEX_COMPARE=true` in the web build env and **rebuild the
-   web image** (build-time var, same rule as `NEXT_PUBLIC_API_URL`). That
-   single flag flips the robots meta to indexable AND adds the 7 URLs to
-   the sitemap.
-4. **Google Search Console**: after deploy, Sitemaps → resubmit
+3. **Google Search Console**: after deploy, Sitemaps → resubmit
    `https://refx.gg/sitemap.xml` (it now carries the game pages with fresh
    metadata; KB articles appear once seeded). No other GSC action needed.
-5. Optional: spot-read a handful of game pages (`/games/palworld`,
+4. Optional: spot-read a handful of game pages (`/games/palworld`,
    `/games/rust`, `/games/factorio`) and KB tutorials for tone — every fact
    was grounded in the seed templates, but you know the games.
 
@@ -104,12 +88,8 @@ was written against).
 - [ ] Run the KB seed command (item 2 above) — expect 28 "upserted" lines
 - [ ] Open `/modpacks` → "How installs work" no longer 404s
 - [ ] Open `/games/minecraft` — editorial band renders below the plans
-- [ ] Open `/compare/apex-hosting` — page renders, view-source shows
-      `noindex, follow`
 - [ ] `curl -s https://refx.gg/sitemap.xml | grep -c knowledge-base` — >0
       after seeding
-- [ ] Later, after reviewing /compare: flip `NEXT_PUBLIC_INDEX_COMPARE=true`,
-      rebuild web, confirm the robots meta flipped
 
 ## Maintenance notes
 
@@ -120,9 +100,6 @@ was written against).
   `seed-kb.ts`), re-run the seed. Markdown subset only — no tables, images
   or raw HTML (the renderer in `components/shared/markdown.tsx` is the
   contract).
-- **Comparison pages**: re-review competitor claims every few months and
-  bump `COMPARE_REVIEWED` in `data/compare/index.ts`; competitor cells must
-  stay qualitative.
 - The style guardrails (no hype, no exclamation marks in prose, sentence
   case, US English, no uptime/SLA/refund/price claims) apply to all future
   content in these surfaces.
