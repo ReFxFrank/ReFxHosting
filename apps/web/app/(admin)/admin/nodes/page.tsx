@@ -412,7 +412,7 @@ function CapacityForm({
               type="number"
               min={0.1}
               max={10}
-              step={0.5}
+              step={0.1}
               value={cpuOvercommit}
               onChange={(e) => setCpuOvercommit(Number(e.target.value))}
             />
@@ -489,8 +489,8 @@ function CapacityForm({
               cpuCores,
               memoryMb,
               diskMb,
-              cpuOvercommit,
-              memOvercommit,
+              cpuOvercommit: clampOvercommit(cpuOvercommit),
+              memOvercommit: clampOvercommit(memOvercommit),
               gameDomain: gameDomain.trim(),
               supportsWeb,
               monthlyCostMinor: monthlyCost.trim()
@@ -668,6 +668,10 @@ function CopyButton({ value }: { value: string }) {
     </Button>
   );
 }
+
+/** Clamp an overcommit multiplier to the API's accepted range (0.1–10).
+ *  A cleared number input coerces to 0/NaN — treat that as the neutral 1×. */
+const clampOvercommit = (v: number) => Math.min(10, Math.max(0.1, v || 1));
 
 const emptyForm = {
   name: "",
@@ -957,8 +961,8 @@ export default function AdminNodesPage() {
         cpuCores: form.cpuCores,
         memoryMb: form.memoryMb,
         diskMb: form.diskMb,
-        cpuOvercommit: form.cpuOvercommit,
-        memOvercommit: form.memOvercommit,
+        cpuOvercommit: clampOvercommit(form.cpuOvercommit),
+        memOvercommit: clampOvercommit(form.memOvercommit),
         allocationPortStart: form.allocationPortStart,
         allocationPortEnd: form.allocationPortEnd,
         gameDomain: form.gameDomain.trim() || undefined,
@@ -1370,7 +1374,7 @@ export default function AdminNodesPage() {
                   type="number"
                   min={0.1}
                   max={10}
-                  step={0.5}
+                  step={0.1}
                   value={form.cpuOvercommit}
                   onChange={(e) =>
                     setForm((f) => ({

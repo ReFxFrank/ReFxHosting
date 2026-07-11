@@ -206,6 +206,22 @@ func (m *Manager) Reconfigure(ctx context.Context, s *server.Server, limits serv
 	return rt.Reconfigure(ctx, s, limits)
 }
 
+// ReconcileLimits best-effort applies the server's CURRENT spec limits to its
+// live runtime artifact (running container / process). Called after a spec
+// (re-)registration so limit-model changes — e.g. the CPU weight+burst pair —
+// reach servers that keep running across an agent update or spec reload,
+// instead of waiting for the next restart. Both backends no-op harmlessly
+// when nothing is running.
+func (m *Manager) ReconcileLimits(ctx context.Context, s *server.Server) {
+	rt, err := m.RuntimeFor(s)
+	if err != nil {
+		return
+	}
+	if err := rt.Reconfigure(ctx, s, s.Spec.Limits); err != nil {
+		m.log.Warn().Err(err).Str("server", s.ID()).Msg("limit reconcile failed (applies on next start)")
+	}
+}
+
 // Destroy tears down runtime artifacts and removes the server from tracking.
 func (m *Manager) Destroy(ctx context.Context, s *server.Server) error {
 	rt, err := m.RuntimeFor(s)

@@ -313,12 +313,13 @@ export default function ConsolePage() {
         </Card>
 
         <ResourceGauge
-          label={cpuBursting ? "CPU · burst" : "CPU"}
+          label="CPU"
           icon={Cpu}
           current={cpuLimit > 0 ? cpuCoresUsed.toFixed(1) : `${Math.round(stats?.cpuPct ?? 0)}`}
           unit={cpuLimit > 0 ? `/ ${cpuLimit} vCPU` : "%"}
           pctValue={cpuPctOfPlan}
           history={cpuHist}
+          burst={cpuBursting}
         />
         <ResourceGauge
           label="Memory"

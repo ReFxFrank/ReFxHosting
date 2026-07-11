@@ -21,10 +21,20 @@ describe("NodesService.sweepOfflineNodes", () => {
     expect(count).toBe(2);
 
     const arg = updateMany.mock.calls[0][0];
-    // Scoped to live, currently-ONLINE nodes — MAINTENANCE/OFFLINE untouched.
+    // Scoped to live, currently-ONLINE nodes — OFFLINE untouched, and
+    // maintenance nodes excluded via the BOOLEAN (the field the admin UI
+    // sets; their state stays whatever it was).
     expect(arg.where.state).toBe("ONLINE");
+    expect(arg.where.maintenance).toBe(false);
     expect(arg.where.deletedAt).toBeNull();
     expect(arg.data).toEqual({ state: "OFFLINE" });
+    // Never flips a freshly-registered node that simply hasn't heartbeated
+    // YET: it must have prior heartbeats, or a registration older than the
+    // window.
+    expect(arg.where.OR).toEqual([
+      { heartbeats: { some: {} } },
+      { bootstrapTokenUsedAt: { lt: expect.any(Date) } },
+    ]);
     // Only nodes with NO heartbeat inside the liveness window.
     const cutoff = arg.where.heartbeats.none.recordedAt.gte as Date;
     expect(before - cutoff.getTime()).toBeGreaterThanOrEqual(

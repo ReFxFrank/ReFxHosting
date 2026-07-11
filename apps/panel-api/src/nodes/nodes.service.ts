@@ -598,8 +598,23 @@ export class NodesService {
     const res = await this.prisma.node.updateMany({
       where: {
         state: "ONLINE",
+        // The admin UI toggles the maintenance BOOLEAN (state often stays
+        // ONLINE), and the heartbeat ONLINE-flip is gated on that boolean —
+        // so the sweep must key on it too, or a maintenance node that
+        // reboots gets stuck OFFLINE with no path back until maintenance
+        // ends. Maintenance nodes keep whatever state they have.
+        maintenance: false,
         deletedAt: null,
         heartbeats: { none: { recordedAt: { gte: cutoff } } },
+        // A just-registered node is ONLINE with ZERO heartbeat rows (the
+        // agent's first beat lands ~15s after registration), which matches
+        // `none` vacuously — don't flip it during that window. Sweep only
+        // nodes that have heartbeated before, or whose registration is
+        // itself older than the window (registered but never reported).
+        OR: [
+          { heartbeats: { some: {} } },
+          { bootstrapTokenUsedAt: { lt: cutoff } },
+        ],
       },
       data: { state: "OFFLINE" },
     });

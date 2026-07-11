@@ -245,6 +245,14 @@ func applyAssignedServers(log zerolog.Logger, mgr *runtime.Manager, auth *sftp.M
 				JailDir:  srv.DataDir,
 			})
 		}
+		// Containers keep running across an agent restart/update; push the
+		// current spec limits onto them so limit-model changes (e.g. the CPU
+		// weight+burst pair) don't wait for the next server restart.
+		func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			mgr.ReconcileLimits(ctx, srv)
+		}()
 		log.Info().Str("server", s.ServerID).Str("short", s.ShortID).Msg("applied panel-assigned server")
 	}
 }

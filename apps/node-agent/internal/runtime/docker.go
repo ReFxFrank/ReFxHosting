@@ -56,6 +56,29 @@ type DockerRuntime struct {
 
 	// Crash auto-restart rate limiter (see autorestart.go).
 	restarts restartGuard
+
+	// The DAEMON's CPU count, resolved once from `docker info`. dockerd
+	// validates NanoCPUs against its own core count, which differs from the
+	// agent's under Docker Desktop/WSL2 (agent on the Windows host, daemon in
+	// a VM that may be granted fewer CPUs) — capping the burst ceiling at the
+	// agent's count would make container create/update hard-fail there.
+	cpusOnce   sync.Once
+	daemonCPUn float64
+}
+
+// daemonCPUs returns the Docker daemon's CPU count, falling back to the
+// agent's own when `docker info` is unavailable.
+func (d *DockerRuntime) daemonCPUs() float64 {
+	d.cpusOnce.Do(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if info, err := d.cli.Info(ctx); err == nil && info.NCPU > 0 {
+			d.daemonCPUn = float64(info.NCPU)
+			return
+		}
+		d.daemonCPUn = float64(goruntime.NumCPU())
+	})
+	return d.daemonCPUn
 }
 
 // dockerCPUSample is one container CPU reading used to compute utilisation
@@ -279,8 +302,9 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 		MemorySwap: (lim.MemoryMB + lim.SwapMB) * 1024 * 1024,
 		// Fair-share weight at the sold cores + hard ceiling at the burst
 		// allowance (see cpuplan.go). NanoCPUs encodes fractional cores
-		// (1.0 core == 1e9); 0 = uncapped.
-		NanoCPUs:  int64(cpuBurstCores(lim.CPUCores, float64(goruntime.NumCPU())) * 1e9),
+		// (1.0 core == 1e9); 0 = uncapped. The ceiling is capped at the
+		// DAEMON's cores — dockerd rejects anything above its own count.
+		NanoCPUs:  int64(cpuBurstCores(lim.CPUCores, d.daemonCPUs()) * 1e9),
 		CPUShares: dockerCPUShares(lim.CPUCores),
 		PidsLimit: pidsPtr(lim.PidsLimit),
 	}
@@ -408,6 +432,7 @@ func (d *DockerRuntime) ensureSteamHome() string {
 //     a root install image) as root-owned. So run a throwaway root container that
 //     chowns the mount to 1000:1000 — the Wings pattern, just containerized. The
 //     game server itself still runs strictly non-root.
+//
 // Both are best-effort; failures are logged, not fatal.
 func (d *DockerRuntime) prepareDataDir(ctx context.Context, s *server.Server, image string) {
 	uid, gid := d.runtimeIDs()
@@ -848,9 +873,9 @@ func (d *DockerRuntime) Reconfigure(ctx context.Context, s *server.Server, lim s
 		Memory:     lim.MemoryMB * 1024 * 1024,
 		MemorySwap: (lim.MemoryMB + lim.SwapMB) * 1024 * 1024,
 		// Same weight + burst-ceiling pair as hostConfig (see cpuplan.go).
-		NanoCPUs:   int64(cpuBurstCores(lim.CPUCores, float64(goruntime.NumCPU())) * 1e9),
-		CPUShares:  dockerCPUShares(lim.CPUCores),
-		PidsLimit:  pidsPtr(lim.PidsLimit),
+		NanoCPUs:  int64(cpuBurstCores(lim.CPUCores, d.daemonCPUs()) * 1e9),
+		CPUShares: dockerCPUShares(lim.CPUCores),
+		PidsLimit: pidsPtr(lim.PidsLimit),
 	}
 	// See hostConfig: io.weight is unavailable under WSL2; Linux only.
 	if goruntime.GOOS != "windows" {

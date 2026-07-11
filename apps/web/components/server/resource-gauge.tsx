@@ -17,6 +17,7 @@ export function ResourceGauge({
   pctValue,
   history,
   color = "hsl(var(--primary))",
+  burst = false,
 }: {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -25,10 +26,15 @@ export function ResourceGauge({
   pctValue?: number;
   history: GaugePoint[];
   color?: string;
+  /** Above-plan usage that is EXPECTED (CPU burst) — suppresses the
+   *  danger/warn tint and labels the % as burst instead of alarming. */
+  burst?: boolean;
 }) {
-  const danger = (pctValue ?? 0) > 90;
-  const warn = (pctValue ?? 0) > 70;
+  const danger = !burst && (pctValue ?? 0) > 90;
+  const warn = !burst && (pctValue ?? 0) > 70;
   const stroke = danger ? "hsl(var(--destructive))" : warn ? "hsl(var(--warning))" : color;
+  // SVG paint references (url(#id)) break on ids with spaces/specials.
+  const gradientId = `g-${label.replace(/[^A-Za-z0-9_-]/g, "")}`;
 
   return (
     <Card className="overflow-hidden">
@@ -41,10 +47,16 @@ export function ResourceGauge({
             <span
               className={cn(
                 "text-xs font-medium",
-                danger ? "text-destructive" : warn ? "text-warning" : "text-muted-foreground",
+                danger
+                  ? "text-destructive"
+                  : warn
+                    ? "text-warning"
+                    : burst && pctValue > 100
+                      ? "text-primary"
+                      : "text-muted-foreground",
               )}
             >
-              {pctValue}%
+              {pctValue}%{burst && pctValue > 100 ? " · burst" : ""}
             </span>
           )}
         </div>
@@ -56,7 +68,7 @@ export function ResourceGauge({
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={history} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
               <defs>
-                <linearGradient id={`g-${label}`} x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={stroke} stopOpacity={0.4} />
                   <stop offset="100%" stopColor={stroke} stopOpacity={0} />
                 </linearGradient>
@@ -67,7 +79,7 @@ export function ResourceGauge({
                 dataKey="value"
                 stroke={stroke}
                 strokeWidth={1.5}
-                fill={`url(#g-${label})`}
+                fill={`url(#${gradientId})`}
                 isAnimationActive={false}
               />
             </AreaChart>

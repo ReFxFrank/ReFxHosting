@@ -93,6 +93,9 @@ func (s *Server) handleReload(w http.ResponseWriter, r *http.Request) {
 			JailDir:  srv.DataDir,
 		})
 	}
+	// Apply the refreshed limits to a live container/process right away; env
+	// and port changes still land on the next start (container recreate).
+	s.deps.Manager.ReconcileLimits(r.Context(), srv)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "reloaded", "id": srv.ID()})
 }
 
