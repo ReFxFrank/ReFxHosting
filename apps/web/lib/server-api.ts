@@ -4,8 +4,16 @@
  * Cached via Next's data cache (default 5 min) and always fail-soft: SEO
  * plumbing must never take a page down.
  */
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+// Same origin convention as lib/api.ts: NEXT_PUBLIC_API_URL is the panel-api
+// ORIGIN (no /api/v1 suffix). API_URL_INTERNAL (runtime, server-only) lets the
+// web container reach panel-api over the compose network instead of hairpinning
+// through the public reverse proxy.
+const API_ORIGIN = (
+  process.env.API_URL_INTERNAL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  "http://localhost:4000"
+).replace(/\/$/, "");
+const API_BASE = `${API_ORIGIN}/api/v1`;
 
 /** Absolute site origin for canonical URLs / OG / sitemap entries. */
 export const SITE_URL = (

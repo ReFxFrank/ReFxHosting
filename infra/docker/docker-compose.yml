@@ -423,6 +423,9 @@ services:
       PORT: "3000"
       HOSTNAME: "0.0.0.0"
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      # Server-side (RSC/metadata/sitemap) fetches go straight to panel-api on
+      # the compose network — runtime env, no rebuild needed to change it.
+      API_URL_INTERNAL: ${API_URL_INTERNAL:-http://panel-api:4000}
     depends_on:
       - panel-api
     ports:
