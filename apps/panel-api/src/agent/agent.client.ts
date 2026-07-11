@@ -367,6 +367,46 @@ export class NodeAgentClient {
     );
   }
 
+  /**
+   * Stream a file's raw bytes from the agent (the same authenticated
+   * /files/read the JSON readFile uses — the agent serves octet-stream).
+   * Returns the response body stream so the caller can pipe arbitrarily large
+   * files to a browser without buffering them in panel memory.
+   */
+  async readFileStream(
+    node: Node,
+    serverId: string,
+    path: string,
+  ): Promise<ReadableStream<Uint8Array>> {
+    const reqPath = `/api/v1/servers/${serverId}/files/read?path=${encodeURIComponent(path)}`;
+    const url = `${this.baseUrl(node)}${reqPath}`;
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = signRequest(
+      this.signingKey(node),
+      "GET",
+      reqPath,
+      timestamp,
+      "",
+      this.signQuery,
+    );
+    const res = await undiciFetch(url, {
+      method: "GET",
+      headers: {
+        [SIGN_HEADER_NODE]: node.id,
+        [SIGN_HEADER_TIMESTAMP]: timestamp,
+        [SIGN_HEADER_SIGNATURE]: signature,
+      },
+      dispatcher: this.dispatcherFor(node),
+    });
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => "");
+      throw new ServiceUnavailableException(
+        `Node agent error ${res.status}: ${text || res.statusText}`,
+      );
+    }
+    return res.body as ReadableStream<Uint8Array>;
+  }
+
   writeFile(node: Node, serverId: string, path: string, content: string) {
     // The agent writes the raw request body to ?path=.
     return this.request(

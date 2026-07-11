@@ -21,7 +21,7 @@ import {
   Save,
   TriangleAlert,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, API_BASE } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -230,7 +230,14 @@ export default function FilesPage() {
 
   const downloadMutation = useMutation({
     mutationFn: (target: string) => api.servers.files.downloadUrl(id, target),
-    onSuccess: ({ url }) => window.open(url, "_blank", "noopener,noreferrer"),
+    // The panel returns a short-lived signed path on the API origin (a new tab
+    // can't send the JWT, so the signature IS the auth).
+    onSuccess: ({ url }) =>
+      window.open(
+        url.startsWith("http") ? url : `${API_BASE}${url}`,
+        "_blank",
+        "noopener,noreferrer",
+      ),
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to get download link"),
   });

@@ -8,6 +8,7 @@ import {
 import { Reflector } from "@nestjs/core";
 import { GqlExecutionContext } from "@nestjs/graphql";
 import { PERMISSIONS_KEY } from "../../common/decorators/permissions.decorator";
+import { IS_PUBLIC_KEY } from "../../common/decorators/public.decorator";
 import { AuthUser } from "../../common/decorators/current-user.decorator";
 import { hasPermission } from "../../common/permissions";
 import { hasServerPermission } from "../../common/server-permissions";
@@ -45,6 +46,14 @@ export class PermissionGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    // Honor @Public() exactly like JwtAuthGuard — routes that opt out of auth
+    // (e.g. the HMAC-signed file download) authorize themselves.
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (isPublic === true) return true;
+
     const required =
       this.reflector.getAllAndOverride<string[]>(PERMISSIONS_KEY, [
         context.getHandler(),

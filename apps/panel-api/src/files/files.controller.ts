@@ -6,14 +6,17 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
+import { Readable } from 'node:stream';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import {
   ChmodDto,
@@ -93,6 +96,32 @@ export class FilesController {
   @RequirePermissions('files.read')
   downloadUrl(@Param('id') id: string, @Query('path') path: string) {
     return this.files.downloadUrl(id, path);
+  }
+
+  // Browser download target. @Public because a new tab can't send the JWT —
+  // access is authorized by the short-lived HMAC minted by download-url (which
+  // DID enforce files.read). Streams straight from the agent.
+  @Public()
+  @Get('download')
+  async download(
+    @Param('id') id: string,
+    @Query('path') path: string,
+    @Query('exp') exp: string,
+    @Query('sig') sig: string,
+    @Res() res: Response,
+  ) {
+    const { stream, filename } = await this.files.openSignedDownload(
+      id,
+      path,
+      exp,
+      sig,
+    );
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename.replace(/[^\w.\- ]/g, '_')}"`,
+    );
+    Readable.fromWeb(stream as never).pipe(res);
   }
 
   @Post('upload-url')

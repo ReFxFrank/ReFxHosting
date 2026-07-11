@@ -22,7 +22,10 @@ describe('FilesService.upload', () => {
       },
     };
     agent = { uploadFileBytes: jest.fn().mockResolvedValue(undefined) };
-    service = new FilesService(prisma, agent as any);
+    const config = {
+      get: jest.fn().mockReturnValue('0'.repeat(64)), // secretsEncKey
+    };
+    service = new FilesService(prisma, agent as any, config as any);
   });
 
   it('streams the bytes to the agent and echoes the result', async () => {
