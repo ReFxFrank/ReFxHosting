@@ -834,8 +834,15 @@ export const api = {
     // Backups
     backups: {
       list: (id: string) => getList<Backup>(`/servers/${id}/backups`),
-      create: (id: string, input: { name: string; ignoredFiles?: string[] }) =>
-        http.post<Backup>(`/servers/${id}/backups`, input),
+      create: (
+        id: string,
+        input: {
+          name: string;
+          /** ESSENTIALS skips re-downloadable content; FULL archives everything. */
+          mode?: "ESSENTIALS" | "FULL";
+          ignoredFiles?: string[];
+        },
+      ) => http.post<Backup>(`/servers/${id}/backups`, input),
       restore: (id: string, backupId: string) =>
         http.post<void>(`/servers/${id}/backups/${backupId}/restore`),
       lock: (id: string, backupId: string, locked: boolean) =>

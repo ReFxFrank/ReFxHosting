@@ -2,7 +2,13 @@ import { BackupsService } from './backups.service';
 
 describe('BackupsService lifecycle', () => {
   const NODE = { id: 'node-1', fqdn: '1.2.3.4' };
-  const SERVER = { id: 'srv-1', nodeId: 'node-1', node: NODE };
+  const SERVER = {
+    id: 'srv-1',
+    nodeId: 'node-1',
+    node: NODE,
+    template: { slug: 'minecraft' },
+    environment: { MINECRAFT_VERSION: '1.21.1' },
+  };
   const BACKUP = {
     id: 'bak-1',
     serverId: 'srv-1',
@@ -20,6 +26,10 @@ describe('BackupsService lifecycle', () => {
     prisma = {
       server: { findFirst: jest.fn().mockResolvedValue(SERVER) },
       backup: {
+        count: jest.fn().mockResolvedValue(0),
+        create: jest
+          .fn()
+          .mockImplementation(({ data }) => Promise.resolve({ ...data })),
         findFirst: jest.fn().mockResolvedValue({ ...BACKUP }),
         update: jest.fn().mockImplementation(({ data }) =>
           Promise.resolve({ ...BACKUP, ...data }),
@@ -36,6 +46,29 @@ describe('BackupsService lifecycle', () => {
     const config = { get: jest.fn().mockReturnValue('0'.repeat(64)) } as any;
     const queue = { add: jest.fn() } as any;
     svc = new BackupsService(prisma, agent, config, queue);
+  });
+
+  describe('create modes', () => {
+    it('ESSENTIALS prepends the game profile to the user globs', async () => {
+      await svc.create('srv-1', {
+        name: 'weekly',
+        mode: 'ESSENTIALS',
+        ignoredFiles: ['dynmap'],
+      });
+      const data = prisma.backup.create.mock.calls[0][0].data;
+      expect(data.ignoredFiles).toEqual(
+        expect.arrayContaining(['libraries', 'versions', 'logs', 'dynmap']),
+      );
+      // Redeploy-critical content is never excluded.
+      expect(data.ignoredFiles).not.toContain('world');
+      expect(data.ignoredFiles).not.toContain('mods');
+    });
+
+    it('FULL (and default) keeps only the user globs', async () => {
+      await svc.create('srv-1', { name: 'full', ignoredFiles: ['dynmap'] });
+      const data = prisma.backup.create.mock.calls[0][0].data;
+      expect(data.ignoredFiles).toEqual(['dynmap']);
+    });
   });
 
   describe('remove', () => {

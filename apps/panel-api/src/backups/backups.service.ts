@@ -18,6 +18,7 @@ import { uuidv7 } from '../common/util/uuid';
 import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { BackupJob, JOB, QUEUE } from '../queues/queue.constants';
 import { CreateBackupDto } from './dto/backups.dto';
+import { essentialExcludes, mergeExcludes } from './backup-profiles.util';
 
 /** Max non-failed backups a single server may hold (disk + job-flood guard). */
 const MAX_BACKUPS_PER_SERVER = 25;
@@ -84,10 +85,10 @@ export class BackupsService {
 
   private async serverWithNode(
     serverId: string,
-  ): Promise<Server & { node: Node }> {
+  ): Promise<Server & { node: Node; template: { slug: string } | null }> {
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
-      include: { node: true },
+      include: { node: true, template: { select: { slug: true } } },
     });
     if (!server) throw new NotFoundException('Server not found');
     return server;
@@ -123,7 +124,7 @@ export class BackupsService {
   }
 
   async create(serverId: string, dto: CreateBackupDto): Promise<Backup> {
-    await this.serverWithNode(serverId);
+    const server = await this.serverWithNode(serverId);
     // Cap backups per server to bound disk use and queued backup jobs — without
     // this a client can enqueue unbounded backups (disk exhaustion / job flood).
     const existing = await this.prisma.backup.count({
@@ -134,13 +135,26 @@ export class BackupsService {
         `Backup limit reached (${MAX_BACKUPS_PER_SERVER}). Delete an existing backup before creating another.`,
       );
     }
+    // ESSENTIALS: prepend the game's curated exclude profile (regenerable
+    // content only) to whatever the user chose to skip. The final glob list is
+    // persisted on the row, so the archive is self-describing.
+    const ignoredFiles =
+      dto.mode === 'ESSENTIALS'
+        ? mergeExcludes(
+            essentialExcludes(
+              server.template?.slug,
+              server.environment as Record<string, unknown> | null,
+            ),
+            dto.ignoredFiles,
+          )
+        : (dto.ignoredFiles ?? []);
     const backup = await this.prisma.backup.create({
       data: {
         id: uuidv7(),
         serverId,
         name: dto.name,
         state: 'PENDING',
-        ignoredFiles: dto.ignoredFiles ?? [],
+        ignoredFiles,
       },
     });
     // Off-load the agent call to the existing backups worker.

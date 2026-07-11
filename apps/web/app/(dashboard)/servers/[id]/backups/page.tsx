@@ -86,6 +86,7 @@ export default function BackupsPage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [name, setName] = useState("");
+  const [mode, setMode] = useState<"ESSENTIALS" | "FULL">("ESSENTIALS");
   const [ignored, setIgnored] = useState("");
   const [restoreTarget, setRestoreTarget] = useState<Backup | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Backup | null>(null);
@@ -111,6 +112,7 @@ export default function BackupsPage() {
     mutationFn: () =>
       api.servers.backups.create(id, {
         name: name.trim(),
+        mode,
         ignoredFiles: ignored
           .split("\n")
           .map((l) => l.trim())
@@ -345,6 +347,40 @@ export default function BackupsPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
               />
+            </div>
+            <div className="space-y-2">
+              <Label>What to back up</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setMode("ESSENTIALS")}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                    mode === "ESSENTIALS"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "hover:bg-accent/40"
+                  }`}
+                >
+                  <p className="font-medium">Essentials</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Worlds, configs, mods & player data. Skips re-downloadable
+                    files (libraries, caches, logs) — much smaller and faster.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode("FULL")}
+                  className={`rounded-lg border p-3 text-left text-sm transition-colors ${
+                    mode === "FULL"
+                      ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      : "hover:bg-accent/40"
+                  }`}
+                >
+                  <p className="font-medium">Everything</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    A complete copy of the server directory, byte for byte.
+                  </p>
+                </button>
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="backup-ignored">Ignored files (optional)</Label>
