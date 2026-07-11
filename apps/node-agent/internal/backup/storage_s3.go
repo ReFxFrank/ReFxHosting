@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awscfg "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
@@ -68,6 +70,21 @@ func (s *S3Storage) Put(ctx context.Context, key string, r io.Reader, _ int64) (
 		return "", fmt.Errorf("s3: upload: %w", err)
 	}
 	return key, nil
+}
+
+// Presign returns a time-limited GET URL for the object so browsers can
+// download straight from object storage — full S3/CDN bandwidth and native
+// resume, instead of relaying every byte through node and panel.
+func (s *S3Storage) Presign(ctx context.Context, location string, ttl time.Duration) (string, error) {
+	presigner := s3.NewPresignClient(s.client)
+	out, err := presigner.PresignGetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(location),
+	}, s3.WithPresignExpires(ttl))
+	if err != nil {
+		return "", fmt.Errorf("s3: presign: %w", err)
+	}
+	return out.URL, nil
 }
 
 // Get streams an archive back from S3.

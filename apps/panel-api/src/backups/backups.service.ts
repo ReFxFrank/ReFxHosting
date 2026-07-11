@@ -14,7 +14,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
 import { Backup, Node, Server } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NodeAgentClient } from '../agent/agent.client';
+import { AgentByteStream, NodeAgentClient } from '../agent/agent.client';
 import { uuidv7 } from '../common/util/uuid';
 import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { BackupJob, JOB, QUEUE } from '../queues/queue.constants';
@@ -265,10 +265,25 @@ export class BackupsService {
     serverId: string,
     backupId: string,
   ): Promise<{ url: string }> {
-    await this.serverWithNode(serverId);
+    const server = await this.serverWithNode(serverId);
     const backup = await this.backupOrThrow(serverId, backupId);
     if (backup.state !== 'COMPLETED' || !backup.location) {
       throw new NotFoundException('Backup has no stored archive to download');
+    }
+    // Prefer a DIRECT download (S3 presigned GET): full object-storage
+    // bandwidth and native resume, no node→panel relay. Local storage (and
+    // pre-v1.5 agents, which echo a non-URL here) falls back to the panel-
+    // signed relay below.
+    try {
+      const { url } = await this.agent.backupDownloadUrl(
+        server.node,
+        serverId,
+        backupId,
+        backup.location,
+      );
+      if (url && /^https?:\/\//i.test(url)) return { url };
+    } catch {
+      // Agent unreachable/legacy — the relay path below still works.
     }
     const exp =
       Math.floor(Date.now() / 1000) + BackupsService.DOWNLOAD_TTL_SECONDS;
@@ -284,7 +299,8 @@ export class BackupsService {
     backupId: string,
     expStr: string,
     sig: string,
-  ): Promise<{ stream: ReadableStream<Uint8Array>; filename: string }> {
+    range?: string,
+  ): Promise<AgentByteStream & { filename: string; sizeBytes: bigint }> {
     const exp = Number(expStr);
     if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) {
       throw new ForbiddenException('Download link expired');
@@ -300,13 +316,14 @@ export class BackupsService {
     if (backup.state !== 'COMPLETED' || !backup.location) {
       throw new NotFoundException('Backup has no stored archive');
     }
-    let stream: ReadableStream<Uint8Array>;
+    let relayed: AgentByteStream;
     try {
-      stream = await this.agent.backupStream(
+      relayed = await this.agent.backupStream(
         server.node,
         serverId,
         backupId,
         backup.location,
+        range,
       );
     } catch (e) {
       // An agent that predates the download endpoint answers with its
@@ -319,6 +336,10 @@ export class BackupsService {
       throw e;
     }
     const base = backup.name?.trim() || 'backup';
-    return { stream, filename: `${base}-${backupId.slice(0, 8)}.tar.gz` };
+    return {
+      ...relayed,
+      filename: `${base}-${backupId.slice(0, 8)}.tar.gz`,
+      sizeBytes: backup.sizeBytes,
+    };
   }
 }

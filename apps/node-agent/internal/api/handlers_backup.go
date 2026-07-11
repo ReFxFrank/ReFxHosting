@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -115,17 +116,21 @@ func (s *Server) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "restore started", "backupId": backupID})
 }
 
-// handleBackupDownloadURL returns a short-lived URL to fetch a backup archive.
-//
-// TODO(impl): for S3-backed storage, return a presigned GET URL; for local
-// storage, mint a signed single-use token served from an unauthenticated
-// transfer route. For now the contract exists and returns the storage location.
+// handleBackupDownloadURL returns a direct-download URL when the backup
+// storage supports it (S3 presigned GET — full object-storage bandwidth,
+// native resume, no relay). An empty url means "relay through the panel".
+// The archive's storage location rides in ?location=, same as fetch/delete.
 func (s *Server) handleBackupDownloadURL(w http.ResponseWriter, r *http.Request) {
-	backupID := chi.URLParam(r, "backupId")
-	url, err := s.deps.Backups.DownloadURL(r.Context(), backupID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+	location := r.URL.Query().Get("location")
+	if location == "" {
+		writeJSON(w, http.StatusOK, map[string]string{"url": ""})
 		return
+	}
+	url, err := s.deps.Backups.PresignDownload(r.Context(), location, 10*time.Minute)
+	if err != nil {
+		// Presign failure just means the fallback relay path is used.
+		s.log.Warn().Err(err).Msg("backup presign failed; falling back to relay")
+		url = ""
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
 }
@@ -204,6 +209,19 @@ func (s *Server) handleBackupFetch(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rc.Close()
 	w.Header().Set("Content-Type", "application/gzip")
+	// Local archives are real files: serve them seekably so Range/resume and
+	// Content-Length work (ServeContent handles 206/If-Range/HEAD). Non-
+	// seekable storages fall back to a plain streamed copy.
+	if f, ok := rc.(io.ReadSeeker); ok {
+		modtime := time.Time{}
+		if osf, ok := rc.(*os.File); ok {
+			if st, err := osf.Stat(); err == nil {
+				modtime = st.ModTime()
+			}
+		}
+		http.ServeContent(w, r, "", modtime, f)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, rc)
 }

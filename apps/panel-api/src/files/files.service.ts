@@ -9,7 +9,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
 import { Node, Server } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { NodeAgentClient } from '../agent/agent.client';
+import { AgentByteStream, NodeAgentClient } from '../agent/agent.client';
 import {
   ChmodDto,
   CompressDto,
@@ -154,7 +154,8 @@ export class FilesService {
     path: string,
     expStr: string,
     sig: string,
-  ): Promise<{ stream: ReadableStream<Uint8Array>; filename: string }> {
+    range?: string,
+  ): Promise<AgentByteStream & { filename: string }> {
     const clean = (path ?? '').replace(/^\/+/, '');
     const exp = Number(expStr);
     if (!clean || !Number.isFinite(exp) || !sig) {
@@ -170,13 +171,14 @@ export class FilesService {
       throw new ForbiddenException('Invalid download link');
     }
     const server = await this.serverWithNode(serverId);
-    const stream = await this.agent.readFileStream(
+    const relayed = await this.agent.readFileStream(
       server.node,
       serverId,
       clean,
+      range,
     );
     const filename = clean.split('/').pop() || 'download';
-    return { stream, filename };
+    return { ...relayed, filename };
   }
 
   async uploadUrl(serverId: string, path: string) {

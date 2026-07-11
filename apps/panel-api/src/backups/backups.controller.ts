@@ -7,11 +7,12 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
 import { Readable } from 'node:stream';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { BackupsService } from './backups.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -85,19 +86,31 @@ export class BackupsController {
     @Param('backupId') backupId: string,
     @Query('exp') exp: string,
     @Query('sig') sig: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const { stream, filename } = await this.backups.openSignedDownload(
+    const dl = await this.backups.openSignedDownload(
       id,
       backupId,
       exp,
       sig,
+      req.headers.range,
     );
+    // Pass the agent's range semantics through so browsers can resume and
+    // show real progress. Fall back to the recorded archive size when a
+    // legacy agent didn't send a length.
+    res.status(dl.status);
     res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader('Accept-Ranges', dl.acceptRanges ?? 'bytes');
+    if (dl.contentRange) res.setHeader('Content-Range', dl.contentRange);
+    const length =
+      dl.contentLength ??
+      (dl.status === 200 && dl.sizeBytes > 0n ? String(dl.sizeBytes) : undefined);
+    if (length) res.setHeader('Content-Length', length);
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${filename.replace(/[^\w.\- ]/g, '_')}"`,
+      `attachment; filename="${dl.filename.replace(/[^\w.\- ]/g, '_')}"`,
     );
-    Readable.fromWeb(stream as never).pipe(res);
+    Readable.fromWeb(dl.stream as never).pipe(res);
   }
 }

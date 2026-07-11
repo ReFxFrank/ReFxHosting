@@ -108,20 +108,27 @@ export class FilesController {
     @Query('path') path: string,
     @Query('exp') exp: string,
     @Query('sig') sig: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const { stream, filename } = await this.files.openSignedDownload(
+    const dl = await this.files.openSignedDownload(
       id,
       path,
       exp,
       sig,
+      req.headers.range,
     );
+    // Range/length passthrough -> resumable downloads with real progress.
+    res.status(dl.status);
     res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Accept-Ranges', dl.acceptRanges ?? 'bytes');
+    if (dl.contentRange) res.setHeader('Content-Range', dl.contentRange);
+    if (dl.contentLength) res.setHeader('Content-Length', dl.contentLength);
     res.setHeader(
       'Content-Disposition',
-      `attachment; filename="${filename.replace(/[^\w.\- ]/g, '_')}"`,
+      `attachment; filename="${dl.filename.replace(/[^\w.\- ]/g, '_')}"`,
     );
-    Readable.fromWeb(stream as never).pipe(res);
+    Readable.fromWeb(dl.stream as never).pipe(res);
   }
 
   @Post('upload-url')

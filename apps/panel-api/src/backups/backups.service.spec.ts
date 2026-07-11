@@ -41,7 +41,12 @@ describe('BackupsService lifecycle', () => {
     agent = {
       deleteBackup: jest.fn().mockResolvedValue({}),
       restoreBackup: jest.fn().mockResolvedValue({}),
-      backupStream: jest.fn().mockResolvedValue({} as ReadableStream),
+      backupDownloadUrl: jest.fn().mockResolvedValue({ url: '' }),
+      backupStream: jest.fn().mockResolvedValue({
+        status: 200,
+        stream: {} as ReadableStream,
+        contentLength: '1024',
+      }),
     };
     const config = { get: jest.fn().mockReturnValue('0'.repeat(64)) } as any;
     const queue = { add: jest.fn() } as any;
@@ -181,8 +186,44 @@ describe('BackupsService lifecycle', () => {
         'srv-1',
         'bak-1',
         BACKUP.location,
+        undefined,
       );
       expect(res.filename).toBe('weekly-bak-1.tar.gz');
+      expect(res.status).toBe(200);
+      expect(res.contentLength).toBe('1024');
+    });
+
+    it('prefers an S3 presigned URL when the agent offers one', async () => {
+      agent.backupDownloadUrl.mockResolvedValue({
+        url: 'https://s3.example.com/bucket/bak-1.tar.gz?X-Amz-Signature=x',
+      });
+      const { url } = await svc.downloadUrl('srv-1', 'bak-1');
+      expect(url).toMatch(/^https:\/\/s3\.example\.com/);
+    });
+
+    it('falls back to the relay URL for legacy agents echoing a non-URL', async () => {
+      agent.backupDownloadUrl.mockResolvedValue({ url: '/var/lib/refx/x.tar.gz' });
+      const { url } = await svc.downloadUrl('srv-1', 'bak-1');
+      expect(url).toMatch(/^\/servers\/srv-1\/backups\/bak-1\/archive\?exp=/);
+    });
+
+    it('forwards a Range request to the agent', async () => {
+      const { url } = await svc.downloadUrl('srv-1', 'bak-1');
+      const parsed = new URL(url, 'http://x');
+      await svc.openSignedDownload(
+        'srv-1',
+        'bak-1',
+        parsed.searchParams.get('exp')!,
+        parsed.searchParams.get('sig')!,
+        'bytes=100-',
+      );
+      expect(agent.backupStream).toHaveBeenCalledWith(
+        NODE,
+        'srv-1',
+        'bak-1',
+        BACKUP.location,
+        'bytes=100-',
+      );
     });
 
     it('rejects a tampered signature and an expired link', async () => {

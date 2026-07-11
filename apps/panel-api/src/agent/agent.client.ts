@@ -38,6 +38,15 @@ export const sniServerName = (host: string): string | undefined =>
 
 export type PowerSignal = "start" | "stop" | "restart" | "kill";
 
+/** A relayed byte stream from the agent, with range/length metadata. */
+export interface AgentByteStream {
+  status: 200 | 206 | number;
+  stream: ReadableStream<Uint8Array>;
+  contentLength?: string;
+  contentRange?: string;
+  acceptRanges?: string;
+}
+
 export interface InstallSpec {
   serverId: string;
   /** Short, user-facing id — also the SFTP username. Required by the agent. */
@@ -377,8 +386,26 @@ export class NodeAgentClient {
     node: Node,
     serverId: string,
     path: string,
-  ): Promise<ReadableStream<Uint8Array>> {
-    const reqPath = `/api/v1/servers/${serverId}/files/read?path=${encodeURIComponent(path)}`;
+    range?: string,
+  ): Promise<AgentByteStream> {
+    return this.streamSigned(
+      node,
+      `/api/v1/servers/${serverId}/files/read?path=${encodeURIComponent(path)}`,
+      range,
+    );
+  }
+
+  /**
+   * Signed streaming GET against the agent, forwarding an optional Range
+   * header and passing back the status + range/length response headers, so
+   * browser downloads relayed through the panel are resumable and show
+   * real progress.
+   */
+  private async streamSigned(
+    node: Node,
+    reqPath: string,
+    range?: string,
+  ): Promise<AgentByteStream> {
     const url = `${this.baseUrl(node)}${reqPath}`;
     const timestamp = Math.floor(Date.now() / 1000).toString();
     const signature = signRequest(
@@ -395,16 +422,23 @@ export class NodeAgentClient {
         [SIGN_HEADER_NODE]: node.id,
         [SIGN_HEADER_TIMESTAMP]: timestamp,
         [SIGN_HEADER_SIGNATURE]: signature,
+        ...(range ? { range } : {}),
       },
       dispatcher: this.dispatcherFor(node),
     });
-    if (!res.ok || !res.body) {
+    if (!(res.status === 200 || res.status === 206) || !res.body) {
       const text = await res.text().catch(() => "");
       throw new ServiceUnavailableException(
         `Node agent error ${res.status}: ${text || res.statusText}`,
       );
     }
-    return res.body as ReadableStream<Uint8Array>;
+    return {
+      status: res.status,
+      stream: res.body as ReadableStream<Uint8Array>,
+      contentLength: res.headers.get("content-length") ?? undefined,
+      contentRange: res.headers.get("content-range") ?? undefined,
+      acceptRanges: res.headers.get("accept-ranges") ?? undefined,
+    };
   }
 
   writeFile(node: Node, serverId: string, path: string, content: string) {
@@ -650,58 +684,41 @@ export class NodeAgentClient {
     );
   }
 
-  /** Signed one-time URL to download a completed backup archive. */
+  /**
+   * Ask the agent for a DIRECT download URL (S3 presigned GET). An empty url
+   * means the storage can't presign (local disk) — relay instead.
+   */
   backupDownloadUrl(
     node: Node,
     serverId: string,
     backupId: string,
+    location?: string,
   ): Promise<{ url: string }> {
     return this.request(
       node,
       "GET",
-      `/api/v1/servers/${serverId}/backups/${backupId}/download-url`,
+      `/api/v1/servers/${serverId}/backups/${backupId}/download-url` +
+        `?location=${encodeURIComponent(location ?? "")}`,
     );
   }
 
   /**
-   * Stream a backup archive's bytes from the agent (signed GET, mirrored on
-   * readFileStream) so the panel can relay it to a browser download.
+   * Stream a backup archive's bytes from the agent so the panel can relay
+   * them to a browser download (Range-aware; see streamSigned).
    */
   async backupStream(
     node: Node,
     serverId: string,
     backupId: string,
     location: string,
-  ): Promise<ReadableStream<Uint8Array>> {
-    const reqPath =
+    range?: string,
+  ): Promise<AgentByteStream> {
+    return this.streamSigned(
+      node,
       `/api/v1/servers/${serverId}/backups/${backupId}/download` +
-      `?location=${encodeURIComponent(location)}`;
-    const url = `${this.baseUrl(node)}${reqPath}`;
-    const timestamp = Math.floor(Date.now() / 1000).toString();
-    const signature = signRequest(
-      this.signingKey(node),
-      "GET",
-      reqPath,
-      timestamp,
-      "",
-      this.signQuery,
+        `?location=${encodeURIComponent(location)}`,
+      range,
     );
-    const res = await undiciFetch(url, {
-      method: "GET",
-      headers: {
-        [SIGN_HEADER_NODE]: node.id,
-        [SIGN_HEADER_TIMESTAMP]: timestamp,
-        [SIGN_HEADER_SIGNATURE]: signature,
-      },
-      dispatcher: this.dispatcherFor(node),
-    });
-    if (!res.ok || !res.body) {
-      const text = await res.text().catch(() => "");
-      throw new ServiceUnavailableException(
-        `Node agent error ${res.status}: ${text || res.statusText}`,
-      );
-    }
-    return res.body as ReadableStream<Uint8Array>;
   }
 
   // ---- live stats ---------------------------------------------------------

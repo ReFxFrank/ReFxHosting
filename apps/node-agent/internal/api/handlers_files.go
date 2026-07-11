@@ -80,6 +80,18 @@ func (s *Server) handleFileRead(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rc.Close()
 	w.Header().Set("Content-Type", "application/octet-stream")
+	// Jail reads are real files: serve seekably so Range/resume and
+	// Content-Length work for big downloads (world archives, packs).
+	if f, ok := rc.(io.ReadSeeker); ok {
+		modtime := time.Time{}
+		if osf, ok := rc.(*os.File); ok {
+			if st, err := osf.Stat(); err == nil {
+				modtime = st.ModTime()
+			}
+		}
+		http.ServeContent(w, r, "", modtime, f)
+		return
+	}
 	_, _ = io.Copy(w, rc)
 }
 

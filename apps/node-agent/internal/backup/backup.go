@@ -230,6 +230,23 @@ func (m *Manager) Open(ctx context.Context, location string) (io.ReadCloser, err
 	return m.storage.Get(ctx, location)
 }
 
+// Presigner is implemented by storages that can mint direct-download URLs
+// (S3). Local storage can't — those downloads relay through the agent.
+type Presigner interface {
+	Presign(ctx context.Context, location string, ttl time.Duration) (string, error)
+}
+
+// PresignDownload returns a direct-download URL for the archive, or "" when
+// the storage doesn't support presigning (the caller then falls back to
+// relaying the bytes).
+func (m *Manager) PresignDownload(ctx context.Context, location string, ttl time.Duration) (string, error) {
+	p, ok := m.storage.(Presigner)
+	if !ok {
+		return "", nil
+	}
+	return p.Presign(ctx, location, ttl)
+}
+
 // DownloadURL returns a short-lived URL the panel/browser can use to fetch a
 // completed backup archive identified by its storage location.
 //
