@@ -368,6 +368,9 @@ export interface Node {
   cpuCores: number;
   memoryMb: number;
   diskMb: number;
+  /** Oversell ratios: schedulable capacity = advertised × overcommit. */
+  cpuOvercommit?: number;
+  memOvercommit?: number;
   /** Public port range the panel auto-assigns to servers on this node. */
   allocationPortStart?: number;
   allocationPortEnd?: number;

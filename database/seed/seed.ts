@@ -335,7 +335,9 @@ async function seedRegionAndNode() {
       cpuCores: 32,
       memoryMb: 131072, // 128 GiB
       diskMb: 4194304, // 4 TiB
-      cpuOvercommit: 1.5,
+      // CPU is weight+burst enforced (not pinned), so 2× oversell is safe for
+      // bursty game workloads. RAM is really consumed — never oversell it.
+      cpuOvercommit: 2.0,
       memOvercommit: 1.0,
     },
   });

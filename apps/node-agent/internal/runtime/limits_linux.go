@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -54,10 +55,14 @@ func enableControllers(dir string) error {
 }
 
 func (l *cgroupV2Limiter) write(limits server.Limits) error {
-	// cpu.max: "<quota> <period>"; quota = cores * period.
+	// CPU: fair-share weight at the sold cores + hard ceiling at the burst
+	// allowance (see cpuplan.go). cpu.max is "<quota> <period>" with
+	// quota = burst cores * period; weight is best-effort (older kernels).
+	_ = l.set("cpu.weight", strconv.Itoa(cgroupCPUWeight(limits.CPUCores)))
 	if limits.CPUCores > 0 {
 		period := 100000
-		quota := int(limits.CPUCores * float64(period))
+		burst := cpuBurstCores(limits.CPUCores, float64(goruntime.NumCPU()))
+		quota := int(burst * float64(period))
 		if err := l.set("cpu.max", fmt.Sprintf("%d %d", quota, period)); err != nil {
 			return err
 		}

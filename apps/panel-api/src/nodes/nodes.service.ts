@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
@@ -46,6 +47,15 @@ function isUuid(v: string): boolean {
 const BOOTSTRAP_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
+ * A node whose agent hasn't heartbeated for this long is considered OFFLINE.
+ * Agents heartbeat every ~15s, so this is 8 consecutive misses — long enough
+ * to ride out a blip or agent self-update, short enough that the admin panel
+ * and the scheduler stop trusting a dead node quickly. Matches the admin UI's
+ * "recent heartbeat" convention (2 minutes).
+ */
+export const NODE_OFFLINE_AFTER_MS = 120_000;
+
+/**
  * Normalize a recurring price (in minor units) to an equivalent MONTHLY amount,
  * so revenue across mixed billing intervals is comparable on the margin view.
  * A month is treated as 1/12 of a year (weeks annualized at 52/12).
@@ -82,6 +92,7 @@ type ServerWithSpec = Prisma.ServerGetPayload<{
 
 @Injectable()
 export class NodesService {
+  private readonly logger = new Logger(NodesService.name);
   private readonly secretsEncKey: string;
 
   constructor(
@@ -240,6 +251,8 @@ export class NodesService {
         cpuCores: dto.cpuCores,
         memoryMb: dto.memoryMb,
         diskMb: dto.diskMb,
+        cpuOvercommit: dto.cpuOvercommit ?? 1.0,
+        memOvercommit: dto.memOvercommit ?? 1.0,
         daemonPort: dto.daemonPort ?? 8443,
         sftpPort: dto.sftpPort ?? 2022,
         allocationPortStart: portStart,
@@ -570,6 +583,34 @@ export class NodesService {
       where: { id },
       data: { maintenance: on, state: on ? "MAINTENANCE" : "ONLINE" },
     });
+  }
+
+  /**
+   * Mark nodes OFFLINE when their agent has gone silent. Heartbeats flip a
+   * node ONLINE but nothing used to flip it back, so a dead node kept its
+   * ONLINE badge forever — and worse, stayed eligible for new-server
+   * placement. Runs from NodesScheduler; recovery is automatic (the next
+   * heartbeat marks the node ONLINE again). MAINTENANCE nodes keep their
+   * state — the admin set it deliberately.
+   */
+  async sweepOfflineNodes(): Promise<number> {
+    const cutoff = new Date(Date.now() - NODE_OFFLINE_AFTER_MS);
+    const res = await this.prisma.node.updateMany({
+      where: {
+        state: "ONLINE",
+        deletedAt: null,
+        heartbeats: { none: { recordedAt: { gte: cutoff } } },
+      },
+      data: { state: "OFFLINE" },
+    });
+    if (res.count > 0) {
+      this.logger.warn(
+        `marked ${res.count} node(s) OFFLINE — no heartbeat for ${
+          NODE_OFFLINE_AFTER_MS / 1000
+        }s`,
+      );
+    }
+    return res.count;
   }
 
   async delete(id: string): Promise<void> {

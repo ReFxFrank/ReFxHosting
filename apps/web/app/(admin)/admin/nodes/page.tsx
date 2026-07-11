@@ -280,6 +280,8 @@ function CapacityForm({
   const [cpuCores, setCpuCores] = useState(node.cpuCores ?? 1);
   const [memoryMb, setMemoryMb] = useState(node.memoryMb ?? 1024);
   const [diskMb, setDiskMb] = useState(node.diskMb ?? 10240);
+  const [cpuOvercommit, setCpuOvercommit] = useState(node.cpuOvercommit ?? 1);
+  const [memOvercommit, setMemOvercommit] = useState(node.memOvercommit ?? 1);
   const [gameDomain, setGameDomain] = useState(node.gameDomain ?? "");
   const [supportsWeb, setSupportsWeb] = useState(!!node.supportsWeb);
   const [monthlyCost, setMonthlyCost] = useState(
@@ -402,6 +404,38 @@ function CapacityForm({
             />
           </div>
         </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="cap-cpu-oc">CPU overcommit ×</Label>
+            <Input
+              id="cap-cpu-oc"
+              type="number"
+              min={0.1}
+              max={10}
+              step={0.5}
+              value={cpuOvercommit}
+              onChange={(e) => setCpuOvercommit(Number(e.target.value))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cap-mem-oc">Memory overcommit ×</Label>
+            <Input
+              id="cap-mem-oc"
+              type="number"
+              min={0.1}
+              max={10}
+              step={0.1}
+              value={memOvercommit}
+              onChange={(e) => setMemOvercommit(Number(e.target.value))}
+            />
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Schedulable capacity = advertised × overcommit. Servers get
+          fair-share CPU weights with burst ceilings (not dedicated pins), so
+          CPU 2–3× is sustainable for bursty game workloads. RAM is really
+          consumed (JVM heaps) — keep memory at 1×.
+        </p>
       </div>
 
       <div className="space-y-3">
@@ -455,6 +489,8 @@ function CapacityForm({
               cpuCores,
               memoryMb,
               diskMb,
+              cpuOvercommit,
+              memOvercommit,
               gameDomain: gameDomain.trim(),
               supportsWeb,
               monthlyCostMinor: monthlyCost.trim()
@@ -641,6 +677,10 @@ const emptyForm = {
   cpuCores: 8,
   memoryMb: 16384,
   diskMb: 512000,
+  // CPU is weight+burst enforced (not pinned), so a moderate oversell is the
+  // sensible default for game nodes. RAM is really consumed — never oversell.
+  cpuOvercommit: 2,
+  memOvercommit: 1,
   allocationPortStart: 25565,
   allocationPortEnd: 25999,
   gameDomain: "",
@@ -917,6 +957,8 @@ export default function AdminNodesPage() {
         cpuCores: form.cpuCores,
         memoryMb: form.memoryMb,
         diskMb: form.diskMb,
+        cpuOvercommit: form.cpuOvercommit,
+        memOvercommit: form.memOvercommit,
         allocationPortStart: form.allocationPortStart,
         allocationPortEnd: form.allocationPortEnd,
         gameDomain: form.gameDomain.trim() || undefined,
@@ -1319,6 +1361,48 @@ export default function AdminNodesPage() {
                 />
               </div>
             </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="node-cpu-oc">CPU overcommit ×</Label>
+                <Input
+                  id="node-cpu-oc"
+                  type="number"
+                  min={0.1}
+                  max={10}
+                  step={0.5}
+                  value={form.cpuOvercommit}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      cpuOvercommit: Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="node-mem-oc">Memory overcommit ×</Label>
+                <Input
+                  id="node-mem-oc"
+                  type="number"
+                  min={0.1}
+                  max={10}
+                  step={0.1}
+                  value={form.memOvercommit}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      memOvercommit: Number(e.target.value),
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Schedulable capacity = advertised × overcommit. CPU is enforced
+              as fair-share weights + burst ceilings, so 2–3× CPU is
+              sustainable for game workloads; keep memory at 1×.
+            </p>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">

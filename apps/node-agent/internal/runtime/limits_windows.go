@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"fmt"
+	goruntime "runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -89,13 +90,21 @@ type jobObjectCPURateControlInformation struct {
 }
 
 // setCPURate caps CPU using the rate-control information class. The rate is a
-// percentage of total machine CPU expressed in hundredths of a percent.
+// percentage of total machine CPU expressed in hundredths of a percent, so a
+// plan's cores are scaled by the host's core count — 1 core on an 8-core host
+// is 12.5% (1250). The cap is set at the burst allowance, not the sold cores
+// (see cpuplan.go); job objects have no usable weight knob alongside a hard
+// cap, so Windows gets ceiling-only enforcement.
 func (l *jobObjectLimiter) setCPURate(cores float64) error {
-	// TODO(impl): scale by NumberOfProcessors to convert cores -> machine %.
 	rate := jobObjectCPURateControlInformation{
 		ControlFlags: jobObjectCPURateControlEnable | jobObjectCPURateControlHardCap,
 	}
-	pct := uint32(cores * 100 * 100) // cores * 100% * (hundredths)
+	host := float64(goruntime.NumCPU())
+	if host <= 0 {
+		host = 1
+	}
+	burst := cpuBurstCores(cores, host)
+	pct := uint32(burst / host * 100 * 100) // machine fraction in hundredths of a %
 	if pct == 0 {
 		pct = 1
 	}

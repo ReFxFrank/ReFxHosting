@@ -277,8 +277,11 @@ func (d *DockerRuntime) hostConfig(s *server.Server) (*container.HostConfig, nat
 	res := container.Resources{
 		Memory:     lim.MemoryMB * 1024 * 1024,
 		MemorySwap: (lim.MemoryMB + lim.SwapMB) * 1024 * 1024,
-		// NanoCPUs encodes fractional cores: 1.0 core == 1e9.
-		NanoCPUs:  int64(lim.CPUCores * 1e9),
+		// Fair-share weight at the sold cores + hard ceiling at the burst
+		// allowance (see cpuplan.go). NanoCPUs encodes fractional cores
+		// (1.0 core == 1e9); 0 = uncapped.
+		NanoCPUs:  int64(cpuBurstCores(lim.CPUCores, float64(goruntime.NumCPU())) * 1e9),
+		CPUShares: dockerCPUShares(lim.CPUCores),
 		PidsLimit: pidsPtr(lim.PidsLimit),
 	}
 	// Block-IO weight maps to the cgroup v2 `io` controller, which isn't exposed
@@ -844,7 +847,9 @@ func (d *DockerRuntime) Reconfigure(ctx context.Context, s *server.Server, lim s
 	res := container.Resources{
 		Memory:     lim.MemoryMB * 1024 * 1024,
 		MemorySwap: (lim.MemoryMB + lim.SwapMB) * 1024 * 1024,
-		NanoCPUs:   int64(lim.CPUCores * 1e9),
+		// Same weight + burst-ceiling pair as hostConfig (see cpuplan.go).
+		NanoCPUs:   int64(cpuBurstCores(lim.CPUCores, float64(goruntime.NumCPU())) * 1e9),
+		CPUShares:  dockerCPUShares(lim.CPUCores),
 		PidsLimit:  pidsPtr(lim.PidsLimit),
 	}
 	// See hostConfig: io.weight is unavailable under WSL2; Linux only.

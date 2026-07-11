@@ -8,6 +8,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
 } from "class-validator";
 import { NodeOs } from "@prisma/client";
@@ -92,6 +93,28 @@ export class CreateNodeDto {
   supportsWeb?: boolean;
 
   @ApiPropertyOptional({
+    default: 1.0,
+    description:
+      "CPU oversell ratio: schedulable vCPU = cpuCores × this. Servers get fair-share weights + burst ceilings (not dedicated pins), so >1 is safe for bursty game workloads; 2–3 is typical for Minecraft fleets.",
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  @Max(10)
+  cpuOvercommit?: number;
+
+  @ApiPropertyOptional({
+    default: 1.0,
+    description:
+      "Memory oversell ratio: schedulable RAM = memoryMb × this. RAM is actually consumed (JVM heaps), so keep this at or very near 1.",
+  })
+  @IsOptional()
+  @IsNumber()
+  @Min(0.1)
+  @Max(10)
+  memOvercommit?: number;
+
+  @ApiPropertyOptional({
     description:
       "What this node costs you per month, in minor units (cents). Drives the admin margin view. Omit if you don't want to track cost.",
   })
@@ -171,11 +194,15 @@ export class UpdateNodeDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @Min(0.1)
+  @Max(10)
   cpuOvercommit?: number;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsNumber()
+  @Min(0.1)
+  @Max(10)
   memOvercommit?: number;
 
   @ApiPropertyOptional()

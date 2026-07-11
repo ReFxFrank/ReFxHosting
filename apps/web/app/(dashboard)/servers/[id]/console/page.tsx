@@ -235,6 +235,9 @@ export default function ConsolePage() {
   const cpuCoresUsed = (stats?.cpuPct ?? 0) / 100;
   const cpuPctOfPlan =
     cpuLimit > 0 ? Math.round((cpuCoresUsed / cpuLimit) * 100) : Math.round(stats?.cpuPct ?? 0);
+  // Nodes let servers burst past their plan's cores into idle capacity, so
+  // >100% of plan is normal (and good) — label it rather than alarm.
+  const cpuBursting = cpuLimit > 0 && cpuCoresUsed > cpuLimit;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
@@ -310,7 +313,7 @@ export default function ConsolePage() {
         </Card>
 
         <ResourceGauge
-          label="CPU"
+          label={cpuBursting ? "CPU · burst" : "CPU"}
           icon={Cpu}
           current={cpuLimit > 0 ? cpuCoresUsed.toFixed(1) : `${Math.round(stats?.cpuPct ?? 0)}`}
           unit={cpuLimit > 0 ? `/ ${cpuLimit} vCPU` : "%"}

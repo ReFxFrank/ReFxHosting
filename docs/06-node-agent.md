@@ -365,6 +365,24 @@ The abstraction normalizes limits (e.g. mapping `cpuCores` to a cgroup CPU quota
 or a job-object CPU rate) and surfaces a single `ResourceSample` shape, so the
 panel sees uniform stats and limits regardless of the node's OS.
 
+### CPU model: fair-share weight + burst ceiling
+
+`cpuCores` is **not** a dedicated pin. Each server gets (see
+`internal/runtime/cpuplan.go`):
+
+- a **weight** proportional to its sold cores (Docker `CpuShares`, cgroup v2
+  `cpu.weight`) — under contention the node's CPU divides in proportion to
+  what each customer pays, so no server can starve a neighbour; and
+- a **hard ceiling** of 2× its sold cores, capped at the host's core count
+  (Docker `NanoCPUs`, cgroup v2 `cpu.max`, job-object hard cap) — idle
+  capacity absorbs bursts (startup, chunk generation, GC) while a runaway
+  server stays contained.
+
+`cpuCores <= 0` keeps its legacy meaning (no ceiling, default weight). Because
+CPU is shared rather than pinned, a `Node.cpuOvercommit` of 2–3× is
+sustainable for bursty game fleets; memory is really consumed, so
+`memOvercommit` should stay at 1.
+
 ---
 
 ## Related documents

@@ -194,10 +194,14 @@ export class AgentCallbacksController {
       }),
       this.prisma.node.update({
         where: { id: nodeId },
-        data: {
-          state: 'ONLINE',
-          agentVersion: body.agentVersion ?? undefined,
-        },
+        data: { agentVersion: body.agentVersion ?? undefined },
+      }),
+      // A heartbeat proves liveness, so flip OFFLINE back to ONLINE — but
+      // never stomp MAINTENANCE, which an admin set deliberately (the old
+      // unconditional write reverted maintenance within one heartbeat).
+      this.prisma.node.updateMany({
+        where: { id: nodeId, maintenance: false },
+        data: { state: 'ONLINE' },
       }),
     ]);
     return { ok: true };
