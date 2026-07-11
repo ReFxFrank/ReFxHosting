@@ -336,18 +336,60 @@ export default function ConsolePage() {
           pctValue={pct(stats?.diskUsedMb ?? 0, diskLimit)}
           history={diskHist}
         />
-        {stats?.players !== undefined && (
-          <Card className="flex items-center justify-between p-4">
-            <span className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Users className="size-4" /> Players
-            </span>
-            <span className="text-lg font-semibold tabular-nums">
-              {stats.players}
-              {server?.slots ? ` / ${server.slots}` : ""}
-            </span>
-          </Card>
-        )}
+        <PlayersCard id={id} running={running} />
       </div>
     </div>
+  );
+}
+
+/**
+ * Live player list for Minecraft servers, from the panel's Server List Ping.
+ * Renders nothing for games the ping doesn't support. Names are the server's
+ * public sample (vanilla shows up to 12; empty if hide-online-players is on).
+ */
+function PlayersCard({ id, running }: { id: string; running: boolean }) {
+  const { data } = useQuery({
+    queryKey: ["server", id, "players"],
+    queryFn: () => api.servers.players(id),
+    refetchInterval: 20_000,
+  });
+
+  if (!data?.supported) return null;
+
+  const count = data.players;
+  return (
+    <Card className="space-y-2 p-4">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Users className="size-4" /> Players
+        </span>
+        <span className="text-lg font-semibold tabular-nums">
+          {data.online && count ? `${count.online} / ${count.max}` : "—"}
+        </span>
+      </div>
+      {data.online && count && count.names.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {count.names.map((name) => (
+            <span
+              key={name}
+              className="rounded-md border border-white/[0.08] bg-accent/40 px-2 py-0.5 font-mono text-xs"
+            >
+              {name}
+            </span>
+          ))}
+        </div>
+      )}
+      <p className="text-xs text-muted-foreground">
+        {!running
+          ? "Server is offline."
+          : !data.online
+            ? "Waiting for the server to accept connections…"
+            : count && count.online === 0
+              ? "Nobody online right now."
+              : count && count.names.length === 0
+                ? "The server hides player names (hide-online-players)."
+                : "Live from the server’s public status ping."}
+      </p>
+    </Card>
   );
 }

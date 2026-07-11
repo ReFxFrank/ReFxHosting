@@ -493,6 +493,15 @@ export const api = {
       http.patch<{ enabled: boolean }>(`/servers/${id}/auto-restart`, {
         enabled,
       }),
+    /** Live Minecraft player count + public name sample (Server List Ping). */
+    players: (id: string) =>
+      http.get<{
+        supported: boolean;
+        online: boolean;
+        players?: { online: number; max: number; names: string[] };
+        version?: string | null;
+        latencyMs?: number;
+      }>(`/servers/${id}/players`),
     variables: (id: string) =>
       http.get<ServerVariableField[]>(`/servers/${id}/variables`),
     setVariable: (id: string, envName: string, value: string) =>
