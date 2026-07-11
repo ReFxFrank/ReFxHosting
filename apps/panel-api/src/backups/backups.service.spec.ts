@@ -301,8 +301,10 @@ describe('BackupsService lifecycle', () => {
         id: 'srv-1',
         shortId: 'abc123',
         name: 'SMP',
-        expressBackups: true,
         node: { name: 'us-east-va' },
+        // Storage flag set but the subscription never bought the add-on —
+        // a manually-comped server must surface as NOT paying.
+        subscription: { expressBackups: false },
       },
     ]);
 
@@ -316,7 +318,7 @@ describe('BackupsService lifecycle', () => {
     expect(stats.topOffsite[0]).toMatchObject({
       shortId: 'abc123',
       bytes: 60e9,
-      express: true,
+      paying: false,
     });
     expect(stats.local.perNode[0]).toMatchObject({
       nodeName: 'us-east-va',

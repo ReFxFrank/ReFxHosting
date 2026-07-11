@@ -1245,7 +1245,8 @@ export const api = {
           shortId: string;
           name: string;
           nodeName: string;
-          express: boolean;
+          /** False when the subscription never bought the add-on (comped). */
+          paying: boolean;
           backups: number;
           bytes: number;
         }[];

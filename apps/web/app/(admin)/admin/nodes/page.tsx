@@ -800,9 +800,9 @@ function BackupStoragePanel() {
                       <span className="font-mono text-xs text-muted-foreground">
                         {t.shortId}
                       </span>
-                      {!t.express && (
+                      {!t.paying && (
                         <Badge variant="warning" className="ml-2 text-[10px]">
-                          not paying
+                          comped
                         </Badge>
                       )}
                     </TableCell>

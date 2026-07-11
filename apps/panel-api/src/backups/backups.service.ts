@@ -406,15 +406,17 @@ export class BackupsService {
     );
     const monthlyRevenueMinor = expressSubs * cfg.monthlyMinor;
 
-    // Top offsite consumers, labeled.
+    // Top offsite consumers, labeled. "paying" keys on the SUBSCRIPTION's
+    // add-on flag, not the server's storage flag — so manually-comped servers
+    // (storage granted, nothing billed) are visibly flagged in the table.
     const servers = await this.prisma.server.findMany({
       where: { id: { in: topRaw.map((t) => t.serverId) } },
       select: {
         id: true,
         shortId: true,
         name: true,
-        expressBackups: true,
         node: { select: { name: true } },
+        subscription: { select: { expressBackups: true } },
       },
     });
     const byId = new Map(servers.map((sv) => [sv.id, sv]));
@@ -423,7 +425,7 @@ export class BackupsService {
       shortId: byId.get(t.serverId)?.shortId ?? '?',
       name: byId.get(t.serverId)?.name ?? 'deleted server',
       nodeName: byId.get(t.serverId)?.node?.name ?? '—',
-      express: byId.get(t.serverId)?.expressBackups ?? false,
+      paying: byId.get(t.serverId)?.subscription?.expressBackups ?? false,
       backups: t._count._all,
       bytes: Number(t._sum.sizeBytes ?? 0n),
     }));
