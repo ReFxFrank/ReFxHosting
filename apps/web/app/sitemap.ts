@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL, serverGet } from "@/lib/server-api";
 import { topModpacks } from "@/lib/modrinth";
+import { COMPARE_INDEXABLE, COMPETITORS } from "@/data/compare";
 
 /**
  * Dynamic sitemap: the static marketing routes plus every published game page
@@ -63,5 +64,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...gameRoutes, ...kbRoutes, ...packRoutes];
+  // Comparison pages are noindex until reviewed; keep them out of the sitemap
+  // until NEXT_PUBLIC_INDEX_COMPARE is flipped.
+  const compareRoutes: MetadataRoute.Sitemap = COMPARE_INDEXABLE
+    ? [
+        { url: `${SITE_URL}/compare`, changeFrequency: "monthly" as const, priority: 0.6 },
+        ...COMPETITORS.map((c) => ({
+          url: `${SITE_URL}/compare/${c.slug}`,
+          changeFrequency: "monthly" as const,
+          priority: 0.6,
+        })),
+      ]
+    : [];
+
+  return [...staticRoutes, ...gameRoutes, ...kbRoutes, ...packRoutes, ...compareRoutes];
 }
