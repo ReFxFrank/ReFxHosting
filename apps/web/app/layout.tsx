@@ -5,6 +5,7 @@ import "./globals.css";
 import "flag-icons/css/flag-icons.min.css";
 import { Providers } from "@/components/providers";
 import { CookieConsent } from "@/components/shared/cookie-consent";
+import { EffectsModeInit } from "@/components/shared/effects-mode";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${mono.variable} font-sans antialiased`}>
+        <EffectsModeInit />
         <Providers>{children}</Providers>
         <CookieConsent />
       </body>

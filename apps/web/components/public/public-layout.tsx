@@ -7,6 +7,7 @@ import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { LogoWordmark } from "@/components/brand/logo";
 import { AppStoreBadge } from "@/components/public/app-store-badge";
+import { EffectsToggle } from "@/components/shared/effects-mode";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
@@ -193,7 +194,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             <p className="text-xs text-muted-foreground">
               © {new Date().getFullYear()} {BRAND}. All rights reserved.
             </p>
-            <nav className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+            <nav className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <Link
                 href="/terms"
                 className="transition-colors hover:text-foreground"
@@ -218,6 +219,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               >
                 Refunds
               </Link>
+              <EffectsToggle />
             </nav>
           </div>
         </div>

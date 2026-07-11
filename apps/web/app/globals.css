@@ -662,3 +662,56 @@
     animation: none;
   }
 }
+
+/* ─────────────────────────── perf-lite mode ────────────────────────────────
+   Static presentation for machines rendering WITHOUT GPU acceleration (or
+   that opted out via the footer toggle / failed the frame-rate probe — see
+   components/shared/effects-mode.tsx). Everything here targets work that is
+   ~free on a GPU but burns CPU every frame under software rasterization:
+   infinite ambient animations, backdrop blur, and cursor-tracked gradients.
+   The gradients themselves stay — a static paint costs nothing. */
+html.perf-lite .refx-aurora {
+  animation: none;
+  transform: none;
+  will-change: auto;
+}
+html.perf-lite .refx-text-shimmer,
+html.perf-lite .animate-pulse {
+  animation: none;
+}
+html.perf-lite .refx-enter,
+html.perf-lite .refx-enter-hero,
+html.perf-lite .refx-enter-glow {
+  animation: none;
+  opacity: 1;
+  transform: none;
+  filter: none;
+}
+html.perf-lite .refx-beam-live::before {
+  animation: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(125, 183, 255, 0.55),
+    transparent
+  );
+  background-size: 100% 100%;
+}
+html.perf-lite .refx-sheen::after {
+  display: none;
+}
+/* Cursor-tracked spotlight/border gradients repaint on every mousemove. */
+html.perf-lite .refx-spotlight::after,
+html.perf-lite .refx-border-glow::before {
+  display: none;
+}
+/* Frosted glass: backdrop-filter re-blurs everything behind the element on
+   every scroll frame in software mode. Drop the blur everywhere; sticky
+   headers get a near-opaque background instead so text stays readable. */
+html.perf-lite [class*="backdrop-blur"] {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+html.perf-lite header[class*="backdrop-blur"] {
+  background-color: rgba(7, 11, 18, 0.97) !important;
+}

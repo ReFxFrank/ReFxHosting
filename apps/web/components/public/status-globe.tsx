@@ -1,9 +1,33 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import createGlobe from "cobe";
 import type { StatusLevel, StatusRegion } from "@/lib/types";
 import { regionCoords } from "@/lib/geo";
+
+/**
+ * True when WebGL would be software-rendered (hardware acceleration off →
+ * SwiftShader/llvmpipe), or the user/probe chose perf-lite. A continuously
+ * animating software-GL canvas doesn't just lag this page — it drags the
+ * whole machine, so we render a static stand-in instead.
+ */
+function softwareRendered(): boolean {
+  if (document.documentElement.classList.contains("perf-lite")) return true;
+  try {
+    const probe = document.createElement("canvas");
+    const gl = (probe.getContext("webgl") ??
+      probe.getContext("experimental-webgl")) as WebGLRenderingContext | null;
+    if (!gl) return true;
+    const ext = gl.getExtension("WEBGL_debug_renderer_info");
+    const renderer = ext
+      ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL))
+      : "";
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return /swiftshader|llvmpipe|software/i.test(renderer);
+  } catch {
+    return true;
+  }
+}
 
 /**
  * How far the globe can be zoomed in (also the canvas oversize factor).
@@ -27,6 +51,7 @@ const MIN_ZOOM = 0.8;
  * stays in the list below.
  */
 export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
+  const [fallback, setFallback] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointerInteracting = useRef<number | null>(null);
@@ -60,6 +85,10 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
     const canvas = canvasRef.current;
     const wrapper = wrapperRef.current;
     if (!canvas || !wrapper) return;
+    if (softwareRendered()) {
+      setFallback(true);
+      return;
+    }
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const onResize = () => {
@@ -188,7 +217,20 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
       style={{ contain: "layout paint size" }}
       aria-hidden="true"
     >
-      <canvas
+      {fallback ? (
+        // Static stand-in for software-rendered WebGL / perf-lite: one cheap
+        // paint, same palette, zero per-frame work.
+        <div
+          className="absolute inset-[6%] rounded-full"
+          style={{
+            background:
+              "radial-gradient(circle at 38% 32%, rgba(66,110,180,0.55), rgba(18,40,84,0.85) 55%, rgba(7,13,24,0.95) 78%)",
+            boxShadow:
+              "0 0 80px -20px rgba(31,92,179,0.55), inset 0 0 60px rgba(12,36,90,0.8)",
+          }}
+        />
+      ) : (
+        <canvas
         ref={canvasRef}
         onPointerDown={(e) => onDown(e.clientX)}
         onPointerUp={onUp}
@@ -201,9 +243,10 @@ export function StatusGlobe({ regions = [] }: { regions?: StatusRegion[] }) {
         onTouchMove={(e) =>
           e.touches.length === 1 && e.touches[0] && onMove(e.touches[0].clientX)
         }
-        className="absolute left-1/2 top-1/2 aspect-square -translate-x-1/2 -translate-y-1/2 cursor-grab opacity-0 transition-opacity duration-700"
-        style={{ width: `${MAX_ZOOM * 100}%` }}
-      />
+          className="absolute left-1/2 top-1/2 aspect-square -translate-x-1/2 -translate-y-1/2 cursor-grab opacity-0 transition-opacity duration-700"
+          style={{ width: `${MAX_ZOOM * 100}%` }}
+        />
+      )}
     </div>
   );
 }
