@@ -910,6 +910,8 @@ model ScheduleTask {
   timeOffsetMs Int            @default(0) // delay after previous task
   sortOrder    Int            @default(0)
   continueOnFailure Boolean   @default(false)
+  // Action-specific extras, e.g. { "mode": "ESSENTIALS" } for BACKUP tasks.
+  options      Json?
 }
 
 // ---------------------------------------------------------------------------

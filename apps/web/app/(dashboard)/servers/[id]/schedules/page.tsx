@@ -58,6 +58,8 @@ interface TaskDraft {
   action: ScheduleAction;
   payload: string;
   timeOffsetMs: number;
+  /** BACKUP only: what to archive (default ESSENTIALS). */
+  backupMode?: "ESSENTIALS" | "FULL";
 }
 
 interface ScheduleDraft {
@@ -109,6 +111,9 @@ export default function SchedulesPage() {
           payload: t.payload,
           timeOffsetMs: t.timeOffsetMs,
           sortOrder: i,
+          ...(t.action === "BACKUP"
+            ? { options: { mode: t.backupMode ?? "ESSENTIALS" } }
+            : {}),
         })) as ScheduleTask[],
       };
       return editing
@@ -170,7 +175,15 @@ export default function SchedulesPage() {
         ? schedule.tasks
             .slice()
             .sort((a, b) => a.sortOrder - b.sortOrder)
-            .map((t) => ({ action: t.action, payload: t.payload, timeOffsetMs: t.timeOffsetMs }))
+            .map((t) => ({
+              action: t.action,
+              payload: t.payload,
+              timeOffsetMs: t.timeOffsetMs,
+              backupMode:
+                t.options?.mode === "FULL"
+                  ? ("FULL" as const)
+                  : ("ESSENTIALS" as const),
+            }))
         : [{ action: "COMMAND", payload: "", timeOffsetMs: 0 }],
     });
     setDialogOpen(true);
@@ -432,11 +445,32 @@ export default function SchedulesPage() {
                           </SelectContent>
                         </Select>
                       ) : task.action === "BACKUP" ? (
-                        <Input
-                          placeholder="Backup name (optional)"
-                          value={task.payload}
-                          onChange={(e) => updateTask(i, { payload: e.target.value })}
-                        />
+                        <div className="flex flex-1 gap-2">
+                          <Input
+                            placeholder="Backup name (optional)"
+                            value={task.payload}
+                            onChange={(e) => updateTask(i, { payload: e.target.value })}
+                          />
+                          <Select
+                            value={task.backupMode ?? "ESSENTIALS"}
+                            onValueChange={(v) =>
+                              updateTask(i, {
+                                backupMode: v as "ESSENTIALS" | "FULL",
+                              })
+                            }
+                          >
+                            <SelectTrigger
+                              className="w-36 shrink-0"
+                              aria-label="Backup mode"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="ESSENTIALS">Essentials</SelectItem>
+                              <SelectItem value="FULL">Everything</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                       ) : (
                         <Input
                           placeholder="say Restarting soon"

@@ -165,6 +165,38 @@ export class BackupsService {
     return backup;
   }
 
+  /**
+   * Create a backup on behalf of a schedule. Unlike interactive creation,
+   * hitting the per-server cap must not wedge the schedule forever — rotate:
+   * drop the oldest UNLOCKED completed backup to make room (locked backups
+   * are exempt, as promised in the UI). Fails only when everything is locked.
+   */
+  async createScheduled(
+    serverId: string,
+    name: string,
+    mode: 'ESSENTIALS' | 'FULL',
+  ): Promise<Backup> {
+    const count = await this.prisma.backup.count({
+      where: { serverId, state: { not: 'FAILED' } },
+    });
+    if (count >= MAX_BACKUPS_PER_SERVER) {
+      const oldest = await this.prisma.backup.findFirst({
+        where: { serverId, isLocked: false, state: 'COMPLETED' },
+        orderBy: { createdAt: 'asc' },
+      });
+      if (!oldest) {
+        throw new ConflictException(
+          'Backup limit reached and every backup is locked — nothing to rotate',
+        );
+      }
+      this.logger.log(
+        `rotating oldest backup ${oldest.id} on server ${serverId} for a scheduled backup`,
+      );
+      await this.remove(serverId, oldest.id);
+    }
+    return this.create(serverId, { name, mode });
+  }
+
   async remove(serverId: string, backupId: string): Promise<void> {
     const server = await this.serverWithNode(serverId);
     const backup = await this.backupOrThrow(serverId, backupId);

@@ -8,6 +8,22 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { uuidv7 } from "../common/util/uuid";
 import { isValidCron, nextCronRun } from "./cron.util";
+
+/**
+ * Whitelist persisted schedule-task options: only the BACKUP mode survives
+ * (arbitrary client JSON must not land in the DB). Undefined = column stays
+ * NULL and the runner applies its default (ESSENTIALS).
+ */
+function taskOptions(t: {
+  action: string;
+  options?: { mode?: string };
+}): Prisma.InputJsonValue | undefined {
+  const mode = t.options?.mode;
+  if (t.action === "BACKUP" && (mode === "ESSENTIALS" || mode === "FULL")) {
+    return { mode };
+  }
+  return undefined;
+}
 import { jvmHeapMb, SERVER_MEMORY_VAR } from "./server-memory.util";
 import {
   isJavaImage,
@@ -461,6 +477,7 @@ export class ServerResourcesService {
             timeOffsetMs: t.timeOffsetMs ?? 0,
             sortOrder: t.sortOrder ?? i,
             continueOnFailure: t.continueOnFailure ?? false,
+            options: taskOptions(t),
           })),
         },
       },
@@ -503,6 +520,7 @@ export class ServerResourcesService {
           timeOffsetMs: t.timeOffsetMs ?? 0,
           sortOrder: t.sortOrder ?? i,
           continueOnFailure: t.continueOnFailure ?? false,
+          options: taskOptions(t),
         })),
       };
     }

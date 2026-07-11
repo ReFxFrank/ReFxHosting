@@ -71,6 +71,41 @@ describe('BackupsService lifecycle', () => {
     });
   });
 
+  describe('createScheduled rotation', () => {
+    it('under the cap: creates without rotating', async () => {
+      prisma.backup.count.mockResolvedValue(3);
+      await svc.createScheduled('srv-1', 'nightly', 'ESSENTIALS');
+      expect(prisma.backup.delete).not.toHaveBeenCalled();
+      const data = prisma.backup.create.mock.calls[0][0].data;
+      expect(data.ignoredFiles).toEqual(expect.arrayContaining(['libraries']));
+    });
+
+    it('at the cap: rotates the oldest unlocked completed backup first', async () => {
+      prisma.backup.count.mockResolvedValueOnce(25).mockResolvedValue(24);
+      await svc.createScheduled('srv-1', 'nightly', 'FULL');
+      // Oldest-first lookup restricted to unlocked, completed backups.
+      expect(prisma.backup.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { serverId: 'srv-1', isLocked: false, state: 'COMPLETED' },
+          orderBy: { createdAt: 'asc' },
+        }),
+      );
+      expect(prisma.backup.delete).toHaveBeenCalledWith({
+        where: { id: 'bak-1' },
+      });
+      expect(prisma.backup.create).toHaveBeenCalled();
+    });
+
+    it('fails cleanly when the cap is hit and everything is locked', async () => {
+      prisma.backup.count.mockResolvedValue(25);
+      prisma.backup.findFirst.mockResolvedValue(null);
+      await expect(
+        svc.createScheduled('srv-1', 'nightly', 'ESSENTIALS'),
+      ).rejects.toThrow(/locked/i);
+      expect(prisma.backup.create).not.toHaveBeenCalled();
+    });
+  });
+
   describe('remove', () => {
     it('passes the archive location to the agent, then deletes the row', async () => {
       await svc.remove('srv-1', 'bak-1');

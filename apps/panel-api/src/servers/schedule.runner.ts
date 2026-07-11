@@ -1,12 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { InjectQueue } from '@nestjs/bullmq';
-import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodeAgentClient, PowerSignal } from '../agent/agent.client';
-import { BackupJob, JOB, QUEUE } from '../queues/queue.constants';
-import { uuidv7 } from '../common/util/uuid';
+import { BackupsService } from '../backups/backups.service';
 import { AppConfig } from '../config/configuration';
 import { nextCronRun } from './cron.util';
 
@@ -29,7 +26,7 @@ export class ScheduleRunner {
     private readonly prisma: PrismaService,
     private readonly agent: NodeAgentClient,
     config: ConfigService,
-    @InjectQueue(QUEUE.BACKUPS) private readonly backupQueue: Queue<BackupJob>,
+    private readonly backups: BackupsService,
   ) {
     // Reuse the in-process scheduler master switch (BILLING_SCHEDULER).
     this.enabled = config.get<AppConfig['billing']>('billing')!.schedulerEnabled;
@@ -97,19 +94,15 @@ export class ScheduleRunner {
         } else if (task.action === 'COMMAND') {
           await this.agent.sendCommand(server.node, server.id, task.payload);
         } else if (task.action === 'BACKUP') {
-          const backup = await this.prisma.backup.create({
-            data: {
-              id: uuidv7(),
-              serverId: server.id,
-              name: task.payload || `Scheduled · ${schedule.name}`,
-              state: 'PENDING',
-              ignoredFiles: [],
-            },
-          });
-          await this.backupQueue.add(JOB.RUN_BACKUP, {
-            serverId: server.id,
-            backupId: backup.id,
-          });
+          // Recurring snapshots default to ESSENTIALS (regenerable content
+          // skipped) unless the task explicitly opts into FULL. Rotation in
+          // createScheduled keeps nightly schedules from wedging on the cap.
+          const opts = (task.options ?? {}) as { mode?: string };
+          await this.backups.createScheduled(
+            server.id,
+            task.payload || `Scheduled · ${schedule.name}`,
+            opts.mode === 'FULL' ? 'FULL' : 'ESSENTIALS',
+          );
         }
       } catch (e) {
         this.logger.warn(

@@ -158,6 +158,14 @@ export class ScheduleTaskDto {
   @MaxLength(2000)
   payload!: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Action-specific extras. BACKUP: { "mode": "ESSENTIALS" | "FULL" } (default ESSENTIALS — skip regenerable content).',
+  })
+  @IsOptional()
+  @IsObject()
+  options?: { mode?: "ESSENTIALS" | "FULL" };
+
   @ApiPropertyOptional({ description: "Delay after the previous task (ms)" })
   @IsOptional()
   @IsInt()

@@ -859,6 +859,8 @@ export interface ScheduleTask {
   timeOffsetMs: number;
   sortOrder: number;
   continueOnFailure: boolean;
+  /** Action-specific extras — BACKUP: { mode: "ESSENTIALS" | "FULL" }. */
+  options?: { mode?: "ESSENTIALS" | "FULL" } | null;
 }
 
 export interface Schedule {
