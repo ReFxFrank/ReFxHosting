@@ -253,6 +253,8 @@ export interface GatewayStatus {
   paypal: { configured: boolean };
   /** Express-backups add-on offer (public-safe: enabled + monthly price). */
   expressBackups?: { enabled: boolean; monthlyMinor: number };
+  /** Referral program offer (public-safe: enabled + reward). */
+  referral?: { enabled: boolean; rewardMinor: number };
 }
 
 /** Masked, editable gateway config for the owner Payments editor. */

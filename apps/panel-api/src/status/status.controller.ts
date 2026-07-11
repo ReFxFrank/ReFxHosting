@@ -35,6 +35,13 @@ export class StatusController {
     return this.status.getStatus();
   }
 
+  /** Public social-proof counters for the homepage (cached ~60s). */
+  @Public()
+  @Get('live')
+  live(): Promise<{ serversOnline: number; playersOnline: number }> {
+    return this.status.getLiveCounts();
+  }
+
   /**
    * Bot-facing per-node live metrics (CPU / RAM / disk / running servers).
    * Requires a `status:read`-scoped token presented as `Authorization: Bearer`

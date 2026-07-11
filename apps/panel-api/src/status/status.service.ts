@@ -398,6 +398,40 @@ export class StatusService {
       "operational",
     );
   }
+  // Cached social-proof counters (homepage polls this publicly).
+  private liveCache: {
+    at: number;
+    data: { serversOnline: number; playersOnline: number };
+  } | null = null;
+
+  /**
+   * Live fleet counters for the public homepage: RUNNING servers + the sum of
+   * each running server's most recent player sample (last 5 minutes). Cached
+   * 60s — it's decoration, not telemetry.
+   */
+  async getLiveCounts(): Promise<{
+    serversOnline: number;
+    playersOnline: number;
+  }> {
+    if (this.liveCache && Date.now() - this.liveCache.at < 60_000) {
+      return this.liveCache.data;
+    }
+    const serversOnline = await this.prisma.server.count({
+      where: { state: 'RUNNING', deletedAt: null },
+    });
+    // Latest sample per running server within the freshness window; done in
+    // SQL (DISTINCT ON) so one busy fleet doesn't pull thousands of rows.
+    const rows = await this.prisma.$queryRaw<{ players: number | null }[]>`
+      SELECT DISTINCT ON ("serverId") "players"
+      FROM "ServerStat"
+      WHERE "recordedAt" > NOW() - INTERVAL '5 minutes'
+      ORDER BY "serverId", "recordedAt" DESC
+    `;
+    const playersOnline = rows.reduce((sum, r) => sum + (r.players ?? 0), 0);
+    const data = { serversOnline, playersOnline };
+    this.liveCache = { at: Date.now(), data };
+    return data;
+  }
 }
 
 type IncidentRow = {

@@ -70,12 +70,14 @@ describe("BillingService settlement engine", () => {
     const renewalQueue = { add: jest.fn() };
     const suspensionQueue = { add: jest.fn() };
     const provisionQueue = { add: jest.fn() };
+    const referrals = { rewardFirstPayment: jest.fn().mockResolvedValue(undefined) };
     const svc = new BillingService(
       prisma as any,
       config as any,
       stripe as any,
       paypal as any,
       settings as any,
+      referrals as any,
       email as any,
       notifications as any,
       push as any,

@@ -32,6 +32,7 @@ export default function AdminSettingsPage() {
       <VanitySettingsCard />
       <BackupStorageSettingsCard />
       <ExpressBackupsSettingsCard />
+      <ReferralSettingsCard />
     </div>
   );
 }
@@ -225,6 +226,90 @@ function BackupStorageSettingsCard() {
                 ))}
               </div>
             )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Referral program: enable/disable + two-sided reward. */
+function ReferralSettingsCard() {
+  const queryClient = useQueryClient();
+  const { data: cfg, isLoading } = useQuery({
+    queryKey: ["admin", "referral-config"],
+    queryFn: () => api.admin.referralConfig(),
+  });
+  const [rewardStr, setRewardStr] = useState<string | null>(null);
+  const rewardV = rewardStr ?? (cfg ? String(cfg.rewardMinor) : "");
+  const rewardNum = Number(rewardV);
+  const rewardValid =
+    Number.isInteger(rewardNum) && rewardNum >= 0 && rewardNum <= 100000;
+
+  const save = useMutation({
+    mutationFn: (input: { enabled?: boolean; rewardMinor?: number }) =>
+      api.admin.setReferralConfig(input),
+    onSuccess: () => {
+      toast.success("Referral settings saved");
+      queryClient.invalidateQueries({ queryKey: ["admin", "referral-config"] });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to save"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Send className="size-4 text-primary" /> Referral program
+        </CardTitle>
+        <CardDescription>
+          Give-and-get: customers share a link; when the referred friend makes
+          their first purchase, BOTH sides receive account credit. Credit is
+          spent before any card is charged, so it never costs you cash — only
+          discounted future revenue.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading || !cfg ? (
+          <ListSkeleton rows={2} />
+        ) : (
+          <>
+            <div className="flex items-center justify-between rounded-lg border border-white/[0.08] p-3">
+              <div>
+                <Label>Program enabled</Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Shows the share card on customer accounts and grants rewards.
+                </p>
+              </div>
+              <Switch
+                checked={cfg.enabled}
+                onCheckedChange={(v) => save.mutate({ enabled: v })}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="ref-reward">Reward (minor units, each side)</Label>
+                <Input
+                  id="ref-reward"
+                  className="w-40"
+                  value={rewardV}
+                  onChange={(e) => setRewardStr(e.target.value)}
+                  placeholder="500"
+                />
+                <p className="text-xs text-muted-foreground">
+                  500 = $5.00 credit to the referrer AND the new customer.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                loading={save.isPending}
+                disabled={!rewardValid || rewardV === String(cfg.rewardMinor)}
+                onClick={() => save.mutate({ rewardMinor: rewardNum })}
+              >
+                Save reward
+              </Button>
+            </div>
           </>
         )}
       </CardContent>

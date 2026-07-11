@@ -41,6 +41,14 @@ export class BillingScheduler {
     await this.enqueueDunning();
   }
 
+  /** Hourly: nudge orders that were placed but never paid (sent once). */
+  @Cron(CronExpression.EVERY_HOUR)
+  async checkoutReminders(): Promise<void> {
+    if (!this.enabled) return;
+    const n = await this.billing.sendCheckoutReminders();
+    if (n) this.logger.log(`Sent ${n} abandoned-checkout reminder(s).`);
+  }
+
   /** Daily: proactive "your subscription renews soon" reminders. */
   @Cron(CronExpression.EVERY_DAY_AT_9AM)
   async renewalReminders(): Promise<void> {

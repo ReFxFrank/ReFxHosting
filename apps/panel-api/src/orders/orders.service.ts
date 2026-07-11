@@ -21,6 +21,20 @@ export interface OrderResult {
  * BillingService and ServersService end to end. The live payment capture is the
  * single external piece left as TODO(impl); the rest of the flow is wired.
  */
+/** Whitelist client-supplied acquisition data (known keys, truncated). */
+function sanitizeAttribution(
+  raw: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const ALLOWED = ['source', 'medium', 'campaign', 'term', 'content', 'ref', 'landing', 'referrer'];
+  const out: Record<string, string> = {};
+  for (const key of ALLOWED) {
+    const v = raw[key];
+    if (typeof v === 'string' && v.trim()) out[key] = v.trim().slice(0, 200);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -46,6 +60,8 @@ export class OrdersService {
       paymentMethodId?: string;
       gateway?: 'stripe' | 'paypal';
       environment?: Record<string, string>;
+      /** First-touch acquisition data (utm params, ref, landing); whitelisted here. */
+      attribution?: Record<string, string>;
       expressBackups?: boolean;
       couponCode?: string;
       giftCardCode?: string;
@@ -161,6 +177,7 @@ export class OrdersService {
       hardwareTierId: dto.hardwareTierId,
       slots: dto.slots,
       expressBackups: dto.expressBackups ?? false,
+      attribution: sanitizeAttribution(dto.attribution),
     });
 
     // PayPal recurring: fixed-price orders with no discounts/credit start a real

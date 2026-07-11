@@ -337,6 +337,10 @@ export const api = {
       region?: string;
       postalCode: string;
       country: string;
+      /** Referral code from a share link (?ref=...). */
+      referralCode?: string;
+      /** First-touch acquisition data (utm/ref/landing). */
+      attribution?: Record<string, string>;
     }) =>
       http.post<LoginResponse>("/auth/register", input, { anonymous: true }),
     verifyMfa: (
@@ -967,6 +971,11 @@ export const api = {
 
   // Public platform status feed for the /status page.
   status: () => http.get<SystemStatus>("/status", { anonymous: true }),
+  /** Public social-proof counters (homepage). */
+  statusLive: () =>
+    http.get<{ serversOnline: number; playersOnline: number }>("/status/live", {
+      anonymous: true,
+    }),
 
   orders: {
     // Creates a checkout session / provisions a server. TODO(impl): Stripe redirect.
@@ -981,6 +990,8 @@ export const api = {
       name: string;
       gateway?: "stripe" | "paypal";
       environment?: Record<string, string>;
+      /** First-touch acquisition data (utm/ref/landing). */
+      attribution?: Record<string, string>;
       /** Express backups add-on: offsite storage + fast downloads (recurring). */
       expressBackups?: boolean;
       couponCode?: string;
@@ -996,6 +1007,16 @@ export const api = {
   },
 
   billing: {
+    /** The caller's referral code + earnings (code created on first request). */
+    referral: () =>
+      http.get<{
+        enabled: boolean;
+        rewardMinor: number;
+        code: string | null;
+        referredCount: number;
+        convertedCount: number;
+        earnedMinor: number;
+      }>("/billing/referral"),
     /** Public-safe gateway config for the checkout button (Stripe publishable key). */
     config: () => http.get<GatewayStatus>("/billing/config"),
     validateCoupon: (code: string, subtotalMinor: number) =>
@@ -1427,6 +1448,15 @@ export const api = {
       http.post<{
         push: { nodeId: string; name: string; ok: boolean; error?: string }[];
       }>("/admin/settings/backup-storage/push"),
+    referralConfig: () =>
+      http.get<{ enabled: boolean; rewardMinor: number }>(
+        "/admin/settings/referrals",
+      ),
+    setReferralConfig: (input: { enabled?: boolean; rewardMinor?: number }) =>
+      http.patch<{ enabled: boolean; rewardMinor: number }>(
+        "/admin/settings/referrals",
+        input,
+      ),
     expressBackupsConfig: () =>
       http.get<{ enabled: boolean; monthlyMinor: number }>(
         "/admin/settings/express-backups",

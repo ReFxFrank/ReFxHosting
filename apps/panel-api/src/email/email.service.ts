@@ -316,6 +316,30 @@ export class EmailService {
     });
   }
 
+  /** Nudge for an order that was placed but never paid (server reserved). */
+  async sendCheckoutReminder(
+    user: MailRecipient,
+    invoice: { number: number | string; amountMinor: number; currency: string },
+  ): Promise<void> {
+    const amount = this.money(invoice.amountMinor, invoice.currency);
+    const { html, text } = await this.compose({
+      title: 'Your server is waiting',
+      greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
+      preheader: 'Finish checkout and your server comes online in minutes.',
+      intro: [
+        `Your order is reserved but invoice <strong>${invoice.number}</strong> (<strong>${amount}</strong>) hasn't been paid yet.`,
+        'Complete the payment and provisioning starts immediately — your name, region and configuration are saved.',
+      ],
+      button: { label: 'Complete payment', url: `${this.panelUrl}/billing` },
+    });
+    await this.sendGeneric({
+      to: user.email,
+      subject: `Your server is reserved — invoice ${invoice.number} awaits payment`,
+      text,
+      html,
+    });
+  }
+
   /** Proactive reminder that a subscription is about to renew. */
   async sendRenewalReminder(
     user: MailRecipient,

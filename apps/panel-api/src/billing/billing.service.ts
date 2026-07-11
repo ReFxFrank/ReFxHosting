@@ -24,6 +24,7 @@ import {
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { SettingsService } from "../platform/settings.service";
+import { ReferralsService } from "./referrals.service";
 import {
   Paginated,
   PaginationDto,
@@ -106,6 +107,7 @@ export class BillingService {
     private readonly stripe: StripeGateway,
     private readonly paypal: PayPalGateway,
     private readonly settings: SettingsService,
+    private readonly referrals: ReferralsService,
     private readonly email: EmailService,
     private readonly notifications: NotificationsService,
     private readonly push: PushService,
@@ -483,6 +485,7 @@ export class BillingService {
         interval: dto.interval,
         slots: dto.slots && dto.slots > 0 ? dto.slots : 1,
         expressBackups: dto.expressBackups ?? false,
+        attribution: dto.attribution ?? undefined,
         state: SubscriptionState.ACTIVE,
         currentPeriodStart: now,
         currentPeriodEnd,
@@ -970,10 +973,12 @@ export class BillingService {
     stripe: { configured: boolean; publishableKey: string | null };
     paypal: { configured: boolean };
     expressBackups: { enabled: boolean; monthlyMinor: number };
+    referral: { enabled: boolean; rewardMinor: number };
   }> {
     const stripe = await this.settings.stripeConfig();
     const paypal = await this.settings.paypalConfig();
     const expressBackups = await this.settings.expressBackupsConfig();
+    const referral = await this.settings.referralConfig();
     return {
       stripe: {
         configured: !!stripe.secretKey,
@@ -983,6 +988,7 @@ export class BillingService {
       paypal: { configured: !!paypal.clientId && !!paypal.clientSecret },
       // Public-safe add-on offer for the checkout page (price only, no secrets).
       expressBackups,
+      referral,
     };
   }
 
@@ -2046,6 +2052,9 @@ export class BillingService {
       if (paidVanity) {
         await this.applyPendingVanityAddress(paidVanity);
       }
+      // Referral reward: fires only on this real OPEN→PAID transition, and
+      // only once per referred account (atomic claim inside).
+      await this.referrals.rewardFirstPayment(invoice.userId, amountMinor);
     }
 
     // Email a receipt (best-effort; never blocks settlement).
@@ -2410,6 +2419,50 @@ export class BillingService {
    * atomically (guarded update of `renewalReminderSentAt`) before sending, so
    * concurrent schedulers don't double-send. Returns the count sent.
    */
+  /**
+   * Abandoned-checkout nudges: an order reserves the server and raises an
+   * OPEN invoice; if it's still unpaid 24h later, remind ONCE (atomic claim
+   * on paymentReminderSentAt). Older than 7 days = stale, leave it alone.
+   */
+  async sendCheckoutReminders(): Promise<number> {
+    const now = Date.now();
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        state: InvoiceState.OPEN,
+        paymentReminderSentAt: null,
+        subscriptionId: { not: null },
+        createdAt: {
+          lte: new Date(now - 24 * 3_600_000),
+          gte: new Date(now - 7 * 86_400_000),
+        },
+      },
+      take: 200,
+    });
+    let sent = 0;
+    for (const invoice of invoices) {
+      const claimed = await this.prisma.invoice.updateMany({
+        where: { id: invoice.id, paymentReminderSentAt: null },
+        data: { paymentReminderSentAt: new Date() },
+      });
+      if (claimed.count === 0) continue;
+      const recipient = await this.invoiceRecipient(invoice.userId);
+      if (!recipient) continue;
+      try {
+        await this.email.sendCheckoutReminder(recipient, {
+          number: invoice.number,
+          amountMinor: invoice.totalMinor,
+          currency: invoice.currency,
+        });
+        sent++;
+      } catch (e) {
+        this.logger.warn(
+          `checkout reminder for invoice ${invoice.id} failed: ${(e as Error).message}`,
+        );
+      }
+    }
+    return sent;
+  }
+
   async sendRenewalReminders(withinDays = 3): Promise<number> {
     const now = new Date();
     const cutoff = new Date(now.getTime() + withinDays * 86_400_000);

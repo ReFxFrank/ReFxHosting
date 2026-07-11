@@ -1,3 +1,5 @@
+import { useQuery } from "@tanstack/react-query";
+import { api } from "@/lib/api";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -51,12 +53,31 @@ export function HeroBackdrop() {
 
 /** Hero/splash with headline + CTAs (backdrop supplied by the page wrapper). */
 export function HeroSplash() {
+  // Social proof: real fleet counters (public, cached server-side). Falls back
+  // to the static line until data arrives / when the fleet is quiet.
+  const live = useQuery({
+    queryKey: ["status", "live"],
+    queryFn: () => api.statusLive(),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const counts = live.data;
+  const showLive = !!counts && counts.serversOnline > 0;
   return (
     <section className="relative">
       <div className="relative mx-auto w-full max-w-6xl px-4 pb-12 pt-12 text-center sm:px-6 sm:pt-20">
         <p className="refx-eyebrow refx-enter refx-enter-1 mx-auto mb-4 inline-flex items-center gap-2">
           <span className="size-1.5 animate-pulse rounded-full bg-primary" />
-          Game · Voice · Web — one platform
+          {showLive ? (
+            <>
+              {counts!.serversOnline} server{counts!.serversOnline === 1 ? "" : "s"} online
+              {counts!.playersOnline > 0 && (
+                <> · {counts!.playersOnline} player{counts!.playersOnline === 1 ? "" : "s"} in game right now</>
+              )}
+            </>
+          ) : (
+            <>Game · Voice · Web — one platform</>
+          )}
         </p>
         <h1 className="refx-enter-hero mx-auto max-w-3xl text-balance text-4xl font-extrabold tracking-tight sm:text-6xl">
           Server hosting for{" "}

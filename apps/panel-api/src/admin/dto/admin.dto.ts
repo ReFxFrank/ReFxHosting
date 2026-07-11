@@ -481,6 +481,24 @@ export class SetVanityConfigDto {
   reservedWords?: string[];
 }
 
+/** Owner-editable referral-program settings. */
+export class SetReferralConfigDto {
+  @ApiPropertyOptional({ description: "Enable the give-and-get program." })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      "Credit BOTH sides receive when a referred customer first pays, in minor units (500 = $5).",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  rewardMinor?: number;
+}
+
 /** Centrally-managed S3/R2 backup storage, distributed to every node. */
 export class SetBackupStorageDto {
   @ApiPropertyOptional({

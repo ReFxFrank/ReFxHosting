@@ -36,6 +36,8 @@ const KEY = {
   backupS3AccessKey: 'backup.s3.accessKey',
   backupS3SecretKey: 'backup.s3.secretKey',
   backupS3PathStyle: 'backup.s3.usePathStyle',
+  referralEnabled: 'features.referrals.enabled',
+  referralRewardMinor: 'billing.referralRewardMinor',
 } as const;
 
 export interface GatewayConfigInput {
@@ -484,5 +486,32 @@ export class SettingsService {
       await this.set(KEY.backupS3SecretKey, dto.secretKey.trim(), true);
     if (dto.usePathStyle !== undefined)
       await this.set(KEY.backupS3PathStyle, dto.usePathStyle ? 'true' : 'false', false);
+  }
+
+  /** Give-and-get referral program: both sides earn this credit when the
+   *  referred customer's first invoice is paid. Disabled until enabled. */
+  async referralConfig(): Promise<{ enabled: boolean; rewardMinor: number }> {
+    const enabledStr = await this.get(KEY.referralEnabled);
+    const rewardStr = await this.get(KEY.referralRewardMinor);
+    const reward = rewardStr ? Number(rewardStr) : NaN;
+    return {
+      enabled: enabledStr === 'true',
+      rewardMinor: Number.isFinite(reward) && reward >= 0 ? Math.round(reward) : 500,
+    };
+  }
+
+  /** Apply owner edits to the referral config. */
+  async setReferralConfig(dto: {
+    enabled?: boolean;
+    rewardMinor?: number;
+  }): Promise<void> {
+    if (dto.enabled !== undefined)
+      await this.set(KEY.referralEnabled, dto.enabled ? 'true' : 'false', false);
+    if (dto.rewardMinor !== undefined)
+      await this.set(
+        KEY.referralRewardMinor,
+        String(Math.max(0, Math.round(dto.rewardMinor))),
+        false,
+      );
   }
 }

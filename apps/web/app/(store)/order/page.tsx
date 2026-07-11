@@ -18,6 +18,7 @@ import {
   Mail,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
+import { getAttribution } from "@/lib/growth";
 import { useAuthStore } from "@/store/auth";
 import { PageHeader, EmptyState } from "@/components/shared";
 import { Button } from "@/components/ui/button";
@@ -422,6 +423,7 @@ export default function OrderPage() {
         gateway,
         environment: Object.keys(config).length ? config : undefined,
         expressBackups: expressBackups && expressAvailable ? true : undefined,
+        attribution: getAttribution() as Record<string, string> | undefined,
         couponCode: coupon?.code,
         giftCardCode: gift?.code,
         useCredit: useCredit && creditBalance > 0 ? true : undefined,

@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingInterval } from '@prisma/client';
 import {
   IsBoolean,
+  IsObject,
   IsEnum,
   IsIn,
   IsInt,
@@ -40,6 +41,13 @@ export class CreateSubscriptionDto {
   @IsInt()
   @Min(1)
   slots?: number;
+
+  @ApiPropertyOptional({
+    description: 'First-touch acquisition data (server-sanitized).',
+  })
+  @IsOptional()
+  @IsObject()
+  attribution?: Record<string, string>;
 
   @ApiPropertyOptional({
     description:

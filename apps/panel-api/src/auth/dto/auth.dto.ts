@@ -28,6 +28,22 @@ export class RegisterDto {
   @IsStrongPassword()
   password!: string;
 
+  @ApiPropertyOptional({
+    description: 'Referral code from a share link (?ref=...). Best-effort.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  referralCode?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'First-touch acquisition data captured client-side (utm params, ref, landing). Whitelisted server-side.',
+  })
+  @IsOptional()
+  @IsObject()
+  attribution?: Record<string, string>;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

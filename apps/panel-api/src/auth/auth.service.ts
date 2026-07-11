@@ -64,6 +64,32 @@ const ARGON_OPTS = {
   parallelism: 1,
 } as const;
 
+/**
+ * Whitelist client-supplied acquisition data: known keys only, values
+ * truncated — this lands in the DB verbatim otherwise.
+ */
+function sanitizeAttribution(
+  raw: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const ALLOWED = [
+    "source",
+    "medium",
+    "campaign",
+    "term",
+    "content",
+    "ref",
+    "landing",
+    "referrer",
+  ];
+  const out: Record<string, string> = {};
+  for (const key of ALLOWED) {
+    const v = raw[key];
+    if (typeof v === "string" && v.trim()) out[key] = v.trim().slice(0, 200);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -110,9 +136,24 @@ export class AuthService {
           postalCode: dto.postalCode,
           country: dto.country.toUpperCase(),
           state: "PENDING_VERIFICATION",
+          // First-touch acquisition data (whitelisted; garbage keys dropped).
+          attribution: sanitizeAttribution(dto.attribution),
         },
         select: { id: true, email: true, firstName: true },
       });
+      // Link the referrer (best-effort — a bad code never blocks signup).
+      if (dto.referralCode?.trim()) {
+        const referrer = await this.prisma.user.findUnique({
+          where: { referralCode: dto.referralCode.trim().toUpperCase() },
+          select: { id: true, deletedAt: true },
+        });
+        if (referrer && !referrer.deletedAt && referrer.id !== user.id) {
+          await this.prisma.user.update({
+            where: { id: user.id },
+            data: { referredById: referrer.id },
+          });
+        }
+      }
     } catch (e) {
       // Two concurrent registrations for the same new address both pass the
       // pre-check, then one loses the unique-email constraint — return a clean

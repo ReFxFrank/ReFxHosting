@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { toast } from "@/components/ui/sonner";
 import { api, ApiError } from "@/lib/api";
+import { getAttribution, getReferralCode } from "@/lib/growth";
 import { COUNTRIES, US_STATES } from "@/lib/geo";
 import { useAuthStore } from "@/store/auth";
 
@@ -85,6 +86,8 @@ export default function RegisterPage() {
         region: values.region || undefined,
         postalCode: values.postalCode,
         country: values.country.toUpperCase(),
+        referralCode: getReferralCode(),
+        attribution: getAttribution() as Record<string, string> | undefined,
       });
       if (res.accessToken && res.refreshToken) {
         await setSession({ accessToken: res.accessToken, refreshToken: res.refreshToken, expiresIn: res.expiresIn ?? 0 });

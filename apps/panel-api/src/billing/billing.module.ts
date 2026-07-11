@@ -5,6 +5,7 @@ import { BillingScheduler } from './billing.scheduler';
 import { CouponsService } from './coupons.service';
 import { GiftCardsService } from './gift-cards.service';
 import { CreditService } from './credit.service';
+import { ReferralsService } from './referrals.service';
 import { BillingController } from './billing.controller';
 import { BillingResolver } from './billing.resolver';
 import { StripeWebhookController } from './webhooks/stripe-webhook.controller';
@@ -38,11 +39,12 @@ import { QUEUE } from '../queues/queue.constants';
     CouponsService,
     GiftCardsService,
     CreditService,
+    ReferralsService,
     BillingResolver,
     StripeGateway,
     PayPalGateway,
     { provide: PAYMENT_GATEWAY, useExisting: StripeGateway },
   ],
-  exports: [BillingService, CouponsService, GiftCardsService, CreditService],
+  exports: [BillingService, CouponsService, GiftCardsService, CreditService, ReferralsService],
 })
 export class BillingModule {}

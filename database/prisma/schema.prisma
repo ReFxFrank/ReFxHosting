@@ -58,6 +58,19 @@ model User {
   // when null. Seeded/backfilled to the matching system role.
   roleId            String?     @db.Uuid
   role              Role?       @relation(fields: [roleId], references: [id])
+  // ---- Growth: referrals + acquisition attribution ----
+  // Shareable code (generated on first request). Signups carrying it set
+  // referredById; both sides earn credit on the referee's first paid invoice.
+  referralCode      String?     @unique
+  referredById      String?     @db.Uuid
+  referredBy        User?       @relation("Referrals", fields: [referredById], references: [id])
+  referrals         User[]      @relation("Referrals")
+  // Set when the referral reward for THIS user's first payment was granted —
+  // the once-only guard.
+  referralRewardedAt DateTime?
+  // First-touch acquisition data captured at signup ({ source, medium,
+  // campaign, ref, landing }). Written once, never updated.
+  attribution       Json?
   state             UserState   @default(PENDING_VERIFICATION)
   locale            String      @default("en")
   timezone          String      @default("UTC")
@@ -1074,6 +1087,9 @@ model Subscription {
   // Paid add-on: offsite (S3/R2) backups with presigned direct downloads.
   // Billed as an extra line on every cycle invoice; drives Server.expressBackups.
   expressBackups  Boolean           @default(false)
+  // First-touch acquisition data at order time (UTM/ref/landing), for
+  // channel-level revenue attribution.
+  attribution     Json?
   state           SubscriptionState @default(ACTIVE)
   currentPeriodStart DateTime
   currentPeriodEnd   DateTime
@@ -1165,6 +1181,8 @@ model Invoice {
   taxMinor       Int           @default(0)
   totalMinor     Int
   amountPaidMinor Int          @default(0)
+  // Set when the abandoned-checkout reminder email went out (sent once).
+  paymentReminderSentAt DateTime?
 
   // Tax detail
   taxType        String?       // VAT | GST | US_SALES_TAX
@@ -1262,6 +1280,7 @@ enum CreditReason {
   GIFT_CARD
   INVOICE_PAYMENT
   ADJUSTMENT
+  REFERRAL
 }
 
 model CreditTransaction {

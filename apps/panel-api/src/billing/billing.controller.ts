@@ -12,6 +12,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { GlobalRole } from '@prisma/client';
 import { BillingService } from './billing.service';
+import { ReferralsService } from './referrals.service';
 import { CouponsService } from './coupons.service';
 import { GiftCardsService } from './gift-cards.service';
 import { CreditService } from './credit.service';
@@ -38,6 +39,7 @@ import {
 export class BillingController {
   constructor(
     private readonly billing: BillingService,
+    private readonly referrals: ReferralsService,
     private readonly coupons: CouponsService,
     private readonly giftCards: GiftCardsService,
     private readonly credit: CreditService,
@@ -91,6 +93,12 @@ export class BillingController {
   @Get('config')
   paymentConfig() {
     return this.billing.gatewayStatus();
+  }
+
+  /** The caller's referral code + earnings (code created on first request). */
+  @Get('referral')
+  myReferral(@CurrentUser('id') userId: string) {
+    return this.referrals.myReferral(userId);
   }
 
   @Get('products')

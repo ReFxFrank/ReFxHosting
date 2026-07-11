@@ -6,9 +6,15 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { ApiError } from "@/lib/api";
+import { captureFirstTouch } from "@/lib/growth";
 
 /** Root client providers: React Query, theming, tooltips, toasts. */
 export function Providers({ children }: { children: React.ReactNode }) {
+  // First-touch acquisition capture (utm/ref/landing) — best-effort, once.
+  React.useEffect(() => {
+    captureFirstTouch();
+  }, []);
+
   const [queryClient] = React.useState(
     () =>
       new QueryClient({

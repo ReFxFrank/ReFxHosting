@@ -111,6 +111,7 @@ import {
   SetVanityConfigDto,
   SetExpressBackupsConfigDto,
   SetBackupStorageDto,
+  SetReferralConfigDto,
   VerifySteamLoginDto,
   SetUserPasswordDto,
   SetUserRoleDto,
@@ -835,6 +836,25 @@ export class AdminController {
   async setVanityConfig(@Body() dto: SetVanityConfigDto) {
     await this.settings.setVanityConfig(dto);
     return this.settings.vanityConfig();
+  }
+
+  // ---- Referral program ----------------------------------------------------
+
+  @Get("settings/referrals")
+  @RequirePerm("settings.manage")
+  referralConfig() {
+    return this.settings.referralConfig();
+  }
+
+  @Patch("settings/referrals")
+  @RequirePerm("settings.manage")
+  @Audit({
+    action: "admin.settings.referrals.update",
+    targetType: "PlatformSetting",
+  })
+  async setReferralConfig(@Body() dto: SetReferralConfigDto) {
+    await this.settings.setReferralConfig(dto);
+    return this.settings.referralConfig();
   }
 
   // ---- Centrally-managed backup storage (S3/R2) ---------------------------

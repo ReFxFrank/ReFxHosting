@@ -64,7 +64,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
-import { cn, formatRelative, formatDate, initials, copyToClipboard } from "@/lib/utils";
+import { cn, formatRelative, formatDate, formatMoney, initials, copyToClipboard } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
 import type { ApiKey, User } from "@/lib/types";
 
@@ -96,7 +96,10 @@ export default function AccountPage() {
         </TabsList>
 
         <TabsContent value="profile">
-          <ProfileTab />
+          <div className="space-y-6">
+            <ProfileTab />
+            <ReferralCard />
+          </div>
         </TabsContent>
 
         <TabsContent value="security">
@@ -104,6 +107,67 @@ export default function AccountPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Referral program
+// ---------------------------------------------------------------------------
+function ReferralCard() {
+  const { data } = useQuery({
+    queryKey: ["billing", "referral"],
+    queryFn: () => api.billing.referral(),
+  });
+  const [copied, setCopied] = useState(false);
+  if (!data?.enabled || !data.code) return null;
+
+  const link = `${window.location.origin}/register?ref=${data.code}`;
+  const reward = formatMoney(data.rewardMinor, "USD");
+  const copy = async () => {
+    try {
+      if (!(await copyToClipboard(link))) throw new Error();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Couldn't copy the link");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Refer friends, earn credit</CardTitle>
+        <CardDescription>
+          Share your link — when a friend makes their first purchase, you BOTH
+          get {reward} in account credit. Credit applies automatically at
+          checkout and renewals.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
+          <Input readOnly value={link} className="font-mono text-xs" />
+          <Button variant="outline" onClick={copy}>
+            {copied ? "Copied!" : "Copy link"}
+          </Button>
+        </div>
+        <div className="grid grid-cols-3 gap-3 text-center">
+          <div className="rounded-lg border border-white/[0.06] p-3">
+            <p className="text-xl font-semibold tabular-nums">{data.referredCount}</p>
+            <p className="text-xs text-muted-foreground">Friends joined</p>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] p-3">
+            <p className="text-xl font-semibold tabular-nums">{data.convertedCount}</p>
+            <p className="text-xs text-muted-foreground">Made a purchase</p>
+          </div>
+          <div className="rounded-lg border border-white/[0.06] p-3">
+            <p className="text-xl font-semibold tabular-nums">
+              {formatMoney(data.earnedMinor, "USD")}
+            </p>
+            <p className="text-xs text-muted-foreground">Credit earned</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
