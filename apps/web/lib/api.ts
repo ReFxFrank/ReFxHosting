@@ -977,6 +977,25 @@ export const api = {
       anonymous: true,
     }),
 
+  tools: {
+    /** Public Minecraft status checker backing /tools/minecraft-server-status. */
+    minecraftStatus: (host: string, port?: number) =>
+      http.get<{
+        online: boolean;
+        host: string;
+        port: number;
+        latencyMs?: number;
+        version?: string;
+        players?: { online: number; max: number; sample: string[] };
+        motd?: string;
+        favicon?: string;
+        reason?: string;
+      }>("/tools/minecraft-status", {
+        anonymous: true,
+        query: { host, port },
+      }),
+  },
+
   orders: {
     // Creates a checkout session / provisions a server. TODO(impl): Stripe redirect.
     create: (input: {
