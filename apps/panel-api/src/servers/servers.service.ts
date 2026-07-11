@@ -952,6 +952,11 @@ export class ServersService {
         ioWeight: updated.ioWeight,
       },
     });
+    // Push the refreshed spec too: a RAM change alters the derived
+    // SERVER_MEMORY (-Xmx) in the spec's env, so without this the cgroup grows
+    // but the JVM keeps its old heap until the next reinstall. Best-effort;
+    // takes effect on the next server restart.
+    await this.pushSpecReload(server.nodeId, id);
     return updated;
   }
 

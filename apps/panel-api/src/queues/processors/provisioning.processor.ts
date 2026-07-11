@@ -100,7 +100,12 @@ export class ProvisioningProcessor extends WorkerHost {
   private async reconfigure(serverId: string): Promise<void> {
     const server = await this.prisma.server.findUnique({
       where: { id: serverId },
-      include: { node: true },
+      include: {
+        node: true,
+        template: { include: { variables: true } },
+        allocations: true,
+        variables: true,
+      },
     });
     if (!server || !server.node) {
       this.logger.warn(`reconfigure: server ${serverId} or node missing; skipping`);
@@ -116,6 +121,22 @@ export class ProvisioningProcessor extends WorkerHost {
         ioWeight: server.ioWeight,
       },
     });
+    // Also push the refreshed install spec: a RAM change alters the derived
+    // SERVER_MEMORY (-Xmx), which lives in the spec's env — without this the
+    // cgroup limit grows but the JVM heap stays at its old size forever.
+    // Best-effort: the limits are already applied either way.
+    if (server.template) {
+      try {
+        await this.agent.reloadServer(
+          server.node,
+          buildInstallSpec(server, { wipe: false }),
+        );
+      } catch (e) {
+        this.logger.warn(
+          `spec reload after reconfigure failed for ${serverId}: ${(e as Error).message}`,
+        );
+      }
+    }
     this.logger.log(`reconfigured ${serverId} to new limits`);
   }
 }

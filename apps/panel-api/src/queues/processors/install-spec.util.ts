@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { InstallSpec } from '../../agent/agent.client';
 import { isJavaImage, resolveJavaImage } from '../../common/util/java-version.util';
+import { jvmHeapMb, SERVER_MEMORY_VAR } from '../../servers/server-memory.util';
 
 /** First docker image (the "Default") from an egg's dockerImages map. */
 function firstDockerImage(images: unknown): string | undefined {
@@ -91,6 +92,18 @@ export function buildInstallSpec(
   }
   for (const ov of server.variables) {
     env[ov.envName] = ov.value;
+  }
+  // SERVER_MEMORY (-Xmx) is system-managed: derived from the server's ACTUAL
+  // RAM allocation (with jvmHeapMb headroom), never the frozen template default
+  // or a stale stored value — so plan upgrades and staff resizes change the JVM
+  // heap the agent actually launches with. Only applies when the template
+  // declares the variable non-editable (the Java eggs); the Startup tab already
+  // displays this same computed value.
+  const memVar = template.variables.find(
+    (v) => v.envName === SERVER_MEMORY_VAR,
+  );
+  if (memVar && !memVar.userEditable && server.memoryMb > 0) {
+    env[SERVER_MEMORY_VAR] = String(jvmHeapMb(server.memoryMb));
   }
   // Per-job overrides (not persisted on the server) win over everything.
   for (const [k, v] of Object.entries(opts.extraEnv ?? {})) {
