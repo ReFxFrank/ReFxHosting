@@ -17,7 +17,7 @@ export const KB_TUTORIALS_A: KbSeedArticle[] = [
     category: "Minecraft",
     body: `Medieval MC (Medieval Minecraft) turns the game into a medieval RPG: hundreds of custom structures, overhauled combat, dungeons and bosses. It is also one of the heavier community packs to host, and most "my Medieval MC server keeps crashing" reports come down to three causes — too little memory, client-only mods sitting in the server's \`mods/\` folder, or world generation outrunning the vanilla watchdog. This guide walks through a clean setup and the fix for each crash.
 
-One naming note before you download anything: each Medieval MC generation pins a single Minecraft version, and **MMC4 is the 1.19.2 generation**, published in separate **Forge** and **Fabric** editions. The server must run the same edition and the same pack version as every player, so confirm the exact version string on the pack's CurseForge file page first — mixing files from different MMC generations is a guaranteed crash.
+One naming note before you download anything: each Medieval MC generation pins a single Minecraft version, and **MMC4 is the 1.19.2 generation**, published in separate **Forge** and **Fabric** editions. The server must run the same edition and the same pack version as every player, so confirm the exact version string on the pack's CurseForge file page first — mixing files from different MMC generations always ends in a crash.
 
 ## Prerequisites
 
@@ -632,11 +632,19 @@ A home server exists while the PC is on and behaving: Windows Update reboots, sl
 ## When a hosted server wins
 
 - The group spans schedules or time zones and the world should be up at 3am without your PC being on.
-- Modded servers that need guaranteed memory — on ReFx, plan RAM is dedicated and CPU can burst for startup and worldgen spikes.
+- Modded servers that need their full memory allocation to really exist — on ReFx, plan RAM is dedicated and CPU can burst for startup and worldgen spikes.
 - Nobody wants to babysit: scheduled backups, crash auto-restart, restart schedules and sub-user access for co-admins are panel toggles instead of your weekend scripting project (see [automating restarts and backups](/knowledge-base/schedule-automatic-restarts-backups)).
 - Your IP stays out of it entirely.
 
 If you're arriving here from free hosting rather than home hosting, the tradeoffs are different again — covered in [our honest look at free hosting](/knowledge-base/aternos-alternative-when-free-hosting-isnt-enough).
+
+## A five-minute decision checklist
+
+1. **Test for CGNAT and measure upload speed.** If you can't port-forward or can't spare 2 Mbps upstream, the decision is already made.
+2. **Price the electricity honestly**: the machine's average watts × 0.72 = kWh per month; multiply by your rate.
+3. **Count the maintenance hours** you are signing up for — and whether they are fun hours or chore hours for you.
+4. **Decide who is affected when it breaks**: just you, or a group that expects the world to be up while you are asleep.
+5. If all four point home, host at home with a clear conscience — and revisit when the group or the modpack grows.
 
 ## Frequently asked
 
@@ -798,7 +806,14 @@ Safe to skip: the server jar, \`libraries/\` and cache folders — all redownloa
 
 ## The panel version
 
-On ReFx this whole page collapses into the **Schedules** tab: cron-style schedules that run power actions (restart), console commands (your warning broadcasts) and backups, in sequence, at whatever cadence you set. One-click backups cover the "about to do something risky" case, the offsite Express add-on stores copies away from the node, and crash auto-restart is built into every server rather than something you wire up with systemd. Staff can manage it without shell access — grant a sub-user \`schedule.create\` and \`backup.create\` and nothing else (how that permission model works: [sub-users explained](/knowledge-base/give-friends-staff-server-access)).
+On ReFx this whole page collapses into the **Schedules** tab:
+
+1. Create a schedule with a cron-style expression — \`0 6 * * *\` for a 6:00 daily run.
+2. Attach its tasks in order: console commands for the warning broadcasts, then the restart (or a backup).
+3. Add a second schedule for backups at your quietest hour; the offsite Express add-on keeps copies away from the node entirely.
+4. Take one-click backups before risky changes — and note that crash auto-restart is already built into every server, not something you wire up with systemd.
+
+Staff can run all of this without shell access: grant a sub-user \`schedule.create\` and \`backup.create\` and nothing else (how that permission model works: [sub-users explained](/knowledge-base/give-friends-staff-server-access)).
 
 ## Frequently asked
 
@@ -863,6 +878,15 @@ A few grants deserve a pause before you tick them: \`control.reinstall\` can ove
 4. When someone leaves the team, revoke the sub-user. Their access ends; yours never changed.
 
 Every action they take runs under their own identity, so "who deleted the config" has an answer.
+
+## Shared secrets are still secrets
+
+Sub-users fix panel access, but a server carries other credentials that no permission system rotates for you:
+
+- **SFTP.** Don't paste one SFTP password around the team — on ReFx, grant \`files.sftp\` and each person connects under their own access instead.
+- **RCON.** Anyone who ever wired up automation with the RCON password still holds it. Rotate it in \`server.properties\` when someone leaves.
+- **In-game admin passwords** from auth or staff plugins follow the same rule: shared once, rotate on departure.
+- **Two-factor.** Ask anyone holding destructive grants — \`files.*\`, \`backup.restore\`, \`control.reinstall\` — to enable two-factor on their own account. One phished maintainer login should not be enough to erase a community.
 
 ## On any other panel: the same four principles
 

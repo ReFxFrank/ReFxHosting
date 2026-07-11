@@ -791,4 +791,332 @@ Nothing is forced — you wipe when you choose by changing \`GameName\` (new sav
 
 Survive the seventh night: [order a 7 Days to Die server](/games/seven-days-to-die) and it's live in minutes.`,
   },
+  {
+    slug: "host-satisfactory-dedicated-server",
+    title: "How to host a Satisfactory dedicated server",
+    category: "Guides",
+    body: `Satisfactory's 1.0 release rebuilt the dedicated server around one idea: you administer it from inside the game. There's a claim flow instead of a config-file scavenger hunt, a single port instead of three, and an HTTPS API underneath it all. This guide covers ordering, claiming, the settings that do live in files, save transfer, and the performance reality of hosting a megafactory.
+
+## Prerequisites
+
+- A Satisfactory server plan — 8 GB RAM to start; large late-game factories want 12–16 GB
+- Satisfactory on Steam or Epic (the dedicated server itself needs no extra license)
+- All players on the same game version as the server
+
+## Step by step
+
+### 1. Order and provision
+
+Order on the [Satisfactory page](/games/satisfactory). Provisioning is instant. Since 1.0 the server consolidates everything onto port **7777** — game traffic on **7777/UDP** and the HTTPS admin API on **7777/TCP**. (The old 15777 query / 15000 beacon ports you'll see in pre-1.0 tutorials are gone; ReFx templates still pass the legacy flags harmlessly.)
+
+### 2. Claim the server in-game
+
+First-time setup happens in the client:
+
+1. Launch Satisfactory → main menu → **Server Manager** tab.
+2. **Add Server**, enter your server address and port 7777.
+3. The unclaimed server prompts you to **claim** it: set the server name and an **admin password**.
+4. Optionally set a player password under server settings if you want the session private.
+
+Whoever claims the server is its administrator; the admin password is what lets you (or a co-admin — or a ReFx sub-user you've shared panel access with) manage it from any client later.
+
+### 3. Create or upload a session
+
+Still in Server Manager, either **Create Game** (new session, pick a starting zone) or move your existing world over. Local saves live at:
+
+\`\`\`
+%LOCALAPPDATA%\\FactoryGame\\Saved\\SaveGames\\<your id>\\
+\`\`\`
+
+The clean path is Server Manager → **Manage Saves** → upload the \`.sav\` from inside the game, then load it into a session. The file route works too: SFTP the \`.sav\` into the server's \`FactoryGame/Saved/SaveGames/server/\` directory and it appears in the save list after a restart.
+
+### 4. Tune server settings
+
+The Server Manager's settings pane drives the canonical options — under the hood these are the server's option variables, applied live through its API and persisted with the config under \`FactoryGame/Saved/Config/LinuxServer/\` (\`ServerSettings.ini\` and friends):
+
+- \`FG.DSAutoPause\` — pause the simulation when nobody's connected (default on; your power grid stops burning fuel overnight)
+- \`FG.DSAutoSaveOnDisconnect\` — snapshot when the last player leaves
+- \`FG.AutosaveInterval\` — seconds between autosaves; long intervals risk rollback, short ones cause hitches on huge saves
+- \`FG.ServerRestartTimeSlot\` — a daily scheduled restart time
+- \`FG.NetworkQuality\` — bandwidth/replication tier
+
+One setting still lives in a file: the player cap. Edit \`FactoryGame/Saved/Config/LinuxServer/Game.ini\`:
+
+\`\`\`ini
+[/Script/Engine.GameSession]
+MaxPlayers=8
+\`\`\`
+
+The default is 4; the engine handles 8 fine, beyond that you're in experimental territory.
+
+### 5. Know the HTTPS API exists
+
+Everything Server Manager does goes through \`https://your.address:7777/api/v1\` — JSON POSTs with function names like \`HealthCheck\`, \`QueryServerState\`, \`ApplyServerOptions\`, and \`SaveGame\`, authenticated by tokens issued from the admin password. The certificate is self-signed, so scripts need to pin or skip verification for this host. Handy for triggering a save from a cron job or a Discord bot without opening the game.
+
+### 6. Connect
+
+Players open Server Manager, add the same address and port 7777, enter the player password if set, and hit **Join**. Sessions persist server-side; whoever joins first resumes the loaded session.
+
+## Troubleshooting
+
+- **The claim screen never appears** — the client can't reach 7777 over **both** TCP and UDP, or your client version doesn't match the server. Check the live console to confirm the server finished booting.
+- **"Server offline" after a game update** — Satisfactory updates client and server in lockstep; update the server and reconnect.
+- **Uploaded save doesn't show** — wrong directory (it must be \`SaveGames/server/\`) or the save predates a breaking game version.
+- **Hitching every few minutes** — that's autosave on a giant world; raise \`FG.AutosaveInterval\` a little and accept the trade-off. General slowdown with huge factories is single-thread CPU bound — burst CPU headroom and modest player counts help more than RAM past a point.
+
+## Frequently asked
+
+### Does the factory keep running when everyone logs off?
+
+Only if you disable auto-pause (\`FG.DSAutoPause\`). Most groups keep pause **on** so production, power, and resource sinks freeze between sessions; AFK-farming groups turn it off deliberately.
+
+### Can I run mods?
+
+Yes — the Satisfactory Mod Loader ecosystem (ficsit.app) supports dedicated servers for many mods. Server and every client must run identical mod sets and versions; expect breakage windows after each game update.
+
+### How big can my factory get before the server struggles?
+
+RAM grows with factory size, but the real ceiling is single-core CPU for the simulation tick. If you're rebuilding the world scale of a YouTube megabase, expect to tune autosaves and network quality. When the factory is finally "done" (it never is), [switch the same server to another game](/knowledge-base/switch-server-game-keep-backups) without losing your backups.
+
+The factory must grow: [order a Satisfactory server](/games/satisfactory) and be placing foundations in minutes.`,
+  },
+  {
+    slug: "switch-server-game-keep-backups",
+    title: "How to switch your server to a different game without losing backups",
+    category: "Guides",
+    body: `Most hosts make you cancel one server and buy another when your group's game of the month changes. ReFx servers work like a GPortal-style game slot instead: the **server** is the durable thing — its address, SFTP account, backups, and billing — and the **game** installed on it is swappable. This guide is the honest walkthrough: what survives a switch, what gets wiped, and the one habit (backup first) that makes switching risk-free.
+
+## What actually survives a switch
+
+When you switch games, the server keeps:
+
+- **Its identity and address** — the short ID, the branded hostname (and a purchased vanity subdomain, if you have one), and its port allocations stay put. Friends' saved bookmarks keep working.
+- **SFTP access** — same host, same credentials.
+- **Every backup you've taken** — the backup list is attached to the server, not to the installed game.
+- **Billing** — the same subscription keeps funding the server; switching creates no new order and no new invoice.
+- **Sub-users and schedules** — people you've granted panel access keep it; scheduled tasks persist (review them — a restart schedule still makes sense, a game-specific task may not).
+- **History** — each switch is logged, so you can always see what ran when.
+
+## What gets replaced
+
+- **The game files.** By default the switch performs a clean reinstall of the new game — the old game's files are wiped from the volume. Your old world does not ride along; it lives on in your backups.
+- **Per-game settings.** Startup variables and per-game configuration are reset to the new game's defaults, because they'd be meaningless (a Minecraft loader version means nothing to Rust).
+
+There is an advanced option to preserve the volume's files during a switch. It's occasionally useful, but for different games it mostly leaves dead weight behind — the clean wipe plus a backup is the recommended path.
+
+## Step by step
+
+### 1. Take a backup
+
+Open the server's Backups tab and take a one-click backup (an Essentials backup captures the world and configs; a Full backup captures everything). If the world matters long-term, the offsite Express add-on keeps copies off the node entirely. This backup is your round-trip ticket.
+
+### 2. Stop the server
+
+Switching requires the server to be stopped — the panel enforces it. Warn your players, then stop from the overview.
+
+### 3. Pick the new game
+
+Server → Settings → **Switch game**. The picker shows the games your plan can fund — the list is plan-scoped, so a small plan won't offer games whose recommended resources it can't meet. If the target game recommends more RAM than your plan has, the panel warns you; heed it, underspecced survival servers are miserable.
+
+### 4. Confirm and wait for the install
+
+Confirm the switch. The server enters a switching state, the old files are cleared (unless you chose preserve), and the new game installs — watch the live console if you like progress bars. Install time is download-bound; big titles like ARK take the longest.
+
+### 5. Start and reconnect
+
+Start the server. The address you've always used now answers as the new game (game port conventions differ per title — the panel's overview always shows the exact connect string). Configure the new game as you would on a fresh server; our per-game guides ([Palworld](/knowledge-base/host-palworld-dedicated-server), [Rust](/knowledge-base/host-rust-server-wipes-plugins), and friends) pick up from here.
+
+## Switching back — and the backup fine print
+
+Backups restore **files**, not game identity. A backup taken while the server ran game A contains game A's world and configs; restoring it while game B is installed would dump A's files into B's install and satisfy no one. The correct round trip:
+
+1. Switch back to game A (fresh install).
+2. Restore the backup you took in step 1.
+3. Start — your old world is exactly where you left it.
+
+## Honest limits
+
+- One game at a time. Switching is serial, not parallel — if the group is split, a second small server beats thrashing one server back and forth daily.
+- Voice servers don't participate: a TeamSpeak server keeps its identity for life and can't become a game server, and game servers can't switch into voice. See [our TeamSpeak guide](/knowledge-base/teamspeak-server-hosting-explained) for why voice is its own thing.
+- A switch doesn't convert saves between games — nothing can. Backups preserve, not translate.
+
+## Troubleshooting
+
+- **Switch option is disabled** — the server is still running (stop it), or it's mid-install.
+- **The game I want isn't listed** — it's outside your plan's allowed set; move to a plan that carries it.
+- **"My world is gone"** — it isn't, if you took step 1's backup: switch back to the original game, restore, start.
+
+## Frequently asked
+
+### Does my connection address change when I switch?
+
+No. Address, hostname, vanity subdomain, and allocations all persist — that's the point of the feature.
+
+### Does switching cost anything or change my billing?
+
+No. The same subscription funds the server regardless of which allowed game is installed. Your invoice neither grows nor resets.
+
+### How often can I switch?
+
+As often as you like — every switch is logged and each install is clean. The only real cost is install time and the discipline of taking a backup first.
+
+One server, every game night: [browse the games catalog](/games) to see what your server could be running tonight.`,
+  },
+  {
+    slug: "teamspeak-server-hosting-explained",
+    title: "TeamSpeak server hosting explained — slots, latency, and why not just Discord",
+    category: "Guides",
+    body: `Discord won casual voice chat, and pretending otherwise would be silly. TeamSpeak persists anyway — in competitive teams, sim-racing leagues, milsim units, and communities that want to own their infrastructure. This guide explains what a hosted TeamSpeak server actually is, how slots work, where it genuinely beats Discord, where it genuinely doesn't, and how to set one up.
+
+## What you're actually renting
+
+A TeamSpeak server is a small, efficient daemon that relays voice between connected clients. It speaks UDP on port **9987** (voice), with **30033/TCP** for file transfers and **10011/TCP** (raw) or **10022/TCP** (SSH) for the ServerQuery admin interface. It stores its own user identities, permissions, and bans in a local database — yours, on your server, exportable and portable.
+
+**Slots** are the pricing unit: one slot is one concurrently connected client. Size by peak concurrency, not community size — a 200-member community that peaks at 40 people in voice needs ~50 slots, not 200. Music bots and query bots each occupy a slot while connected, so budget a few extra.
+
+## The honest Discord comparison
+
+Where TeamSpeak wins:
+
+- **Latency and routing.** Your TS server runs in a region you chose, and clients connect to it directly over UDP. Discord assigns your call to its own voice infrastructure — usually fine, but you can't pick placement, and a bad route stays bad. Groups where 30 ms matters (competitive FPS, sim racing spotters) hear the difference.
+- **Permissions.** TeamSpeak's permission system is a full matrix: server groups, channel groups, talk power, per-permission integer values, needed-permission thresholds. Building a military-style rank hierarchy or a channel-admin structure with guest lobbies is native behavior, not a bot workaround.
+- **Ownership and privacy.** Voice never transits a third-party platform; identities aren't accounts on someone else's service; there's no ToS shift or platform outage between you and your voice.
+- **Always-on presence.** The server is a place, not a call. People idle in channels; squads self-organize by moving between rooms — a workflow Discord approximates but TS was built around.
+- **Audio control.** Per-channel codec and quality settings (Opus Voice for speech, Opus Music at higher bitrates for radio/DJ channels). Discord's voice bitrate starts at 64 kbps and higher caps are gated behind server boosts.
+
+Where Discord wins — and concede it freely:
+
+- It's free, it's already installed, and every gamer has an account.
+- Text channels, history, search, screenshare, streaming, and integrations are things TeamSpeak barely attempts.
+- Discoverability and onboarding: sending someone a Discord invite link beats teaching them to add a bookmark.
+
+The honest recommendation: a casual friend group should stay on Discord. Get a TeamSpeak server when latency, permissions, uptime you control, or data ownership stop being abstractions for your group — most serious communities end up running both (TS for voice, Discord for text).
+
+## Set it up on ReFx
+
+1. **Order a voice server** — pick your slot count and the region closest to your players. Provisioning is instant.
+2. **Accept the TeamSpeak license.** TeamSpeak requires the operator to accept its license before the server may run; on ReFx that's a one-time checkbox on the server's **Voice** tab. The panel won't start the server until it's done — by design, not by bug.
+3. **Start the server and grab the admin key.** On first boot the server prints a **ServerAdmin privilege key** (a \`token=\` line) — read it from the live console. It's shown once, so copy it now; the console scrollback is your friend if you missed it.
+4. **Connect.** In the TeamSpeak client: Connections → Connect, enter your server address (port 9987 is the default, so a bare hostname usually works), pick a nickname. No account creation — your client generates a cryptographic identity.
+5. **Claim admin.** The client prompts for a privilege key on first join (or use Permissions → Use Privilege Key). Paste the token; you're now Server Admin.
+6. **Build the structure.** Create channels, define server groups (Admin, Member, Guest), assign talk power in briefing channels, and hand out group memberships instead of individual permissions.
+
+A custom address is a nice finish: TeamSpeak honors \`_ts3._udp\` SRV records, so \`ts.yourclan.com\` can point at your server — [our SRV guide](/knowledge-base/custom-domain-game-server-srv-records) covers it, and a paid vanity subdomain gets you a clean name with zero DNS work.
+
+## Troubleshooting
+
+- **Server refuses to start with a license message** — the TeamSpeak license hasn't been accepted on the Voice tab yet.
+- **Lost the ServerAdmin token** — scroll the console history from first boot. If it's truly gone, an admin-level ServerQuery session can issue a new privilege key; open a ticket if you get stuck.
+- **"Server is full"** — you've hit your slot count; disconnect idle bots or add slots.
+- **Connected but silent** — a client bound to the wrong capture/playback device, or push-to-talk unbound. It's almost never the server.
+
+## Frequently asked
+
+### TeamSpeak 3 or the newer TeamSpeak line?
+
+The TS3 server remains the widely deployed, plugin-rich standard that this guide assumes; TeamSpeak's newer client/server generation is maturing but changes the admin surface. If your community runs established TS3 tooling (bots, ranks, query scripts), stay on TS3 for now.
+
+### Do my members need accounts?
+
+No. TeamSpeak identities are generated by the client — join with a nickname and you exist. Registration-style behavior is done with server groups, and optional myTeamSpeak accounts only sync bookmarks/identities across a member's own devices.
+
+### Can I run a music bot?
+
+Yes — bots connect as ordinary clients (each using a slot). Put them in a channel with the Opus Music codec and a sensible talk-power setup so they can't be hijacked.
+
+Voice that answers to you: [order a TeamSpeak server](/games) with instant setup and DDoS-protected nodes.`,
+  },
+  {
+    slug: "custom-domain-game-server-srv-records",
+    title: "How to point a custom domain at your game server — SRV records explained",
+    category: "Guides",
+    body: `You want players typing \`play.yourdomain.com\` instead of an IP and port. DNS gives you two tools for that: an **A record** (name → IP) and an **SRV record** (service → host **and port**). Which one you need — and whether it will work at all — depends entirely on the game, because the game client has to implement the lookup. This guide covers the mechanics, the honest compatibility list, and the zero-DNS alternative.
+
+## Prerequisites
+
+- A domain you control, and access to its DNS zone (registrar or DNS provider dashboard)
+- Your server's connection address and port from the panel
+- Ten minutes, plus DNS propagation patience
+
+## How clients resolve game addresses
+
+When a player types a hostname into a game, the client resolves its A/AAAA record to an IP and connects to the port the player supplied (or the game's default). That works in any game that accepts hostnames — but the **port still has to come from somewhere**. An SRV record solves exactly that: it maps a named service to a target host *and port*, letting players omit the port entirely. The catch: the client must explicitly query SRV. Most don't.
+
+## Anatomy of an SRV record
+
+\`\`\`
+_service._proto.name.  TTL  IN SRV  priority weight port target.
+\`\`\`
+
+A complete Minecraft Java example — one A record, one SRV record:
+
+\`\`\`
+play.example.com.                  3600 IN A    203.0.113.10
+_minecraft._tcp.play.example.com.  3600 IN SRV  0 5 25565 play.example.com.
+\`\`\`
+
+Field by field:
+
+- **Service/protocol** — fixed per application: \`_minecraft._tcp\` for Minecraft Java, \`_ts3._udp\` for TeamSpeak.
+- **Name** — the address players will actually type (\`play.example.com\`).
+- **Priority** — lower is tried first; only matters with multiple records.
+- **Weight** — load-spread among equal priorities; \`5\` is a fine default.
+- **Port** — your server's real port from the panel. This is the whole point of the record.
+- **Target** — a hostname that resolves via A/AAAA. Per RFC 2782 it must **not** be a raw IP and must not point at a CNAME. It can be a name your host provides — pointing the target at your ReFx branded hostname works and survives most infrastructure changes on our side.
+
+In a typical registrar UI you'll fill separate boxes: Service \`_minecraft\`, Protocol \`_tcp\`, Name \`play\`, Priority \`0\`, Weight \`5\`, Port \`25565\`, Target \`play.example.com.\`.
+
+## Step by step
+
+1. Get your server's hostname/IP and port from the panel overview.
+2. Create the A record (\`play\` → the server IP) — or skip it and use your host-provided hostname as the SRV target.
+3. Create the SRV record as above, with the real port.
+4. Verify before blaming the game:
+
+\`\`\`
+dig +short SRV _minecraft._tcp.play.example.com
+# expected: 0 5 25565 play.example.com.
+\`\`\`
+
+(\`nslookup -type=SRV _minecraft._tcp.play.example.com\` on Windows.) Allow up to your TTL for caches to catch up.
+
+## The honest compatibility list
+
+Games that **honor SRV**:
+
+- **Minecraft Java** (\`_minecraft._tcp\`) — the flagship case; players type the bare name, no port.
+- **TeamSpeak** (\`_ts3._udp\`) — clean \`ts.yourclan.com\` addresses; see [our TeamSpeak guide](/knowledge-base/teamspeak-server-hosting-explained).
+- **FiveM** (\`_cfx._udp\`) — for direct-connect addresses.
+
+Games that **ignore SRV** — which is most of them, including nearly everything on Steam: Rust, Valheim, ARK, Palworld, Project Zomboid, 7 Days to Die, Satisfactory, Enshrouded, and Minecraft **Bedrock**. Their clients never query SRV. For these, the best DNS can do is an A record plus telling players the port — \`client.connect play.example.com:28015\` works in Rust because it's a plain hostname lookup, but no record will ever make the \`:28015\` optional. Anyone promising otherwise is selling you a record the client won't read.
+
+## The zero-DNS path
+
+If the goal is just a memorable address, you may not need your own domain at all. Every ReFx server ships with a branded regional hostname out of the box (something like \`abc123.fra.refx.gg\`), and a **paid vanity subdomain** (Server Settings → Custom server address) replaces the random part with a word you choose. No records to create, and the name survives node transfers and even [game switches](/knowledge-base/switch-server-game-keep-backups).
+
+Two honesty notes that apply to any naming scheme, ours included: a DNS name is cosmetic — it still resolves to the server's real IP, so it hides nothing from anyone with \`dig\`; and names provide zero attack protection — DDoS mitigation happens at the network layer (ReFx nodes sit behind it regardless of what you call them).
+
+## Troubleshooting
+
+- **"I made the SRV record but the game still wants a port"** — the game doesn't support SRV (see the list above). No record fixes that.
+- **Record exists but doesn't resolve** — wrong owner name (it must be \`_service._proto.\` + the exact name players type), or the target is a CNAME/raw IP. Fix the target to a real A/AAAA name.
+- **Worked for you, not for friends** — propagation; their resolver still caches the old answer. Wait out the TTL.
+- **Minecraft-specific** — if players type \`play.example.com\` and land on the wrong server, check for a stray A record on \`play\` pointing elsewhere; the client falls back to A + default port 25565 when SRV lookup fails.
+
+## Frequently asked
+
+### Does an SRV record hide my server's IP?
+
+No. Anyone can query the record chain and reach the IP. Use custom names for convenience and branding, never for secrecy.
+
+### Can I make a fancy domain work for Rust, Valheim, or Palworld?
+
+Only partially: an A record gives players a memorable hostname, but they'll always need the port, because those clients never consult SRV. Put the full \`name:port\` in your Discord pins and server description.
+
+### Is there a way to get a clean address without touching DNS?
+
+Yes — the vanity subdomain above. It's the practical choice when you don't own a domain or don't want to babysit records.
+
+Name it, then play it: [pick a game server](/games) and give it an address worth remembering.`,
+  },
 ];
