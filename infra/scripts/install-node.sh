@@ -167,6 +167,19 @@ runtime:
 
 log:
   level: info
+
+# Backup storage. Default = this node's local disk (<data_dir>/backups).
+# For offsite backups + fast direct downloads (presigned URLs), point at any
+# S3-compatible store (AWS S3, Cloudflare R2, Backblaze B2, MinIO):
+# backup:
+#   driver: s3
+#   s3:
+#     endpoint: ""        # custom endpoint for R2/B2/MinIO; empty for AWS
+#     region: us-east-1
+#     bucket: refx-backups
+#     access_key: ""
+#     secret_key: ""
+#     use_path_style: false  # true for MinIO (and some R2 setups)
 EOF
 chown "$RUN_USER:$RUN_USER" "${CONFIG_DIR}/config.yaml"
 chmod 0600 "${CONFIG_DIR}/config.yaml"
