@@ -43,6 +43,9 @@ type NativeRuntime struct {
 
 	mu        sync.Mutex
 	processes map[string]*nativeProcess // keyed by server id
+
+	// Crash auto-restart rate limiter (see autorestart.go).
+	restarts restartGuard
 }
 
 // nativeProcess holds the live state for one running native server.
@@ -339,6 +342,20 @@ func (n *NativeRuntime) waitExit(p *nativeProcess, s *server.Server) {
 		s.SetError(err.Error())
 		s.SetState(server.StateCrashed)
 		n.log.Warn().Err(err).Str("server", s.ID()).Msg("native process exited unexpectedly")
+		// Crash auto-restart (panel-controlled via REFX_AUTO_RESTART, default
+		// on), rate-limited — mirrors the Docker runtime's watchExit.
+		if autoRestartEnabled(s) && n.restarts.Allow(s.ID()) {
+			go func() {
+				time.Sleep(autoRestartDelay)
+				if s.State() != server.StateCrashed {
+					return
+				}
+				n.log.Info().Str("server", s.ID()).Msg("auto-restarting crashed server")
+				if err := n.Start(context.Background(), s); err != nil {
+					n.log.Warn().Err(err).Str("server", s.ID()).Msg("auto-restart failed")
+				}
+			}()
+		}
 	} else {
 		s.SetState(server.StateOffline)
 	}

@@ -488,6 +488,11 @@ export const api = {
       http.get<JavaVersionState>(`/servers/${id}/java-version`),
     setJavaVersion: (id: string, version: string) =>
       http.put<JavaVersionState>(`/servers/${id}/java-version`, { version }),
+    /** Crash auto-restart toggle (agent restarts the server after a crash). */
+    setAutoRestart: (id: string, enabled: boolean) =>
+      http.patch<{ enabled: boolean }>(`/servers/${id}/auto-restart`, {
+        enabled,
+      }),
     variables: (id: string) =>
       http.get<ServerVariableField[]>(`/servers/${id}/variables`),
     setVariable: (id: string, envName: string, value: string) =>

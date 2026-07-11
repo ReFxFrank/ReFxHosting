@@ -46,6 +46,7 @@ import {
   ResizeServerDto,
   SendCommandDto,
   SetVariableDto,
+  SetAutoRestartDto,
   SetJavaVersionDto,
   SwitchGameDto,
   UpdateStartupDto,
@@ -226,6 +227,19 @@ export class ServersController {
   @Audit({ action: "server.startup", targetType: "Server", targetParam: "id" })
   patchStartup(@Param("id") id: string, @Body() dto: UpdateStartupDto) {
     return this.servers.setStartup(id, dto);
+  }
+
+  // ---- crash auto-restart --------------------------------------------------
+
+  @Patch(":id/auto-restart")
+  @RequirePermissions("settings.update")
+  @Audit({
+    action: "server.auto-restart",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  setAutoRestart(@Param("id") id: string, @Body() dto: SetAutoRestartDto) {
+    return this.servers.setAutoRestart(id, dto.enabled);
   }
 
   // ---- Minecraft version --------------------------------------------------

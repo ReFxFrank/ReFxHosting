@@ -1297,6 +1297,10 @@ export class ServersService {
         ioWeight: updated.ioWeight,
       },
     });
+    // Refresh the agent's cached spec too: reconfigure only moves cgroup
+    // limits, while derived env (SERVER_MEMORY → -Xmx) lives in the spec used
+    // on the next start. Without this, a plan change keeps the old JVM heap.
+    await this.pushSpecReload(server.nodeId, server.id);
     return updated;
   }
 
@@ -2017,6 +2021,35 @@ export class ServersService {
    * on the agent's next reconnect. Requires agent v1.2.4+ for /reload; older
    * agents pick the change up on reconnect regardless.
    */
+  /**
+   * Toggle crash auto-restart for a server. The flag rides in the server's
+   * environment as REFX_AUTO_RESTART ("true"/"false"; the agent treats absence
+   * as ON), so it reaches the agent through the normal spec channel — no
+   * schema or protocol change. Applies from the next crash after the agent has
+   * the refreshed spec (pushed immediately; offline agents pick it up on
+   * reconnect).
+   */
+  async setAutoRestart(
+    serverId: string,
+    enabled: boolean,
+  ): Promise<{ enabled: boolean }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: { id: true, nodeId: true, environment: true },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+    const environment = {
+      ...((server.environment as Record<string, unknown>) ?? {}),
+      REFX_AUTO_RESTART: enabled ? "true" : "false",
+    } as Prisma.InputJsonObject;
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { environment },
+    });
+    await this.pushSpecReload(server.nodeId, serverId);
+    return { enabled };
+  }
+
   /**
    * Public entry point to refresh a server's cached agent spec after an
    * out-of-band config change (e.g. the Java selector), so the next restart

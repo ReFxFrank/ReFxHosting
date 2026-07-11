@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Textarea, Label } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -112,6 +113,7 @@ export default function ServerSettingsPage() {
           <TabsContent value="general">
             <div className="space-y-6">
               <GeneralTab server={server} />
+              <AutoRestartCard server={server} />
               <VanityAddressCard server={server} />
             </div>
           </TabsContent>
@@ -188,6 +190,66 @@ function GeneralTab({ server }: { server: Server }) {
           >
             Save changes
           </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Crash auto-restart
+// ---------------------------------------------------------------------------
+function AutoRestartCard({ server }: { server: Server }) {
+  const queryClient = useQueryClient();
+  // Absence of the flag means ON — matches the node agent's default.
+  const enabled = server.environment?.REFX_AUTO_RESTART !== "false";
+  const canToggle = hasServerPermission(
+    server.viewerPermissions,
+    "settings.update",
+  );
+
+  const toggle = useMutation({
+    mutationFn: (next: boolean) => api.servers.setAutoRestart(server.id, next),
+    onSuccess: ({ enabled: next }) => {
+      toast.success(
+        next ? "Crash auto-restart enabled" : "Crash auto-restart disabled",
+      );
+      queryClient.invalidateQueries({ queryKey: ["server", server.id] });
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to update auto-restart",
+      ),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Crash auto-restart</CardTitle>
+        <CardDescription>
+          Bring the server back automatically if it crashes. To avoid a crash
+          loop, we stop after 3 restarts within 10 minutes — after that the
+          server stays stopped until you start it yourself.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium">
+              Restart automatically after a crash
+            </p>
+            <p className="text-muted-foreground text-sm">
+              {enabled
+                ? "On — crashed servers restart after a few seconds."
+                : "Off — crashed servers stay stopped until started manually."}
+            </p>
+          </div>
+          <Switch
+            checked={enabled}
+            disabled={!canToggle || toggle.isPending}
+            onCheckedChange={(next) => toggle.mutate(next)}
+            aria-label="Toggle crash auto-restart"
+          />
         </div>
       </CardContent>
     </Card>

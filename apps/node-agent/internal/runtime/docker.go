@@ -53,6 +53,9 @@ type DockerRuntime struct {
 	// delta is always zero). Guarded by cpuMu.
 	cpuMu   sync.Mutex
 	cpuPrev map[string]dockerCPUSample
+
+	// Crash auto-restart rate limiter (see autorestart.go).
+	restarts restartGuard
 }
 
 // dockerCPUSample is one container CPU reading used to compute utilisation
@@ -591,10 +594,34 @@ func (d *DockerRuntime) watchExit(s *server.Server, id string) {
 	}
 	if code == 0 {
 		s.SetState(server.StateOffline)
-	} else {
-		s.SetState(server.StateCrashed)
-		d.log.Warn().Str("server", s.ID()).Int64("exit", code).Msg("container exited")
+		return
 	}
+	s.SetState(server.StateCrashed)
+	d.log.Warn().Str("server", s.ID()).Int64("exit", code).Msg("container exited")
+
+	// Crash auto-restart (panel-controlled via REFX_AUTO_RESTART, default on),
+	// rate-limited so a crash-looping server can't burn the node. The short
+	// delay both spaces out loops and lets the operator's own actions win: if
+	// the state is no longer CRASHED (someone started/stopped it) or the
+	// container was replaced, we back off.
+	if !autoRestartEnabled(s) {
+		return
+	}
+	if !d.restarts.Allow(s.ID()) {
+		d.log.Warn().Str("server", s.ID()).
+			Msg("auto-restart budget exhausted; leaving server CRASHED")
+		return
+	}
+	go func() {
+		time.Sleep(autoRestartDelay)
+		if s.State() != server.StateCrashed || s.RuntimeRef != id {
+			return
+		}
+		d.log.Info().Str("server", s.ID()).Msg("auto-restarting crashed server")
+		if err := d.Start(context.Background(), s); err != nil {
+			d.log.Warn().Err(err).Str("server", s.ID()).Msg("auto-restart failed")
+		}
+	}()
 }
 
 // startupRunningGrace caps how long a server that has a startup marker stays in
@@ -839,6 +866,7 @@ func (d *DockerRuntime) Reconfigure(ctx context.Context, s *server.Server, lim s
 // deleting a server in the panel leaves nothing behind in Docker.
 func (d *DockerRuntime) Destroy(ctx context.Context, s *server.Server) error {
 	d.forgetCPU(s.ID())
+	d.restarts.Forget(s.ID())
 	var firstErr error
 	for _, name := range []string{
 		containerName(s),

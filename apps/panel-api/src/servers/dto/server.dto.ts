@@ -124,6 +124,12 @@ export class SetJavaVersionDto {
   version!: string;
 }
 
+export class SetAutoRestartDto {
+  @ApiProperty({ description: "Restart the server automatically after a crash" })
+  @IsBoolean()
+  enabled!: boolean;
+}
+
 export class CreateAllocationDto {
   @ApiProperty()
   @IsString()
