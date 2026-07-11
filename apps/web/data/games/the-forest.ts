@@ -31,7 +31,7 @@ const content: GameContent = {
       ram: "6 GB",
       cpu: "4 vCPU",
       storage: "15 GB SSD",
-      note: "Extra headroom for big fort builds and long uptimes.",
+      note: "Extra headroom for big fort builds and busy weekends.",
     },
   ],
   setupSteps: [

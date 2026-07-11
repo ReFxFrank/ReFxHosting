@@ -64,7 +64,7 @@ const content: GameContent = {
       a: "Change the SaveSlot variable to an unused slot (1–10) for a fresh world while keeping the old one on disk, or delete the slot's folder under the serverconfig save path to regenerate in place.",
     },
     {
-      q: "Is there crossplay?",
+      q: "What platforms can join?",
       a: "Sons of the Forest is a Steam PC title with no console version, so everyone joins the same build through Steam — no crossplay caveats to manage.",
     },
   ],

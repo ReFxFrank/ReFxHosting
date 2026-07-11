@@ -312,4 +312,483 @@ The world is just \`.db\` + \`.fwl\`, so any file-level backup captures it. On R
 
 Raise your longhouse: [order a Valheim server](/games/valheim) and it's live before your coffee cools.`,
   },
+  {
+    slug: "host-ark-survival-evolved-server",
+    title: "How to host an ARK: Survival Evolved server",
+    category: "Guides",
+    body: `ARK: Survival Evolved remains one of the most-hosted survival games because official rates are grindy and unofficial servers fix that. A dedicated server gives you your own rates, your own mod list, and a world that keeps breeding dinos while you sleep. This guide covers the two config files that control everything, Workshop mods, admin setup, and moving a single-player world onto the server.
+
+## Prerequisites
+
+- An ARK server plan — 8 GB RAM minimum, 10–12 GB once you stack mods
+- ARK: Survival Evolved on Steam for every player
+- Your SteamID64 for the admin whitelist
+
+Note: this guide is for **Survival Evolved** (ASE). ARK: Survival Ascended (ASA) is a separate game with separate servers.
+
+## Step by step
+
+### 1. Order and provision
+
+Order on the [ARK page](/games/ark-survival-evolved). Provisioning is instant, though ARK's install is one of the largest in gaming — the download takes a while even on fast nodes. Default ports: **7777/UDP** (game), **7778/UDP** (raw socket, always game port + 1), **27015/UDP** (Steam query), **27020/TCP** (RCON).
+
+Pick your map at order time or in Startup settings — \`TheIsland\`, \`Ragnarok\`, \`Valguero_P\`, \`CrystalIsles\`, \`LostIsland\`, \`Fjordur\`, or a DLC/mod map. Changing maps later keeps each map's world save separate.
+
+### 2. Tune GameUserSettings.ini
+
+The main config is \`ShooterGame/Saved/Config/LinuxServer/GameUserSettings.ini\` (edit with the server **stopped** — ARK rewrites it on shutdown and will clobber live edits):
+
+\`\`\`ini
+[ServerSettings]
+ServerAdminPassword=ChangeMe-Admin
+ServerPassword=
+DifficultyOffset=1.000000
+OverrideOfficialDifficulty=5.0
+HarvestAmountMultiplier=2.0
+TamingSpeedMultiplier=3.0
+XPMultiplier=2.0
+ActiveMods=731604991,1404697612
+
+[/Script/Engine.GameSession]
+MaxPlayers=20
+
+[SessionSettings]
+SessionName=ReFx ARK
+\`\`\`
+
+\`DifficultyOffset=1.0\` plus \`OverrideOfficialDifficulty=5.0\` gives wild dinos up to level 150, the unofficial standard. Breeding, engram, and per-level multipliers live in the sibling \`Game.ini\` under \`[/script/shootergame.shootergamemode]\`:
+
+\`\`\`ini
+[/script/shootergame.shootergamemode]
+MatingIntervalMultiplier=0.5
+EggHatchSpeedMultiplier=10.0
+BabyMatureSpeedMultiplier=10.0
+bDisableStructurePlacementCollision=true
+\`\`\`
+
+### 3. Install Workshop mods
+
+\`ActiveMods\` is a comma-separated, **order-sensitive** list of Steam Workshop IDs (the number in each mod's Workshop URL) — map-extension and core mods first. The server also needs the mod content itself in \`ShooterGame/Content/Mods/\`: either run with \`-automanagedmods\` so it downloads from the Workshop at boot, or copy the mod folders from a client install.
+
+On ReFx this is the one-click path: the panel's Workshop installer searches the Workshop, downloads the mod server-side, and appends the ID to \`ActiveMods\` in the right place. Players need the same mods — ARK downloads missing ones on join, but it's slow; tell your group to subscribe beforehand.
+
+### 4. Set up admin access
+
+In-game, open the console (Tab) and authenticate:
+
+\`\`\`
+enablecheats ChangeMe-Admin
+\`\`\`
+
+Then \`cheat\` commands work (\`cheat saveworld\`, \`cheat broadcast\`, \`cheat destroywilddinos\` after difficulty changes), and \`showmyadminmanager\` opens the built-in admin UI. To skip typing the password every session, add SteamID64s (one per line) to \`ShooterGame/Saved/AllowedCheaterSteamIDs.txt\`. RCON is available on 27020 with the same admin password for scripted saves and broadcasts.
+
+### 5. Transfer a single-player world (optional)
+
+Single-player worlds live inside your client install:
+
+\`\`\`
+Steam\\steamapps\\common\\ARK\\ShooterGame\\Saved\\SavedArksLocal\\
+\`\`\`
+
+The server's equivalent folder is \`ShooterGame/Saved/SavedArks/\`. To transfer:
+
+1. Stop the server.
+2. Upload the map save (for example \`TheIsland.ark\`) plus the \`.arkprofile\` and \`.arktribe\` files into \`SavedArks/\`.
+3. Make sure the server runs the **same map** as the save file.
+4. Characters are the messy part: single-player stores yours as \`LocalPlayer.arkprofile\`, while a dedicated server expects \`<YourSteamID64>.arkprofile\`. Rename the file accordingly — structures, dinos, and tribes transfer reliably; the character link works in most cases but be prepared to respawn and have an admin restore levels if it doesn't.
+
+### 6. Connect
+
+The in-game "Unofficial" browser is notoriously flaky. The dependable route is Steam → View → Game Servers → Favorites → add \`address:27015\` (the query port), then the server appears in ARK's session list with your filters set to show favorites. Password-protected servers prompt on join.
+
+## Troubleshooting
+
+- **Server invisible in the unofficial list** — use the Steam favorites method above; the in-game browser drops thousands of servers arbitrarily.
+- **Crash loop after adding a mod** — a mod is missing from \`Content/Mods\`, the ID order is wrong, or two mods conflict. Remove the newest addition, boot, re-add one at a time.
+- **Wild dinos still low level after difficulty changes** — run \`cheat destroywilddinos\` once; existing spawns keep their old levels until culled.
+- **Config edits vanish** — you edited \`GameUserSettings.ini\` while the server was running. Stop first, edit, start.
+
+## Frequently asked
+
+### ASE or ASA — does this guide apply to both?
+
+No. ASA (Survival Ascended) is a separate game on Unreal Engine 5 with its own server binary, mod system (CurseForge, not Steam Workshop), and networking. Everything here is for Survival Evolved.
+
+### Can Epic Games Store players join?
+
+Yes, if the server runs with the \`-crossplay\` flag — with one hard limit: Epic clients cannot use Steam Workshop mods, so crossplay only works cleanly on unmodded servers.
+
+### How much RAM does ARK need?
+
+8 GB runs a vanilla island map for a small tribe. Every mod, higher player counts, and long uptimes push that up — 10–12 GB with dedicated allocation (which is what ReFx provides) keeps a modded map stable. Project Zomboid players will find the [same Workshop workflow here](/knowledge-base/host-project-zomboid-server).
+
+Tame something huge: [order an ARK server](/games/ark-survival-evolved) with one-click Workshop mods and instant setup.`,
+  },
+  {
+    slug: "host-enshrouded-server",
+    title: "How to host an Enshrouded server",
+    category: "Guides",
+    body: `Enshrouded's dedicated server is refreshingly simple: one JSON config file, two UDP ports, and a role-based password system instead of admin commands. This guide covers ordering, the \`enshrouded_server.json\` file in detail, moving a local co-op save to the server, and the honest limits (16 slots, no RCON).
+
+## Prerequisites
+
+- An Enshrouded server plan — 8 GB RAM is a sensible floor, 16 GB if you expect all 16 slots
+- Enshrouded on Steam for each player
+- For a save transfer: access to the old machine's \`Saved Games\` folder
+
+## Step by step
+
+### 1. Order and provision
+
+Order on the [Enshrouded page](/games/enshrouded). Provisioning is instant. Enshrouded's server ships as a Windows binary; on Linux nodes ReFx runs it under Wine/Proton automatically — you'll see some Wine chatter in the console log, and it's harmless. Default ports: **15636/UDP** (game) and **15637/UDP** (query).
+
+### 2. Configure enshrouded_server.json
+
+Everything lives in \`enshrouded_server.json\` in the server root. Stop the server before editing — it reads the file at boot. A working example:
+
+\`\`\`json
+{
+  "name": "ReFx Embervale",
+  "saveDirectory": "./savegame",
+  "logDirectory": "./logs",
+  "ip": "0.0.0.0",
+  "gamePort": 15636,
+  "queryPort": 15637,
+  "slotCount": 16,
+  "gameSettingsPreset": "Default",
+  "userGroups": [
+    {
+      "name": "Admin",
+      "password": "ChangeMe-Admin",
+      "canKickBan": true,
+      "canAccessInventories": true,
+      "canEditBase": true,
+      "canExtendBase": true,
+      "reservedSlots": 1
+    },
+    {
+      "name": "Friend",
+      "password": "ChangeMe-Friend",
+      "canKickBan": false,
+      "canAccessInventories": true,
+      "canEditBase": true,
+      "canExtendBase": false,
+      "reservedSlots": 0
+    },
+    {
+      "name": "Guest",
+      "password": "ChangeMe-Guest",
+      "canKickBan": false,
+      "canAccessInventories": false,
+      "canEditBase": false,
+      "canExtendBase": false,
+      "reservedSlots": 0
+    }
+  ]
+}
+\`\`\`
+
+Key points:
+
+- **Roles replace admin commands.** Whichever password a player types on join decides their group and permissions (\`canKickBan\`, base editing, inventory access). Very early builds used a single flat \`"password"\` field; current builds use \`userGroups\`.
+- \`slotCount\` caps at **16** — that's an engine limit, not a plan limit.
+- \`gameSettingsPreset\` accepts \`Default\`, \`Relaxed\`, \`Hard\`, \`Survival\`, or \`Custom\`; with \`Custom\` you add a \`gameSettings\` block of numeric factors (enemy damage, resource drop amounts, day length and similar) to fine-tune difficulty.
+- Leave \`ip\` on \`0.0.0.0\` — the panel's allocation handles the public address.
+
+Mind the JSON: a trailing comma or missing quote makes the server fall back to defaults or fail to boot. The file manager's editor highlights JSON, which helps.
+
+### 3. Transfer a local co-op save (optional)
+
+Local saves live on the hosting player's machine at:
+
+\`\`\`
+C:\\Users\\<you>\\Saved Games\\Enshrouded\\
+\`\`\`
+
+Saves are hex-named files (a base file like \`3ad85aea\`, numbered rollback copies, and a matching \`_info\` file). To move a world:
+
+1. Start the dedicated server once so it creates its own files under \`savegame/\`, then stop it.
+2. Note the exact base filename the server created.
+3. Copy your local save files into \`savegame/\`, renaming them so the base name (and its \`_info\` companion) match what the server had.
+4. Keep a copy of the originals, start the server, and verify your base and characters are there.
+
+Character progression in multiplayer is stored inside the server's world save, so your group's progress travels with these files — take a one-click backup before and after the swap.
+
+### 4. Connect
+
+In-game, choose **Play** → **Join** and search the exact server name from your config, then enter the password for your role (this is how the game decides you're Admin, Friend, or Guest). You can also add \`address:15637\` under Steam → View → Game Servers → Favorites to keep it bookmarked.
+
+## Troubleshooting
+
+- **Server not found by name** — give the listing a few minutes after boot, search the exact string from \`"name"\`, and double-check the server actually started (console shows the world loading).
+- **Password rejected** — you're typing a group password that no longer exists; after updates that migrated \`password\` to \`userGroups\`, old flat passwords stop working. Check the JSON.
+- **Changes didn't apply** — the file was edited while the server ran, or the JSON is invalid and the server silently used defaults. Validate and restart.
+- **Save transfer produced a fresh world** — filenames don't match what the server expects; redo step 3 exactly, including the \`_info\` file.
+
+## Frequently asked
+
+### Can I raise the 16-player cap?
+
+No — 16 is Enshrouded's engine-side maximum for dedicated servers. Size your plan for RAM per concurrent player instead; 16 active builders is when 16 GB pays off.
+
+### Are there admin commands or RCON?
+
+No console, no RCON. Moderation is the \`canKickBan\` permission on the Admin group, used from the in-game player list. Keep the Admin password tight and rotate it if it leaks — it's the only privilege system the game has.
+
+### Does the server run mods?
+
+There's no official mod support for dedicated servers. Unofficial pak-file mods exist but break on every patch; treat them as unsupported. If your group wants deeper server modding, [Valheim](/knowledge-base/host-valheim-server-crossplay) or [Palworld](/knowledge-base/host-palworld-dedicated-server) are friendlier targets.
+
+Light the flame: [order an Enshrouded server](/games/enshrouded) and be exploring the Shroud in minutes.`,
+  },
+  {
+    slug: "host-project-zomboid-server",
+    title: "How to host a Project Zomboid multiplayer server",
+    category: "Guides",
+    body: `Project Zomboid multiplayer is built around a trio of config files that share your server's name, a sandbox file that controls every difficulty knob, and Steam Workshop mods referenced by two different kinds of ID. Get those three things right and PZ is one of the smoothest games to host. This guide walks through all of it, plus moving a co-op save onto a dedicated server.
+
+## Prerequisites
+
+- A Project Zomboid server plan — 4 GB RAM for vanilla, 6–8 GB with a serious mod list (PZ runs on Java, so memory matters)
+- Project Zomboid on Steam for every player
+- Your mod list's Workshop IDs and Mod IDs (they differ — see step 4)
+
+## Step by step
+
+### 1. Order and provision
+
+Order on the [Project Zomboid page](/games/project-zomboid). Provisioning is instant. PZ uses **16261/UDP** as its main port and **16262/UDP** for direct player connections — both are allocated for you.
+
+### 2. Find your config trio
+
+PZ names its config files after the server name passed at launch (the \`-servername\` flag; the default is \`servertest\`). In \`Zomboid/Server/\` you'll find:
+
+- \`servertest.ini\` — server settings (name, slots, mods, PvP)
+- \`servertest_SandboxVars.lua\` — world difficulty settings
+- \`servertest_spawnregions.lua\` / \`servertest_spawnpoints.lua\` — spawn locations
+
+Check your Startup settings for the actual \`-servername\` value; the file prefix always matches it. The essentials in the \`.ini\`:
+
+\`\`\`ini
+PVP=false
+PauseEmpty=true
+Public=true
+PublicName=ReFx Knox County
+PublicDescription=Slow-burn survival. Fresh spawns welcome.
+Password=
+MaxPlayers=16
+Open=true
+Map=Muldraugh, KY
+Mods=
+WorkshopItems=
+SaveWorldEveryMinutes=10
+BackupsCount=5
+DefaultPort=16261
+UDPPort=16262
+UPnP=false
+\`\`\`
+
+\`PauseEmpty=true\` freezes the clock when nobody's online — most friend groups want that so loot and seasons don't march on overnight.
+
+### 3. Tune the sandbox
+
+\`servertest_SandboxVars.lua\` is where the game actually gets easier or harder. Edit with the server stopped:
+
+\`\`\`lua
+SandboxVars = {
+    VERSION = 5,
+    Zombies = 3,          -- population: 1 insane .. 5 none
+    Distribution = 1,     -- urban focused
+    DayLength = 3,        -- 3 = one-hour days
+    XpMultiplier = 1.5,
+    ZombieLore = {
+        Speed = 2,        -- 1 sprinters, 2 fast shamblers, 3 shamblers
+        Strength = 2,
+        Toughness = 2,
+        Transmission = 1, -- blood + saliva
+        Cognition = 3,
+        Memory = 2,
+    },
+    ZombieConfig = {
+        PopulationMultiplier = 1.0,
+        RespawnHours = 72.0,
+    },
+}
+\`\`\`
+
+Most values here bake into the save at world creation; population and respawn settings can be adjusted later, but lore changes on an existing world can behave inconsistently — decide your zombie rules before launch day.
+
+### 4. Add Workshop mods
+
+Every mod needs **two** entries, both semicolon-separated:
+
+- \`WorkshopItems=\` — the Workshop ID from the mod's Steam URL
+- \`Mods=\` — the Mod ID printed in the mod's Workshop description (often a word, not a number)
+
+\`\`\`ini
+WorkshopItems=1234567890;2345678901
+Mods=BetterSorting;SomeWeaponPack
+\`\`\`
+
+Mismatched pairs are the number-one PZ support ticket. On ReFx, the Workshop one-click installer handles both fields (and their order) for you. Map mods additionally need a \`Map=\` entry listed **before** \`Muldraugh, KY\`. Players don't need to pre-install anything — the server pushes mod downloads on join. When a mod updates on the Workshop, restart the server so it pulls the new version, otherwise joiners get version-mismatch kicks.
+
+### 5. Set up admin
+
+Set the admin password via the panel's admin-password variable (it maps to the \`-adminpassword\` launch flag); the account is named \`admin\`. Log in with those credentials in-game, then:
+
+- \`/setaccesslevel "username" admin\` — promote a friend (levels: admin, moderator, overseer, gm, observer)
+- \`/players\`, \`/kickuser\`, \`/banuser\`, \`/teleport\` — day-to-day moderation
+- The in-game **Admin panel** button covers most of it with a UI
+
+Player accounts are simple username/password pairs created on first join and stored server-side in \`Zomboid/db/servertest.db\`.
+
+### 6. Transfer a co-op save (optional)
+
+If you've been hosting from the game client, your world lives on that machine:
+
+\`\`\`
+C:\\Users\\<you>\\Zomboid\\Saves\\Multiplayer\\<savename>\\
+C:\\Users\\<you>\\Zomboid\\db\\<savename>.db
+\`\`\`
+
+Stop the server, upload the save folder to \`Zomboid/Saves/Multiplayer/\` and the \`.db\` to \`Zomboid/db/\`, renaming both to match the server's \`-servername\` if it differs. Keep the mod list identical to what the save was created with, then start and verify.
+
+### 7. Connect
+
+In-game: **Join** → **Add server**, enter the address and port 16261, pick a username and password (this creates your account), and connect. With \`Public=true\` the server also appears in the in-game browser under its \`PublicName\`.
+
+## Troubleshooting
+
+- **Kicked on join with a mod error** — a \`Mods=\`/\`WorkshopItems=\` pair is mismatched or a mod updated; fix the pair or restart the server to pull updates.
+- **Server starts then stops immediately** — read the console; the usual culprits are a syntax error in \`SandboxVars.lua\` or a broken \`Map=\` line.
+- **World didn't transfer** — the save folder or db name doesn't match \`-servername\` exactly.
+- **Stutters with many players** — PZ is Java; give it headroom. Dedicated RAM plans (no oversell) matter more here than raw CPU clock.
+
+## Frequently asked
+
+### Can I wipe the map but keep everyone's accounts?
+
+Yes. Stop the server and delete \`Zomboid/Saves/Multiplayer/<servername>/\` but leave \`Zomboid/db/<servername>.db\`. Fresh Knox County, same logins.
+
+### Build 41 or Build 42?
+
+Match the server to whatever branch your players run — saves and mods are not compatible across builds. Pin your group to one branch in Steam's beta settings and update together.
+
+### How many players can PZ handle?
+
+\`MaxPlayers\` is yours to set; 16–32 runs comfortably on a well-specced plan. Very large populations need mod-assisted tuning and generous RAM. ARK owners will recognize [the same Workshop workflow](/knowledge-base/host-ark-survival-evolved-server).
+
+This is how you died — on your own terms: [order a Project Zomboid server](/games/project-zomboid).`,
+  },
+  {
+    slug: "host-7-days-to-die-server",
+    title: "How to host a 7 Days to Die server",
+    category: "Guides",
+    body: `7 Days to Die configures everything through a single XML file, keys its save folders to two properties most people don't know about (\`GameWorld\` and \`GameName\`), and hides its admin system in a second XML in the save directory. This guide covers all of it: setup, world generation choices, admin access, EAC and mods, and transferring a local save to the server.
+
+## Prerequisites
+
+- A 7 Days to Die server plan — 8 GB RAM minimum; add more for big random-gen maps and high zombie counts
+- 7 Days to Die on Steam for every player
+- Your SteamID64 for admin setup
+
+## Step by step
+
+### 1. Order and provision
+
+Order on the [7 Days to Die page](/games/seven-days-to-die). Provisioning is instant. The server listens on **26900/TCP** plus **26900–26903/UDP** — allocated for you, nothing to forward.
+
+### 2. Configure serverconfig.xml
+
+The whole server is defined by \`serverconfig.xml\` in the install root — a flat list of \`<property>\` lines. Edit with the server stopped. The ones that matter:
+
+\`\`\`xml
+<property name="ServerName" value="ReFx Navezgane"/>
+<property name="ServerPassword" value=""/>
+<property name="ServerMaxPlayerCount" value="8"/>
+<property name="ServerVisibility" value="2"/>
+<property name="GameWorld" value="Navezgane"/>
+<property name="WorldGenSeed" value="refxseed"/>
+<property name="WorldGenSize" value="6144"/>
+<property name="GameName" value="Season1"/>
+<property name="GameDifficulty" value="2"/>
+<property name="DayNightLength" value="60"/>
+<property name="BloodMoonFrequency" value="7"/>
+<property name="EACEnabled" value="true"/>
+<property name="TelnetEnabled" value="true"/>
+<property name="TelnetPort" value="8081"/>
+<property name="TelnetPassword" value="ChangeMe-Telnet"/>
+\`\`\`
+
+The two identity properties trip everyone up:
+
+- \`GameWorld\` picks the **map**: \`Navezgane\` (hand-built), one of the shipped pregenerated worlds, or \`RWG\` for random generation using \`WorldGenSeed\` + \`WorldGenSize\` (6144 and 8192 are the common sizes; bigger sizes multiply the first-boot generation time).
+- \`GameName\` names the **save**. Change it and the server starts a brand-new game on the same map. It also seeds decoration placement in RWG, so treat it as part of your world's identity.
+
+\`ServerVisibility\` is 2 (public list), 1 (friends), or 0 (unlisted — players direct-connect). \`DayNightLength\` is real minutes per in-game day; \`BloodMoonFrequency\` is days between hordes.
+
+### 3. Set up admins
+
+Admin rights live in \`serveradmin.xml\` inside the save/user-data directory (its location is governed by the \`UserDataFolder\` property; on Linux installs the default is \`~/.local/share/7DaysToDie\` — if you don't see a \`Saves\` folder next to the server files, that property is where to look). Add yourself:
+
+\`\`\`xml
+<users>
+  <user platform="Steam" userid="76561198000000000" name="you" permission_level="0" />
+</users>
+\`\`\`
+
+Permission level 0 is full admin. In-game, press F1 for the console: \`dm\` (debug menu), \`cm\` (creative), \`settime day\`, \`kick\`, \`ban add\`, and \`admin add <steamid> <level>\` once you already have access. The Telnet listener (port 8081) accepts the same commands remotely — set a strong \`TelnetPassword\`, since it's plain TCP.
+
+### 4. Decide on EAC and mods
+
+\`EACEnabled\` controls Easy Anti-Cheat:
+
+- **XML-only modlets** (loot tables, recipes, spawning) work fine with EAC **on**, server-side only.
+- **DLL/Harmony mods** (new mechanics, UI overhauls) require EAC **off** on both server and clients, and usually a matching client-side install.
+
+Mods go in a \`Mods/\` folder in the server root. Public servers generally keep EAC on and stick to XML modlets; private friend servers turn it off and mod freely.
+
+### 5. Transfer a local save (optional)
+
+On your PC, saves live at:
+
+\`\`\`
+%APPDATA%\\7DaysToDie\\Saves\\<WorldName>\\<SaveName>\\
+\`\`\`
+
+and randomly generated worlds at \`%APPDATA%\\7DaysToDie\\GeneratedWorlds\\<WorldName>\\\`. To move to the server:
+
+1. Stop the server.
+2. Upload the save folder into the server's \`Saves/<WorldName>/<SaveName>/\` (create the world folder to match).
+3. If the world was RWG, **also** upload the matching \`GeneratedWorlds/<WorldName>/\` folder — the save is useless without its world data.
+4. Set \`GameWorld\` and \`GameName\` in \`serverconfig.xml\` to those exact names.
+5. Start and verify you spawn at your old base, not a beach.
+
+### 6. Connect
+
+Players find the server in the in-game browser (visibility 2) or press F1 and run \`connect your.address:26900\`. Password-protected servers prompt on join.
+
+## Troubleshooting
+
+- **Fresh world instead of my transferred save** — \`GameWorld\`/\`GameName\` don't match the uploaded folder names, or the \`GeneratedWorlds\` folder is missing for an RWG save.
+- **First boot takes forever on RWG** — world generation is a one-time, CPU-heavy job (burst CPU headroom helps here); 8192 maps can take a long while. Subsequent boots are fast.
+- **Players kicked by EAC** — EAC is on while DLL mods are installed, or a client launched with EAC disabled against an EAC-on server. Align both sides.
+- **Horde-night lag** — lower \`MaxSpawnedZombies\`, shrink \`WorldGenSize\` next season, or move up a RAM tier; blood moons are the load test.
+
+## Frequently asked
+
+### Navezgane or random gen?
+
+Navezgane is the polished, hand-made map — great first season. RWG gives every wipe a new map at the cost of a long first generation and a slightly rougher world. Most long-running servers alternate seasons by changing \`GameName\` and the seed.
+
+### Can I change settings mid-save?
+
+Most gameplay properties (difficulty, day length, blood-moon cadence, loot) apply to the existing save on restart. World identity (\`GameWorld\`, seed, size) cannot change without starting a new save.
+
+### How do wipes work here compared to Rust?
+
+Nothing is forced — you wipe when you choose by changing \`GameName\` (new save) or deleting the save folder. Take a one-click backup first so any season can be restored; Rust owners live a stricter version of this in [our Rust wipe guide](/knowledge-base/host-rust-server-wipes-plugins).
+
+Survive the seventh night: [order a 7 Days to Die server](/games/seven-days-to-die) and it's live in minutes.`,
+  },
 ];
