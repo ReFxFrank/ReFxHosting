@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { ConfigService } from '@nestjs/config';
@@ -299,12 +300,24 @@ export class BackupsService {
     if (backup.state !== 'COMPLETED' || !backup.location) {
       throw new NotFoundException('Backup has no stored archive');
     }
-    const stream = await this.agent.backupStream(
-      server.node,
-      serverId,
-      backupId,
-      backup.location,
-    );
+    let stream: ReadableStream<Uint8Array>;
+    try {
+      stream = await this.agent.backupStream(
+        server.node,
+        serverId,
+        backupId,
+        backup.location,
+      );
+    } catch (e) {
+      // An agent that predates the download endpoint answers with its
+      // router's plain 404 — turn that into an actionable message.
+      if ((e as Error).message?.includes('404')) {
+        throw new ServiceUnavailableException(
+          'This node agent does not support backup downloads yet — update the node agent (v1.4.2+) from the admin panel, then try again.',
+        );
+      }
+      throw e;
+    }
     const base = backup.name?.trim() || 'backup';
     return { stream, filename: `${base}-${backupId.slice(0, 8)}.tar.gz` };
   }
