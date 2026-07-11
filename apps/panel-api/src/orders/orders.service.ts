@@ -46,6 +46,7 @@ export class OrdersService {
       paymentMethodId?: string;
       gateway?: 'stripe' | 'paypal';
       environment?: Record<string, string>;
+      expressBackups?: boolean;
       couponCode?: string;
       giftCardCode?: string;
       useCredit?: boolean;
@@ -159,6 +160,7 @@ export class OrdersService {
       interval: price.interval,
       hardwareTierId: dto.hardwareTierId,
       slots: dto.slots,
+      expressBackups: dto.expressBackups ?? false,
     });
 
     // PayPal recurring: fixed-price orders with no discounts/credit start a real
@@ -168,6 +170,9 @@ export class OrdersService {
     const wantsPaypalSub =
       dto.gateway === 'paypal' &&
       quantity === 1 &&
+      // A shared PayPal plan price can't carry the add-on, so express-backup
+      // orders use the one-time invoice flow instead of a PayPal subscription.
+      !dto.expressBackups &&
       !dto.couponCode?.trim() &&
       !dto.giftCardCode?.trim() &&
       !dto.useCredit;

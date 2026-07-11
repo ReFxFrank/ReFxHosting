@@ -292,10 +292,20 @@ func buildManager(log zerolog.Logger, cfg *config.Config, caps osabstraction.Cap
 // buildBackups constructs the backup manager from config (local or S3).
 func buildBackups(ctx context.Context, log zerolog.Logger, cfg *config.Config) (*backup.Manager, error) {
 	tmp := filepath.Join(cfg.DataDir, "tmp")
-	var store backup.Storage
-	switch cfg.Backup.Driver {
-	case "s3":
-		s, err := backup.NewS3Storage(ctx, backup.S3Config{
+	// Local storage always exists (it's the fallback); S3 is built whenever the
+	// node has credentials, even if it's not the default driver — the panel
+	// routes express-backup servers to S3 per backup.
+	dir := cfg.Backup.LocalDir
+	if dir == "" {
+		dir = filepath.Join(cfg.DataDir, "backups")
+	}
+	local, err := backup.NewLocalStorage(dir)
+	if err != nil {
+		return nil, err
+	}
+	var s3 backup.Storage
+	if cfg.Backup.S3.Bucket != "" {
+		st, err := backup.NewS3Storage(ctx, backup.S3Config{
 			Endpoint:     cfg.Backup.S3.Endpoint,
 			Region:       cfg.Backup.S3.Region,
 			Bucket:       cfg.Backup.S3.Bucket,
@@ -306,19 +316,9 @@ func buildBackups(ctx context.Context, log zerolog.Logger, cfg *config.Config) (
 		if err != nil {
 			return nil, err
 		}
-		store = s
-	default:
-		dir := cfg.Backup.LocalDir
-		if dir == "" {
-			dir = filepath.Join(cfg.DataDir, "backups")
-		}
-		s, err := backup.NewLocalStorage(dir)
-		if err != nil {
-			return nil, err
-		}
-		store = s
+		s3 = st
 	}
-	return backup.New(log, store, tmp), nil
+	return backup.New(log, local, s3, cfg.Backup.Driver, tmp), nil
 }
 
 // service is a named long-running subsystem.

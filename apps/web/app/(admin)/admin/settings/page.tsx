@@ -30,7 +30,95 @@ export default function AdminSettingsPage() {
       <EmailSettingsCard />
       <SteamSettingsCard />
       <VanitySettingsCard />
+      <ExpressBackupsSettingsCard />
     </div>
+  );
+}
+
+/** Express backups add-on: enable/disable + monthly fee. */
+function ExpressBackupsSettingsCard() {
+  const queryClient = useQueryClient();
+  const { data: cfg, isLoading } = useQuery({
+    queryKey: ["admin", "express-backups-config"],
+    queryFn: () => api.admin.expressBackupsConfig(),
+  });
+
+  const [feeStr, setFeeStr] = useState<string | null>(null);
+  const feeV = feeStr ?? (cfg ? String(cfg.monthlyMinor) : "");
+  const feeNum = Number(feeV);
+  const feeValid = Number.isInteger(feeNum) && feeNum >= 0 && feeNum <= 100000;
+
+  const save = useMutation({
+    mutationFn: (input: { enabled?: boolean; monthlyMinor?: number }) =>
+      api.admin.setExpressBackupsConfig(input),
+    onSuccess: () => {
+      toast.success("Express-backups settings saved");
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "express-backups-config"],
+      });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to save"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Boxes className="size-4 text-primary" /> Express backups
+        </CardTitle>
+        <CardDescription>
+          Paid add-on at checkout: backups go to offsite object storage
+          (S3/R2) with resumable high-speed direct downloads, billed monthly
+          on top of the plan. Nodes need S3 credentials in their agent config
+          (<span className="font-mono">backup.s3</span>) — servers without the
+          add-on keep using the node&apos;s local disk.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading || !cfg ? (
+          <ListSkeleton rows={2} />
+        ) : (
+          <>
+            <div className="flex items-center justify-between rounded-lg border border-white/[0.08] p-3">
+              <div>
+                <Label>Offer at checkout</Label>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Show the add-on on the order page.
+                </p>
+              </div>
+              <Switch
+                checked={cfg.enabled}
+                onCheckedChange={(v) => save.mutate({ enabled: v })}
+              />
+            </div>
+            <div className="flex items-end gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="express-fee">Monthly fee (minor units)</Label>
+                <Input
+                  id="express-fee"
+                  className="w-40"
+                  value={feeV}
+                  onChange={(e) => setFeeStr(e.target.value)}
+                  placeholder="200"
+                />
+                <p className="text-xs text-muted-foreground">
+                  e.g. 200 = $2.00/mo, scaled to the plan&apos;s billing cycle.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                loading={save.isPending}
+                disabled={!feeValid || feeV === String(cfg.monthlyMinor)}
+                onClick={() => save.mutate({ monthlyMinor: feeNum })}
+              >
+                Save fee
+              </Button>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

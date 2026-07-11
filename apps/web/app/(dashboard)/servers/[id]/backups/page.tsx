@@ -251,6 +251,11 @@ export default function BackupsPage() {
                         state={backup.state}
                         progressPct={backup.progressPct}
                       />
+                      {backup.storage === "S3" && (
+                        <Badge variant="secondary" className="ml-1 text-[10px]">
+                          Offsite
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {completed ? formatBytes(backup.sizeBytes) : "—"}

@@ -148,6 +148,7 @@ export default function OrderPage() {
   const [nodeId, setNodeId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [gateway, setGateway] = useState<"stripe" | "paypal">("stripe");
+  const [expressBackups, setExpressBackups] = useState(false);
   const [config, setConfig] = useState<Record<string, string>>({});
   const [couponInput, setCouponInput] = useState("");
   const [coupon, setCoupon] = useState<{
@@ -345,7 +346,25 @@ export default function OrderPage() {
 
   // Pricing preview (the backend recomputes authoritatively, incl. tax).
   const quantity = perSlot ? slots : 1;
-  const subtotalMinor = price ? price.amountMinor * quantity : 0;
+  // Express backups add-on: monthly fee scaled onto the plan's billing cycle
+  // (mirrors the backend's intervalMonths factors).
+  const INTERVAL_MONTHS: Record<string, number> = {
+    WEEKLY: 12 / 52,
+    BIWEEKLY: 12 / 26,
+    MONTHLY: 1,
+    QUARTERLY: 3,
+    SEMIANNUAL: 6,
+    ANNUAL: 12,
+  };
+  const expressOffer = payCfg.data?.expressBackups;
+  const expressAvailable = !!expressOffer?.enabled && (expressOffer?.monthlyMinor ?? 0) > 0;
+  const expressMinor =
+    expressBackups && expressAvailable && price
+      ? Math.round(
+          (expressOffer!.monthlyMinor) * (INTERVAL_MONTHS[price.interval] ?? 1),
+        )
+      : 0;
+  const subtotalMinor = (price ? price.amountMinor * quantity : 0) + expressMinor;
   const discountMinor = coupon
     ? Math.min(coupon.discountMinor, subtotalMinor)
     : 0;
@@ -402,6 +421,7 @@ export default function OrderPage() {
         name: name.trim(),
         gateway,
         environment: Object.keys(config).length ? config : undefined,
+        expressBackups: expressBackups && expressAvailable ? true : undefined,
         couponCode: coupon?.code,
         giftCardCode: gift?.code,
         useCredit: useCredit && creditBalance > 0 ? true : undefined,
@@ -1019,6 +1039,20 @@ export default function OrderPage() {
                 </div>
               )}
             </div>
+
+            {/* Express backups add-on */}
+            {expressAvailable && (
+              <div className="flex items-center justify-between rounded-md border px-2.5 py-1.5">
+                <div className="text-sm">
+                  <span>Express backups</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Offsite storage + resumable high-speed downloads · +
+                    {formatMoney(expressOffer!.monthlyMinor, currency)}/mo
+                  </span>
+                </div>
+                <Switch checked={expressBackups} onCheckedChange={setExpressBackups} />
+              </div>
+            )}
 
             {/* Account credit */}
             {creditBalance > 0 && (

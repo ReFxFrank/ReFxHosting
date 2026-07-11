@@ -70,6 +70,30 @@ export interface MarkPaidDetails {
   gatewayInvoiceId?: string;
 }
 
+/**
+ * Months represented by one billing interval — used to scale per-month add-on
+ * pricing (e.g. express backups) onto whatever cycle the plan bills at.
+ * Mirrors the factors used by the revenue normalization in nodes.service.
+ */
+function intervalMonths(interval: string): number {
+  switch (interval) {
+    case 'WEEKLY':
+      return 12 / 52;
+    case 'BIWEEKLY':
+      return 12 / 26;
+    case 'MONTHLY':
+      return 1;
+    case 'QUARTERLY':
+      return 3;
+    case 'SEMIANNUAL':
+      return 6;
+    case 'ANNUAL':
+      return 12;
+    default:
+      return 1;
+  }
+}
+
 @Injectable()
 export class BillingService {
   private readonly logger = new Logger(BillingService.name);
@@ -458,6 +482,7 @@ export class BillingService {
         hardwareTierId: dto.hardwareTierId ?? null,
         interval: dto.interval,
         slots: dto.slots && dto.slots > 0 ? dto.slots : 1,
+        expressBackups: dto.expressBackups ?? false,
         state: SubscriptionState.ACTIVE,
         currentPeriodStart: now,
         currentPeriodEnd,
@@ -944,9 +969,11 @@ export class BillingService {
   async gatewayStatus(): Promise<{
     stripe: { configured: boolean; publishableKey: string | null };
     paypal: { configured: boolean };
+    expressBackups: { enabled: boolean; monthlyMinor: number };
   }> {
     const stripe = await this.settings.stripeConfig();
     const paypal = await this.settings.paypalConfig();
+    const expressBackups = await this.settings.expressBackupsConfig();
     return {
       stripe: {
         configured: !!stripe.secretKey,
@@ -954,6 +981,8 @@ export class BillingService {
         publishableKey: stripe.publishableKey || null,
       },
       paypal: { configured: !!paypal.clientId && !!paypal.clientSecret },
+      // Public-safe add-on offer for the checkout page (price only, no secrets).
+      expressBackups,
     };
   }
 
@@ -1764,7 +1793,21 @@ export class BillingService {
         ? subscription.slots
         : 1;
     const unitMinor = price.amountMinor;
-    const subtotalMinor = unitMinor * quantity;
+    // Express-backups add-on: a per-cycle line on top of the plan, scaled from
+    // the admin-configured monthly fee to the subscription's interval. Charged
+    // for as long as the subscription carries the flag.
+    let addonMinor = 0;
+    let addonLabel = '';
+    if (subscription.expressBackups) {
+      const cfg = await this.settings.expressBackupsConfig();
+      if (cfg.monthlyMinor > 0) {
+        addonMinor = Math.round(
+          cfg.monthlyMinor * intervalMonths(subscription.interval),
+        );
+        addonLabel = 'Express backups — offsite storage & fast downloads';
+      }
+    }
+    const subtotalMinor = unitMinor * quantity + addonMinor;
     // Coupon discount reduces the taxable base; never exceeds the subtotal.
     const discountMinor = Math.max(
       0,
@@ -1823,8 +1866,19 @@ export class BillingService {
               description: this.invoiceLineDescription(subscription, quantity),
               quantity,
               unitMinor,
-              amountMinor: subtotalMinor,
+              amountMinor: unitMinor * quantity,
             },
+            ...(addonMinor > 0
+              ? [
+                  {
+                    id: uuidv7(),
+                    description: addonLabel,
+                    quantity: 1,
+                    unitMinor: addonMinor,
+                    amountMinor: addonMinor,
+                  },
+                ]
+              : []),
           ],
         },
       },

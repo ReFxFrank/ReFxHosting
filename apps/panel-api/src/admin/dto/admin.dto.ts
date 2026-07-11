@@ -480,3 +480,23 @@ export class SetVanityConfigDto {
   @IsString({ each: true })
   reservedWords?: string[];
 }
+
+/** Owner-editable express-backups (offsite storage add-on) settings. */
+export class SetExpressBackupsConfigDto {
+  @ApiPropertyOptional({
+    description:
+      "Offer express backups at checkout. Nodes also need S3 credentials in their agent config.",
+  })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Monthly fee in minor units (e.g. 200 = $2.00/mo).",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100000)
+  monthlyMinor?: number;
+}

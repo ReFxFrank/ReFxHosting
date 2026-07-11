@@ -15,6 +15,9 @@ import (
 type backupCreateRequest struct {
 	BackupID     string   `json:"backupId"`
 	IgnoredFiles []string `json:"ignoredFiles"`
+	// Storage kind requested by the panel: "LOCAL" | "S3" (express add-on).
+	// Empty = the node's configured default.
+	Storage string `json:"storage"`
 }
 
 // handleBackupCreate kicks off a backup in the background and returns 202.
@@ -49,7 +52,7 @@ func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 				"progress": pct,
 				"message":  msg,
 			})
-		})
+		}, req.Storage)
 		if err != nil {
 			s.log.Error().Err(err).Str("backup", req.BackupID).Msg("backup failed")
 			s.reportBackup(map[string]any{
@@ -72,6 +75,7 @@ func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 			"location":  res.Location,
 			"sizeBytes": res.SizeBytes,
 			"checksum":  res.Checksum,
+			"storage":   res.StorageKind,
 		})
 	}()
 

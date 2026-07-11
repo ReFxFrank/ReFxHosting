@@ -28,6 +28,8 @@ const KEY = {
   vanityEnabled: 'features.vanityAddress.enabled',
   vanityFeeMinor: 'billing.vanityAddressFeeMinor',
   vanityReservedWords: 'features.vanityAddress.reservedWords',
+  expressBackupsEnabled: 'features.expressBackups.enabled',
+  expressBackupsMonthlyMinor: 'billing.expressBackupsMonthlyMinor',
 } as const;
 
 export interface GatewayConfigInput {
@@ -350,6 +352,43 @@ export class SettingsService {
       await this.set(
         KEY.vanityReservedWords,
         dto.reservedWords.map((w) => w.trim().toLowerCase()).filter(Boolean).join('\n'),
+        false,
+      );
+  }
+
+  /**
+   * Express-backups add-on config: offsite (S3/R2) backups sold as a recurring
+   * per-month fee on top of the plan. Disabled until the owner sets it up
+   * (nodes also need S3 credentials in their agent config).
+   */
+  async expressBackupsConfig(): Promise<{
+    enabled: boolean;
+    monthlyMinor: number;
+  }> {
+    const enabledStr = await this.get(KEY.expressBackupsEnabled);
+    const feeStr = await this.get(KEY.expressBackupsMonthlyMinor);
+    const fee = feeStr ? Number(feeStr) : NaN;
+    return {
+      enabled: enabledStr === 'true',
+      monthlyMinor: Number.isFinite(fee) && fee >= 0 ? Math.round(fee) : 200,
+    };
+  }
+
+  /** Apply owner edits to the express-backups config. */
+  async setExpressBackupsConfig(dto: {
+    enabled?: boolean;
+    monthlyMinor?: number;
+  }): Promise<void> {
+    if (dto.enabled !== undefined)
+      await this.set(
+        KEY.expressBackupsEnabled,
+        dto.enabled ? 'true' : 'false',
+        false,
+      );
+    if (dto.monthlyMinor !== undefined)
+      await this.set(
+        KEY.expressBackupsMonthlyMinor,
+        String(Math.max(0, Math.round(dto.monthlyMinor))),
         false,
       );
   }

@@ -981,6 +981,8 @@ export const api = {
       name: string;
       gateway?: "stripe" | "paypal";
       environment?: Record<string, string>;
+      /** Express backups add-on: offsite storage + fast downloads (recurring). */
+      expressBackups?: boolean;
       couponCode?: string;
       giftCardCode?: string;
       useCredit?: boolean;
@@ -1372,6 +1374,18 @@ export const api = {
       http.post<{ delivered: boolean }>("/admin/settings/email/test", { to }),
 
     // Custom server addresses (settings.manage)
+    expressBackupsConfig: () =>
+      http.get<{ enabled: boolean; monthlyMinor: number }>(
+        "/admin/settings/express-backups",
+      ),
+    setExpressBackupsConfig: (input: {
+      enabled?: boolean;
+      monthlyMinor?: number;
+    }) =>
+      http.patch<{ enabled: boolean; monthlyMinor: number }>(
+        "/admin/settings/express-backups",
+        input,
+      ),
     vanityConfig: () =>
       http.get<{ enabled: boolean; feeMinor: number; reservedWords: string[] }>(
         "/admin/settings/vanity",

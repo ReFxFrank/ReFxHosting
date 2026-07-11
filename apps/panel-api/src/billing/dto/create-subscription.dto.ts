@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { BillingInterval } from '@prisma/client';
 import {
+  IsBoolean,
   IsEnum,
   IsIn,
   IsInt,
@@ -39,6 +40,15 @@ export class CreateSubscriptionDto {
   @IsInt()
   @Min(1)
   slots?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Express backups add-on: offsite object-storage backups with fast direct downloads, billed per cycle.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  expressBackups?: boolean;
 
   @ApiPropertyOptional({
     description: 'Payment gateway to bill through.',

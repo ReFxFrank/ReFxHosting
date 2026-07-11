@@ -8,6 +8,7 @@ describe('BackupsService lifecycle', () => {
     node: NODE,
     template: { slug: 'minecraft' },
     environment: { MINECRAFT_VERSION: '1.21.1' },
+    expressBackups: false,
   };
   const BACKUP = {
     id: 'bak-1',
@@ -73,6 +74,17 @@ describe('BackupsService lifecycle', () => {
       await svc.create('srv-1', { name: 'full', ignoredFiles: ['dynmap'] });
       const data = prisma.backup.create.mock.calls[0][0].data;
       expect(data.ignoredFiles).toEqual(['dynmap']);
+    });
+
+    it('routes express servers to S3 storage, everyone else to LOCAL', async () => {
+      await svc.create('srv-1', { name: 'a' });
+      expect(prisma.backup.create.mock.calls[0][0].data.storage).toBe('LOCAL');
+      prisma.server.findFirst.mockResolvedValue({
+        ...SERVER,
+        expressBackups: true,
+      });
+      await svc.create('srv-1', { name: 'b' });
+      expect(prisma.backup.create.mock.calls[1][0].data.storage).toBe('S3');
     });
   });
 

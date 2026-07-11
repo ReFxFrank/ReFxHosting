@@ -375,6 +375,9 @@ export class ServersService {
         dockerImage,
         environment,
         subscriptionId: subscription.id,
+        // Offsite-backup entitlement rides on the subscription (it's billed
+        // there every cycle); mirror it onto the server for backup routing.
+        expressBackups: subscription.expressBackups,
         sftpPasswordEnc: this.crypto.encrypt(this.crypto.token(16)),
       },
     });

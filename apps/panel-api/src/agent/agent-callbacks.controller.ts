@@ -102,6 +102,9 @@ interface BackupProgressBody {
   status: string;
   progress?: number;
   message?: string;
+  /** Storage the agent ACTUALLY used ("local" | "s3") — corrects the row when
+   *  an express server's node lacks S3 config and fell back to local. */
+  storage?: string;
   location?: string;
   sizeBytes?: number;
   checksum?: string;
@@ -307,6 +310,8 @@ export class AgentCallbacksController {
     const state = this.toBackupState(body.status);
     if (state) data.state = state;
     if (body.location != null) data.location = body.location;
+    if (body.storage === 's3') data.storage = 'S3';
+    else if (body.storage === 'local') data.storage = 'LOCAL';
     if (body.sizeBytes != null) data.sizeBytes = BigInt(Math.round(body.sizeBytes));
     if (body.checksum != null) data.checksum = body.checksum;
     if (body.error != null) data.error = body.error;

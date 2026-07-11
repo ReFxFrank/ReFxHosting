@@ -616,6 +616,8 @@ model Server {
   startupCommand  String?
   environment     Json          @default("{}") // resolved env var values
   dockerImage     String?
+  // Backups for this server go to offsite object storage (paid add-on).
+  expressBackups  Boolean       @default(false)
 
   // Billing linkage
   subscriptionId  String?       @db.Uuid
@@ -1069,6 +1071,9 @@ model Subscription {
   hardwareTier    HardwareTier?     @relation(fields: [hardwareTierId], references: [id])
   interval        BillingInterval
   slots           Int               @default(1)
+  // Paid add-on: offsite (S3/R2) backups with presigned direct downloads.
+  // Billed as an extra line on every cycle invoice; drives Server.expressBackups.
+  expressBackups  Boolean           @default(false)
   state           SubscriptionState @default(ACTIVE)
   currentPeriodStart DateTime
   currentPeriodEnd   DateTime

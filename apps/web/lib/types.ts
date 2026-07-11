@@ -251,6 +251,8 @@ export interface AdminBillingSummary {
 export interface GatewayStatus {
   stripe: { configured: boolean; publishableKey: string | null };
   paypal: { configured: boolean };
+  /** Express-backups add-on offer (public-safe: enabled + monthly price). */
+  expressBackups?: { enabled: boolean; monthlyMinor: number };
 }
 
 /** Masked, editable gateway config for the owner Payments editor. */

@@ -108,6 +108,7 @@ import {
   SetGatewayConfigDto,
   SetSteamConfigDto,
   SetVanityConfigDto,
+  SetExpressBackupsConfigDto,
   VerifySteamLoginDto,
   SetUserPasswordDto,
   SetUserRoleDto,
@@ -824,6 +825,25 @@ export class AdminController {
   async setVanityConfig(@Body() dto: SetVanityConfigDto) {
     await this.settings.setVanityConfig(dto);
     return this.settings.vanityConfig();
+  }
+
+  // ---- Express backups (offsite storage add-on) ---------------------------
+
+  @Get("settings/express-backups")
+  @RequirePerm("settings.manage")
+  expressBackupsConfig() {
+    return this.settings.expressBackupsConfig();
+  }
+
+  @Patch("settings/express-backups")
+  @RequirePerm("settings.manage")
+  @Audit({
+    action: "admin.settings.expressBackups.update",
+    targetType: "PlatformSetting",
+  })
+  async setExpressBackupsConfig(@Body() dto: SetExpressBackupsConfigDto) {
+    await this.settings.setExpressBackupsConfig(dto);
+    return this.settings.expressBackupsConfig();
   }
 
   /** ToS/impersonation enforcement: strip a purchased address (optional credit). */

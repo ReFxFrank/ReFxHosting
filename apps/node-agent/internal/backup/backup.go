@@ -38,27 +38,72 @@ type Result struct {
 	Location  string
 	SizeBytes int64
 	Checksum  string // sha256 hex
+	// StorageKind is where the archive actually landed: "local" or "s3"
+	// (an S3 request degrades to local when the node has no S3 config).
+	StorageKind string
 }
 
-// Manager performs backup operations against a configured Storage backend.
+// Manager performs backup operations. It holds BOTH storage backends (local
+// always; s3 when the node is configured for it) so the panel can route each
+// backup per server — express plans go offsite, everyone else stays on disk.
 type Manager struct {
 	log     zerolog.Logger
-	storage Storage
+	local   Storage
+	s3      Storage // nil when the node has no S3 config
+	defKind string  // "local" | "s3" — used when a request doesn't specify
 	tmpDir  string
 }
 
-// New constructs a backup Manager.
-func New(log zerolog.Logger, storage Storage, tmpDir string) *Manager {
+// New constructs a backup Manager. s3 may be nil; defKind selects the backend
+// for requests that don't name one (legacy panels).
+func New(log zerolog.Logger, local, s3 Storage, defKind string, tmpDir string) *Manager {
+	if defKind != "s3" || s3 == nil {
+		defKind = "local"
+	}
 	return &Manager{
 		log:     log.With().Str("component", "backup").Logger(),
-		storage: storage,
+		local:   local,
+		s3:      s3,
+		defKind: defKind,
 		tmpDir:  tmpDir,
 	}
 }
 
+// storageFor resolves a requested kind ("local"/"s3"/"") to a backend, falling
+// back to local when S3 was asked for but isn't configured on this node.
+func (m *Manager) storageFor(kind string) (Storage, string) {
+	switch strings.ToLower(kind) {
+	case "s3":
+		if m.s3 != nil {
+			return m.s3, "s3"
+		}
+		return m.local, "local"
+	case "local":
+		return m.local, "local"
+	default:
+		if m.defKind == "s3" && m.s3 != nil {
+			return m.s3, "s3"
+		}
+		return m.local, "local"
+	}
+}
+
+// storageForLocation routes an EXISTING archive by its location shape: local
+// locations are absolute filesystem paths; S3 locations are object keys. This
+// keeps old rows working regardless of what the panel thinks their storage is.
+func (m *Manager) storageForLocation(location string) Storage {
+	if filepath.IsAbs(location) || strings.HasPrefix(location, "/") {
+		return m.local
+	}
+	if m.s3 != nil {
+		return m.s3
+	}
+	return m.local
+}
+
 // Create archives the server data dir into a tar.gz, computes its checksum, and
 // uploads it. ignoredGlobs are matched against the data-dir-relative path.
-func (m *Manager) Create(ctx context.Context, backupID, dataDir string, ignoredGlobs []string, progress ProgressFunc) (*Result, error) {
+func (m *Manager) Create(ctx context.Context, backupID, dataDir string, ignoredGlobs []string, progress ProgressFunc, kind string) (*Result, error) {
 	if progress == nil {
 		progress = func(float64, string) {}
 	}
@@ -145,17 +190,19 @@ func (m *Manager) Create(ctx context.Context, backupID, dataDir string, ignoredG
 	}
 
 	progress(0.92, "uploading")
+	store, actual := m.storageFor(kind)
 	key := fmt.Sprintf("backups/%s.tar.gz", backupID)
-	location, err := m.storage.Put(ctx, key, out, info.Size())
+	location, err := store.Put(ctx, key, out, info.Size())
 	if err != nil {
 		return nil, fmt.Errorf("backup: upload: %w", err)
 	}
 
 	progress(1, "complete")
 	return &Result{
-		Location:  location,
-		SizeBytes: info.Size(),
-		Checksum:  hex.EncodeToString(hasher.Sum(nil)),
+		Location:    location,
+		SizeBytes:   info.Size(),
+		Checksum:    hex.EncodeToString(hasher.Sum(nil)),
+		StorageKind: actual,
 	}, nil
 }
 
@@ -165,7 +212,7 @@ func (m *Manager) Restore(ctx context.Context, location, dataDir string, progres
 		progress = func(float64, string) {}
 	}
 	progress(0, "downloading backup")
-	rc, err := m.storage.Get(ctx, location)
+	rc, err := m.storageForLocation(location).Get(ctx, location)
 	if err != nil {
 		return fmt.Errorf("backup: download: %w", err)
 	}
@@ -222,12 +269,12 @@ func (m *Manager) Restore(ctx context.Context, location, dataDir string, progres
 
 // Delete removes a stored backup.
 func (m *Manager) Delete(ctx context.Context, location string) error {
-	return m.storage.Delete(ctx, location)
+	return m.storageForLocation(location).Delete(ctx, location)
 }
 
 // Open returns a reader over a stored backup archive for downloads.
 func (m *Manager) Open(ctx context.Context, location string) (io.ReadCloser, error) {
-	return m.storage.Get(ctx, location)
+	return m.storageForLocation(location).Get(ctx, location)
 }
 
 // Presigner is implemented by storages that can mint direct-download URLs
@@ -240,7 +287,7 @@ type Presigner interface {
 // the storage doesn't support presigning (the caller then falls back to
 // relaying the bytes).
 func (m *Manager) PresignDownload(ctx context.Context, location string, ttl time.Duration) (string, error) {
-	p, ok := m.storage.(Presigner)
+	p, ok := m.storageForLocation(location).(Presigner)
 	if !ok {
 		return "", nil
 	}

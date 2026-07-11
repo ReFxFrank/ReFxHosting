@@ -46,6 +46,7 @@ export class BackupsProcessor extends WorkerHost {
         serverId,
         backupId,
         backup.ignoredFiles,
+        backup.storage,
       );
       // TODO(impl): the agent reports final size/checksum/location on completion;
       // mark COMPLETED there. Left IN_PROGRESS here pending that callback.

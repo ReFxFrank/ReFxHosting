@@ -649,10 +649,13 @@ export class NodeAgentClient {
     serverId: string,
     backupId: string,
     ignored: string[],
+    /** Where the archive should go: express servers use offsite S3. */
+    storage: "LOCAL" | "S3" = "LOCAL",
   ) {
     return this.request(node, "POST", `/api/v1/servers/${serverId}/backups`, {
       backupId,
       ignoredFiles: ignored,
+      storage,
     });
   }
 

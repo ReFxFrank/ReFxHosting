@@ -155,6 +155,10 @@ export class BackupsService {
         serverId,
         name: dto.name,
         state: 'PENDING',
+        // Express servers store offsite (S3/R2, presigned direct downloads);
+        // everyone else uses the node's local disk. The agent confirms the
+        // storage it actually used in the completion callback.
+        storage: server.expressBackups ? 'S3' : 'LOCAL',
         ignoredFiles,
       },
     });
