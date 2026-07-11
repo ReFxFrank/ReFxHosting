@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { SITE_URL, serverGet } from "@/lib/server-api";
+import { topModpacks } from "@/lib/modrinth";
 
 /**
  * Dynamic sitemap: the static marketing routes plus every published game page
@@ -19,6 +20,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     "",
     "/games",
+    "/modpacks",
     "/order",
     "/knowledge-base",
     "/voice",
@@ -36,9 +38,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: path === "" ? 1 : path === "/games" || path === "/order" ? 0.9 : 0.5,
   }));
 
-  const [games, articles] = await Promise.all([
+  const [games, articles, packs] = await Promise.all([
     serverGet<GameRef[]>("/catalog/games", 900),
     serverGet<KbRef[]>("/support/kb", 900),
+    topModpacks(),
   ]);
 
   const gameRoutes: MetadataRoute.Sitemap = (games ?? []).map((g) => ({
@@ -54,5 +57,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.7,
   }));
 
-  return [...staticRoutes, ...gameRoutes, ...kbRoutes];
+  const packRoutes: MetadataRoute.Sitemap = (packs ?? []).map((p) => ({
+    url: `${SITE_URL}/modpacks/${p.slug}`,
+    changeFrequency: "weekly",
+    priority: 0.7,
+  }));
+
+  return [...staticRoutes, ...gameRoutes, ...kbRoutes, ...packRoutes];
 }

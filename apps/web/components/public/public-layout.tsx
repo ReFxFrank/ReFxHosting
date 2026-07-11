@@ -158,6 +158,7 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
             title="Platform"
             links={[
               { label: "Browse games", href: "/games" },
+              { label: "Modpack hosting", href: "/modpacks" },
               { label: "Features", href: "/#features" },
               { label: "Client area", href: "/dashboard" },
             ]}
