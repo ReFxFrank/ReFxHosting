@@ -1,66 +1,101 @@
-"use client";
+import type { Metadata } from "next";
+import { GameDetailClient } from "./game-detail-client";
+import { SITE_URL, serverGet } from "@/lib/server-api";
 
-import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { api, ApiError } from "@/lib/api";
-import {
-  GameDetailHero,
-  GameOrderSummaryPanel,
-  GameAbout,
-} from "@/components/public/game-detail";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+/**
+ * Server shell for the game landing page: crawlable metadata + Product
+ * JSON-LD (name, description, tier price range) around the interactive
+ * client detail. The client component keeps its own fetching/skeletons.
+ */
 
-export default function GameDetailPage() {
-  const { slug } = useParams<{ slug: string }>();
+interface GameDetailSeo {
+  game: {
+    slug: string;
+    name: string;
+    description?: string | null;
+    imageUrl?: string | null;
+  };
+  configurations?: {
+    name: string;
+    price?: { amountMinor: number; currency: string } | null;
+  }[];
+}
 
-  const detail = useQuery({
-    queryKey: ["storefront", "game", slug],
-    queryFn: () => api.catalog.game(slug),
-    retry: (count, err) => !(err instanceof ApiError && err.status === 404) && count < 2,
-  });
+const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
-  if (detail.isLoading) {
-    return (
-      <div className="mx-auto w-full max-w-6xl space-y-6 px-4 py-12 sm:px-6">
-        <Skeleton className="h-56 w-full rounded-2xl" />
-        <Skeleton className="h-8 w-64" />
-        <div className="grid gap-4 md:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-52 rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const detail = await serverGet<GameDetailSeo>(`/catalog/games/${slug}`, 600);
+  if (!detail?.game) return { title: "Game hosting" };
+  const g = detail.game;
+  const title = `${g.name} Server Hosting`;
+  const description =
+    g.description?.slice(0, 155) ??
+    `Rent a ${g.name} server with instant setup, full file access, backups and DDoS protection.`;
+  const url = `${SITE_URL}/games/${g.slug}`;
+  return {
+    title,
+    description,
+    alternates: { canonical: url },
+    openGraph: {
+      title: `${title} — ${BRAND}`,
+      description,
+      url,
+      type: "website",
+      images: g.imageUrl ? [g.imageUrl] : undefined,
+    },
+  };
+}
 
-  if (detail.isError || !detail.data) {
-    return (
-      <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 px-4 py-24 text-center">
-        <h1 className="text-2xl font-bold">Game unavailable</h1>
-        <p className="text-sm text-muted-foreground">
-          This game isn&apos;t available right now. Browse the rest of our catalog.
-        </p>
-        <Button asChild>
-          <Link href="/games">Back to games</Link>
-        </Button>
-      </div>
-    );
-  }
+export default async function GameDetailPage({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}) {
+  const { slug } = await params;
+  const detail = await serverGet<GameDetailSeo>(`/catalog/games/${slug}`, 600);
+
+  const prices = (detail?.configurations ?? [])
+    .map((c) => c.price)
+    .filter((p): p is { amountMinor: number; currency: string } => !!p);
+  const jsonLd = detail?.game
+    ? {
+        "@context": "https://schema.org",
+        "@type": "Product",
+        name: `${detail.game.name} Server Hosting`,
+        description: detail.game.description ?? undefined,
+        image: detail.game.imageUrl ?? undefined,
+        brand: { "@type": "Brand", name: BRAND },
+        offers:
+          prices.length > 0
+            ? {
+                "@type": "AggregateOffer",
+                priceCurrency: prices[0].currency,
+                lowPrice: (
+                  Math.min(...prices.map((p) => p.amountMinor)) / 100
+                ).toFixed(2),
+                highPrice: (
+                  Math.max(...prices.map((p) => p.amountMinor)) / 100
+                ).toFixed(2),
+                offerCount: prices.length,
+              }
+            : undefined,
+      }
+    : null;
 
   return (
     <>
-      <GameDetailHero game={detail.data.game} />
-      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_340px]">
-        {/* Plans first everywhere (primary action); About sidebar second. */}
-        <div>
-          <GameOrderSummaryPanel detail={detail.data} />
-        </div>
-        <aside>
-          <GameAbout game={detail.data.game} />
-        </aside>
-      </div>
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
+      <GameDetailClient />
     </>
   );
 }
