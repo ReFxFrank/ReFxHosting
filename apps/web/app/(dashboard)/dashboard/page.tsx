@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Server as ServerIcon,
@@ -11,6 +11,7 @@ import {
   CreditCard,
   Activity,
   AlertTriangle,
+  Gift,
   Plus,
 } from "lucide-react";
 import { api } from "@/lib/api";
@@ -19,7 +20,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge, ServerStateBadge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatMoney, formatMb, formatRelative } from "@/lib/utils";
+import { copyToClipboard, formatMoney, formatMb, formatRelative } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
+import { toast } from "@/components/ui/sonner";
 import { useAuthStore } from "@/store/auth";
 
 export default function DashboardPage() {
@@ -223,6 +226,8 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      <ReferralPromoCard />
+
       {servers.length > 0 && (
         <Card>
           <CardHeader>
@@ -240,6 +245,58 @@ export default function DashboardPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+/**
+ * Compact give-and-get referral banner. Renders nothing unless the program
+ * is enabled — the full stats live on the Account page.
+ */
+function ReferralPromoCard() {
+  const { data } = useQuery({
+    queryKey: ["billing", "referral"],
+    queryFn: () => api.billing.referral(),
+    staleTime: 5 * 60_000,
+  });
+  const [copied, setCopied] = useState(false);
+  if (!data?.enabled || !data.code || data.rewardMinor <= 0) return null;
+
+  const link = `${window.location.origin}/register?ref=${data.code}`;
+  const reward = formatMoney(data.rewardMinor, "USD");
+  const copy = async () => {
+    try {
+      if (!(await copyToClipboard(link))) throw new Error();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Couldn't copy the link");
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Gift className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-medium">Give {reward}, get {reward}</p>
+            <p className="text-sm text-muted-foreground">
+              When a friend makes their first purchase, you both receive{" "}
+              {reward} in account credit — it applies automatically at
+              checkout and renewals.
+            </p>
+          </div>
+        </div>
+        <div className="flex w-full gap-2 sm:w-auto sm:max-w-sm">
+          <Input readOnly value={link} className="font-mono text-xs" />
+          <Button variant="outline" className="shrink-0" onClick={copy}>
+            {copied ? "Copied!" : "Copy link"}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

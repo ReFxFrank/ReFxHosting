@@ -2060,11 +2060,26 @@ export class BillingService {
     // Email a receipt (best-effort; never blocks settlement).
     const recipient = await this.invoiceRecipient(invoice.userId);
     if (recipient) {
-      await this.email.sendPaymentReceipt(recipient, {
-        number: invoice.number,
-        amountMinor,
-        currency,
-      });
+      // Piggyback the referral link on the happiest email we send — the
+      // lookup is best-effort and must never block the receipt.
+      let referral: { code: string; rewardMinor: number } | undefined;
+      try {
+        const r = await this.referrals.myReferral(invoice.userId);
+        if (r.enabled && r.code && r.rewardMinor > 0) {
+          referral = { code: r.code, rewardMinor: r.rewardMinor };
+        }
+      } catch {
+        /* receipt still goes out */
+      }
+      await this.email.sendPaymentReceipt(
+        recipient,
+        {
+          number: invoice.number,
+          amountMinor,
+          currency,
+        },
+        referral,
+      );
     }
 
     return updated;

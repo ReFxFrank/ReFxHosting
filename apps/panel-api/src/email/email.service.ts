@@ -267,15 +267,24 @@ export class EmailService {
   async sendPaymentReceipt(
     user: MailRecipient,
     invoice: { number: number | string; amountMinor: number; currency: string },
+    referral?: { code: string; rewardMinor: number },
   ): Promise<void> {
     const amount = this.money(invoice.amountMinor, invoice.currency);
+    const intro = [
+      `We've received your payment of <strong>${amount}</strong> for invoice <strong>${invoice.number}</strong>. Thank you!`,
+    ];
+    if (referral) {
+      const reward = this.money(referral.rewardMinor, invoice.currency);
+      const link = `${this.panelUrl}/register?ref=${referral.code}`;
+      intro.push(
+        `Enjoying your server? When a friend signs up with your link and makes their first purchase, you both receive <strong>${reward}</strong> in account credit: <a href="${link}">${link}</a>`,
+      );
+    }
     const { html, text } = await this.compose({
       title: 'Payment received',
       greeting: user.firstName ? `Hi ${user.firstName},` : 'Hello,',
       preheader: `Payment received for invoice ${invoice.number}.`,
-      intro: [
-        `We've received your payment of <strong>${amount}</strong> for invoice <strong>${invoice.number}</strong>. Thank you!`,
-      ],
+      intro,
       button: { label: 'View your invoices', url: `${this.panelUrl}/billing` },
     });
     await this.sendGeneric({
