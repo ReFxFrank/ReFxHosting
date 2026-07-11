@@ -158,6 +158,7 @@ func (s *Server) routes() chi.Router {
 					r.Post("/{backupId}/restore", s.handleBackupRestore)
 					r.Delete("/{backupId}", s.handleBackupDelete)
 					r.Get("/{backupId}/download-url", s.handleBackupDownloadURL)
+					r.Get("/{backupId}/download", s.handleBackupFetch)
 				})
 			})
 		})

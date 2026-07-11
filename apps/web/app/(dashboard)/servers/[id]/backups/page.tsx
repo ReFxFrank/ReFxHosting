@@ -17,7 +17,7 @@ import {
   CalendarClock,
   ArrowRight,
 } from "lucide-react";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, API_BASE } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -162,7 +162,13 @@ export default function BackupsPage() {
 
   const downloadMutation = useMutation({
     mutationFn: (backupId: string) => api.servers.backups.downloadUrl(id, backupId),
-    onSuccess: ({ url }) => window.open(url, "_blank", "noopener,noreferrer"),
+    // The panel returns a relative signed URL — resolve it against the API.
+    onSuccess: ({ url }) =>
+      window.open(
+        url.startsWith("http") ? url : `${API_BASE}${url}`,
+        "_blank",
+        "noopener,noreferrer",
+      ),
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to get download link"),
   });

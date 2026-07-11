@@ -225,6 +225,11 @@ func (m *Manager) Delete(ctx context.Context, location string) error {
 	return m.storage.Delete(ctx, location)
 }
 
+// Open returns a reader over a stored backup archive for downloads.
+func (m *Manager) Open(ctx context.Context, location string) (io.ReadCloser, error) {
+	return m.storage.Get(ctx, location)
+}
+
 // DownloadURL returns a short-lived URL the panel/browser can use to fetch a
 // completed backup archive identified by its storage location.
 //

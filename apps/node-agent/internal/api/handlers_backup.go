@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"time"
 
@@ -168,12 +169,15 @@ func (s *Server) reportBackup(payload map[string]any) {
 	}
 }
 
-// handleBackupDelete removes a stored backup.
+// handleBackupDelete removes a stored backup. An empty location means the
+// backup never produced an archive (failed / still pending when deleted) —
+// nothing to remove on this node, so report success and let the panel drop
+// the row.
 func (s *Server) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 	var req backupRestoreRequest
 	_ = json.NewDecoder(r.Body).Decode(&req)
 	if req.Location == "" {
-		writeError(w, http.StatusBadRequest, "location is required")
+		writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "note": "no archive stored"})
 		return
 	}
 	if err := s.deps.Backups.Delete(r.Context(), req.Location); err != nil {
@@ -181,4 +185,25 @@ func (s *Server) handleBackupDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+}
+
+// handleBackupFetch streams a stored backup archive to the caller (the panel,
+// which relays it to the customer's browser). The location comes from the
+// panel — the same trusted, HMAC-signed channel that supplies it for restore
+// and delete.
+func (s *Server) handleBackupFetch(w http.ResponseWriter, r *http.Request) {
+	location := r.URL.Query().Get("location")
+	if location == "" {
+		writeError(w, http.StatusBadRequest, "location is required")
+		return
+	}
+	rc, err := s.deps.Backups.Open(r.Context(), location)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "backup archive not found: "+err.Error())
+		return
+	}
+	defer rc.Close()
+	w.Header().Set("Content-Type", "application/gzip")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, rc)
 }

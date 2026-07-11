@@ -4,18 +4,23 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import { Readable } from 'node:stream';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { BackupsService } from './backups.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionGuard } from '../auth/guards/permission.guard';
 import { RequirePermissions } from '../common/decorators/permissions.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
-import { CreateBackupDto } from './dto/backups.dto';
+import { CreateBackupDto, UpdateBackupDto } from './dto/backups.dto';
 
 @ApiTags('backups')
 @ApiBearerAuth()
@@ -37,6 +42,19 @@ export class BackupsController {
     return this.backups.create(id, dto);
   }
 
+  // Lock/unlock. Gated on backup.delete because locking exists purely to
+  // control deletability — whoever may delete may also protect.
+  @Patch(':backupId')
+  @RequirePermissions('backup.delete')
+  @Audit({ action: 'backup.lock', targetType: 'Server', targetParam: 'id' })
+  update(
+    @Param('id') id: string,
+    @Param('backupId') backupId: string,
+    @Body() dto: UpdateBackupDto,
+  ) {
+    return this.backups.setLocked(id, backupId, dto.isLocked);
+  }
+
   @Delete(':backupId')
   @RequirePermissions('backup.delete')
   @Audit({ action: 'backup.delete', targetType: 'Server', targetParam: 'id' })
@@ -55,5 +73,31 @@ export class BackupsController {
   @RequirePermissions('backup.download')
   download(@Param('id') id: string, @Param('backupId') backupId: string) {
     return this.backups.downloadUrl(id, backupId);
+  }
+
+  // Browser download target. @Public because a new tab can't send the JWT —
+  // access is authorized by the short-lived HMAC minted by /download (which
+  // DID enforce backup.download). Streams the archive from the agent.
+  @Public()
+  @Get(':backupId/archive')
+  async archive(
+    @Param('id') id: string,
+    @Param('backupId') backupId: string,
+    @Query('exp') exp: string,
+    @Query('sig') sig: string,
+    @Res() res: Response,
+  ) {
+    const { stream, filename } = await this.backups.openSignedDownload(
+      id,
+      backupId,
+      exp,
+      sig,
+    );
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename.replace(/[^\w.\- ]/g, '_')}"`,
+    );
+    Readable.fromWeb(stream as never).pipe(res);
   }
 }

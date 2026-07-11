@@ -39,9 +39,15 @@ func (l *LocalStorage) Get(_ context.Context, location string) (io.ReadCloser, e
 	return os.Open(location)
 }
 
-// Delete removes a local archive.
+// Delete removes a local archive. Idempotent: a missing file is success — the
+// panel deletes the DB row afterwards either way, and failing here would
+// strand rows for archives that are already gone.
 func (l *LocalStorage) Delete(_ context.Context, location string) error {
-	return os.Remove(location)
+	err := os.Remove(location)
+	if err != nil && os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 var _ Storage = (*LocalStorage)(nil)

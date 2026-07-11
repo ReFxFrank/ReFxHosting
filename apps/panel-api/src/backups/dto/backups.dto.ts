@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsArray, IsOptional, IsString } from 'class-validator';
+import { IsArray, IsBoolean, IsOptional, IsString } from 'class-validator';
 
 export class CreateBackupDto {
   @ApiProperty()
@@ -11,4 +11,10 @@ export class CreateBackupDto {
   @IsArray()
   @IsString({ each: true })
   ignoredFiles?: string[];
+}
+
+export class UpdateBackupDto {
+  @ApiProperty({ description: 'Locked backups are protected from deletion' })
+  @IsBoolean()
+  isLocked!: boolean;
 }

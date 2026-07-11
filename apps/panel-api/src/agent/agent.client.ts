@@ -663,6 +663,47 @@ export class NodeAgentClient {
     );
   }
 
+  /**
+   * Stream a backup archive's bytes from the agent (signed GET, mirrored on
+   * readFileStream) so the panel can relay it to a browser download.
+   */
+  async backupStream(
+    node: Node,
+    serverId: string,
+    backupId: string,
+    location: string,
+  ): Promise<ReadableStream<Uint8Array>> {
+    const reqPath =
+      `/api/v1/servers/${serverId}/backups/${backupId}/download` +
+      `?location=${encodeURIComponent(location)}`;
+    const url = `${this.baseUrl(node)}${reqPath}`;
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = signRequest(
+      this.signingKey(node),
+      "GET",
+      reqPath,
+      timestamp,
+      "",
+      this.signQuery,
+    );
+    const res = await undiciFetch(url, {
+      method: "GET",
+      headers: {
+        [SIGN_HEADER_NODE]: node.id,
+        [SIGN_HEADER_TIMESTAMP]: timestamp,
+        [SIGN_HEADER_SIGNATURE]: signature,
+      },
+      dispatcher: this.dispatcherFor(node),
+    });
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => "");
+      throw new ServiceUnavailableException(
+        `Node agent error ${res.status}: ${text || res.statusText}`,
+      );
+    }
+    return res.body as ReadableStream<Uint8Array>;
+  }
+
   // ---- live stats ---------------------------------------------------------
 
   /** Current live resource usage for a running server. */

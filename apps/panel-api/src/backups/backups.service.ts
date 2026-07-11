@@ -1,9 +1,13 @@
 import {
+  BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
@@ -27,12 +31,31 @@ const MAX_BACKUPS_PER_SERVER = 25;
 @Injectable()
 export class BackupsService {
   private readonly logger = new Logger(BackupsService.name);
+  /** Signed download links live this long — minted per click. */
+  private static readonly DOWNLOAD_TTL_SECONDS = 300;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly agent: NodeAgentClient,
+    private readonly config: ConfigService,
     @InjectQueue(QUEUE.BACKUPS) private readonly backupQueue: Queue,
   ) {}
+
+  /** HMAC key for signed backup downloads (derived from the secrets key). */
+  private downloadKey(): string {
+    const key =
+      this.config.get<string>('secretsEncKey') ??
+      process.env.SECRETS_ENC_KEY ??
+      '';
+    if (!key) throw new BadRequestException('Downloads are not configured');
+    return `backup-download:${key}`;
+  }
+
+  private downloadSig(serverId: string, backupId: string, exp: number): string {
+    return createHmac('sha256', this.downloadKey())
+      .update(`${serverId}\n${backupId}\n${exp}`)
+      .digest('hex');
+  }
 
   /**
    * Fail out backups that will never finish: the agent reports completion via
@@ -130,9 +153,42 @@ export class BackupsService {
 
   async remove(serverId: string, backupId: string): Promise<void> {
     const server = await this.serverWithNode(serverId);
-    await this.backupOrThrow(serverId, backupId);
-    await this.agent.deleteBackup(server.node, serverId, backupId);
+    const backup = await this.backupOrThrow(serverId, backupId);
+    if (backup.isLocked) {
+      throw new ConflictException('Backup is locked — unlock it first');
+    }
+    // Only ask the agent to remove an archive that exists (failed/pending
+    // backups never stored one), and treat agent failure as best-effort: the
+    // DB row is the source of truth, and a dead node must not make a backup
+    // undeletable. Stray archives are reconciled by rotation later.
+    if (backup.location) {
+      try {
+        await this.agent.deleteBackup(
+          server.node,
+          serverId,
+          backupId,
+          backup.location,
+        );
+      } catch (e) {
+        this.logger.warn(
+          `agent archive delete failed for backup ${backupId} (${(e as Error).message}); removing row anyway`,
+        );
+      }
+    }
     await this.prisma.backup.delete({ where: { id: backupId } });
+  }
+
+  /** Lock/unlock a backup (locked = protected from deletion/rotation). */
+  async setLocked(
+    serverId: string,
+    backupId: string,
+    isLocked: boolean,
+  ): Promise<Backup> {
+    await this.backupOrThrow(serverId, backupId);
+    return this.prisma.backup.update({
+      where: { id: backupId },
+      data: { isLocked },
+    });
   }
 
   async restore(
@@ -141,19 +197,69 @@ export class BackupsService {
   ): Promise<{ accepted: true }> {
     const server = await this.serverWithNode(serverId);
     const backup = await this.backupOrThrow(serverId, backupId);
-    if (backup.state !== 'COMPLETED') {
+    if (backup.state !== 'COMPLETED' || !backup.location) {
       throw new NotFoundException('Backup is not ready to restore');
     }
-    await this.agent.restoreBackup(server.node, serverId, backupId);
+    await this.agent.restoreBackup(
+      server.node,
+      serverId,
+      backupId,
+      backup.location,
+    );
     return { accepted: true };
   }
 
+  /**
+   * Mint a short-lived signed URL for the browser (a new tab can't send the
+   * JWT). The public archive route verifies the HMAC and relays the agent's
+   * byte stream — same pattern as file downloads.
+   */
   async downloadUrl(
     serverId: string,
     backupId: string,
   ): Promise<{ url: string }> {
+    await this.serverWithNode(serverId);
+    const backup = await this.backupOrThrow(serverId, backupId);
+    if (backup.state !== 'COMPLETED' || !backup.location) {
+      throw new NotFoundException('Backup has no stored archive to download');
+    }
+    const exp =
+      Math.floor(Date.now() / 1000) + BackupsService.DOWNLOAD_TTL_SECONDS;
+    const sig = this.downloadSig(serverId, backupId, exp);
+    return {
+      url: `/servers/${serverId}/backups/${backupId}/archive?exp=${exp}&sig=${sig}`,
+    };
+  }
+
+  /** Verify a signed download and return the agent byte stream + filename. */
+  async openSignedDownload(
+    serverId: string,
+    backupId: string,
+    expStr: string,
+    sig: string,
+  ): Promise<{ stream: ReadableStream<Uint8Array>; filename: string }> {
+    const exp = Number(expStr);
+    if (!Number.isFinite(exp) || exp < Math.floor(Date.now() / 1000)) {
+      throw new ForbiddenException('Download link expired');
+    }
+    const expected = this.downloadSig(serverId, backupId, exp);
+    const a = Buffer.from(sig ?? '', 'utf8');
+    const b = Buffer.from(expected, 'utf8');
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      throw new ForbiddenException('Invalid download signature');
+    }
     const server = await this.serverWithNode(serverId);
-    await this.backupOrThrow(serverId, backupId);
-    return this.agent.backupDownloadUrl(server.node, serverId, backupId);
+    const backup = await this.backupOrThrow(serverId, backupId);
+    if (backup.state !== 'COMPLETED' || !backup.location) {
+      throw new NotFoundException('Backup has no stored archive');
+    }
+    const stream = await this.agent.backupStream(
+      server.node,
+      serverId,
+      backupId,
+      backup.location,
+    );
+    const base = backup.name?.trim() || 'backup';
+    return { stream, filename: `${base}-${backupId.slice(0, 8)}.tar.gz` };
   }
 }
