@@ -1,7 +1,7 @@
 /**
- * Upsert the SEO knowledge-base articles (database/seed/kb-articles.ts) into
- * the live database, published. Idempotent — re-running updates bodies in
- * place by slug and never touches articles it doesn't own.
+ * Upsert the SEO knowledge-base articles (kb-articles.ts + the tutorial
+ * batches) into the live database, published. Idempotent — re-running
+ * updates bodies in place by slug and never touches articles it doesn't own.
  *
  * Run on the panel machine:
  *   DATABASE_URL=postgresql://... npx tsx database/seed/seed-kb.ts
@@ -13,13 +13,24 @@ import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { KB_ARTICLES } from "./kb-articles";
+import { KB_TUTORIALS_A } from "./kb-articles-tutorials-a";
+import { KB_TUTORIALS_B } from "./kb-articles-tutorials-b";
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }),
 });
 
+const ALL_ARTICLES = [...KB_ARTICLES, ...KB_TUTORIALS_A, ...KB_TUTORIALS_B];
+
 async function main() {
-  for (const article of KB_ARTICLES) {
+  const seen = new Set<string>();
+  for (const article of ALL_ARTICLES) {
+    if (seen.has(article.slug)) {
+      throw new Error(`duplicate KB slug in seed data: ${article.slug}`);
+    }
+    seen.add(article.slug);
+  }
+  for (const article of ALL_ARTICLES) {
     await prisma.kbArticle.upsert({
       where: { slug: article.slug },
       update: {
@@ -39,7 +50,7 @@ async function main() {
     });
     console.log(`  • upserted ${article.slug}`);
   }
-  console.log(`Done — ${KB_ARTICLES.length} article(s) published.`);
+  console.log(`Done — ${ALL_ARTICLES.length} article(s) published.`);
 }
 
 main()
