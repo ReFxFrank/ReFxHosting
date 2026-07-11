@@ -193,9 +193,9 @@ export default function BackupsPage() {
           <CardContent className="flex items-start gap-3 p-4 text-sm">
             <CloudUpload className="mt-0.5 size-5 shrink-0 text-primary" />
             <p className="text-muted-foreground">
-              Backups are stored offsite in encrypted S3 object storage, separate from your
-              node. Locked backups are kept indefinitely and excluded from automatic
-              rotation.
+              Backups are stored separately from your server&apos;s live files and can be
+              restored or downloaded at any time. Locked backups are kept indefinitely and
+              excluded from automatic rotation.
             </p>
           </CardContent>
         </Card>
