@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Sidebar } from "@/components/layout/sidebar";
+import { Sidebar, MobileSidebar } from "@/components/layout/sidebar";
 import { TopNav, MobileNav } from "@/components/layout/topnav";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { IdleSessionGuard } from "@/components/auth/idle-session-guard";
@@ -24,6 +24,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <IdleSessionGuard />
       <ForcePasswordChange />
       <Sidebar />
+      <MobileSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <TopNav />
         <MobileNav />

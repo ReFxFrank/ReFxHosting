@@ -1,6 +1,6 @@
 "use client";
 
-import { AdminSidebar } from "@/components/layout/admin-sidebar";
+import { AdminSidebar, AdminMobileSidebar } from "@/components/layout/admin-sidebar";
 import { AdminTopNav, AdminMobileNav } from "@/components/layout/admin-topnav";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { IdleSessionGuard } from "@/components/auth/idle-session-guard";
@@ -22,6 +22,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="admin-scope flex min-h-svh bg-[hsl(var(--background))]">
       <IdleSessionGuard />
       <AdminSidebar />
+      <AdminMobileSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
         <AdminTopNav />
         <AdminMobileNav />

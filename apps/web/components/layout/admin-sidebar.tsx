@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft, ArrowLeft, ShieldCheck } from "lucide-react";
+import { useEffect } from "react";
+import { ChevronLeft, ArrowLeft, ShieldCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -133,5 +134,77 @@ export function AdminSidebar() {
         </Button>
       </div>
     </aside>
+  );
+}
+
+/** Mobile drawer for the staff shell — same permission-gated nav as the
+ *  desktop sidebar, opened by the top-bar hamburger below md. */
+export function AdminMobileSidebar() {
+  const { mobileNavOpen, setMobileNav } = useUiStore();
+  const hasPermission = useAuthStore((s) => s.hasPermission);
+  const pathname = usePathname();
+
+  useEffect(() => {
+    setMobileNav(false);
+  }, [pathname, setMobileNav]);
+
+  if (!mobileNavOpen) return null;
+
+  const sections = adminNav
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((i) => !i.perm || hasPermission(i.perm)),
+    }))
+    .filter((section) => section.items.length > 0);
+
+  return (
+    <div className="fixed inset-0 z-50 md:hidden">
+      <button
+        aria-label="Close menu"
+        className="absolute inset-0 bg-black/60"
+        onClick={() => setMobileNav(false)}
+      />
+      <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-white/[0.08] bg-[linear-gradient(180deg,rgba(8,12,22,0.99),rgba(5,8,16,0.99))] shadow-2xl">
+        <div className="flex h-14 items-center justify-between border-b border-white/[0.08] px-4">
+          <span className="flex items-center gap-2.5">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary/20 text-[hsl(var(--primary))] ring-1 ring-primary/30">
+              <ShieldCheck className="size-4" />
+            </span>
+            <span className="text-sm font-semibold tracking-tight">Staff Panel</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Close menu"
+            onClick={() => setMobileNav(false)}
+          >
+            <X className="size-5" />
+          </Button>
+        </div>
+        <nav className="flex-1 space-y-3 overflow-y-auto p-2">
+          {sections.map((section, i) => (
+            <div key={section.title ?? `s${i}`} className="space-y-1">
+              {section.title && (
+                <div className="px-3 pb-0.5 pt-1 text-[0.625rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+                  {section.title}
+                </div>
+              )}
+              {section.items.map((item) => (
+                <AdminNavLink key={item.href} item={item} collapsed={false} />
+              ))}
+            </div>
+          ))}
+        </nav>
+        <div className="border-t border-white/[0.08] p-2">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground"
+          >
+            <ArrowLeft className="size-4 shrink-0" />
+            <span>Client area</span>
+          </Link>
+        </div>
+      </aside>
+    </div>
   );
 }

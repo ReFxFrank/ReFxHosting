@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
+import { useEffect } from "react";
+import { ChevronLeft, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LogoMark } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
@@ -91,5 +92,55 @@ export function Sidebar() {
         </Button>
       </div>
     </aside>
+  );
+}
+
+/**
+ * Mobile drawer variant. The desktop <Sidebar> is display:none below md and
+ * only collapses; this is what the top-bar hamburger actually opens on a
+ * phone. Closes on backdrop tap, the X, or any navigation.
+ */
+export function MobileSidebar() {
+  const { mobileNavOpen, setMobileNav } = useUiStore();
+  const pathname = usePathname();
+
+  // Navigating (tapping a link) closes the drawer.
+  useEffect(() => {
+    setMobileNav(false);
+  }, [pathname, setMobileNav]);
+
+  if (!mobileNavOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 md:hidden">
+      <button
+        aria-label="Close menu"
+        className="absolute inset-0 bg-black/60"
+        onClick={() => setMobileNav(false)}
+      />
+      <aside className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col border-r border-white/[0.08] bg-[linear-gradient(180deg,rgba(10,18,32,0.99),rgba(7,13,24,0.99))] shadow-2xl">
+        <div className="flex h-14 items-center justify-between border-b border-white/[0.06] px-4">
+          <span className="flex items-center gap-2">
+            <LogoMark size={28} />
+            <span className="truncate font-semibold tracking-tight text-[hsl(213_100%_97%)]">
+              {BRAND}
+            </span>
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Close menu"
+            onClick={() => setMobileNav(false)}
+          >
+            <X className="size-5" />
+          </Button>
+        </div>
+        <nav className="flex-1 space-y-1 overflow-y-auto p-2">
+          {customerNav.map((item) => (
+            <NavLink key={item.href} item={item} collapsed={false} />
+          ))}
+        </nav>
+      </aside>
+    </div>
   );
 }

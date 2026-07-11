@@ -31,7 +31,7 @@ const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 export function TopNav() {
   const router = useRouter();
   const { user, logout, isStaff } = useAuthStore();
-  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const setMobileNav = useUiStore((s) => s.setMobileNav);
 
   async function handleLogout() {
     await logout();
@@ -40,7 +40,7 @@ export function TopNav() {
 
   return (
     <header className="refx-beam sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-white/[0.06] bg-[rgba(7,13,24,0.7)] px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-[rgba(7,13,24,0.55)]">
-      <Button variant="ghost" size="icon" className="md:hidden" onClick={toggleSidebar}>
+      <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileNav(true)} aria-label="Open menu">
         <Menu className="size-5" />
       </Button>
 

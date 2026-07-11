@@ -23,7 +23,7 @@ import { adminNavItems } from "./nav-config";
 export function AdminTopNav() {
   const router = useRouter();
   const { user, logout } = useAuthStore();
-  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+  const setMobileNav = useUiStore((s) => s.setMobileNav);
 
   async function handleLogout() {
     await logout();
@@ -39,7 +39,7 @@ export function AdminTopNav() {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-white/[0.08] bg-[rgba(5,8,16,0.8)] px-4 backdrop-blur-xl supports-[backdrop-filter]:bg-[rgba(5,8,16,0.6)]">
-      <Button variant="ghost" size="icon" className="md:hidden" onClick={toggleSidebar}>
+      <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileNav(true)} aria-label="Open menu">
         <Menu className="size-5" />
       </Button>
 
