@@ -726,6 +726,127 @@ function EconTile({
 }
 
 /**
+ * Backup storage: offsite (R2/S3) usage + estimated storage cost vs what the
+ * Express add-on earns, the heaviest offsite consumers, and how much local
+ * backup weight sits on each node's own disk. All computed from Backup rows —
+ * no object-storage API calls.
+ */
+function BackupStoragePanel() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "backup-stats"],
+    queryFn: () => api.admin.backupStats(),
+  });
+
+  if (isLoading) return <Skeleton className="h-40 w-full rounded-2xl" />;
+  if (!data) return null;
+  const hasAny = data.offsite.backups > 0 || data.local.backups > 0;
+  if (!hasAny) return null;
+
+  const gb = (bytes: number) => (bytes / 1e9).toFixed(bytes >= 1e10 ? 0 : 2);
+  const profitable = data.express.marginMinor >= 0;
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 p-5">
+        <div className="flex items-center gap-2">
+          <HardDrive className="size-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold">Backup storage</h2>
+          <span className="text-xs text-muted-foreground">
+            offsite (R2) vs node-local · estimated monthly
+          </span>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-4">
+          <EconTile
+            label="Offsite storage"
+            value={`${gb(data.offsite.bytes)} GB`}
+            sub={`${data.offsite.backups} backup(s) in the bucket`}
+          />
+          <EconTile
+            label="Est. R2 cost"
+            value={fmtMoney(data.offsite.estMonthlyCostMinor, "USD")}
+            sub="$0.015/GB-mo · egress free"
+          />
+          <EconTile
+            label="Add-on revenue"
+            value={fmtMoney(data.express.monthlyRevenueMinor, "USD")}
+            sub={`${data.express.payingSubscriptions} paying · ${data.express.serversWithExpress} server(s) on R2`}
+          />
+          <EconTile
+            label="Add-on margin"
+            value={fmtMoney(data.express.marginMinor, "USD")}
+            tone={profitable ? "good" : "bad"}
+            sub={profitable ? "In profit" : "Storage exceeds revenue"}
+          />
+        </div>
+
+        {data.topOffsite.length > 0 && (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Top offsite consumers</TableHead>
+                  <TableHead>Node</TableHead>
+                  <TableHead className="text-right">Backups</TableHead>
+                  <TableHead className="text-right">Stored</TableHead>
+                  <TableHead className="text-right">Est. cost/mo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.topOffsite.map((t) => (
+                  <TableRow key={t.serverId}>
+                    <TableCell>
+                      <span className="font-medium">{t.name}</span>{" "}
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {t.shortId}
+                      </span>
+                      {!t.express && (
+                        <Badge variant="warning" className="ml-2 text-[10px]">
+                          not paying
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{t.nodeName}</TableCell>
+                    <TableCell className="text-right tabular-nums">{t.backups}</TableCell>
+                    <TableCell className="text-right tabular-nums">{gb(t.bytes)} GB</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {fmtMoney(Math.round((t.bytes / 1e9) * 1.5), "USD")}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+
+        {data.local.perNode.length > 0 && (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Local backups on node disk</TableHead>
+                  <TableHead className="text-right">Backups</TableHead>
+                  <TableHead className="text-right">Disk used</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.local.perNode.map((n) => (
+                  <TableRow key={n.nodeId}>
+                    <TableCell className="font-medium">{n.nodeName}</TableCell>
+                    <TableCell className="text-right tabular-nums">{n.backups}</TableCell>
+                    <TableCell className="text-right tabular-nums">{gb(n.bytes)} GB</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
  * Portfolio economics: total cost vs. estimated revenue + a per-node margin
  * table. Revenue is derived from the active subscriptions of servers on each
  * node, so it's an estimate (comps/free servers carry no subscription).
@@ -1084,6 +1205,7 @@ export default function AdminNodesPage() {
       />
 
       <NodeEconomicsPanel />
+      <BackupStoragePanel />
 
       {isLoading ? (
         <ListSkeleton rows={4} />

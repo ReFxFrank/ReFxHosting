@@ -1224,6 +1224,32 @@ export const api = {
       http.get<NodeCapacity>(`/nodes/${id}/capacity`),
     /** Portfolio margin view: per-node cost vs. estimated revenue. */
     nodeEconomics: () => http.get<NodeEconomics>("/admin/nodes/economics"),
+    /** Fleet backup-storage stats (offsite usage/cost vs add-on revenue). */
+    backupStats: () =>
+      http.get<{
+        offsite: { bytes: number; backups: number; estMonthlyCostMinor: number };
+        local: {
+          bytes: number;
+          backups: number;
+          perNode: { nodeId: string; nodeName: string; backups: number; bytes: number }[];
+        };
+        express: {
+          payingSubscriptions: number;
+          serversWithExpress: number;
+          monthlyFeeMinor: number;
+          monthlyRevenueMinor: number;
+          marginMinor: number;
+        };
+        topOffsite: {
+          serverId: string;
+          shortId: string;
+          name: string;
+          nodeName: string;
+          express: boolean;
+          backups: number;
+          bytes: number;
+        }[];
+      }>("/admin/backups/stats"),
 
     // Database hosts (shared MySQL/MariaDB for per-server databases).
     databaseHosts: () => getList<DatabaseHost>("/admin/database-hosts"),

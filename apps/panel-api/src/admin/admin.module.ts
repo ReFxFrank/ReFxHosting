@@ -7,6 +7,7 @@ import { TemplatesModule } from "../templates/templates.module";
 import { UsersModule } from "../users/users.module";
 import { BillingModule } from "../billing/billing.module";
 import { ServersModule } from "../servers/servers.module";
+import { BackupsModule } from "../backups/backups.module";
 import { DatabasesModule } from "../databases/databases.module";
 
 /**
@@ -21,6 +22,7 @@ import { DatabasesModule } from "../databases/databases.module";
     UsersModule,
     BillingModule,
     ServersModule,
+    BackupsModule,
     DatabasesModule,
   ],
   controllers: [AdminController],

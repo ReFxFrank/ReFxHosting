@@ -22,6 +22,7 @@ describe('AgentCallbacksController server-state push', () => {
       notifications as any,
       push as any,
       {} as any,
+      {} as any,
     );
     return { prisma, push, ctrl };
   }

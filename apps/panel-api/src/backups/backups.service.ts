@@ -20,6 +20,7 @@ import { Paginated, PaginationDto, paginate } from '../common/dto/pagination.dto
 import { BackupJob, JOB, QUEUE } from '../queues/queue.constants';
 import { CreateBackupDto } from './dto/backups.dto';
 import { essentialExcludes, mergeExcludes } from './backup-profiles.util';
+import { SettingsService } from '../platform/settings.service';
 
 /** Max non-failed backups a single server may hold (disk + job-flood guard). */
 const MAX_BACKUPS_PER_SERVER = 25;
@@ -40,6 +41,7 @@ export class BackupsService {
     private readonly prisma: PrismaService,
     private readonly agent: NodeAgentClient,
     private readonly config: ConfigService,
+    private readonly settings: SettingsService,
     @InjectQueue(QUEUE.BACKUPS) private readonly backupQueue: Queue,
   ) {}
 
@@ -344,6 +346,125 @@ export class BackupsService {
       ...relayed,
       filename: `${base}-${backupId.slice(0, 8)}.tar.gz`,
       sizeBytes: backup.sizeBytes,
+    };
+  }
+
+  /**
+   * Fleet-wide backup storage statistics for the admin dashboard: how much
+   * offsite (R2/S3) storage the fleet uses and what it costs vs what the
+   * Express add-on earns, plus where local backups weigh on node disks.
+   * Computed entirely from our own Backup rows — provider-agnostic and free
+   * (no object-storage API calls).
+   */
+  async adminStats() {
+    // Cloudflare R2 storage rate: $0.015/GB-month = 1.5 minor units. Egress is
+    // free on R2, so storage-at-rest IS the cost estimate (ops are pennies).
+    const OFFSITE_COST_MINOR_PER_GB_MONTH = 1.5;
+
+    const [offsite, local, topRaw, localRows, expressSubs, expressServers, cfg] =
+      await Promise.all([
+        this.prisma.backup.aggregate({
+          where: { storage: 'S3', state: 'COMPLETED' },
+          _sum: { sizeBytes: true },
+          _count: { _all: true },
+        }),
+        this.prisma.backup.aggregate({
+          where: { storage: 'LOCAL', state: 'COMPLETED' },
+          _sum: { sizeBytes: true },
+          _count: { _all: true },
+        }),
+        this.prisma.backup.groupBy({
+          by: ['serverId'],
+          where: { storage: 'S3', state: 'COMPLETED' },
+          _sum: { sizeBytes: true },
+          _count: { _all: true },
+          orderBy: { _sum: { sizeBytes: 'desc' } },
+          take: 8,
+        }),
+        this.prisma.backup.findMany({
+          where: { storage: 'LOCAL', state: 'COMPLETED' },
+          select: {
+            sizeBytes: true,
+            server: {
+              select: { nodeId: true, node: { select: { name: true } } },
+            },
+          },
+        }),
+        this.prisma.subscription.count({
+          where: { expressBackups: true, state: { in: ['ACTIVE', 'TRIALING'] } },
+        }),
+        this.prisma.server.count({
+          where: { expressBackups: true, deletedAt: null },
+        }),
+        this.settings.expressBackupsConfig(),
+      ]);
+
+    const offsiteBytes = Number(offsite._sum.sizeBytes ?? 0n);
+    const localBytes = Number(local._sum.sizeBytes ?? 0n);
+    const estMonthlyCostMinor = Math.round(
+      (offsiteBytes / 1e9) * OFFSITE_COST_MINOR_PER_GB_MONTH,
+    );
+    const monthlyRevenueMinor = expressSubs * cfg.monthlyMinor;
+
+    // Top offsite consumers, labeled.
+    const servers = await this.prisma.server.findMany({
+      where: { id: { in: topRaw.map((t) => t.serverId) } },
+      select: {
+        id: true,
+        shortId: true,
+        name: true,
+        expressBackups: true,
+        node: { select: { name: true } },
+      },
+    });
+    const byId = new Map(servers.map((sv) => [sv.id, sv]));
+    const topOffsite = topRaw.map((t) => ({
+      serverId: t.serverId,
+      shortId: byId.get(t.serverId)?.shortId ?? '?',
+      name: byId.get(t.serverId)?.name ?? 'deleted server',
+      nodeName: byId.get(t.serverId)?.node?.name ?? '—',
+      express: byId.get(t.serverId)?.expressBackups ?? false,
+      backups: t._count._all,
+      bytes: Number(t._sum.sizeBytes ?? 0n),
+    }));
+
+    // Local backup weight per node (these live on the node's own disk).
+    const perNode = new Map<
+      string,
+      { nodeId: string; nodeName: string; backups: number; bytes: number }
+    >();
+    for (const row of localRows) {
+      const nodeId = row.server.nodeId;
+      const entry = perNode.get(nodeId) ?? {
+        nodeId,
+        nodeName: row.server.node?.name ?? nodeId,
+        backups: 0,
+        bytes: 0,
+      };
+      entry.backups += 1;
+      entry.bytes += Number(row.sizeBytes);
+      perNode.set(nodeId, entry);
+    }
+
+    return {
+      offsite: {
+        bytes: offsiteBytes,
+        backups: offsite._count._all,
+        estMonthlyCostMinor,
+      },
+      local: {
+        bytes: localBytes,
+        backups: local._count._all,
+        perNode: [...perNode.values()].sort((a, b) => b.bytes - a.bytes),
+      },
+      express: {
+        payingSubscriptions: expressSubs,
+        serversWithExpress: expressServers,
+        monthlyFeeMinor: cfg.monthlyMinor,
+        monthlyRevenueMinor,
+        marginMinor: monthlyRevenueMinor - estMonthlyCostMinor,
+      },
+      topOffsite,
     };
   }
 }

@@ -50,8 +50,13 @@ describe('BackupsService lifecycle', () => {
       }),
     };
     const config = { get: jest.fn().mockReturnValue('0'.repeat(64)) } as any;
+    const settings = {
+      expressBackupsConfig: jest
+        .fn()
+        .mockResolvedValue({ enabled: true, monthlyMinor: 200 }),
+    } as any;
     const queue = { add: jest.fn() } as any;
-    svc = new BackupsService(prisma, agent, config, queue);
+    svc = new BackupsService(prisma, agent, config, settings, queue);
   });
 
   describe('create modes', () => {
@@ -260,6 +265,62 @@ describe('BackupsService lifecycle', () => {
       await expect(svc.downloadUrl('srv-1', 'bak-1')).rejects.toThrow(
         /no stored archive/i,
       );
+    });
+  });
+
+  it('adminStats aggregates offsite usage, cost estimate and add-on margin', async () => {
+    prisma.backup.aggregate = jest
+      .fn()
+      // offsite: 100 GB across 10 backups
+      .mockResolvedValueOnce({
+        _sum: { sizeBytes: BigInt(100e9) },
+        _count: { _all: 10 },
+      })
+      // local: 50 GB across 20 backups
+      .mockResolvedValueOnce({
+        _sum: { sizeBytes: BigInt(50e9) },
+        _count: { _all: 20 },
+      });
+    prisma.backup.groupBy = jest.fn().mockResolvedValue([
+      {
+        serverId: 'srv-1',
+        _sum: { sizeBytes: BigInt(60e9) },
+        _count: { _all: 6 },
+      },
+    ]);
+    prisma.backup.findMany = jest.fn().mockResolvedValue([
+      {
+        sizeBytes: BigInt(50e9),
+        server: { nodeId: 'node-1', node: { name: 'us-east-va' } },
+      },
+    ]);
+    prisma.subscription = { count: jest.fn().mockResolvedValue(3) };
+    prisma.server.count = jest.fn().mockResolvedValue(4);
+    prisma.server.findMany = jest.fn().mockResolvedValue([
+      {
+        id: 'srv-1',
+        shortId: 'abc123',
+        name: 'SMP',
+        expressBackups: true,
+        node: { name: 'us-east-va' },
+      },
+    ]);
+
+    const stats = await svc.adminStats();
+    expect(stats.offsite.bytes).toBe(100e9);
+    // 100 GB × 1.5 minor/GB-month = 150 minor ($1.50).
+    expect(stats.offsite.estMonthlyCostMinor).toBe(150);
+    // 3 paying subs × 200 minor = 600; margin 450.
+    expect(stats.express.monthlyRevenueMinor).toBe(600);
+    expect(stats.express.marginMinor).toBe(450);
+    expect(stats.topOffsite[0]).toMatchObject({
+      shortId: 'abc123',
+      bytes: 60e9,
+      express: true,
+    });
+    expect(stats.local.perNode[0]).toMatchObject({
+      nodeName: 'us-east-va',
+      bytes: 50e9,
     });
   });
 });

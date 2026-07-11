@@ -19,6 +19,7 @@ import { UsersService } from "../users/users.service";
 import { BillingService } from "../billing/billing.service";
 import { TemplatesService } from "../templates/templates.service";
 import { ServersService } from "../servers/servers.service";
+import { BackupsService } from "../backups/backups.service";
 import { TransfersService } from "../servers/transfers.service";
 import { DatabaseHostsService } from "../databases/database-hosts.service";
 import { VanityAddressService } from "../servers/vanity-address.service";
@@ -139,6 +140,7 @@ export class AdminController {
     private readonly billing: BillingService,
     private readonly templates: TemplatesService,
     private readonly servers: ServersService,
+    private readonly backupsService: BackupsService,
     private readonly transfers: TransfersService,
     private readonly alerts: AlertsService,
     private readonly homepageAlerts: HomepageAlertsService,
@@ -249,6 +251,13 @@ export class AdminController {
   @RequirePerm("nodes.read")
   async agentLatestVersion() {
     return { latest: await this.nodes.latestAgentVersion() };
+  }
+
+  /** Fleet backup-storage stats: offsite usage/cost vs add-on revenue. */
+  @Get("backups/stats")
+  @RequirePerm("nodes.read")
+  backupStats() {
+    return this.backupsService.adminStats();
   }
 
   /** Portfolio margin view: per-node cost vs. estimated revenue + break-even.
