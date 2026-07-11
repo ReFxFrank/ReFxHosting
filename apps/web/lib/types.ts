@@ -826,6 +826,8 @@ export interface Backup {
   name: string;
   state: BackupState;
   storage: "LOCAL" | "S3";
+  /** Live progress (0–100) while state is IN_PROGRESS. */
+  progressPct?: number;
   sizeBytes: number;
   checksum: string | null;
   isLocked: boolean;

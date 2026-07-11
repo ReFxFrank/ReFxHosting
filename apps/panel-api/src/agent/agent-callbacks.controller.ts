@@ -310,7 +310,14 @@ export class AgentCallbacksController {
     if (body.sizeBytes != null) data.sizeBytes = BigInt(Math.round(body.sizeBytes));
     if (body.checksum != null) data.checksum = body.checksum;
     if (body.error != null) data.error = body.error;
-    if (state === BackupState.COMPLETED) data.completedAt = new Date();
+    // The agent reports progress as a 0–1 fraction; store 0–100 for the UI.
+    if (typeof body.progress === 'number' && Number.isFinite(body.progress)) {
+      data.progressPct = Math.max(0, Math.min(100, Math.round(body.progress * 100)));
+    }
+    if (state === BackupState.COMPLETED) {
+      data.completedAt = new Date();
+      data.progressPct = 100;
+    }
 
     if (Object.keys(data).length > 0) {
       await this.prisma.backup

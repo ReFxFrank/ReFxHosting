@@ -30,7 +30,15 @@ func (s *Server) handleBackupCreate(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		ctx := contextForServer()
+		// The archiver invokes the callback for EVERY file. Reporting each one
+		// to the panel synchronously turns a 50k-file Minecraft backup into
+		// 50k sequential HTTP calls — the backup spends its life in reportBackup
+		// and looks stuck forever. Throttle to meaningful steps.
+		throttle := newProgressThrottle()
 		res, err := s.deps.Backups.Create(ctx, req.BackupID, srv.DataDir, req.IgnoredFiles, func(pct float64, msg string) {
+			if !throttle.shouldReport(pct) {
+				return
+			}
 			s.log.Debug().Str("server", srv.ID()).Float64("pct", pct).Msg(msg)
 			s.reportBackup(map[string]any{
 				"serverId": srv.ID(),
@@ -119,6 +127,32 @@ func (s *Server) handleBackupDownloadURL(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"url": url})
+}
+
+// progressThrottle rate-limits progress reports: at most one per interval,
+// unless progress jumped a whole step (5%) — so small servers still get a few
+// updates and large ones don't drown the panel. Not safe for concurrent use;
+// each backup goroutine owns one.
+type progressThrottle struct {
+	minInterval time.Duration
+	minStep     float64
+	lastAt      time.Time
+	lastPct     float64
+	started     bool
+}
+
+func newProgressThrottle() *progressThrottle {
+	return &progressThrottle{minInterval: 2 * time.Second, minStep: 0.05}
+}
+
+func (t *progressThrottle) shouldReport(pct float64) bool {
+	if t.started && time.Since(t.lastAt) < t.minInterval && pct-t.lastPct < t.minStep {
+		return false
+	}
+	t.started = true
+	t.lastAt = time.Now()
+	t.lastPct = pct
+	return true
 }
 
 // reportBackup forwards a backup progress/completion payload to the panel. It is

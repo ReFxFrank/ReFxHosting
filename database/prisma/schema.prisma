@@ -818,6 +818,8 @@ model Backup {
   name        String
   state       BackupState   @default(PENDING)
   storage     BackupStorage @default(S3)
+  // Live progress (0–100) reported by the agent while the backup runs.
+  progressPct Int           @default(0)
   // Object key / local path
   location    String?
   sizeBytes   BigInt        @default(0)

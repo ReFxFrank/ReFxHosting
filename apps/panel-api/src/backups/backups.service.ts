@@ -1,5 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Queue } from 'bullmq';
 import { Backup, Node, Server } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -20,11 +26,38 @@ const MAX_BACKUPS_PER_SERVER = 25;
  */
 @Injectable()
 export class BackupsService {
+  private readonly logger = new Logger(BackupsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly agent: NodeAgentClient,
     @InjectQueue(QUEUE.BACKUPS) private readonly backupQueue: Queue,
   ) {}
+
+  /**
+   * Fail out backups that will never finish: the agent reports completion via
+   * callback, so if it dies/restarts mid-archive the row would sit PENDING or
+   * IN_PROGRESS forever (and count against the per-server backup cap). Six
+   * hours is far beyond any realistic archive+upload.
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async failStaleBackups(): Promise<number> {
+    const cutoff = new Date(Date.now() - 6 * 60 * 60 * 1000);
+    const res = await this.prisma.backup.updateMany({
+      where: {
+        state: { in: ['PENDING', 'IN_PROGRESS'] },
+        createdAt: { lt: cutoff },
+      },
+      data: {
+        state: 'FAILED',
+        error: 'Timed out — the node agent never reported completion.',
+      },
+    });
+    if (res.count > 0) {
+      this.logger.warn(`failed ${res.count} stale backup(s) (no completion callback)`);
+    }
+    return res.count;
+  }
 
   private async serverWithNode(
     serverId: string,

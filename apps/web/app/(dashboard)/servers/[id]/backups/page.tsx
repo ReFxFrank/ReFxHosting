@@ -60,12 +60,22 @@ const stateMap: Record<
   FAILED: { label: "Failed", variant: "destructive" },
 };
 
-function BackupStateBadge({ state }: { state: BackupState }) {
+function BackupStateBadge({
+  state,
+  progressPct,
+}: {
+  state: BackupState;
+  progressPct?: number;
+}) {
   const cfg = stateMap[state] ?? { label: state, variant: "muted" as const };
+  const label =
+    state === "IN_PROGRESS" && progressPct != null && progressPct > 0
+      ? `${cfg.label} · ${Math.min(progressPct, 99)}%`
+      : cfg.label;
   return (
     <Badge variant={cfg.variant}>
       {cfg.pulse && <span className="size-1.5 animate-pulse rounded-full bg-current" />}
-      {cfg.label}
+      {label}
     </Badge>
   );
 }
@@ -83,6 +93,14 @@ export default function BackupsPage() {
   const { data: backups, isLoading } = useQuery({
     queryKey: ["backups", id],
     queryFn: () => api.servers.backups.list(id),
+    // Live-update while a backup runs: the agent posts progress to the panel,
+    // so poll until every backup reaches a terminal state.
+    refetchInterval: (query) =>
+      query.state.data?.some(
+        (b) => b.state === "IN_PROGRESS" || b.state === "PENDING",
+      )
+        ? 3000
+        : false,
   });
 
   function invalidate() {
@@ -221,7 +239,10 @@ export default function BackupsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <BackupStateBadge state={backup.state} />
+                      <BackupStateBadge
+                        state={backup.state}
+                        progressPct={backup.progressPct}
+                      />
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground sm:table-cell">
                       {completed ? formatBytes(backup.sizeBytes) : "—"}
