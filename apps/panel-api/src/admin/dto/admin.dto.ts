@@ -481,6 +481,48 @@ export class SetVanityConfigDto {
   reservedWords?: string[];
 }
 
+/** Centrally-managed S3/R2 backup storage, distributed to every node. */
+export class SetBackupStorageDto {
+  @ApiPropertyOptional({
+    description: 'Custom endpoint for R2/B2/MinIO; empty for AWS S3.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  endpoint?: string;
+
+  @ApiPropertyOptional({ description: '"auto" for R2.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  region?: string;
+
+  @ApiPropertyOptional({
+    description: 'Bucket name. Empty string clears the whole config.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  bucket?: string;
+
+  @ApiPropertyOptional({ description: 'Write-only; omit/empty keeps current.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  accessKey?: string;
+
+  @ApiPropertyOptional({ description: 'Write-only; omit/empty keeps current.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  secretKey?: string;
+
+  @ApiPropertyOptional({ description: 'true for MinIO / some R2 setups.' })
+  @IsOptional()
+  @IsBoolean()
+  usePathStyle?: boolean;
+}
+
 /** Owner-editable express-backups (offsite storage add-on) settings. */
 export class SetExpressBackupsConfigDto {
   @ApiPropertyOptional({

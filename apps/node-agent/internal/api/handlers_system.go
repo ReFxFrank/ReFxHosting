@@ -12,6 +12,8 @@ import (
 	goruntime "runtime"
 	"strings"
 	"time"
+
+	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
 )
 
 // updateRepo is the GitHub repo whose latest release the agent self-updates from.
@@ -101,6 +103,29 @@ func (s *Server) handleAgentRestart(w http.ResponseWriter, _ *http.Request) {
 			s.log.Error().Err(err).Msg("agent re-exec failed")
 		}
 	}()
+}
+
+// handleBackupStorage receives centrally-managed S3 backup credentials from
+// the panel, persists them for future boots, and hot-swaps the backup
+// manager's S3 backend — no agent restart, no hand-edited node config. A null
+// s3 payload disables offsite storage on this node.
+func (s *Server) handleBackupStorage(w http.ResponseWriter, r *http.Request) {
+	if s.deps.ApplyBackupStorage == nil {
+		writeError(w, http.StatusNotImplemented, "backup storage management unavailable")
+		return
+	}
+	var req struct {
+		S3 *panel.BackupStorageS3 `json:"s3"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+	if err := s.deps.ApplyBackupStorage(req.S3); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"configured": req.S3 != nil && req.S3.Bucket != ""})
 }
 
 // handleAgentUpdate self-updates the agent to the latest published release: it

@@ -30,8 +30,205 @@ export default function AdminSettingsPage() {
       <EmailSettingsCard />
       <SteamSettingsCard />
       <VanitySettingsCard />
+      <BackupStorageSettingsCard />
       <ExpressBackupsSettingsCard />
     </div>
+  );
+}
+
+/** Centrally-managed S3/R2 storage, saved once and pushed to every node. */
+function BackupStorageSettingsCard() {
+  const queryClient = useQueryClient();
+  const { data: cfg, isLoading } = useQuery({
+    queryKey: ["admin", "backup-storage-config"],
+    queryFn: () => api.admin.backupStorageConfig(),
+  });
+
+  const [endpoint, setEndpoint] = useState<string | null>(null);
+  const [region, setRegion] = useState<string | null>(null);
+  const [bucket, setBucket] = useState<string | null>(null);
+  const [accessKey, setAccessKey] = useState("");
+  const [secretKey, setSecretKey] = useState("");
+  const [pathStyle, setPathStyle] = useState<boolean | null>(null);
+  const [pushResults, setPushResults] = useState<
+    { nodeId: string; name: string; ok: boolean; error?: string }[] | null
+  >(null);
+
+  const endpointV = endpoint ?? cfg?.endpoint ?? "";
+  const regionV = region ?? cfg?.region ?? "auto";
+  const bucketV = bucket ?? cfg?.bucket ?? "";
+  const pathStyleV = pathStyle ?? cfg?.usePathStyle ?? false;
+
+  const save = useMutation({
+    mutationFn: () =>
+      api.admin.setBackupStorageConfig({
+        endpoint: endpointV.trim(),
+        region: regionV.trim() || "auto",
+        bucket: bucketV.trim(),
+        // Write-only: empty means "keep the stored key".
+        accessKey: accessKey.trim() || undefined,
+        secretKey: secretKey.trim() || undefined,
+        usePathStyle: pathStyleV,
+      }),
+    onSuccess: (res) => {
+      const ok = res.push.filter((r) => r.ok).length;
+      toast.success(
+        `Storage saved — pushed to ${ok}/${res.push.length} node(s)`,
+      );
+      setPushResults(res.push);
+      setAccessKey("");
+      setSecretKey("");
+      queryClient.invalidateQueries({
+        queryKey: ["admin", "backup-storage-config"],
+      });
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to save"),
+  });
+
+  const repush = useMutation({
+    mutationFn: () => api.admin.pushBackupStorage(),
+    onSuccess: (res) => {
+      const ok = res.push.filter((r) => r.ok).length;
+      toast.success(`Pushed to ${ok}/${res.push.length} node(s)`);
+      setPushResults(res.push);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Push failed"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Boxes className="size-4 text-primary" /> Backup storage (S3 / R2)
+        </CardTitle>
+        <CardDescription>
+          Enter your object-storage credentials ONCE — the panel pushes them to
+          every node over the signed agent channel (and to new nodes
+          automatically at registration). No node config edits, no restarts.
+          Powers the Express backups add-on. Clearing the bucket disables
+          offsite storage everywhere.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {isLoading || !cfg ? (
+          <ListSkeleton rows={3} />
+        ) : (
+          <>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="bs-endpoint">Endpoint</Label>
+                <Input
+                  id="bs-endpoint"
+                  placeholder="https://<accountid>.r2.cloudflarestorage.com"
+                  value={endpointV}
+                  onChange={(e) => setEndpoint(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  R2/B2/MinIO endpoint; leave empty for AWS S3.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bs-region">Region</Label>
+                <Input
+                  id="bs-region"
+                  placeholder="auto"
+                  value={regionV}
+                  onChange={(e) => setRegion(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bs-bucket">Bucket</Label>
+                <Input
+                  id="bs-bucket"
+                  placeholder="refx-backups"
+                  value={bucketV}
+                  onChange={(e) => setBucket(e.target.value)}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-white/[0.08] p-3">
+                <div>
+                  <Label>Path-style addressing</Label>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Enable for MinIO (and some R2 setups).
+                  </p>
+                </div>
+                <Switch checked={pathStyleV} onCheckedChange={setPathStyle} />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bs-access">
+                  Access key{cfg.accessKeySet ? " (set)" : ""}
+                </Label>
+                <Input
+                  id="bs-access"
+                  type="password"
+                  placeholder={cfg.accessKeySet ? "•••••• (keep current)" : ""}
+                  value={accessKey}
+                  onChange={(e) => setAccessKey(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="bs-secret">
+                  Secret key{cfg.secretKeySet ? " (set)" : ""}
+                </Label>
+                <Input
+                  id="bs-secret"
+                  type="password"
+                  placeholder={cfg.secretKeySet ? "•••••• (keep current)" : ""}
+                  value={secretKey}
+                  onChange={(e) => setSecretKey(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                loading={save.isPending}
+                disabled={
+                  !bucketV.trim() &&
+                  !cfg.configured /* allow clearing when configured */
+                }
+                onClick={() => save.mutate()}
+              >
+                Save & push to all nodes
+              </Button>
+              {cfg.configured && (
+                <Button
+                  variant="outline"
+                  loading={repush.isPending}
+                  onClick={() => repush.mutate()}
+                >
+                  Re-push to nodes
+                </Button>
+              )}
+            </div>
+            {pushResults && (
+              <div className="space-y-1 rounded-lg border border-white/[0.08] p-3 text-sm">
+                {pushResults.map((r) => (
+                  <div key={r.nodeId} className="flex items-center justify-between gap-3">
+                    <span className="font-mono text-xs">{r.name}</span>
+                    {r.ok ? (
+                      <Badge variant="success" className="text-[10px]">
+                        Applied
+                      </Badge>
+                    ) : (
+                      <span
+                        className="max-w-[60%] truncate text-xs text-destructive"
+                        title={r.error}
+                      >
+                        {r.error ?? "failed"} — applies at next agent boot
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

@@ -659,6 +659,21 @@ export class NodeAgentClient {
     });
   }
 
+  /** Push centrally-managed S3 backup credentials to a node (null disables). */
+  pushBackupStorage(
+    node: Node,
+    s3: {
+      endpoint: string;
+      region: string;
+      bucket: string;
+      accessKey: string;
+      secretKey: string;
+      usePathStyle: boolean;
+    } | null,
+  ) {
+    return this.request(node, "POST", `/api/v1/system/backup-storage`, { s3 });
+  }
+
   restoreBackup(
     node: Node,
     serverId: string,

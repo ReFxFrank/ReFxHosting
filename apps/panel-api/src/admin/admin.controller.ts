@@ -109,6 +109,7 @@ import {
   SetSteamConfigDto,
   SetVanityConfigDto,
   SetExpressBackupsConfigDto,
+  SetBackupStorageDto,
   VerifySteamLoginDto,
   SetUserPasswordDto,
   SetUserRoleDto,
@@ -825,6 +826,43 @@ export class AdminController {
   async setVanityConfig(@Body() dto: SetVanityConfigDto) {
     await this.settings.setVanityConfig(dto);
     return this.settings.vanityConfig();
+  }
+
+  // ---- Centrally-managed backup storage (S3/R2) ---------------------------
+
+  @Get("settings/backup-storage")
+  @RequirePerm("settings.manage")
+  backupStorageConfig() {
+    return this.settings.backupStorageConfigMasked();
+  }
+
+  /** Save the S3/R2 credentials and push them to every node in one action. */
+  @Patch("settings/backup-storage")
+  @RequirePerm("settings.manage")
+  @Audit({
+    action: "admin.settings.backupStorage.update",
+    targetType: "PlatformSetting",
+  })
+  async setBackupStorageConfig(@Body() dto: SetBackupStorageDto) {
+    await this.settings.setBackupStorageConfig(dto);
+    const s3 = await this.settings.backupStorageConfig();
+    const push = await this.nodes.broadcastBackupStorage(s3);
+    return {
+      config: await this.settings.backupStorageConfigMasked(),
+      push,
+    };
+  }
+
+  /** Re-push the saved credentials (e.g. after bringing a node online). */
+  @Post("settings/backup-storage/push")
+  @RequirePerm("settings.manage")
+  @Audit({
+    action: "admin.settings.backupStorage.push",
+    targetType: "PlatformSetting",
+  })
+  async pushBackupStorage() {
+    const s3 = await this.settings.backupStorageConfig();
+    return { push: await this.nodes.broadcastBackupStorage(s3) };
   }
 
   // ---- Express backups (offsite storage add-on) ---------------------------

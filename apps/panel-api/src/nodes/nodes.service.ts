@@ -586,6 +586,47 @@ export class NodesService {
   }
 
   /**
+   * Push centrally-managed S3 backup credentials to every live node,
+   * best-effort. Nodes that are offline pick the config up at their next
+   * boot (the agent fetches /agent/backup-storage on start). Returns per-node
+   * results so the admin UI can show exactly who got it.
+   */
+  async broadcastBackupStorage(
+    s3: {
+      endpoint: string;
+      region: string;
+      bucket: string;
+      accessKey: string;
+      secretKey: string;
+      usePathStyle: boolean;
+    } | null,
+  ): Promise<{ nodeId: string; name: string; ok: boolean; error?: string }[]> {
+    const nodes = await this.prisma.node.findMany({
+      where: { deletedAt: null },
+    });
+    const results: {
+      nodeId: string;
+      name: string;
+      ok: boolean;
+      error?: string;
+    }[] = [];
+    for (const node of nodes) {
+      try {
+        await this.agent.pushBackupStorage(node, s3);
+        results.push({ nodeId: node.id, name: node.name, ok: true });
+      } catch (e) {
+        results.push({
+          nodeId: node.id,
+          name: node.name,
+          ok: false,
+          error: (e as Error).message,
+        });
+      }
+    }
+    return results;
+  }
+
+  /**
    * Mark nodes OFFLINE when their agent has gone silent. Heartbeats flip a
    * node ONLINE but nothing used to flip it back, so a dead node kept its
    * ONLINE badge forever — and worse, stayed eligible for new-server

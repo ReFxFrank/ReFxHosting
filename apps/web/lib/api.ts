@@ -1374,6 +1374,32 @@ export const api = {
       http.post<{ delivered: boolean }>("/admin/settings/email/test", { to }),
 
     // Custom server addresses (settings.manage)
+    backupStorageConfig: () =>
+      http.get<{
+        configured: boolean;
+        endpoint: string;
+        region: string;
+        bucket: string;
+        accessKeySet: boolean;
+        secretKeySet: boolean;
+        usePathStyle: boolean;
+      }>("/admin/settings/backup-storage"),
+    setBackupStorageConfig: (input: {
+      endpoint?: string;
+      region?: string;
+      bucket?: string;
+      accessKey?: string;
+      secretKey?: string;
+      usePathStyle?: boolean;
+    }) =>
+      http.patch<{
+        config: { configured: boolean };
+        push: { nodeId: string; name: string; ok: boolean; error?: string }[];
+      }>("/admin/settings/backup-storage", input),
+    pushBackupStorage: () =>
+      http.post<{
+        push: { nodeId: string; name: string; ok: boolean; error?: string }[];
+      }>("/admin/settings/backup-storage/push"),
     expressBackupsConfig: () =>
       http.get<{ enabled: boolean; monthlyMinor: number }>(
         "/admin/settings/express-backups",

@@ -30,6 +30,12 @@ const KEY = {
   vanityReservedWords: 'features.vanityAddress.reservedWords',
   expressBackupsEnabled: 'features.expressBackups.enabled',
   expressBackupsMonthlyMinor: 'billing.expressBackupsMonthlyMinor',
+  backupS3Endpoint: 'backup.s3.endpoint',
+  backupS3Region: 'backup.s3.region',
+  backupS3Bucket: 'backup.s3.bucket',
+  backupS3AccessKey: 'backup.s3.accessKey',
+  backupS3SecretKey: 'backup.s3.secretKey',
+  backupS3PathStyle: 'backup.s3.usePathStyle',
 } as const;
 
 export interface GatewayConfigInput {
@@ -391,5 +397,92 @@ export class SettingsService {
         String(Math.max(0, Math.round(dto.monthlyMinor))),
         false,
       );
+  }
+
+  /**
+   * Centrally-managed S3/R2 backup storage the panel distributes to every
+   * node (push on save + agent boot fetch), so operators never hand-edit
+   * node configs. Credentials are stored encrypted; null = not configured.
+   */
+  async backupStorageConfig(): Promise<{
+    endpoint: string;
+    region: string;
+    bucket: string;
+    accessKey: string;
+    secretKey: string;
+    usePathStyle: boolean;
+  } | null> {
+    const bucket = (await this.get(KEY.backupS3Bucket)) ?? '';
+    if (!bucket) return null;
+    return {
+      endpoint: (await this.get(KEY.backupS3Endpoint)) ?? '',
+      region: (await this.get(KEY.backupS3Region)) || 'auto',
+      bucket,
+      accessKey: (await this.get(KEY.backupS3AccessKey)) ?? '',
+      secretKey: (await this.get(KEY.backupS3SecretKey)) ?? '',
+      usePathStyle: (await this.get(KEY.backupS3PathStyle)) === 'true',
+    };
+  }
+
+  /** Admin-safe view: never returns the secret key, only whether it's set. */
+  async backupStorageConfigMasked(): Promise<{
+    configured: boolean;
+    endpoint: string;
+    region: string;
+    bucket: string;
+    accessKeySet: boolean;
+    secretKeySet: boolean;
+    usePathStyle: boolean;
+  }> {
+    const bucket = (await this.get(KEY.backupS3Bucket)) ?? '';
+    return {
+      configured: !!bucket,
+      endpoint: (await this.get(KEY.backupS3Endpoint)) ?? '',
+      region: (await this.get(KEY.backupS3Region)) || 'auto',
+      bucket,
+      accessKeySet: !!(await this.get(KEY.backupS3AccessKey)),
+      secretKeySet: !!(await this.get(KEY.backupS3SecretKey)),
+      usePathStyle: (await this.get(KEY.backupS3PathStyle)) === 'true',
+    };
+  }
+
+  /**
+   * Apply owner edits. Omitted fields keep their value; an empty-string
+   * bucket clears the whole config (S3 disabled everywhere on next push).
+   */
+  async setBackupStorageConfig(dto: {
+    endpoint?: string;
+    region?: string;
+    bucket?: string;
+    accessKey?: string;
+    secretKey?: string;
+    usePathStyle?: boolean;
+  }): Promise<void> {
+    if (dto.bucket !== undefined && dto.bucket.trim() === '') {
+      // Clearing the bucket disables the feature; drop credentials too.
+      for (const k of [
+        KEY.backupS3Endpoint,
+        KEY.backupS3Region,
+        KEY.backupS3Bucket,
+        KEY.backupS3AccessKey,
+        KEY.backupS3SecretKey,
+        KEY.backupS3PathStyle,
+      ]) {
+        await this.set(k, '', false);
+      }
+      return;
+    }
+    if (dto.endpoint !== undefined)
+      await this.set(KEY.backupS3Endpoint, dto.endpoint.trim(), false);
+    if (dto.region !== undefined)
+      await this.set(KEY.backupS3Region, dto.region.trim(), false);
+    if (dto.bucket !== undefined)
+      await this.set(KEY.backupS3Bucket, dto.bucket.trim(), false);
+    if (dto.accessKey !== undefined && dto.accessKey !== '')
+      await this.set(KEY.backupS3AccessKey, dto.accessKey.trim(), true);
+    if (dto.secretKey !== undefined && dto.secretKey !== '')
+      await this.set(KEY.backupS3SecretKey, dto.secretKey.trim(), true);
+    if (dto.usePathStyle !== undefined)
+      await this.set(KEY.backupS3PathStyle, dto.usePathStyle ? 'true' : 'false', false);
   }
 }

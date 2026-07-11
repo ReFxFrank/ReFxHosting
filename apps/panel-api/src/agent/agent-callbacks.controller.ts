@@ -19,6 +19,7 @@ import { Public } from '../common/decorators/public.decorator';
 import { RawResponse } from '../common/decorators/raw-response.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { NodesService } from '../nodes/nodes.service';
+import { SettingsService } from '../platform/settings.service';
 import { NotificationsService } from '../platform/notifications.service';
 import { PushService } from '../push/push.service';
 import { ConsoleGateway } from './console.gateway';
@@ -146,6 +147,7 @@ export class AgentCallbacksController {
     private readonly notifications: NotificationsService,
     private readonly push: PushService,
     private readonly console: ConsoleGateway,
+    private readonly settings: SettingsService,
   ) {}
 
   // ---- registration (token-only, unsigned) --------------------------------
@@ -170,6 +172,18 @@ export class AgentCallbacksController {
     // survive restarts (it only receives `servers` in the register response on
     // first boot). Same ServerInstallSpec shape as register.
     return this.nodes.buildServerInstallSpecs(req.refxNodeId!);
+  }
+
+  // ---- signed: centrally-managed backup storage ---------------------------
+
+  @Public()
+  @UseGuards(AgentSignatureGuard)
+  @Get('backup-storage')
+  async backupStorage() {
+    // The agent calls this at boot (and receives pushes on admin save) so
+    // every node converges on the panel's S3 credentials without hand-edited
+    // configs. Same signed channel as the spec resync.
+    return { s3: await this.settings.backupStorageConfig() };
   }
 
   // ---- signed telemetry ---------------------------------------------------

@@ -48,6 +48,9 @@ type Deps struct {
 	SigningKey string
 	// MetricsHandler is the Prometheus handler mounted at /metrics.
 	MetricsHandler http.Handler
+	// ApplyBackupStorage persists + hot-applies panel-distributed S3 backup
+	// credentials (nil payload disables S3). Wired in main; may be nil in tests.
+	ApplyBackupStorage func(cfg *panel.BackupStorageS3) error
 	// SFTPAuth is the live SFTP credential store; handlers update it on install
 	// and password rotation so creds work without an agent restart. May be nil.
 	SFTPAuth *sftp.MemoryAuthenticator
@@ -115,6 +118,7 @@ func (s *Server) routes() chi.Router {
 
 		// Node-level control (not server-scoped).
 		r.Post("/api/v1/system/restart", s.handleAgentRestart)
+		r.Post("/api/v1/system/backup-storage", s.handleBackupStorage)
 		r.Post("/api/v1/system/update", s.handleAgentUpdate)
 		r.Post("/api/v1/system/steam-cache/clear", s.handleSteamCacheClear)
 		r.Post("/api/v1/system/steam-login", s.handleSteamLogin)

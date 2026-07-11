@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog"
@@ -47,7 +48,10 @@ type Result struct {
 // always; s3 when the node is configured for it) so the panel can route each
 // backup per server — express plans go offsite, everyone else stays on disk.
 type Manager struct {
-	log     zerolog.Logger
+	log zerolog.Logger
+	// mu guards the storage fields: the panel can hot-swap the S3 backend at
+	// runtime (centrally distributed credentials) while backups are running.
+	mu      sync.RWMutex
 	local   Storage
 	s3      Storage // nil when the node has no S3 config
 	defKind string  // "local" | "s3" — used when a request doesn't specify
@@ -69,9 +73,20 @@ func New(log zerolog.Logger, local, s3 Storage, defKind string, tmpDir string) *
 	}
 }
 
+// SetS3 swaps the S3 backend at runtime (nil disables it). Used when the
+// panel pushes centrally-managed storage credentials — no restart needed.
+func (m *Manager) SetS3(s3 Storage) {
+	m.mu.Lock()
+	m.s3 = s3
+	m.mu.Unlock()
+	m.log.Info().Bool("configured", s3 != nil).Msg("backup S3 storage updated")
+}
+
 // storageFor resolves a requested kind ("local"/"s3"/"") to a backend, falling
 // back to local when S3 was asked for but isn't configured on this node.
 func (m *Manager) storageFor(kind string) (Storage, string) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	switch strings.ToLower(kind) {
 	case "s3":
 		if m.s3 != nil {
@@ -92,6 +107,8 @@ func (m *Manager) storageFor(kind string) (Storage, string) {
 // locations are absolute filesystem paths; S3 locations are object keys. This
 // keeps old rows working regardless of what the panel thinks their storage is.
 func (m *Manager) storageForLocation(location string) Storage {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	if filepath.IsAbs(location) || strings.HasPrefix(location, "/") {
 		return m.local
 	}

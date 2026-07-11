@@ -190,6 +190,30 @@ func (c *Client) FetchServers(ctx context.Context) ([]ServerInstallSpec, error) 
 	return resp, nil
 }
 
+// BackupStorageS3 is the centrally-managed S3 backup-storage config the panel
+// distributes to nodes (push + boot fetch). A nil/empty bucket disables S3.
+type BackupStorageS3 struct {
+	Endpoint     string `json:"endpoint"`
+	Region       string `json:"region"`
+	Bucket       string `json:"bucket"`
+	AccessKey    string `json:"accessKey"`
+	SecretKey    string `json:"secretKey"`
+	UsePathStyle bool   `json:"usePathStyle"`
+}
+
+// FetchBackupStorage pulls the panel's centrally-managed backup S3 config (nil
+// when none is configured). Called at boot so nodes converge even if they were
+// offline when the admin saved/pushed the settings.
+func (c *Client) FetchBackupStorage(ctx context.Context) (*BackupStorageS3, error) {
+	var resp struct {
+		S3 *BackupStorageS3 `json:"s3"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/api/v1/agent/backup-storage", nil, &resp, true); err != nil {
+		return nil, err
+	}
+	return resp.S3, nil
+}
+
 // ServerStat is a single per-server stat sample pushed to the panel.
 type ServerStat struct {
 	ServerID   string  `json:"serverId"`

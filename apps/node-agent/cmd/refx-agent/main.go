@@ -11,6 +11,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/signal"
@@ -164,9 +165,25 @@ func run(ctx context.Context, cfgPath string) error {
 	hub := newHub(log, mgr, cfg.SigningKey)
 
 	// --- backup manager ----------------------------------------------------
+	// Panel-distributed S3 credentials (pushed or fetched earlier) persist in
+	// the data dir and take precedence over config.yaml's backup.s3 block.
+	if pushed := loadPushedBackupStorage(log, cfg.DataDir); pushed != nil {
+		applyBackupStorageToConfig(cfg, pushed)
+	}
 	backups, err := buildBackups(ctx, log, cfg)
 	if err != nil {
 		return err
+	}
+	// Converge on the panel's centrally-managed storage config at every boot
+	// (covers nodes that were offline during an admin push, and fresh installs).
+	if cfg.IsRegistered() {
+		if s3cfg, ferr := pc.FetchBackupStorage(ctx); ferr == nil {
+			if aerr := applyBackupStorage(log, cfg, backups, s3cfg); aerr != nil {
+				log.Warn().Err(aerr).Msg("applying panel backup storage failed")
+			}
+		} else {
+			log.Debug().Err(ferr).Msg("no centrally-managed backup storage (or panel unreachable)")
+		}
 	}
 
 	// --- SFTP server -------------------------------------------------------
@@ -203,6 +220,9 @@ func run(ctx context.Context, cfgPath string) error {
 		MetricsHandler: promhttp.Handler(),
 		SFTPAuth:       sftpAuth,
 		SteamHomeDir:   filepath.Join(cfg.DataDir, "steam-home"),
+		ApplyBackupStorage: func(s3cfg *panel.BackupStorageS3) error {
+			return applyBackupStorage(log, cfg, backups, s3cfg)
+		},
 	})
 
 	// --- stats collector ---------------------------------------------------
@@ -287,6 +307,66 @@ func buildManager(log zerolog.Logger, cfg *config.Config, caps osabstraction.Cap
 		opts.Docker = dockerRT
 	}
 	return runtime.NewManager(opts), dockerRT
+}
+
+// backupStorageFile is where panel-distributed S3 credentials persist across
+// agent restarts (0600, refx-owned). Presence means "panel manages storage".
+func backupStorageFile(dataDir string) string {
+	return filepath.Join(dataDir, "backup-storage.json")
+}
+
+// loadPushedBackupStorage reads persisted panel-distributed S3 config; nil when
+// absent/unreadable (falls back to config.yaml).
+func loadPushedBackupStorage(log zerolog.Logger, dataDir string) *panel.BackupStorageS3 {
+	b, err := os.ReadFile(backupStorageFile(dataDir))
+	if err != nil {
+		return nil
+	}
+	var cfg panel.BackupStorageS3
+	if err := json.Unmarshal(b, &cfg); err != nil || cfg.Bucket == "" {
+		log.Warn().Err(err).Msg("ignoring invalid persisted backup-storage.json")
+		return nil
+	}
+	return &cfg
+}
+
+// applyBackupStorageToConfig merges pushed S3 credentials over the yaml config.
+func applyBackupStorageToConfig(cfg *config.Config, s3 *panel.BackupStorageS3) {
+	cfg.Backup.S3.Endpoint = s3.Endpoint
+	cfg.Backup.S3.Region = s3.Region
+	cfg.Backup.S3.Bucket = s3.Bucket
+	cfg.Backup.S3.AccessKey = s3.AccessKey
+	cfg.Backup.S3.SecretKey = s3.SecretKey
+	cfg.Backup.S3.UsePathStyle = s3.UsePathStyle
+}
+
+// applyBackupStorage persists panel-distributed S3 credentials and hot-swaps
+// the backup manager's S3 backend. A nil/empty payload disables S3 (and
+// removes the persisted file) — express backups then degrade to local disk.
+func applyBackupStorage(log zerolog.Logger, cfg *config.Config, backups *backup.Manager, s3cfg *panel.BackupStorageS3) error {
+	file := backupStorageFile(cfg.DataDir)
+	if s3cfg == nil || s3cfg.Bucket == "" {
+		_ = os.Remove(file)
+		backups.SetS3(nil)
+		return nil
+	}
+	store, err := backup.NewS3Storage(context.Background(), backup.S3Config{
+		Endpoint:     s3cfg.Endpoint,
+		Region:       s3cfg.Region,
+		Bucket:       s3cfg.Bucket,
+		AccessKey:    s3cfg.AccessKey,
+		SecretKey:    s3cfg.SecretKey,
+		UsePathStyle: s3cfg.UsePathStyle,
+	})
+	if err != nil {
+		return err
+	}
+	b, _ := json.Marshal(s3cfg)
+	if err := os.WriteFile(file, b, 0o600); err != nil {
+		log.Warn().Err(err).Msg("could not persist backup storage config (applies until restart)")
+	}
+	backups.SetS3(store)
+	return nil
 }
 
 // buildBackups constructs the backup manager from config (local or S3).
