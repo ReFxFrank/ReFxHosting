@@ -69,6 +69,14 @@ export default async function KnowledgeBaseArticlePage({
   const article = await fetchArticle(slug);
   if (!article) notFound();
 
+  const breadcrumbs = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Knowledge base", item: `${SITE_URL}/knowledge-base` },
+      { "@type": "ListItem", position: 2, name: article.title, item: `${SITE_URL}/knowledge-base/${article.slug}` },
+    ],
+  };
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "TechArticle",
@@ -88,7 +96,7 @@ export default async function KnowledgeBaseArticlePage({
     <article className="mx-auto w-full max-w-3xl px-4 py-14 sm:px-6">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify([jsonLd, breadcrumbs]) }}
       />
       <Link
         href="/knowledge-base"
