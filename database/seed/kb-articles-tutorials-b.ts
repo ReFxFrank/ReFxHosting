@@ -91,7 +91,7 @@ Steam → Palworld → **Join Multiplayer Game** → enter \`address:8211\` in t
 ## Troubleshooting
 
 - **Settings don't apply** — you edited \`DefaultPalWorldSettings.ini\`, edited the live file while the server was running, or broke the single-line rule. Stop, fix, start.
-- **Memory climbs over time** — Palworld's server is known to bloat with uptime. Schedule a nightly restart (ReFx's Schedules tab does this in two clicks) and the problem disappears; crash auto-restart catches the rare hard fall in the meantime.
+- **Memory climbs over time** — Palworld's server is known to bloat the longer it runs. Schedule a nightly restart (ReFx's Schedules tab does this in two clicks) and the problem disappears; crash auto-restart catches the rare hard fall in the meantime.
 - **Progress lost after a crash** — the world saves on interval and on graceful shutdown. Get in the habit of \`/Save\` before risky moments, and always stop the server from the panel rather than killing it.
 - **Friends can't see the server in the browser** — skip the browser; direct connect by \`address:8211\` always works.
 
@@ -99,7 +99,7 @@ Steam → Palworld → **Join Multiplayer Game** → enter \`address:8211\` in t
 
 ### How much RAM does a Palworld server need?
 
-Start at 8 GB for a handful of players. Memory grows with explored map, base count, and uptime — 16 GB with a nightly restart is the comfortable setup for a 10–30 player world. ReFx RAM is dedicated, so what you buy is what the server actually gets.
+Start at 8 GB for a handful of players. Memory grows with explored map, base count, and hours since the last restart — 16 GB with a nightly restart is the comfortable setup for a 10–30 player world. ReFx RAM is dedicated, so what you buy is what the server actually gets.
 
 ### Can Xbox or Game Pass friends join?
 
@@ -420,7 +420,7 @@ Yes, if the server runs with the \`-crossplay\` flag — with one hard limit: Ep
 
 ### How much RAM does ARK need?
 
-8 GB runs a vanilla island map for a small tribe. Every mod, higher player counts, and long uptimes push that up — 10–12 GB with dedicated allocation (which is what ReFx provides) keeps a modded map stable. Project Zomboid players will find the [same Workshop workflow here](/knowledge-base/host-project-zomboid-server).
+8 GB runs a vanilla island map for a small tribe. Every mod, higher player counts, and long-running sessions push that up — 10–12 GB with dedicated allocation (which is what ReFx provides) keeps a modded map stable. Project Zomboid players will find the [same Workshop workflow here](/knowledge-base/host-project-zomboid-server).
 
 Tame something huge: [order an ARK server](/games/ark-survival-evolved) with one-click Workshop mods and instant setup.`,
   },
@@ -990,7 +990,7 @@ Where Discord wins — and concede it freely:
 - Text channels, history, search, screenshare, streaming, and integrations are things TeamSpeak barely attempts.
 - Discoverability and onboarding: sending someone a Discord invite link beats teaching them to add a bookmark.
 
-The honest recommendation: a casual friend group should stay on Discord. Get a TeamSpeak server when latency, permissions, uptime you control, or data ownership stop being abstractions for your group — most serious communities end up running both (TS for voice, Discord for text).
+The honest recommendation: a casual friend group should stay on Discord. Get a TeamSpeak server when latency, permissions, infrastructure you control, or data ownership stop being abstractions for your group — most serious communities end up running both (TS for voice, Discord for text).
 
 ## Set it up on ReFx
 
