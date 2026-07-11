@@ -198,6 +198,8 @@ ExecStart=/usr/local/bin/refx-agent --config /etc/refx/config.yaml
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=1048576
+# Never kill the agent's children (native game servers) on restart/update.
+KillMode=process
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 

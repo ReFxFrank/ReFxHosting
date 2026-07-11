@@ -12,6 +12,12 @@ ExecStart=/usr/local/bin/refx-agent --config /etc/refx/config.yaml
 Restart=on-failure
 RestartSec=5
 LimitNOFILE=1048576
+# Only signal the agent itself on stop/restart — NEVER the whole cgroup.
+# Native (non-Docker) game servers are children of the agent; the systemd
+# default (control-group) would SIGTERM every one of them on `systemctl
+# restart refx-agent`, i.e. on every agent update. Docker servers live in
+# dockerd's cgroup and are unaffected either way.
+KillMode=process
 
 # Bind to privileged ports if ever needed, but drop everything else.
 AmbientCapabilities=CAP_NET_BIND_SERVICE
