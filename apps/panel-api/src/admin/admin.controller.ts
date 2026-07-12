@@ -675,6 +675,14 @@ export class AdminController {
     return this.billing.adminBillingSummary();
   }
 
+  /** Acquisition channels: signups, payers and revenue by first-touch source. */
+  @Get("growth")
+  @RequirePerm("billing.read")
+  growth(@Query("days") days?: string) {
+    const parsed = Number(days);
+    return this.admin.growthReport(Number.isFinite(parsed) && parsed > 0 ? parsed : 30);
+  }
+
   /** "Orders" = subscriptions (each is a customer's plan purchase). */
   @Get("orders")
   @RequirePerm("billing.read")

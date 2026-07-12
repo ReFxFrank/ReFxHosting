@@ -1390,6 +1390,20 @@ export const api = {
     // Billing / orders / invoices / payments (payments are OWNER-only).
     billingSummary: () =>
       http.get<AdminBillingSummary>("/admin/billing/summary"),
+    /** Acquisition channels: signups, payers, revenue by first-touch source. */
+    growth: (days: number) =>
+      http.get<{
+        days: number;
+        channels: {
+          channel: string;
+          signups: number;
+          payers: number;
+          revenueMinor: number;
+        }[];
+        landings: { landing: string; signups: number }[];
+        totals: { signups: number; payers: number; revenueMinor: number };
+        referral: { signups: number; converted: number; creditIssuedMinor: number };
+      }>("/admin/growth", { query: { days } }),
     orders: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminSubscription>>("/admin/orders", { query }),
     deleteOrder: (id: string) => http.delete<void>(`/admin/orders/${id}`),

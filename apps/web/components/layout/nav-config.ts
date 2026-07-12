@@ -22,6 +22,7 @@ import {
   Gift,
   ShieldCheck,
   Database,
+  TrendingUp,
   type LucideIcon,
 } from "lucide-react";
 
@@ -123,6 +124,12 @@ export const adminNav: NavSection[] = [
         label: "Billing",
         href: "/admin/billing",
         icon: CreditCard,
+        perm: "billing.read",
+      },
+      {
+        label: "Growth",
+        href: "/admin/growth",
+        icon: TrendingUp,
         perm: "billing.read",
       },
       {

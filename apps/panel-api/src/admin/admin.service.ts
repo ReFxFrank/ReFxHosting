@@ -300,4 +300,114 @@ export class AdminService {
       nodes,
     };
   }
+
+  /**
+   * Acquisition report for /admin/growth: signups, first-time payers and
+   * paid revenue grouped by first-touch channel (utm_source captured at
+   * signup, referral links, plain referrer, or direct), plus the landing
+   * pages that actually produce accounts and a referral-program summary.
+   */
+  async growthReport(days: number) {
+    const window = Math.min(Math.max(days, 1), 3650);
+    const since = new Date(Date.now() - window * 86_400_000);
+
+    // First-touch channel per user, derived once and reused by both queries.
+    const channelExpr = Prisma.sql`COALESCE(
+      NULLIF(u."attribution"->>'source', ''),
+      CASE
+        WHEN u."referredById" IS NOT NULL OR NULLIF(u."attribution"->>'ref', '') IS NOT NULL THEN 'referral'
+        WHEN NULLIF(u."attribution"->>'referrer', '') IS NOT NULL THEN 'organic / referring site'
+        ELSE 'direct'
+      END
+    )`;
+
+    const [signups, payers, landings, referral, revenueTotal] =
+      await Promise.all([
+        this.prisma.$queryRaw<{ channel: string; signups: number }[]>`
+          SELECT ${channelExpr} AS channel, COUNT(*)::int AS signups
+          FROM "User" u
+          WHERE u."createdAt" >= ${since} AND u."deletedAt" IS NULL
+          GROUP BY 1
+          ORDER BY 2 DESC`,
+        this.prisma.$queryRaw<
+          { channel: string; payers: number; revenueMinor: number }[]
+        >`
+          SELECT ${channelExpr} AS channel,
+                 COUNT(DISTINCT i."userId")::int AS payers,
+                 COALESCE(SUM(i."amountPaidMinor"), 0)::int AS "revenueMinor"
+          FROM "Invoice" i
+          JOIN "User" u ON u."id" = i."userId"
+          WHERE i."state" = 'PAID' AND i."paidAt" >= ${since}
+          GROUP BY 1
+          ORDER BY 3 DESC`,
+        this.prisma.$queryRaw<{ landing: string; signups: number }[]>`
+          SELECT COALESCE(NULLIF(u."attribution"->>'landing', ''), '(unknown)') AS landing,
+                 COUNT(*)::int AS signups
+          FROM "User" u
+          WHERE u."createdAt" >= ${since}
+            AND u."deletedAt" IS NULL
+            AND u."attribution" IS NOT NULL
+          GROUP BY 1
+          ORDER BY 2 DESC
+          LIMIT 12`,
+        Promise.all([
+          this.prisma.user.count({
+            where: { referredById: { not: null }, createdAt: { gte: since } },
+          }),
+          this.prisma.user.count({
+            where: {
+              referredById: { not: null },
+              referralRewardedAt: { not: null, gte: since },
+            },
+          }),
+          this.prisma.creditTransaction.aggregate({
+            where: { reason: 'REFERRAL', createdAt: { gte: since } },
+            _sum: { amountMinor: true },
+          }),
+        ]),
+        this.prisma.invoice.aggregate({
+          where: { state: InvoiceState.PAID, paidAt: { gte: since } },
+          _sum: { amountPaidMinor: true },
+        }),
+      ]);
+
+    // Zip signups and payer/revenue rows into one table.
+    const byChannel = new Map<
+      string,
+      { channel: string; signups: number; payers: number; revenueMinor: number }
+    >();
+    for (const row of signups) {
+      byChannel.set(row.channel, { ...row, payers: 0, revenueMinor: 0 });
+    }
+    for (const row of payers) {
+      const existing = byChannel.get(row.channel) ?? {
+        channel: row.channel,
+        signups: 0,
+        payers: 0,
+        revenueMinor: 0,
+      };
+      existing.payers = row.payers;
+      existing.revenueMinor = row.revenueMinor;
+      byChannel.set(row.channel, existing);
+    }
+
+    const [referredSignups, referredConverted, referralCredit] = referral;
+    return {
+      days: window,
+      channels: [...byChannel.values()].sort(
+        (a, b) => b.revenueMinor - a.revenueMinor || b.signups - a.signups,
+      ),
+      landings,
+      totals: {
+        signups: signups.reduce((n, r) => n + r.signups, 0),
+        payers: payers.reduce((n, r) => n + r.payers, 0),
+        revenueMinor: revenueTotal._sum.amountPaidMinor ?? 0,
+      },
+      referral: {
+        signups: referredSignups,
+        converted: referredConverted,
+        creditIssuedMinor: referralCredit._sum.amountMinor ?? 0,
+      },
+    };
+  }
 }
