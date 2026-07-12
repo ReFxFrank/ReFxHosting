@@ -1,5 +1,62 @@
 # Launch post drafts
 
+## Posting playbook (do this in order)
+
+Every link below carries a utm tag — the admin **Growth** page
+(/admin/growth) will show you signups/revenue per channel within a day of
+posting. Before you start: apply the $4/GB reprice if you haven't, and create
+a `WELCOME25` coupon (25%, first invoice only) in Admin → Coupons.
+
+1. **Week 1 — tools post** (below) on r/admincraft. Zero selling, builds
+   karma. Answer every comment.
+2. **Week 2–3 — founder post** (below) on r/admincraft, then your Discord
+   announcement.
+3. **Ongoing** — drop tool links when they genuinely answer someone's
+   question (any Discord/subreddit). Modpack-author + YouTuber outreach
+   (template below), a couple per week.
+4. **When you have ~5 happy customers** — ask each personally for a
+   Trustpilot review.
+
+Tagged links to paste (edit the medium per channel):
+
+- Tools: `https://refx.gg/tools?utm_source=reddit&utm_medium=admincraft`
+- Founder post: `https://refx.gg/?utm_source=reddit&utm_medium=founder-post`
+- Discord: `https://refx.gg/?utm_source=discord&utm_medium=announcement`
+- Outreach: `https://refx.gg/?utm_source=outreach&utm_medium=<creator-name>`
+
+Pricing talking point (July 2026 basis, see docs/25-pricing.md): $4/GB
+dedicated RAM — 4 GB Minecraft $16/mo, 8 GB $32/mo, minus 20% on annual.
+Comparable volume hosts list ~$3/GB on oversold RAM; the pitch is honest
+resources at a fair premium, not the cheapest sticker.
+
+---
+
+## Price-drop email (existing customers — send once after repricing)
+
+**Subject:** Your renewal just got cheaper
+
+**Body:**
+
+Hi {first name},
+
+Quick heads-up: we've dropped our pricing from $5 to $4 per GB of RAM,
+and it applies to you automatically — your next renewal will simply be
+lower. Nothing to do on your end.
+
+Same dedicated RAM, same burst CPU, same everything. We got more
+efficient and the price should reflect that.
+
+If you've been thinking about more memory, upgrades are prorated and
+apply instantly from the panel.
+
+— Frank, ReFx Hosting
+
+(PayPal-subscription customers keep their original plan price — PayPal
+locks the billing agreement. Mention they can cancel + re-subscribe to
+get the new rate if any of them ask.)
+
+---
+
 Copy-paste material for channels only a human should post from. Edit freely —
 these are written to sound like the founder, not an ad. **Never post these
 from sockpuppet/customer accounts**; both communities ban astroturfing and
