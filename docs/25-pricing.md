@@ -9,7 +9,7 @@ truth; update it whenever the rate or cost basis changes.
 - Each game is a **HARDWARE_TIER** product with **Low / Mid / High** tiers, sized
   at **0.5× / 1× / 2×** the game's *recommended* RAM (set per egg in
   `database/seed/templates/*.json` as `recMemoryMb`), **capped at 14 GB / tier**
-  (`MAX_TIER_MEMORY_MB`) so the High tier can't exceed **$70/mo** — past that,
+  (`MAX_TIER_MEMORY_MB`) so the High tier can't exceed **$56/mo** — past that,
   player-capped games can't use the RAM and no host sells those packages.
 - **RAM is the binding constraint** for game servers, so price is driven by it:
 
@@ -24,18 +24,24 @@ truth; update it whenever the rate or cost basis changes.
 
 ## Current rate
 
-**`RATE_PER_GB = $5.00 / GB / month (USD)`** — stored as `PRICE_PER_GB_CENTS = 500`
+**`RATE_PER_GB = $4.00 / GB / month (USD)`** — stored as `PRICE_PER_GB_CENTS = 400`
 in `database/seed/seed.ts` (override per-deploy with `SEED_PRICE_PER_GB_CENTS`).
 
-Chosen as **~2.3× blended hardware cost** (see below): healthy margin, profitable
-on every node, and priced to sit at the **top of the premium, no-overcommit band**
-of the market rather than chase budget hosts. A 2026 competitor sweep (~15 hosts)
-found RAM-priced hosts cluster at **$2.65–3/GB** when they oversell RAM, and
-**$5–6/GB** when they sell honest, dedicated RAM (Nodecraft Pro ~$5/GB, GGServers
-Premium $6/GB). At $5/GB with **no overcommit**, our RAM is genuinely dedicated —
-we match the premium-tier rate while the headline still drops ~17% from the old
-$6/GB. (Floor: the guardrail below keeps us ≥ 1.5× the priciest node, i.e. ≥ $4.20;
-drop `PRICE_PER_GB_CENTS` toward 450 if you want to undercut more aggressively.)
+Repriced **July 2026** (from $5.00) to close the gap to the volume hosts while
+keeping every cell profitable. Competitive anchor: **G-Portal lists ~$3/GB**
+($6.15/2 GB, $11.90/4 GB per 30 days) with recurring 25% first-period promos
+(~$2.25/GB effective) — that promo floor is at our blended hardware **cost**
+($2.18/GB) and is only possible with oversold RAM. At $4/GB our 4 GB plan is
+$16 vs their $11.90 list: a ~34% premium justified by genuinely dedicated RAM,
+2× burst CPU, free scheduled backups, and game switching. The honest-RAM band
+(Nodecraft Pro ~$5/GB, GGServers Premium $6/GB) now sits above us, not beside us.
+
+**Floor guardrail:** do not drop below $4.00/GB without changing something
+structural — at $3.50 the annual term (−20%) lands at $2.80/GB, which is exactly
+the premium node's cost. If deeper cuts are ever needed, trim the annual discount
+to −15% or retire/reprice the premium node first. For acquisition pushes, prefer
+a **first-period coupon** (Admin → Coupons, e.g. 25% first invoice) — it matches
+G-Portal's promo mechanic without permanently repricing the base.
 
 Note the "no overcommit" claim is about **RAM** — that stays 1:1 dedicated.
 **CPU** is deliberately different: plans sell fair-share vCPU with burst to 2×
@@ -51,10 +57,10 @@ to 2× CPU overcommit, which is what makes the burst headroom sustainable.
 | panel control box | — | — | $14.50 | shared overhead |
 | **Total** | | **128 GB** | **$278.50** | **$2.18 blended** |
 
-Margin at $5/GB, conservative **1:1** (no overcommit), fully sold:
+Margin at $4/GB, conservative **1:1** (no overcommit), fully sold:
 
-- Revenue 128 GB × $5 = **$640/mo** → cost $278.50 → **~$361/mo profit (~2.30×, ~57% gross)**.
-- Worst-case node (`bhs`, $2.80/GB): $5 still = **1.79×** — profitable everywhere.
+- Revenue 128 GB × $4 = **$512/mo** → cost $278.50 → **~$234/mo profit (~1.84×, ~46% gross)**.
+- Worst-case node (`bhs`, $2.80/GB): $4 = **1.43×** — profitable everywhere.
 - Any RAM **overcommit** you run (1.5–2× is normal for game hosting) is pure
   upside not baked into the price, so you stay safe at full face-value sell-out.
 
@@ -65,16 +71,17 @@ Longer terms discount, but never below cost. Effective **$/GB** and margin vs th
 
 | Term | Discount | Effective $/GB | × worst node | × blended |
 |------|----------|----------------|--------------|-----------|
-| Weekly / Biweekly | none (pro-rated) | $5.00 | 1.79× | 2.29× |
-| Monthly | — | $5.00 | 1.79× | 2.29× |
-| Quarterly | −10% | $4.50 | 1.61× | 2.06× |
-| Semi-annual | −15% | $4.25 | 1.52× | 1.95× |
-| **Annual** | **−20%** | **$4.00** | **1.43×** | **1.83×** |
+| Weekly / Biweekly | none (pro-rated) | $4.00 | 1.43× | 1.83× |
+| Monthly | — | $4.00 | 1.43× | 1.83× |
+| Quarterly | −10% | $3.60 | 1.29× | 1.65× |
+| Semi-annual | −15% | $3.40 | 1.21× | 1.56× |
+| **Annual** | **−20%** | **$3.20** | **1.14×** | **1.47×** |
 
-So even the deepest term (annual) earns **1.83× blended** and **1.43× on the single
+So even the deepest term (annual) earns **1.47× blended** and **1.14× on the single
 priciest node** — still profitable in every cell, with the worst case being a
-full-annual prepay on the premium `bhs` box (~43% gross there; any overcommit erases
-even that thinness). The reprice script writes all six terms from this curve, so
+full-annual prepay on the premium `bhs` box (~12% gross there; CPU overcommit and
+the fact that annual prepays are cash up front make that acceptable, but it is the
+reason $4.00 is the floor). The reprice script writes all six terms from this curve, so
 they stay in lock-step with the monthly base automatically. Weekly/biweekly are
 pro-rated (same per-day rate as monthly), not discounted.
 

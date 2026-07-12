@@ -33,7 +33,7 @@ const APPLY = args.includes('--apply');
 const rateArg = args.find((a) => a.startsWith('--rate='))?.split('=')[1];
 const RATE =
   Number.parseInt(rateArg ?? process.env.SEED_PRICE_PER_GB_CENTS ?? '', 10) ||
-  500;
+  400;
 const CURRENCY = 'USD';
 const FLOOR = 500; // never price a tier below $5/mo
 
