@@ -73,6 +73,41 @@ No obligation to promote anything — worst case you get a free server.
 
 ---
 
+## Free-tools post (r/admincraft, r/MinecraftServer, or Discords)
+
+The softest possible intro — you're sharing a utility, not selling. Post this
+BEFORE the founder post above if you're new to a community; it builds karma
+and goodwill, and the tools pages do the selling quietly.
+
+**Title:** Made a free Minecraft server status checker + RAM calculator —
+no signup, no ads
+
+**Body:**
+
+Small weekend-ish project from running my own hosting setup: a set of free
+server-owner tools, no account or ads —
+
+- **Status checker** (refx.gg/tools/minecraft-server-status): live
+  players/version/MOTD/ping for any Java server. Follows SRV records exactly
+  like the vanilla client, so clean domains without a port resolve properly —
+  handy for "is it down or is it me."
+- **RAM calculator** (refx.gg/tools/minecraft-ram-calculator): honest sizing
+  from vanilla to ATM10-class packs. Deliberately conservative because the
+  most common support ticket in existence is a 250-mod pack on 2 GB.
+- **Aikar's flags generator** (refx.gg/tools/aikars-flags): the canonical
+  flags with the correct G1 sizing for your heap, including the 12 GB+
+  variant people always miss.
+- **SRV record builder** (refx.gg/tools/minecraft-srv-record): registrar
+  fields + the raw zone line, for joining via play.yourdomain.com with no
+  port.
+
+They run against a hosting panel I build (so yes, there's a company behind
+it), but the tools are free for everyone and stay that way — they exist
+because I kept needing them in support conversations. Feature requests very
+welcome.
+
+---
+
 ## Where to submit the site (one-time, ~an hour)
 
 - Google Search Console + Bing Webmaster Tools (done)
