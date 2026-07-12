@@ -17,7 +17,7 @@ Legend:
 > typechecks; the node-agent builds/vets/tests on linux/amd64, linux/arm64,
 > windows/amd64; `apps/web` builds, typechecks, and lints; and `apps/panel-api`
 > compiles with 0 type errors, boots (all modules init, all REST routes map, the
-> code-first GraphQL schema generates), and passes **291 unit + 47 e2e tests**.
+> code-first GraphQL schema generates), and passes **564 unit + 47 e2e tests**.
 
 ## Components
 
@@ -27,7 +27,7 @@ Legend:
 | `packages/shared` | **Done** | Enums mirroring the schema, panel↔agent WS protocol, per-server permission strings + `hasPermission`, common DTOs. Typechecks clean. (Apps still carry local copies pending migration onto it.) |
 | `panel-api` (NestJS) | **Done (foundation)** | 222 TS files across auth, users, servers, nodes, billing, orders, support, platform, push, status, agent, queues, common, prisma. Compiles clean and boots. |
 | `node-agent` (Go) | **Done (foundation)** | 61 Go files. `Runtime` interface with real Docker + native-process backends, build-tagged limits, WS hub, signed control API, file jail, backups, SFTP, stats. Cross-compiles + tests pass. |
-| `web` (Next.js) | **Done (foundation)** | shadcn/ui design system, ~60 routes incl. live console, file manager, billing, support, admin, storefront, public status page, legal pages, and the game-switch flow. Builds/typechecks/lints. |
+| `web` (Next.js) | **Done (foundation)** | shadcn/ui design system, ~75 routes incl. live console (xterm + mobile-friendly copy/select-text log view), file manager (folders-first natural sort, column sorting, filter), billing, support, admin, storefront, public status page, legal pages, and the game-switch flow. **SEO/growth surface**: per-game editorial content for all 40 games (HowTo/FAQ/Product JSON-LD, OG images), server-rendered knowledge base (28 seeded articles), Modrinth modpack landing pages, `/tools` hub (status checker, RAM calculator, Aikar's flags, SRV builder), dynamic sitemap + robots. Builds/typechecks/lints. |
 | `infra/docker` | **Done** | Full Compose stack (postgres, redis, opensearch, minio, rabbitmq, prometheus, grafana, loki, panel-api, web) + observability provisioning + migrate service. |
 | `infra/k8s/helm/refx` | **Done** | Helm chart: Deployments/Services for panel-api+web, HPAs, Ingress (WS timeouts), ConfigMap/Secret, ServiceAccount, NetworkPolicy, pre-upgrade migrate Job, NOTES. |
 | `infra/scripts` | **Done** | `install-node.sh` (Ubuntu/Debian/Alma/Rocky), `install-node.ps1` (Windows Server), `refx-agent.service`, `bootstrap.sh`. |
@@ -55,6 +55,9 @@ Legend:
 | Support (admin queue/notes/canned/SLA/KB) | **Done** | Admin ticket queue (reply, status/priority, categorise, assign, internal notes); **ticket archive (storage) + permanent delete**; **category (SLA) + canned-response CRUD**; SLA breach computation; `support.*` permissions. |
 | Platform (audit query, notifications, alerts, health, metrics) | **Done** | Prometheus `/metrics`, `/health`. |
 | Public status page + incidents | **Done** | `GET /api/v1/status` (public, cached) rolls node health (state + heartbeat freshness) into per-region + per-component status — **Control Panel API, Web Dashboard** (panel-api pings the web container's `/api/health`), **Game Server Nodes**, and **iOS App**. Operator-posted **incidents** (`StatusIncident` + timeline, admin CRUD under `/admin/status/incidents`, `content.manage`) drive affected components' status while unresolved and render on the storefront `/status` page (active + 30-day history). iOS App has no auto-signal, so it's admin-declared via incidents. |
+| Backups (panel surface) | **Done** | One-click + scheduled (25-cap rotation of oldest unlocked), live progress, lock/unlock, delete, **signed streaming downloads** (HMAC, 300s TTL, Range/resume; S3 presign for Express) and **essentials vs full** modes. **Express Backups add-on**: per-cycle invoice line drives offsite R2/S3 routing; comped servers visibly flagged; admin **backup-storage stats** (usage/cost vs add-on revenue). |
+| Growth engine | **Done** | First-touch **attribution** (whitelisted utm/ref/landing/referrer captured at signup + order), **referral program** (two-sided store credit on first paid invoice, atomic once-only claim, no self-referral; surfaced on dashboard, account, and receipt emails), **abandoned-checkout email** (24h, once), `/status/live` social proof, and the admin **Growth report** (`/admin/growth`: signups/payers/revenue by channel + top landing pages). |
+| Public tools API | **Done** | Unauthenticated `/tools/minecraft-status` (Java SLP with SRV lookup) backing the marketing status checker — SSRF-guarded (resolve-then-vet, globally-routable-only), 10/min per-IP throttle, bounded response. |
 | Mobile push (APNs, iOS) | **Done** | Native token-based APNs over HTTP/2 (ES256 `.p8`, no SDK dep): `PushService` + `PushToken` model + `POST/DELETE /account/push-tokens`. Pushes mirror in-app events — `server.state` (online/offline/crashed, 30-min per-server throttle), `billing.invoice` (created/due/failed), `support.reply` (staff→customer) — with `type`+id fields at the payload top level. 410/BadDeviceToken auto-prunes stale tokens. Key from `APNS_KEY_P8_BASE64`/`APNS_*`; disabled cleanly when unset. **Android/FCM:** the `platform` field accepts `android` but only `ios` is delivered today (FCM sender `TODO(impl)`). |
 | REST + GraphQL + Swagger | **Done** | REST primary; code-first GraphQL mirrors key reads; Swagger at `/docs`. |
 
@@ -65,12 +68,12 @@ Legend:
 | `Runtime` interface + Manager | **Done** | Routes by `DeployMethod`. |
 | DockerRuntime | **Done** | SDK: image pull, install container, limited create, log demux, live stats, update. |
 | NativeRuntime | **Done** | os/exec, ring-buffer console fan-out, startup detect, graceful stop. |
-| Resource limits (cgroups v2 / Job Objects) | **Done** | Build-tagged `limits_linux.go` / `limits_windows.go` (+ noop). |
+| Resource limits (cgroups v2 / Job Objects) | **Done** | Build-tagged `limits_linux.go` / `limits_windows.go` (+ noop). **CPU is fair-share, not hard-capped**: weight = sold cores (CpuShares/cpu.weight), burst ceiling = min(2× sold, node cores); limits reconcile onto live containers on spec push. **Crash auto-restart** with loop protection (opt-out per server). |
 | WindowsContainerRuntime | **Partial** | Interface-complete skeleton; HCS mechanics `TODO(impl)`. |
 | SandboxRuntime | **Planned** | Deploy method defined; dedicated impl pending. |
 | Control API (signed) + WS hub | **Done** | HMAC verify + replay window; `{type,payload}` protocol. |
 | File manager (jailed) | **Done** | Path-traversal-safe; tests cover containment. |
-| Backups (tar.gz → S3/local) | **Done** | Checksum + progress; completion callback `TODO(impl)`. |
+| Backups (tar.gz → S3/local) | **Done** | Checksum + throttled live progress + completion callback to the panel; **dual storage** — local always, S3/R2 when configured (hot-swappable via the panel's central credential push, `/api/v1/system/backup-storage`) — with per-backup routing by the server's Express flag; **essentials mode** (exclude-list profiles) for lean redeploy archives. |
 | Embedded SFTP | **Done** | Per-server creds, jailed sessions. |
 | Stats reporter | **Done** | Per-server + node heartbeat. |
 
