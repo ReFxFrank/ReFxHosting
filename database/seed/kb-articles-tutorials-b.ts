@@ -109,6 +109,16 @@ On current builds, dedicated servers can opt into console crossplay via \`Crossp
 
 Yes. Stop the server, edit the values, start again — multipliers apply to the existing world immediately. Take a one-click backup first if you're experimenting; if you later outgrow Palworld entirely, [game switching](/knowledge-base/switch-server-game-keep-backups) lets you swap the same server to another game without losing those backups.
 
+## Updating to Palworld 1.0
+
+The 1.0 release (July 2026) keeps the dedicated-server basics unchanged — same Steam app, same startup flags, same \`PalWorldSettings.ini\` location — so updating is: take a backup, stop the server, run a Steam update (Reinstall on ReFx updates in place without touching your save), and start it again. Three things to know before you press the button:
+
+- **Old saves have a floor.** Worlds from v0.7.3 or later carry into 1.0. Anything older no longer loads — if your server has been dormant since early access days, plan on a fresh world.
+- **Delete mods, don't just disable them.** UE4SS and .pak mods from before 1.0 are incompatible and can corrupt a save that boots with them present. Remove them entirely and wait for updated builds.
+- **Budget more memory.** The 1.0 map is roughly twice the size, and Pocketpair's own recommendation is 16 GB. Small groups still run fine on 8 GB, but a busy 10–30 player world now wants 12–16 GB with the nightly restart. Plans resize without reinstalling if you're feeling the ceiling.
+
+The update also adds a batch of new \`PalWorldSettings.ini\` keys (voice chat, PvP drops, building limits, and more). They're additive — your existing OptionSettings line keeps working — and the new keys pick up defaults until you set them.
+
 Ready to build? [Order a Palworld server](/games/palworld) and be in-game in minutes.`,
   },
   {
