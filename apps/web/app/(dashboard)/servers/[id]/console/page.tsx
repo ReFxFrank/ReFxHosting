@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users, Globe, Copy } from "lucide-react";
+import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users, Globe, Copy, ClipboardCopy, TextSelect } from "lucide-react";
 import { api } from "@/lib/api";
 import { type ConsoleEvent, type ConsoleStats } from "@/lib/ws";
 import { getConsole, type ConsoleHandle } from "@/lib/console-hub";
@@ -11,6 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import { ResourceGauge, type GaugePoint } from "@/components/server/resource-gauge";
 import { formatMb, pct, copyToClipboard } from "@/lib/utils";
@@ -33,6 +39,9 @@ export default function ConsolePage() {
   const [memHist, setMemHist] = useState<GaugePoint[]>([]);
   const [diskHist, setDiskHist] = useState<GaugePoint[]>([]);
   const [command, setCommand] = useState("");
+  // Plain-text log view: xterm's canvas has no touch selection, so mobile
+  // users copy from here instead.
+  const [logText, setLogText] = useState<string | null>(null);
   const cmdHistory = useRef<string[]>([]);
   const cmdIndex = useRef(-1);
 
@@ -213,6 +222,20 @@ export default function ConsolePage() {
     ? `${server.primaryAllocation.alias || server.primaryAllocation.ip}:${server.primaryAllocation.port}`
     : null;
 
+  // The shared hub buffers raw lines with ANSI color codes — strip for copy.
+  function plainLog(): string {
+    const lines = consoleRef.current?.lines ?? [];
+    // eslint-disable-next-line no-control-regex
+    return lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "")).join("\n");
+  }
+
+  async function copyLog() {
+    const text = plainLog();
+    if (!text) return toast.error("Nothing to copy yet");
+    if (await copyToClipboard(text)) toast.success("Console log copied");
+    else toast.error("Couldn't copy — use Select text instead");
+  }
+
   async function copyAddress() {
     if (!address) return;
     try {
@@ -256,7 +279,25 @@ export default function ConsolePage() {
           <Button size="sm" variant="destructive" onClick={() => power("kill")} disabled={state === "OFFLINE"}>
             <Zap className="size-4" /> Kill
           </Button>
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              size="icon-sm"
+              variant="outline"
+              onClick={copyLog}
+              aria-label="Copy console log"
+              title="Copy console log"
+            >
+              <ClipboardCopy className="size-4" />
+            </Button>
+            <Button
+              size="icon-sm"
+              variant="outline"
+              onClick={() => setLogText(plainLog())}
+              aria-label="View console as selectable text"
+              title="View as selectable text"
+            >
+              <TextSelect className="size-4" />
+            </Button>
             <Badge variant={connected ? "success" : "muted"}>
               <span className={`size-1.5 rounded-full bg-current ${connected ? "animate-pulse" : ""}`} />
               {connected ? "Live" : "Disconnected"}
@@ -267,6 +308,21 @@ export default function ConsolePage() {
         <Card className="overflow-hidden border bg-[#0a0a0c]">
           <div ref={termRef} className="h-[480px] w-full" />
         </Card>
+
+        {/* Selectable plain-text log (mobile-friendly copy). */}
+        <Dialog open={logText !== null} onOpenChange={(open) => !open && setLogText(null)}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Console log</DialogTitle>
+            </DialogHeader>
+            <pre className="max-h-[60vh] select-text overflow-auto whitespace-pre-wrap break-words rounded-lg border border-white/[0.07] bg-black/40 p-3 font-mono text-xs leading-relaxed">
+              {logText}
+            </pre>
+            <Button variant="outline" onClick={copyLog} className="self-end">
+              <ClipboardCopy className="size-4" /> Copy everything
+            </Button>
+          </DialogContent>
+        </Dialog>
 
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm text-muted-foreground">$</span>
