@@ -18,7 +18,11 @@ import {
   ChevronRight,
   HardDrive,
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Save,
+  Search,
   TriangleAlert,
 } from "lucide-react";
 import { api, ApiError, API_BASE } from "@/lib/api";
@@ -94,6 +98,12 @@ export default function FilesPage() {
 
   const [path, setPath] = useState("/");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Listing controls: classic file-manager order — folders first, then files,
+  // sortable by name/size/modified with a quick name filter.
+  const [filter, setFilter] = useState("");
+  const [sortKey, setSortKey] = useState<"name" | "size" | "modified">("name");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
   // Upload state.
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -171,6 +181,7 @@ export default function FilesPage() {
 
   function navigate(to: string) {
     setSelected(new Set());
+    setFilter("");
     setPath(to);
   }
 
@@ -351,11 +362,69 @@ export default function FilesPage() {
   }
 
   // -- selection helpers ----------------------------------------------------
-  const allSelected = !!entries?.length && entries.every((e) => selected.has(e.path));
+  const visibleEntries = useMemo(() => {
+    if (!entries) return [];
+    const needle = filter.trim().toLowerCase();
+    const rows = needle
+      ? entries.filter((e) => e.name.toLowerCase().includes(needle))
+      : [...entries];
+    const dir = sortDir === "asc" ? 1 : -1;
+    const byName = (a: FileEntry, b: FileEntry) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+    rows.sort((a, b) => {
+      // Folders always group above files, whatever the sort.
+      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+      let cmp: number;
+      switch (sortKey) {
+        case "size":
+          cmp = a.size - b.size;
+          break;
+        case "modified":
+          cmp = Date.parse(a.modified) - Date.parse(b.modified);
+          break;
+        default:
+          cmp = byName(a, b);
+      }
+      if (cmp === 0) cmp = byName(a, b);
+      return cmp * dir;
+    });
+    return rows;
+  }, [entries, filter, sortKey, sortDir]);
+
+  function toggleSort(key: "name" | "size" | "modified") {
+    if (sortKey === key) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      // Name reads naturally ascending; size/modified usually wanted biggest/newest first.
+      setSortDir(key === "name" ? "asc" : "desc");
+    }
+  }
+
+  function sortHeader(label: string, key: "name" | "size" | "modified") {
+    const active = sortKey === key;
+    const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(key)}
+        className={cn(
+          "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+          active && "text-foreground",
+        )}
+      >
+        {label}
+        <Icon className={cn("size-3", !active && "opacity-40")} />
+      </button>
+    );
+  }
+
+  const allSelected =
+    !!visibleEntries.length && visibleEntries.every((e) => selected.has(e.path));
 
   function toggleAll() {
     if (allSelected) setSelected(new Set());
-    else setSelected(new Set(entries?.map((e) => e.path) ?? []));
+    else setSelected(new Set(visibleEntries.map((e) => e.path)));
   }
 
   function toggleOne(p: string) {
@@ -472,7 +541,7 @@ export default function FilesPage() {
         }
       />
 
-      {/* Breadcrumb navigation */}
+      {/* Breadcrumb navigation + filter */}
       <div className="flex flex-wrap items-center gap-1 text-sm">
         {segments.map((crumb, i) => (
           <div key={crumb.path} className="flex items-center gap-1">
@@ -492,6 +561,16 @@ export default function FilesPage() {
             </button>
           </div>
         ))}
+        <div className="relative ml-auto w-full sm:w-56">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter this folder…"
+            aria-label="Filter files by name"
+            className="h-8 pl-8 text-sm"
+          />
+        </div>
       </div>
 
       {/* Bulk actions bar */}
@@ -553,15 +632,26 @@ export default function FilesPage() {
                     className="size-4 cursor-pointer rounded border-input accent-primary"
                   />
                 </TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden sm:table-cell">Size</TableHead>
+                <TableHead>{sortHeader("Name", "name")}</TableHead>
+                <TableHead className="hidden sm:table-cell">
+                  {sortHeader("Size", "size")}
+                </TableHead>
                 <TableHead className="hidden md:table-cell">Permissions</TableHead>
-                <TableHead className="hidden md:table-cell">Modified</TableHead>
+                <TableHead className="hidden md:table-cell">
+                  {sortHeader("Modified", "modified")}
+                </TableHead>
                 <TableHead className="w-10" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {entries.map((entry) => {
+              {visibleEntries.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                    Nothing here matches “{filter}”.
+                  </TableCell>
+                </TableRow>
+              )}
+              {visibleEntries.map((entry) => {
                 const isDir = entry.isDir;
                 const editable = isEditable(entry);
                 const archive = !entry.isDir && isArchive(entry.name);
