@@ -25,10 +25,12 @@ original review commit.
 | **P0-E** | PayPal-managed subs excluded from the Stripe renewal/dunning sweep; never Stripe-charged or suspended for lacking a Stripe method | High (wrongful suspension / double-charge) | **Done + tested** |
 | **P0-F** | Stripe `Idempotency-Key` on charge + refund; PayPal `PayPal-Request-Id` on refund | High (duplicate charges/refunds) | **Partial — done + tested** (order/capture idempotency deferred) |
 | **P0-G** | Paid/refunded invoices immutable (delete refused); full refund + Stripe/PayPal reversal/dispute revokes entitlement (suspends servers); refund recording idempotent; Stripe refund/dispute webhooks handled | High (refunded service stays live; ledger deletable) | **Partial — done + tested** |
-| **P0-H** | DB-enforced invariants (unique payment ref, one-server-per-sub, price uniqueness, atomic invoice sequence) | High (concurrency races) | **Specified — see continuation plan** |
+| **P0-H** | Atomic invoice numbering (counter table) done; remaining DB uniqueness (payment ref, one-server-per-sub, price) specified | High (concurrency races) | **Partial — invoice numbering done + tested; rest in continuation plan** |
 
-New/updated tests: **+25** (573 → **598** panel-api unit tests green). Full suite,
-typecheck, and lint pass on the branch.
+New/updated tests: **+28** (573 → **601** panel-api unit tests green). Full suite,
+typecheck, and lint pass. The full migration chain (incl. the new
+`invoice_counter` migration) was applied from an empty database on a real
+Postgres and the schema-drift check returns clean.
 
 ---
 
@@ -194,13 +196,16 @@ web production build. These run in CI; commands are in §7.
      `CREATE UNIQUE INDEX ON "Server"("subscriptionId") WHERE "deletedAt" IS NULL AND "subscriptionId" IS NOT NULL`.
    - Price uniqueness: replace the composite that a nullable `hardwareTierId`
      weakens with two partial unique indexes (tier NULL / tier NOT NULL).
-   - Invoice numbering: replace `COUNT()+1` with a Postgres sequence (or an
-     upsert on a per-year counter row in the same tx as invoice insert).
-   - **Drift-check reconciliation:** the new CI `migrate diff --exit-code` step
-     flags raw partial indexes not representable in `schema.prisma`. Either
-     express what Prisma can natively and add the partial indexes via a migration
-     with a documented `// prisma-migrate-diff:ignore` allowlist step, or gate the
-     drift check to datamodel-representable objects. Decide before adding them.
+   - Invoice numbering: **DONE** — `InvoiceCounter` table + atomic
+     `INSERT … ON CONFLICT DO UPDATE … RETURNING` in `nextInvoiceSequence`, with
+     a data-backfill migration seeding the counter from existing invoices.
+   - **Drift-check reconciliation (still required for the partial-index items):**
+     the CI `migrate diff` step (now corrected to
+     `--from-schema … --to-config-datasource`) flags raw partial indexes not
+     representable in `schema.prisma`. Either restructure so a Prisma-native
+     `@@unique` is safe (e.g. guarantee non-empty/unique `gatewayRef`; null
+     `Server.subscriptionId` on soft-delete) or gate the drift check to
+     datamodel-representable objects. Decide before adding the partial indexes.
 2. **Durable dunning schedule (P0-D remainder).** Add `attemptCount` +
    `nextAttemptAt` to `Subscription` (or an `Invoice` dunning record); implement
    the 24h / 72h-suspend / 14d-terminate cadence with fake-clock tests. Today

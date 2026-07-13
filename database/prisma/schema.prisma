@@ -1349,6 +1349,16 @@ model Payment {
   @@index([invoiceId])
 }
 
+/// Per-year monotonic counter for invoice numbering (P0-H). `last` is the
+/// highest sequence assigned for that calendar year; the next number is
+/// allocated atomically with `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`
+/// so concurrent invoice creation cannot collide, and deleting an invoice never
+/// reuses a number. Replaces the previous COUNT()+1 scheme.
+model InvoiceCounter {
+  year Int @id
+  last Int @default(0)
+}
+
 // ---------------------------------------------------------------------------
 // Support / Helpdesk
 // ---------------------------------------------------------------------------

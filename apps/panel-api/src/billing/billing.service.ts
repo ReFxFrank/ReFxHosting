@@ -2032,16 +2032,21 @@ export class BillingService {
   }
 
   /**
-   * Compute the next 1-based invoice sequence for a calendar year (count of
-   * invoices created this year + 1).
+   * Atomically allocate the next 1-based invoice sequence for a calendar year
+   * (P0-H). A single `INSERT … ON CONFLICT DO UPDATE … RETURNING` inserts the
+   * year row with last=1, or bumps `last` by one and returns the new value.
+   * Postgres row-locks the counter, so concurrent invoice creation can never
+   * assign the same number, and a deleted invoice never causes reuse — the
+   * counter only moves forward. Replaces the previous COUNT()+1 scheme, which
+   * two concurrent creates could read identically and then collide on
+   * Invoice.number's unique index.
    */
   private async nextInvoiceSequence(year: number): Promise<number> {
-    const start = new Date(Date.UTC(year, 0, 1));
-    const end = new Date(Date.UTC(year + 1, 0, 1));
-    const count = await this.prisma.invoice.count({
-      where: { createdAt: { gte: start, lt: end } },
-    });
-    return count + 1;
+    const rows = await this.prisma.$queryRaw<{ last: number }[]>`
+      INSERT INTO "InvoiceCounter" ("year", "last") VALUES (${year}, 1)
+      ON CONFLICT ("year") DO UPDATE SET "last" = "InvoiceCounter"."last" + 1
+      RETURNING "last"`;
+    return Number(rows[0].last);
   }
 
   /**
