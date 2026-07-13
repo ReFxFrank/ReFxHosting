@@ -54,7 +54,11 @@ export async function listObjects(
 ): Promise<S3Listing> {
   const timeoutMs = opts.timeoutMs ?? 10_000;
   const maxPages = opts.maxPages ?? 50; // 50 * 1000 keys — ample for backups
-  const base = config.endpoint.replace(/\/$/, '');
+  // An S3 API endpoint is scheme+host only. Some dashboards hand out the
+  // endpoint with the bucket appended (…/r2.cloudflarestorage.com/<bucket>);
+  // keeping that path would double the bucket and R2 answers ListObjectsV2
+  // with NoSuchKey. Normalize to the origin so addressing is always clean.
+  const base = new URL(config.endpoint).origin;
   const basePath = config.usePathStyle ? `/${config.bucket}` : '';
 
   const aws = new AwsClient({
