@@ -1,10 +1,12 @@
-import { EMPTY_PAYLOAD_SHA256, amzDateNow, signv4, uriEncode } from './aws-sigv4';
+import { AwsClient } from 'aws4fetch';
 
 /**
- * Read-only S3/R2 object listing with no SDK dependency. Signs ListObjectsV2
- * GETs with SigV4 (aws-sigv4.ts) and parses the XML with focused regexes —
- * the ListObjectsV2 response shape is simple and stable. Used to report the
- * panel-DB backup bucket's usage in the admin storage overview.
+ * Read-only S3/R2 object listing. Signing is delegated to aws4fetch — a tiny,
+ * dependency-free SigV4 implementation that's the de-facto standard for
+ * talking to R2 from fetch (hand-rolled SigV4 passed AWS's test vectors but
+ * tripped R2's stricter validation). We keep only the ListObjectsV2 XML
+ * parsing here, which is simple and stable. Used to report the panel-DB backup
+ * bucket's usage in the admin storage overview.
  */
 
 export interface S3ListConfig {
@@ -42,7 +44,8 @@ function decodeXml(s: string): string {
 
 /**
  * List every object under `prefix` (paginating ListObjectsV2). Throws on any
- * non-2xx or network error so callers can fail-soft with context.
+ * non-2xx (with the R2 error code/message) or network error so callers can
+ * fail-soft with context.
  */
 export async function listObjects(
   config: S3ListConfig,
@@ -52,60 +55,39 @@ export async function listObjects(
   const timeoutMs = opts.timeoutMs ?? 10_000;
   const maxPages = opts.maxPages ?? 50; // 50 * 1000 keys — ample for backups
   const base = config.endpoint.replace(/\/$/, '');
-  const host = new URL(base).host;
-  const basePath = config.usePathStyle ? `/${config.bucket}` : '/';
+  const basePath = config.usePathStyle ? `/${config.bucket}` : '';
+
+  const aws = new AwsClient({
+    accessKeyId: config.accessKey,
+    secretAccessKey: config.secretKey,
+    region: config.region || 'auto',
+    service: 's3',
+  });
 
   const objects: S3Object[] = [];
   let continuationToken: string | undefined;
   let totalBytes = 0;
 
   for (let page = 0; page < maxPages; page++) {
-    const query: Record<string, string> = {
+    const params = new URLSearchParams({
       'list-type': '2',
       'max-keys': '1000',
       prefix,
-    };
-    if (continuationToken) query['continuation-token'] = continuationToken;
-
-    const amzDate = amzDateNow();
-    const headers: Record<string, string> = {
-      Host: host,
-      'X-Amz-Date': amzDate,
-      'X-Amz-Content-Sha256': EMPTY_PAYLOAD_SHA256,
-    };
-    const authorization = signv4({
-      method: 'GET',
-      path: basePath,
-      query,
-      headers,
-      payloadHash: EMPTY_PAYLOAD_SHA256,
-      region: config.region || 'auto',
-      service: 's3',
-      accessKey: config.accessKey,
-      secretKey: config.secretKey,
-      amzDate,
     });
-
-    // Use the SAME encoder as the canonical query in signv4 so the wire query
-    // string can never diverge from what was signed (mismatch → SignatureDoesNotMatch).
-    const qs = Object.keys(query)
-      .sort()
-      .map((k) => `${uriEncode(k)}=${uriEncode(query[k])}`)
-      .join('&');
+    if (continuationToken) params.set('continuation-token', continuationToken);
+    const url = `${base}${basePath}?${params.toString()}`;
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     let xml: string;
     try {
-      const res = await fetch(`${base}${basePath}?${qs}`, {
+      const res = await aws.fetch(url, {
         method: 'GET',
-        headers: { ...headers, Authorization: authorization },
         signal: controller.signal,
       });
       const body = await res.text();
       if (!res.ok) {
         // R2/S3 errors are XML: <Error><Code>..</Code><Message>..</Message></Error>.
-        // Surface the code+message so the caller can show the real cause.
         const code = body.match(/<Code>([\s\S]*?)<\/Code>/)?.[1];
         const msg = body.match(/<Message>([\s\S]*?)<\/Message>/)?.[1];
         const detail = code
@@ -122,11 +104,7 @@ export async function listObjects(
     let m: RegExpExecArray | null;
     while ((m = CONTENTS_RE.exec(xml)) !== null) {
       const size = Number(m[3]);
-      objects.push({
-        key: decodeXml(m[1]),
-        lastModified: m[2],
-        size,
-      });
+      objects.push({ key: decodeXml(m[1]), lastModified: m[2], size });
       totalBytes += size;
     }
 
