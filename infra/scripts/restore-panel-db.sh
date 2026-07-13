@@ -60,7 +60,13 @@ if [ -n "$SRC_FILE" ]; then
 else
   command -v aws >/dev/null || die "aws CLI not found (needed unless --file)."
   if [ -n "$USE_LATEST" ]; then
-    # s3api (not `s3 ls`) for R2 compatibility. Capture failures LOUDLY —
+    # First choice: the LATEST pointer written by the backup script — a plain
+    # GetObject, which works even where bucket listing doesn't (R2 quirks).
+    SRC_KEY="$(aws "${EP_ARG[@]}" s3 cp "s3://${BUCKET}/${PREFIX}/LATEST" - 2>/dev/null | tr -d '[:space:]' || true)"
+    [ -n "$SRC_KEY" ] && echo "using LATEST pointer: ${SRC_KEY}"
+  fi
+  if [ -n "$USE_LATEST" ] && [ -z "$SRC_KEY" ]; then
+    # Fallback: list the prefix. Capture failures LOUDLY —
     # a silent set -e death here looks like the script did nothing.
     if ! LIST_OUT="$(aws "${EP_ARG[@]}" s3api list-objects-v2 --bucket "$BUCKET" \
         --prefix "${PREFIX}/" --query 'Contents[].Key' --output text 2>&1)"; then

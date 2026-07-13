@@ -63,6 +63,12 @@ EP_ARG=(); [ -n "$ENDPOINT" ] && EP_ARG=(--endpoint-url "$ENDPOINT")
 echo "[$(date -u +%FT%TZ)] uploading -> s3://${BUCKET}/${PREFIX}/${NAME}"
 aws "${EP_ARG[@]}" s3 cp "$TMP" "s3://${BUCKET}/${PREFIX}/${NAME}"
 
+# LATEST pointer: restore --latest reads this tiny object instead of listing
+# the bucket (R2 tokens/CLIs are unreliable at ListObjectsV2; Get/Put always work).
+printf '%s' "$NAME" | aws "${EP_ARG[@]}" s3 cp - "s3://${BUCKET}/${PREFIX}/LATEST" \
+  && echo "  updated LATEST pointer" \
+  || echo "  (couldn't update LATEST pointer — restore with --key if needed)"
+
 # --- retention: keep the newest $RETENTION objects under the prefix ----------
 echo "[$(date -u +%FT%TZ)] pruning to newest ${RETENTION}…"
 # s3api (not `s3 ls`): reliable against R2's ListObjectsV2 implementation.
