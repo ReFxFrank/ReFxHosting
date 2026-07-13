@@ -37,8 +37,20 @@ export class BillingScheduler {
   @Cron(CronExpression.EVERY_HOUR)
   async sweep(): Promise<void> {
     if (!this.enabled) return;
+    await this.expireCancellations();
     await this.enqueueRenewals();
     await this.enqueueDunning();
+  }
+
+  /**
+   * Expire subscriptions set to cancel-at-period-end whose period has elapsed,
+   * and stop their servers (P0-D). Runs directly (not via the queue) — it's an
+   * idempotent, multi-instance-safe guarded update, so no job dedup is needed.
+   */
+  async expireCancellations(): Promise<number> {
+    const n = await this.billing.expireDueCancellations();
+    if (n) this.logger.log(`Expired ${n} cancel-at-period-end subscription(s).`);
+    return n;
   }
 
   /** Hourly: nudge orders that were placed but never paid (sent once). */

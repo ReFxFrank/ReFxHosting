@@ -596,7 +596,7 @@ export class BillingService {
       });
     }
 
-    return this.prisma.subscription.update({
+    const updated = await this.prisma.subscription.update({
       where: { id },
       data: {
         state: SubscriptionState.CANCELED,
@@ -605,6 +605,37 @@ export class BillingService {
         currentPeriodEnd: new Date(),
       },
     });
+    // P0-D: an immediate cancel must actually stop the service — enqueue a
+    // suspend for each live server (previously the server kept running).
+    await this.suspendSubscriptionServers(id, "subscription canceled");
+    return updated;
+  }
+
+  /**
+   * Enqueue a suspend job for every live server on a subscription. Used by
+   * immediate cancellation and end-of-period expiry (P0-D). The suspension
+   * processor performs the documented retention/deletion policy from there.
+   */
+  private async suspendSubscriptionServers(
+    subscriptionId: string,
+    reason: string,
+  ): Promise<void> {
+    const servers = await this.prisma.server.findMany({
+      where: { subscriptionId, deletedAt: null },
+      select: { id: true },
+    });
+    for (const s of servers) {
+      await this.suspensionQueue.add(
+        JOB.SUSPEND,
+        {
+          serverId: s.id,
+          subscriptionId,
+          action: "suspend",
+          reason,
+        } satisfies SuspensionJob,
+        SUSPENSION_JOB_OPTS,
+      );
+    }
   }
 
   /**
@@ -2435,6 +2466,9 @@ export class BillingService {
         cancelAtPeriodEnd: false,
         currentPeriodEnd: { lte: cutoff },
         state: { in: [SubscriptionState.ACTIVE, SubscriptionState.TRIALING] },
+        // P0-E: PayPal-managed recurring subs are billed by PayPal + settled via
+        // its webhook — never enqueue them for the Stripe renewal path.
+        gateway: { not: "paypal" },
       },
       select: { id: true },
     });
@@ -2578,12 +2612,66 @@ export class BillingService {
    * cancel, still PAST_DUE — each has an unpaid OPEN invoice the renew path
    * reuses (it never creates a second invoice for the same period).
    */
+  /**
+   * P0-D: Expire subscriptions set to cancel-at-period-end once their paid
+   * period has elapsed, and stop their servers. These are deliberately excluded
+   * from the renewal/dunning sweeps (cancelAtPeriodEnd:false filter), so without
+   * this sweep they'd stay ACTIVE with a past currentPeriodEnd forever and keep
+   * running for free. Idempotent (once EXPIRED they no longer match) and
+   * multi-instance safe via a guarded updateMany claim per subscription. Returns
+   * the number expired.
+   */
+  async expireDueCancellations(): Promise<number> {
+    const now = new Date();
+    const due = await this.prisma.subscription.findMany({
+      where: {
+        cancelAtPeriodEnd: true,
+        currentPeriodEnd: { lte: now },
+        state: {
+          in: [
+            SubscriptionState.ACTIVE,
+            SubscriptionState.TRIALING,
+            SubscriptionState.PAST_DUE,
+          ],
+        },
+      },
+      select: { id: true },
+    });
+    let expired = 0;
+    for (const s of due) {
+      // Guarded claim: only the instance that flips it does the suspension.
+      const claimed = await this.prisma.subscription.updateMany({
+        where: {
+          id: s.id,
+          cancelAtPeriodEnd: true,
+          state: {
+            in: [
+              SubscriptionState.ACTIVE,
+              SubscriptionState.TRIALING,
+              SubscriptionState.PAST_DUE,
+            ],
+          },
+        },
+        data: { state: SubscriptionState.EXPIRED, autoRenew: false },
+      });
+      if (claimed.count === 0) continue;
+      await this.suspendSubscriptionServers(
+        s.id,
+        "subscription expired (cancel at period end)",
+      );
+      expired++;
+    }
+    return expired;
+  }
+
   async findPastDueSubscriptions(): Promise<string[]> {
     const subs = await this.prisma.subscription.findMany({
       where: {
         autoRenew: true,
         cancelAtPeriodEnd: false,
         state: SubscriptionState.PAST_DUE,
+        // P0-E: PayPal-managed subs are never dunned via the Stripe path.
+        gateway: { not: "paypal" },
       },
       select: { id: true },
     });
@@ -2610,6 +2698,16 @@ export class BillingService {
         data: { state: SubscriptionState.EXPIRED },
       });
       return { invoiceId: "", paid: false, reason: "canceled" };
+    }
+
+    // P0-E: PayPal-managed recurring subscriptions are billed by PayPal itself
+    // and settled via the PAYMENT.SALE.COMPLETED webhook
+    // (settlePayPalRecurringPayment). The Stripe renewal path must never charge
+    // them (double-charge, racing the webhook) nor run handlePaymentFailure —
+    // which would suspend a PayPal customer merely because they have no Stripe
+    // payment method. Leave them entirely to PayPal.
+    if (sub.gateway === "paypal") {
+      return { invoiceId: "", paid: false, reason: "paypal-managed" };
     }
 
     // Reuse an existing OPEN invoice for this subscription (the dunning case —
