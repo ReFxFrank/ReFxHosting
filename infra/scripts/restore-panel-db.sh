@@ -60,11 +60,17 @@ if [ -n "$SRC_FILE" ]; then
 else
   command -v aws >/dev/null || die "aws CLI not found (needed unless --file)."
   if [ -n "$USE_LATEST" ]; then
-    # s3api (not `s3 ls`): reliable against R2's ListObjectsV2 implementation.
-    SRC_KEY="$(aws "${EP_ARG[@]}" s3api list-objects-v2 --bucket "$BUCKET" --prefix "${PREFIX}/" \
-      --query 'Contents[].Key' --output text 2>/dev/null \
-      | tr '\t' '\n' | grep -E '\.dump\.enc$' | sed "s|^${PREFIX}/||" | sort | tail -n 1)"
-    [ -n "$SRC_KEY" ] || die "no backups found under s3://${BUCKET}/${PREFIX}/ (or listing failed — pass --key <name> from the backup log)"
+    # s3api (not `s3 ls`) for R2 compatibility. Capture failures LOUDLY —
+    # a silent set -e death here looks like the script did nothing.
+    if ! LIST_OUT="$(aws "${EP_ARG[@]}" s3api list-objects-v2 --bucket "$BUCKET" \
+        --prefix "${PREFIX}/" --query 'Contents[].Key' --output text 2>&1)"; then
+      echo "--- listing error from S3/R2: ---------------------------------" >&2
+      echo "$LIST_OUT" >&2
+      die "could not list s3://${BUCKET}/${PREFIX}/ — pass --key <name> (shown in the backup log) instead."
+    fi
+    SRC_KEY="$(printf '%s' "$LIST_OUT" | tr '\t' '\n' | grep -E '\.dump\.enc$' \
+      | sed "s|^${PREFIX}/||" | sort | tail -n 1 || true)"
+    [ -n "$SRC_KEY" ] || die "no backups found under s3://${BUCKET}/${PREFIX}/"
   fi
   [ -n "$SRC_KEY" ] || die "specify --latest, --key <name>, or --file <path>."
   echo "downloading s3://${BUCKET}/${PREFIX}/${SRC_KEY}"

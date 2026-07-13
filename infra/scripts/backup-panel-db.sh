@@ -68,9 +68,10 @@ echo "[$(date -u +%FT%TZ)] pruning to newest ${RETENTION}…"
 # s3api (not `s3 ls`): reliable against R2's ListObjectsV2 implementation.
 mapfile -t OLD < <(
   aws "${EP_ARG[@]}" s3api list-objects-v2 --bucket "$BUCKET" --prefix "${PREFIX}/" \
-    --query 'Contents[].Key' --output text 2>/dev/null \
+    --query 'Contents[].Key' --output text \
     | tr '\t' '\n' | grep -E '\.dump\.enc$' | sed "s|^${PREFIX}/||" | sort | head -n -"${RETENTION}"
 ) || true
+[ "${#OLD[@]}" -gt 0 ] || echo "  (nothing to prune, or listing failed — see any error above; backups still upload fine)"
 for key in "${OLD[@]:-}"; do
   [ -n "$key" ] || continue
   echo "  removing old backup: ${key}"
