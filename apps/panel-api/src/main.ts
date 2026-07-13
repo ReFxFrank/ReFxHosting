@@ -8,6 +8,7 @@ import { json, raw } from "express";
 import { AppModule } from "./app.module";
 import { AppConfig } from "./config/configuration";
 import { runPreflight } from "./config/preflight";
+import { SettingsService } from "./platform/settings.service";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { LoggingInterceptor } from "./common/interceptors/logging.interceptor";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
@@ -72,7 +73,17 @@ async function bootstrap(): Promise<void> {
     agentTlsPinning:
       config.get<AppConfig["agentTlsPinning"]>("agentTlsPinning")!,
   } as AppConfig;
-  runPreflight(appConfig);
+  // SMTP can be configured in the owner-editable admin settings (DB) instead of
+  // env — the mailer resolves DB-first, so the preflight must judge the same
+  // EFFECTIVE config or it false-positives on panels configured via the UI.
+  let effectiveEmail = appConfig.email;
+  try {
+    const emailCfg = await app.get(SettingsService).emailConfig();
+    if (emailCfg.host) effectiveEmail = { ...appConfig.email, host: emailCfg.host };
+  } catch {
+    /* DB unreachable at boot — judge the env view; the app can't run anyway */
+  }
+  runPreflight({ ...appConfig, email: effectiveEmail });
 
   // Behind a reverse proxy (Caddy/nginx) the socket peer is the proxy, not the
   // client. Trust the proxy so Express derives req.ip from X-Forwarded-For —

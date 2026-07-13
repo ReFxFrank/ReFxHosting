@@ -169,9 +169,10 @@ export function evaluatePreflight(
   // ALLOW_INSECURE_CONFIG=true.
   if (!config.email.host) {
     errors.push(
-      "SMTP_HOST is not set — verification, password-reset and receipt emails " +
-        "cannot be delivered (log-only transport), so customers cannot verify " +
-        "their email or receive receipts. Configure SMTP before launch.",
+      "SMTP is not configured — neither the admin panel's email settings " +
+        "(Admin → Settings → Email) nor the SMTP_HOST env variable are set, so " +
+        "verification, password-reset and receipt emails cannot be delivered " +
+        "(log-only transport). Configure SMTP before launch.",
     );
   }
 
