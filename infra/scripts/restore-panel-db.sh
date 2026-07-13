@@ -84,6 +84,12 @@ if [ -z "$ASSUME_YES" ]; then
   [ "$CONFIRM" = "$TARGET_DB" ] || die "confirmation did not match — aborted."
 fi
 
+# Scratch/drill targets don't exist yet — create the DB if needed (a no-op
+# error when it already exists, which is fine for the DR path).
+"$DC" exec -T postgres createdb -U "$PG_USER" "$TARGET_DB" 2>/dev/null \
+  && echo "created database ${TARGET_DB}" \
+  || echo "database ${TARGET_DB} already exists — restoring into it"
+
 echo "restoring into ${TARGET_DB}…"
 # Stream the dump into pg_restore running inside the postgres container.
 "$DC" exec -T postgres pg_restore --clean --if-exists --no-owner \
