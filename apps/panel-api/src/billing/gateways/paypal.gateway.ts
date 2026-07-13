@@ -89,7 +89,9 @@ export class PayPalGateway implements PaymentGateway {
   /** Authorized JSON helper against the PayPal REST base. */
   private async api<T>(
     path: string,
-    init: { method: string; body?: unknown } = { method: "GET" },
+    init: { method: string; body?: unknown; requestId?: string } = {
+      method: "GET",
+    },
   ): Promise<T> {
     const token = await this.getAccessToken();
     const baseUrl = await this.resolveBaseUrl();
@@ -98,6 +100,9 @@ export class PayPalGateway implements PaymentGateway {
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
+        // Idempotency (P0-F): PayPal dedupes a retried mutation carrying the
+        // same PayPal-Request-Id, so a retry can't issue a second refund.
+        ...(init.requestId ? { "PayPal-Request-Id": init.requestId } : {}),
       },
       body: init.body ? JSON.stringify(init.body) : undefined,
     });
@@ -212,7 +217,11 @@ export class PayPalGateway implements PaymentGateway {
         : undefined;
     const refund = await this.api<{ id: string }>(
       `/v2/payments/captures/${captureId}/refund`,
-      { method: "POST", body },
+      {
+        method: "POST",
+        body,
+        requestId: `refund:${captureId}:${amountMinor ?? "full"}`,
+      },
     );
     return { refundRef: refund.id };
   }

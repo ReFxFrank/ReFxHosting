@@ -130,23 +130,34 @@ export class StripeGateway implements PaymentGateway {
   ): Promise<ChargeResult> {
     try {
       const stripe = await this.client();
-      const intent = await stripe.paymentIntents.create({
-        // Charge the outstanding balance (total minus any credit already applied,
-        // e.g. a gift card).
-        amount: Math.max(
-          0,
-          invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
-        ),
-        currency: invoice.currency.toLowerCase(),
-        payment_method: paymentMethodRef,
-        confirm: true,
-        off_session: true,
-        // The saved PaymentMethod belongs to the customer; off-session reuse at
-        // renewal requires the owning customer to be attached.
-        ...(customerRef ? { customer: customerRef } : {}),
-        metadata: { invoiceId: invoice.id, invoiceNumber: invoice.number },
-        description: `Invoice ${invoice.number}`,
-      });
+      const outstanding = Math.max(
+        0,
+        invoice.totalMinor - (invoice.amountPaidMinor ?? 0),
+      );
+      const intent = await stripe.paymentIntents.create(
+        {
+          // Charge the outstanding balance (total minus any credit already
+          // applied, e.g. a gift card).
+          amount: outstanding,
+          currency: invoice.currency.toLowerCase(),
+          payment_method: paymentMethodRef,
+          confirm: true,
+          off_session: true,
+          // The saved PaymentMethod belongs to the customer; off-session reuse
+          // at renewal requires the owning customer to be attached.
+          ...(customerRef ? { customer: customerRef } : {}),
+          metadata: { invoiceId: invoice.id, invoiceNumber: invoice.number },
+          description: `Invoice ${invoice.number}`,
+        },
+        {
+          // Idempotency (P0-F): a retry of the SAME charge (same invoice + same
+          // outstanding balance) reuses Stripe's stored result instead of
+          // creating a second PaymentIntent, so a scheduler retry or duplicated
+          // request can't double-charge. Stripe keys auto-expire ~24h, after
+          // which the next dunning cycle can legitimately re-attempt.
+          idempotencyKey: `charge:${invoice.id}:${outstanding}`,
+        },
+      );
 
       const success = intent.status === "succeeded";
       return {
@@ -180,12 +191,19 @@ export class StripeGateway implements PaymentGateway {
     amountMinor?: number,
   ): Promise<{ refundRef: string }> {
     const stripe = await this.client();
-    const refund = await stripe.refunds.create({
-      ...(chargeRef.startsWith("ch_")
-        ? { charge: chargeRef }
-        : { payment_intent: chargeRef }),
-      ...(amountMinor != null ? { amount: amountMinor } : {}),
-    });
+    const refund = await stripe.refunds.create(
+      {
+        ...(chargeRef.startsWith("ch_")
+          ? { charge: chargeRef }
+          : { payment_intent: chargeRef }),
+        ...(amountMinor != null ? { amount: amountMinor } : {}),
+      },
+      {
+        // Idempotency (P0-F/G): a retried refund of the same charge + amount is
+        // deduped by Stripe rather than issuing a second refund.
+        idempotencyKey: `refund:${chargeRef}:${amountMinor ?? "full"}`,
+      },
+    );
     return { refundRef: refund.id };
   }
 

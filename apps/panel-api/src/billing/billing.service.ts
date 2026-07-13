@@ -978,14 +978,25 @@ export class BillingService {
     }
   }
 
-  /** Permanently delete an invoice (and its line items/payments via cascade). */
+  /**
+   * Permanently delete an UNPAID invoice (and its line items/payments via
+   * cascade). PAID/REFUNDED invoices are an immutable financial + audit record
+   * (P0-G): deleting one erases a revenue row and, via the Payment onDelete
+   * cascade, the payment ledger — so it is refused. Void or refund instead.
+   */
   async deleteInvoice(id: string): Promise<void> {
     const invoice = await this.prisma.invoice.findUnique({ where: { id } });
     if (!invoice) throw new NotFoundException("Invoice not found");
-    // Deleting a PAID invoice removes a revenue record — allowed (the UI
-    // confirms it), but we must NOT release/soft-delete the server it paid for.
+    if (
+      invoice.state === InvoiceState.PAID ||
+      invoice.state === InvoiceState.REFUNDED
+    ) {
+      throw new BadRequestException(
+        `Invoice ${invoice.number} is ${invoice.state} and cannot be deleted — financial records are immutable. Refund or void it instead.`,
+      );
+    }
     // Only an unpaid invoice releases its pending reservation.
-    if (invoice.state !== InvoiceState.PAID && invoice.subscriptionId) {
+    if (invoice.subscriptionId) {
       await this.releaseUnpaidReservation(invoice.subscriptionId);
     }
     await this.prisma.invoice.delete({ where: { id } });
@@ -1395,6 +1406,23 @@ export class BillingService {
     await this.markInvoicePaid(invoiceId, details);
   }
 
+  /**
+   * Resolve our invoice id from a gateway payment reference (a Stripe
+   * PaymentIntent/charge id or a PayPal capture id) recorded on a SUCCEEDED
+   * Payment. Used to map inbound refund/dispute webhooks that carry only the
+   * gateway payment ref, not our metadata. Returns null if unknown.
+   */
+  async findInvoiceIdByPaymentRef(gatewayRef: string): Promise<string | null> {
+    const ref = gatewayRef?.trim();
+    if (!ref) return null;
+    const payment = await this.prisma.payment.findFirst({
+      where: { gatewayRef: ref, state: PaymentState.SUCCEEDED },
+      select: { invoiceId: true },
+      orderBy: { createdAt: "desc" },
+    });
+    return payment?.invoiceId ?? null;
+  }
+
   /** Record an async payment failure for an invoice. */
   async failExternalPayment(
     invoiceId: string,
@@ -1423,6 +1451,11 @@ export class BillingService {
       where: { id: invoiceId },
     });
     if (!invoice) return;
+
+    // Idempotency (P0-G): if this invoice is already REFUNDED, a repeated
+    // reversal event (webhook echo of our own admin refund, or a duplicate
+    // delivery) is a no-op — don't record a second ledger row or re-suspend.
+    if (invoice.state === InvoiceState.REFUNDED) return;
 
     if (details.gatewayRef) {
       const existing = await this.prisma.payment.findFirst({
@@ -1456,6 +1489,15 @@ export class BillingService {
         data: { state: InvoiceState.REFUNDED },
       }),
     ]);
+    // P0-G: a refund/reversal (incl. a PayPal dispute) must revoke entitlement —
+    // the customer no longer paid for the service, so stop the server(s). This
+    // is a reversal event (full), so we always suspend.
+    if (invoice.subscriptionId) {
+      await this.suspendSubscriptionServers(
+        invoice.subscriptionId,
+        `payment refunded/reversed via ${details.gateway}`,
+      );
+    }
     this.logger.log(`Invoice ${invoiceId} refunded via ${details.gateway}`);
   }
 
@@ -1463,8 +1505,10 @@ export class BillingService {
    * Admin-initiated refund: refund a PAID invoice's settled payment back to the
    * original method via its gateway, then record a REFUNDED Payment. A full
    * refund moves the invoice to REFUNDED; a partial refund records the amount but
-   * leaves the invoice PAID (there's no partial-refunded state). Does NOT touch
-   * the subscription or servers — cancel/suspend those separately if intended.
+   * leaves the invoice PAID (there's no partial-refunded state). A FULL refund
+   * also suspends the subscription's servers (P0-G: refunded service must not
+   * keep running); a partial refund leaves them running. The subscription itself
+   * is not cancelled here — do that separately if future billing should stop.
    */
   async refundInvoice(
     invoiceId: string,
@@ -1527,6 +1571,16 @@ export class BillingService {
           ]
         : []),
     ]);
+
+    // P0-G: a FULL refund revokes entitlement — stop the server(s) so a refunded
+    // customer isn't left with a running service. A partial refund leaves the
+    // service active (they still paid for part of the period).
+    if (full && invoice.subscriptionId) {
+      await this.suspendSubscriptionServers(
+        invoice.subscriptionId,
+        `invoice fully refunded by ${actorId ?? "system"}`,
+      );
+    }
 
     this.logger.log(
       `Invoice ${invoiceId} ${full ? "fully" : "partially"} refunded ` +

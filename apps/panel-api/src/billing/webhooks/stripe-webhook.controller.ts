@@ -173,6 +173,47 @@ export class StripeWebhookController {
         break;
       }
 
+      // A refund issued in the Stripe dashboard (or a dispute/chargeback) must
+      // revoke entitlement (P0-G). These objects carry only the gateway payment
+      // ref, so resolve our invoice via metadata first, then by the stored
+      // PaymentIntent/charge ref. refundExternalPayment is idempotent (state +
+      // gatewayRef guarded), so a webhook echo of our own admin refund is a
+      // no-op.
+      case "charge.refunded":
+      case "charge.dispute.created": {
+        const obj = event.data.object as StripeCharge & {
+          invoice?: string;
+          payment_intent?: string;
+          charge?: string;
+        };
+        let invoice = await this.resolveInvoice(obj);
+        if (!invoice) {
+          const ref =
+            (typeof obj.payment_intent === "string" && obj.payment_intent) ||
+            (typeof obj.charge === "string" && obj.charge) ||
+            obj.id ||
+            "";
+          const invoiceId = await this.billing
+            .findInvoiceIdByPaymentRef(ref)
+            .catch(() => null);
+          if (invoiceId) invoice = { id: invoiceId };
+        }
+        if (!invoice) {
+          this.logger.warn(
+            `Stripe ${event.type} could not be mapped to an invoice (id=${obj.id ?? "n/a"}); ignoring`,
+          );
+          return;
+        }
+        await this.billing.refundExternalPayment(invoice.id, {
+          gateway: "stripe",
+          gatewayRef:
+            (typeof obj.payment_intent === "string" && obj.payment_intent) ||
+            obj.id ||
+            "",
+        });
+        break;
+      }
+
       default:
         this.logger.debug(`Unhandled Stripe event type: ${event.type}`);
     }
