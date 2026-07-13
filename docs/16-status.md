@@ -2,10 +2,11 @@
 
 This is an **honest** implemented-vs-scaffolded matrix for the ReFx Hosting
 codebase as it exists in this repository. The architecture and documentation set
-are complete and authoritative; the code is a **working foundation** built and
-verified end-to-end, with clearly-marked extension points (`// TODO(impl)`) at
-genuine external-integration boundaries. It is **not** a finished, load-tested
-commercial SaaS — see "What is deliberately not done" at the end.
+are complete and authoritative; the code is the **production platform running
+[refx.gg](https://refx.gg)**, built and verified end-to-end, with clearly-marked
+extension points (`// TODO(impl)`) at genuine external-integration boundaries.
+A short list of deliberately-deferred items lives under "What is deliberately not
+done" at the end.
 
 Legend:
 
@@ -17,7 +18,7 @@ Legend:
 > typechecks; the node-agent builds/vets/tests on linux/amd64, linux/arm64,
 > windows/amd64; `apps/web` builds, typechecks, and lints; and `apps/panel-api`
 > compiles with 0 type errors, boots (all modules init, all REST routes map, the
-> code-first GraphQL schema generates), and passes **564 unit + 47 e2e tests**.
+> code-first GraphQL schema generates), and passes **573 unit + 49 e2e tests**.
 
 ## Components
 
@@ -25,9 +26,9 @@ Legend:
 |-----------|--------|-------|
 | `database` (Prisma schema) | **Done** | Full canonical schema across all domains; validates. **Committed migration chain** (`0_init` → auth-hardening, storefront, node port-range, user contact/address, RBAC roles, platform settings). Seed script + ~24 game templates that **auto-load create-only on every deploy** (new eggs appear without `SEED_DEMO`); other demo content is gated behind `SEED_DEMO` (first-run only) so deleted data isn't resurrected. |
 | `packages/shared` | **Done** | Enums mirroring the schema, panel↔agent WS protocol, per-server permission strings + `hasPermission`, common DTOs. Typechecks clean. (Apps still carry local copies pending migration onto it.) |
-| `panel-api` (NestJS) | **Done (foundation)** | 222 TS files across auth, users, servers, nodes, billing, orders, support, platform, push, status, agent, queues, common, prisma. Compiles clean and boots. |
-| `node-agent` (Go) | **Done (foundation)** | 61 Go files. `Runtime` interface with real Docker + native-process backends, build-tagged limits, WS hub, signed control API, file jail, backups, SFTP, stats. Cross-compiles + tests pass. |
-| `web` (Next.js) | **Done (foundation)** | shadcn/ui design system, ~75 routes incl. live console (xterm + mobile-friendly copy/select-text log view), file manager (folders-first natural sort, column sorting, filter), billing, support, admin, storefront, public status page, legal pages, and the game-switch flow. **SEO/growth surface**: per-game editorial content for all 40 games (HowTo/FAQ/Product JSON-LD, OG images), server-rendered knowledge base (28 seeded articles), Modrinth modpack landing pages, `/tools` hub (status checker, RAM calculator, Aikar's flags, SRV builder), dynamic sitemap + robots. Builds/typechecks/lints. |
+| `panel-api` (NestJS) | **Done** | 222 TS files across auth, users, servers, nodes, billing, orders, support, platform, push, status, agent, queues, common, prisma. Compiles clean and boots. |
+| `node-agent` (Go) | **Done** | 61 Go files. `Runtime` interface with real Docker + native-process backends, build-tagged limits, WS hub, signed control API, file jail, backups, SFTP, stats. Cross-compiles + tests pass. |
+| `web` (Next.js) | **Done** | shadcn/ui design system, ~75 routes incl. live console (xterm + mobile-friendly copy/select-text log view), file manager (folders-first natural sort, column sorting, filter), billing, support, admin, storefront, public status page, legal pages, and the game-switch flow. **SEO/growth surface**: per-game editorial content for all 40 games (HowTo/FAQ/Product JSON-LD, OG images), server-rendered knowledge base (28 seeded articles), Modrinth modpack landing pages, `/tools` hub (status checker, RAM calculator, Aikar's flags, SRV builder), dynamic sitemap + robots. Builds/typechecks/lints. |
 | `infra/docker` | **Done** | Full Compose stack (postgres, redis, opensearch, minio, rabbitmq, prometheus, grafana, loki, panel-api, web) + observability provisioning + migrate service. |
 | `infra/k8s/helm/refx` | **Done** | Helm chart: Deployments/Services for panel-api+web, HPAs, Ingress (WS timeouts), ConfigMap/Secret, ServiceAccount, NetworkPolicy, pre-upgrade migrate Job, NOTES. |
 | `infra/scripts` | **Done** | `install-node.sh` (Ubuntu/Debian/Alma/Rocky), `install-node.ps1` (Windows Server), `refx-agent.service`, `bootstrap.sh`. |
@@ -49,7 +50,7 @@ Legend:
 | Server transfer between nodes | **Done (admin)** | Admin-only (`servers.manage`) Pterodactyl-style move: `POST /admin/servers/:id/transfer` enqueues a `TRANSFER` job (`TransfersService`/`TransferProcessor`) that snapshots on the source (reusing backups→S3), provisions + restores on the destination (fresh ports allocated from the dest node's range), repoints `nodeId`/allocations atomically, then deletes the source copy. The **source is removed only after the destination is verified**, so any failure rolls back and the server survives. Tracked via the `ServerTransfer` model + state machine. No node-agent change (reuses install/backup/restore/delete). Follow-ups: a clean-provision agent endpoint to skip the redundant install, and a stuck-transfer reconciliation sweep. |
 | Resource resize / **plan change** | **Done** | Node-capacity check + agent reconfigure. **Upgrades are invoice-gated:** a dearer tier/slot change raises a **prorated** invoice immediately (`createUpgradeInvoice`) and stages the change in `PendingPlanChange` — the server stays on its **current** configuration until that invoice is **paid**, at which point `markInvoicePaid → applyPendingPlanChange` updates the sub + server and queues a `RECONFIGURE` job (the universal settlement funnel covers card/PayPal/manual/zero-total). **Downgrades** are scheduled (`applyAtPeriodEnd`) and applied at the next standard renewal (`renewSubscription`), so the customer keeps paid-for resources until the period rolls; voiding the upgrade invoice abandons the staged change. One pending change per subscription — the customer is **notified** to pay when the upgrade invoice is raised, and can **cancel** a staged change from the upgrade page (voids the unpaid invoice / drops the downgrade, unblocking new changes). *Caveat:* downgrades on PayPal **billing-agreement** subs (renewed via `settlePayPalRecurringPayment`, not the cron) aren't auto-applied — the PayPal plan price can't be re-encoded per change. Legacy flat-product resizes still apply immediately. |
 | Nodes (register/heartbeat/capacity/tokens, per-node port range) | **Done** | Agent registration + bootstrap-token endpoints; configurable allocation port range; optional per-node **game domain** for branded per-server addresses (`<shortId>.<gameDomain>` via a wildcard DNS record — see [docs/24](24-server-hostnames.md)). |
-| Agent client + console WS gateway | **Done (foundation)** | HMAC-signed HTTP client + browser↔agent relay. **Opt-in TLS certificate pinning** (`AGENT_TLS_PINNING`): pin a node's agent cert (admin "Pin certificate", trust-on-first-use) and the panel verifies against it via an undici dispatcher; off by default so self-signed setups are unaffected until pinned. |
+| Agent client + console WS gateway | **Done** | HMAC-signed HTTP client + browser↔agent relay. **Opt-in TLS certificate pinning** (`AGENT_TLS_PINNING`): pin a node's agent cert (admin "Pin certificate", trust-on-first-use) and the panel verifies against it via an undici dispatcher; off by default so self-signed setups are unaffected until pinned. |
 | Billing (products/prices/subs/invoices/payments, tax) | **Done** | **Editable + deletable products + per-interval prices**; **two billing models per product** — **hardware tiers** (game servers: Low/Mid/High `HardwareTier` packages, fixed RAM/CPU/disk, priced per tier) and **per-slot** (voice servers, e.g. **TeamSpeak 3**, priced per slot). The order page renders **tier cards** for game products and a **slot selector** for voice; the backend recomputes + validates every total (tier belongs to product, tier/slot active, slot min/max/step) and never trusts client prices. **weekly → annual** terms; **owner-only gateway/key editor** (`SettingsService`, AES-256-GCM, env fallback); Stripe + PayPal gateways; **Stripe _and_ PayPal verified webhooks** (capture/refund, idempotent); **coupons** (%/fixed, caps, expiry), **gift cards**, and per-user **account/store credit** — stackable, gateway charges only the remainder; free/fully-covered invoices settle without a gateway round-trip; **VAT/GST/US tax computed from the customer's billing address** (required at registration + before any order). Deep SDK flows (saved-card off-session vaulting, SCA) marked `TODO(impl)`. |
 | Queues (provisioning/reinstall/backup/renewal/suspension/modpack) | **Done** | BullMQ processors call agent/billing; **hourly renewal/dunning cron** (`BillingScheduler`, `@nestjs/schedule`) enqueues RENEW for due subs + DUNNING for past-due (deterministic jobIds = multi-instance safe; toggle `BILLING_SCHEDULER`). |
 | Support (admin queue/notes/canned/SLA/KB) | **Done** | Admin ticket queue (reply, status/priority, categorise, assign, internal notes); **ticket archive (storage) + permanent delete**; **category (SLA) + canned-response CRUD**; SLA breach computation; `support.*` permissions. |
@@ -134,10 +135,11 @@ beyond a single build session, and are called out so expectations are clear:
   use the voice port's published TCP side.
 - **Load/scale validation** to the "tens of thousands of servers" target —
   the architecture (docs 01/09) supports it; it has not been benchmarked.
-- **OpenSearch indexing, migration importers** (Pterodactyl/AMP/TCAdmin) —
-  designed (docs 11) with `TODO(impl)` stubs. (Transactional email delivery for
-  password reset / verification is implemented via nodemailer/SMTP.)
-- **Test coverage** — 291 unit + 47 e2e (panel-api) and security-critical agent
+- **OpenSearch indexing** and the **AMP/TCAdmin migration importers** —
+  designed (docs 11) with `TODO(impl)` stubs. (The **Pterodactyl** importer is
+  live; transactional email delivery for password reset / verification is
+  implemented via nodemailer/SMTP.)
+- **Test coverage** — 573 unit + 49 e2e (panel-api) and security-critical agent
   paths are covered, including the billing settlement/dunning/renewal engine, the
   auth/credential hardening controls, node-to-node transfers, APNs push, and the
   status rollup; broader coverage (esp. the modpack installer and web E2E) is

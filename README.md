@@ -66,10 +66,10 @@ Two product types, each with the right pricing model:
 | 🔑 **Admin password management** | From **Admin → Users** an admin can **email a reset link** or **set a temporary password** (auto-generated or chosen). A temp password flags `mustChangePassword`, **revokes all the user's sessions**, and **forces a change at next sign-in** — enforced **server-side** (you can't skip it by hitting the API directly, or even via the WebSocket console). Admins can only act on **strictly lower-privileged** accounts. |
 | 🛡️ **Hardened by default** | Security controls enforced at the framework layer, not just the UI: **server-side `mustChangePassword`** (global interceptor blocks every route bar change-password/me/logout/refresh), an **API-key WRITE-scope ceiling** (a READ key can never drive a mutating request, even on JWT-only controllers), **single-use + time-boxed node bootstrap tokens** (atomic consume, 30-min TTL), and **GraphQL introspection/playground off in production**. |
 | ⚖️ **Launch-ready legal** | First-class **Terms, Privacy, Acceptable-Use and Refund** pages, a footer that links them, an **honest cookie-consent banner** (necessary + telemetry only — no ad/tracking cookies), and a central `lib/legal.ts` with a sub-processor list and `{{placeholder}}` fields that stay visible until the operator fills them in. |
-| 📦 **Migrate in** | Importers for **Pterodactyl** (live), AMP & TCAdmin (scaffolded). |
+| 📦 **Migrate in** | Importers for **Pterodactyl** (live); AMP & TCAdmin on the roadmap. |
 
 > [!NOTE]
-> **Project status — honest.** This repo is a **complete architecture + a verified, building foundation**, not a finished commercial SaaS. Every component builds/typechecks/tests/validates (**291 unit + 47 e2e tests green**, agent cross-compiles to 3 targets, schema validates). External-integration edges are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
+> **Project status.** ReFx Hosting is the **production platform that runs [refx.gg](https://refx.gg)** — not a demo or a scaffold. Every component builds/typechecks/tests/validates (**573 unit + 49 e2e tests green**, agent cross-compiles to 3 targets, schema validates). A few optional external-integration edges (e.g. additional payment SDKs, extra panel importers) are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
 
 > [!TIP]
 > **Recently shipped:** **native iOS companion app + token-based APNs push** (server state · invoices · support replies · status incidents) · **public status page** with a live world map, per-region/per-component health and operator **incidents** (+ customer push broadcast) · **admin-only server transfers between nodes** (snapshot → provision → restore → repoint, with rollback) · **admin password management** (email reset or temp password + forced change) · a **security-hardening pass** (server-side `mustChangePassword`, API-key write-scope ceiling, single-use/time-boxed bootstrap tokens, GraphQL introspection off in prod) verified against a self-audit · **legal/policy pages + cookie-consent banner** · **billing settlement/dunning/renewal test suite** · **Steam Workshop management** (per‑server Workshop tab + central SteamCMD login & Web API key) · **hardware‑tier game servers** (Low/Mid/High cards + admin tier editor) · **slot‑based voice hosting — TeamSpeak 3** · **recurring PayPal via the Subscriptions API** · **public "Meet the team" page** · **coupons + gift cards + account/store credit** · **custom RBAC** + permission‑gated admin · **admin Support ticket queue** · **owner‑only payment‑gateway/key editor** · unified **one‑Minecraft** product with loader/version tab · built‑in **Modrinth** mods + **modpack installer** · **rootless** game containers · in‑browser **file manager** + live **SFTP** rotation · console that **persists across navigations & refreshes**.
@@ -257,7 +257,7 @@ A polished, **public** status page (no login) that turns real telemetry into an 
 ## 🧩 Components & key functions
 
 ### 🧠 panel-api — [`apps/panel-api`](apps/panel-api)
-NestJS central panel. **Compiles clean & boots; 291 unit + 47 e2e tests green.**
+NestJS central panel. **Compiles clean & boots; 573 unit + 49 e2e tests green.**
 
 | Area | Where | Notable functions / endpoints |
 |------|-------|-------------------------------|
@@ -830,8 +830,8 @@ refxhosting/
 ## 🧪 Testing
 
 ```bash
-cd apps/panel-api && npm test          # 291 unit tests (34 suites)
-cd apps/panel-api && npm run test:e2e  # 47 HTTP integration tests
+cd apps/panel-api && npm test          # 573 unit tests (63 suites)
+cd apps/panel-api && npm run test:e2e  # 49 HTTP integration tests
 cd apps/node-agent && go test ./...    # agent unit tests
 npx prisma validate --schema database/prisma/schema.prisma
 ```
@@ -859,5 +859,5 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the dev setup and the per-compone
 [AGPL-3.0](LICENSE) — if you run a modified version as a network service, you must offer users its source.
 
 <div align="center">
-<sub>Built as a complete, honest foundation — see the <a href="docs/16-status.md">implementation status</a> for exactly what's done vs. stubbed.</sub>
+<sub>The production platform behind <a href="https://refx.gg">refx.gg</a> — see the <a href="docs/16-status.md">implementation status</a> for exactly what's done vs. stubbed.</sub>
 </div>

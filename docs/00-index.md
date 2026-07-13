@@ -45,7 +45,7 @@ consistent with the canonical data model in
 - [12 — CI/CD](12-cicd.md) — GitHub Actions pipelines, image publishing, agent cross-compilation, promotion.
 
 ### Status & runbooks
-- [16 — Implementation Status](16-status.md) — honest implemented-vs-scaffolded matrix.
+- [16 — Implementation Status](16-status.md) — honest implementation-status matrix.
 - [22 — Go-Live Checklist](22-go-live-checklist.md) — the master runbook for taking paying customers: business/legal, payments go-live, prod infra, DR, ops, and the pre-launch smoke test.
 - [23 — Backups & Disaster Recovery](23-backups-dr.md) — what's backed up, the encrypted panel-DB backup/restore scripts, and the restore drill.
 - [24 — Branded server hostnames](24-server-hostnames.md) — GPortal-style per-server addresses via a per-node wildcard game domain.

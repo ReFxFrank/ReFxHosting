@@ -1,6 +1,6 @@
 # 22 — Go-Live Checklist (taking paying customers)
 
-The master runbook for turning the ReFx Hosting **foundation** into a live
+The master runbook for taking the ReFx Hosting platform live as a
 business that safely takes real money. This is the single source of truth we work
 down together; check items off as they land.
 
