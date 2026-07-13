@@ -1011,6 +1011,10 @@ model Product {
 
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+
+  // Declared to match the index created by 20260616040000_per_slot_products —
+  // previously missing from the canonical schema (drift the CI check now catches).
+  @@index([gameTemplateId])
 }
 
 /// A fixed hardware package (Low/Mid/High) under a HARDWARE_TIER game Product.

@@ -88,14 +88,17 @@ jobs:
       - name: Apply full migration chain from empty DB
         working-directory: apps/panel-api
         run: npx prisma migrate deploy
-      - name: Fail on schema drift (migrations vs schema.prisma)
+      - name: Fail on schema drift (migrated DB vs schema.prisma)
         working-directory: apps/panel-api
-        # --exit-code returns 2 when the migration chain and the datamodel diverge
-        # (i.e. a schema.prisma change shipped without a matching migration).
+        # After migrate deploy applied the full chain to the DB above, diff
+        # schema.prisma against that live database. --exit-code returns 2 when
+        # they diverge (a schema.prisma change shipped without a matching
+        # migration, or vice versa). Using --to-config-datasource avoids needing
+        # a separate shadow database.
         run: >-
           npx prisma migrate diff
-          --from-migrations ../../database/prisma/migrations
-          --to-schema-datamodel ../../database/prisma/schema.prisma
+          --from-schema ../../database/prisma/schema.prisma
+          --to-config-datasource
           --exit-code
       - name: Assert migrate entrypoint is fail-closed
         run: bash infra/scripts/assert-migrate-fail-closed.sh
