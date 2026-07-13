@@ -551,15 +551,16 @@ export class BackupsService {
         latestFresh,
       };
     } catch (err) {
-      this.logger.warn(
-        `panel-DB backup stats unavailable: ${(err as Error).message}`,
-      );
+      const detail = (err as Error).message;
+      this.logger.warn(`panel-DB backup stats unavailable: ${detail}`);
+      const hint = /AccessDenied|403/.test(detail)
+        ? ' The R2 token can read/write objects but not list the bucket — give it "Admin Read & Write" (or add s3:ListBucket) in Cloudflare.'
+        : '';
       return {
         configured: false,
         bucket,
         prefix,
-        reason:
-          'Could not list the panel-DB backup bucket (check the R2 token has list permission on this bucket).',
+        reason: `Could not list ${bucket}: ${detail}.${hint}`,
       };
     }
   }

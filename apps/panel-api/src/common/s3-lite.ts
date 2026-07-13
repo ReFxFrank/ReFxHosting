@@ -104,7 +104,14 @@ export async function listObjects(
       });
       const body = await res.text();
       if (!res.ok) {
-        throw new Error(`S3 list ${res.status}: ${body.slice(0, 300)}`);
+        // R2/S3 errors are XML: <Error><Code>..</Code><Message>..</Message></Error>.
+        // Surface the code+message so the caller can show the real cause.
+        const code = body.match(/<Code>([\s\S]*?)<\/Code>/)?.[1];
+        const msg = body.match(/<Message>([\s\S]*?)<\/Message>/)?.[1];
+        const detail = code
+          ? `${code}${msg ? `: ${msg}` : ''}`
+          : body.slice(0, 200).replace(/\s+/g, ' ').trim();
+        throw new Error(`HTTP ${res.status} — ${detail}`);
       }
       xml = body;
     } finally {

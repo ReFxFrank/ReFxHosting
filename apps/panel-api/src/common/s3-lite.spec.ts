@@ -78,16 +78,17 @@ describe('listObjects', () => {
     expect(res.totalBytes).toBe(0);
   });
 
-  it('throws with context on a non-2xx response', async () => {
+  it('surfaces the R2 error code and status on a non-2xx response', async () => {
     jest
       .spyOn(global, 'fetch')
       .mockResolvedValue(
-        new Response('<Error><Code>AccessDenied</Code></Error>', {
-          status: 403,
-        }),
+        new Response(
+          '<Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>',
+          { status: 403 },
+        ),
       );
     await expect(listObjects(CFG, 'panel-postgres/')).rejects.toThrow(
-      /S3 list 403/,
+      /HTTP 403 — AccessDenied: Access Denied/,
     );
   });
 });
