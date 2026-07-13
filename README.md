@@ -13,7 +13,7 @@
 [![CI](https://github.com/refxfrank/refxhosting/actions/workflows/ci.yml/badge.svg)](./.github/workflows/ci.yml)
 [![Security](https://github.com/refxfrank/refxhosting/actions/workflows/security.yml/badge.svg)](./.github/workflows/security.yml)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-0072FF.svg?style=flat-square)](./LICENSE)
-[![Tests](https://img.shields.io/badge/tests-291_unit_·_47_e2e_green-0072FF?style=flat-square)](#-testing)
+[![Tests](https://img.shields.io/badge/tests-573_unit_·_49_e2e_green-0072FF?style=flat-square)](#-testing)
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](#-tech-stack)
 [![Go](https://img.shields.io/badge/Go-00ADD8?style=flat-square&logo=go&logoColor=white)](#-node-agent--apps-node-agent)
@@ -73,6 +73,24 @@ Two product types, each with the right pricing model:
 
 > [!TIP]
 > **Recently shipped:** **native iOS companion app + token-based APNs push** (server state · invoices · support replies · status incidents) · **public status page** with a live world map, per-region/per-component health and operator **incidents** (+ customer push broadcast) · **admin-only server transfers between nodes** (snapshot → provision → restore → repoint, with rollback) · **admin password management** (email reset or temp password + forced change) · a **security-hardening pass** (server-side `mustChangePassword`, API-key write-scope ceiling, single-use/time-boxed bootstrap tokens, GraphQL introspection off in prod) verified against a self-audit · **legal/policy pages + cookie-consent banner** · **billing settlement/dunning/renewal test suite** · **Steam Workshop management** (per‑server Workshop tab + central SteamCMD login & Web API key) · **hardware‑tier game servers** (Low/Mid/High cards + admin tier editor) · **slot‑based voice hosting — TeamSpeak 3** · **recurring PayPal via the Subscriptions API** · **public "Meet the team" page** · **coupons + gift cards + account/store credit** · **custom RBAC** + permission‑gated admin · **admin Support ticket queue** · **owner‑only payment‑gateway/key editor** · unified **one‑Minecraft** product with loader/version tab · built‑in **Modrinth** mods + **modpack installer** · **rootless** game containers · in‑browser **file manager** + live **SFTP** rotation · console that **persists across navigations & refreshes**.
+
+---
+
+## 📸 See it in action
+
+<div align="center">
+
+<img src="docs/screenshots/storefront-home.png" alt="ReFx Hosting storefront — hero and game catalogue" width="820" />
+
+<sub>The live storefront at <a href="https://refx.gg">refx.gg</a>.</sub>
+
+</div>
+
+| Order a server | Public status page |
+|:--:|:--:|
+| <img src="docs/screenshots/store-games.png" alt="Order page with hardware-tier cards" width="410" /> | <img src="docs/screenshots/status-page.png" alt="Public status page with a live world map" width="410" /> |
+
+<sub>Screenshots live in <a href="docs/screenshots/">docs/screenshots/</a> — see that folder's guide to add or refresh them (and the sanitisation checklist, since this repo is public).</sub>
 
 ---
 

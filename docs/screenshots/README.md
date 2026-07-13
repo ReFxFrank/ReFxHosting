@@ -32,9 +32,20 @@ consistent — the panel's dark `#0072ff` theme photographs best), and export as
 | `status-page.png` | The public `/status` page with the world map. | README status-page |
 | `admin-growth.png` | The admin **Growth** report. | README growth-engine |
 
-You don't need all of them — `storefront-home.png`, `dashboard.png`,
-`server-console.png`, `game-switch.png`, and `admin-network.png` are the
-highest-value five for a launch README. Add the rest as you have them.
+### Approved for this public repo
+
+Because this repo is public, the root README's **"See it in action"** gallery
+only wires up **fully public pages** that expose nothing sensitive:
+
+- `storefront-home.png`
+- `store-games.png`
+- `status-page.png`
+
+Drop those three PNGs in and the README gallery renders immediately. The
+admin/infra shots above (`admin-*`, `server-*`, `dashboard`) are **intentionally
+left out of the public README** — capture them for internal decks if you like,
+but don't commit them here unless you've decided the sanitised versions are fine
+to publish.
 
 ## How references look
 
