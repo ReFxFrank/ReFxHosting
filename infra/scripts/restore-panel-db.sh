@@ -60,9 +60,11 @@ if [ -n "$SRC_FILE" ]; then
 else
   command -v aws >/dev/null || die "aws CLI not found (needed unless --file)."
   if [ -n "$USE_LATEST" ]; then
-    SRC_KEY="$(aws "${EP_ARG[@]}" s3 ls "s3://${BUCKET}/${PREFIX}/" \
-      | awk '{print $4}' | grep -E '\.dump\.enc$' | sort | tail -n 1)"
-    [ -n "$SRC_KEY" ] || die "no backups found under s3://${BUCKET}/${PREFIX}/"
+    # s3api (not `s3 ls`): reliable against R2's ListObjectsV2 implementation.
+    SRC_KEY="$(aws "${EP_ARG[@]}" s3api list-objects-v2 --bucket "$BUCKET" --prefix "${PREFIX}/" \
+      --query 'Contents[].Key' --output text 2>/dev/null \
+      | tr '\t' '\n' | grep -E '\.dump\.enc$' | sed "s|^${PREFIX}/||" | sort | tail -n 1)"
+    [ -n "$SRC_KEY" ] || die "no backups found under s3://${BUCKET}/${PREFIX}/ (or listing failed — pass --key <name> from the backup log)"
   fi
   [ -n "$SRC_KEY" ] || die "specify --latest, --key <name>, or --file <path>."
   echo "downloading s3://${BUCKET}/${PREFIX}/${SRC_KEY}"

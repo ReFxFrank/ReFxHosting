@@ -65,9 +65,11 @@ aws "${EP_ARG[@]}" s3 cp "$TMP" "s3://${BUCKET}/${PREFIX}/${NAME}"
 
 # --- retention: keep the newest $RETENTION objects under the prefix ----------
 echo "[$(date -u +%FT%TZ)] pruning to newest ${RETENTION}…"
+# s3api (not `s3 ls`): reliable against R2's ListObjectsV2 implementation.
 mapfile -t OLD < <(
-  aws "${EP_ARG[@]}" s3 ls "s3://${BUCKET}/${PREFIX}/" \
-    | awk '{print $4}' | grep -E '\.dump\.enc$' | sort | head -n -"${RETENTION}"
+  aws "${EP_ARG[@]}" s3api list-objects-v2 --bucket "$BUCKET" --prefix "${PREFIX}/" \
+    --query 'Contents[].Key' --output text 2>/dev/null \
+    | tr '\t' '\n' | grep -E '\.dump\.enc$' | sed "s|^${PREFIX}/||" | sort | head -n -"${RETENTION}"
 ) || true
 for key in "${OLD[@]:-}"; do
   [ -n "$key" ] || continue
