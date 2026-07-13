@@ -6,6 +6,7 @@ import "flag-icons/css/flag-icons.min.css";
 import { Providers } from "@/components/providers";
 import { CookieConsent } from "@/components/shared/cookie-consent";
 import { EffectsModeInit } from "@/components/shared/effects-mode";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
@@ -38,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={`${inter.variable} ${mono.variable} font-sans antialiased`}>
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSON_LD) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(ORG_JSON_LD) }}
         />
         <EffectsModeInit />
         <Providers>{children}</Providers>

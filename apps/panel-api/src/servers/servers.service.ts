@@ -247,6 +247,36 @@ export class ServersService {
       throw new BadRequestException("Subscription is not active");
     }
 
+    // SECURITY (SEC-01): never install on an unpaid subscription. The order flow
+    // reserves unpaid servers with `deferProvision: true` and installs them from
+    // billing.markInvoicePaid once payment clears; any *immediate* provisioning
+    // must be backed by a settled invoice. Without this, POST /billing/subscriptions
+    // (which mints an ACTIVE subscription with no charge) chained with POST /servers
+    // would provision free compute. Deferred (reserved-but-not-installed) servers
+    // are exempt — they carry no running workload until paid.
+    if (!opts.deferProvision) {
+      const paid = await this.prisma.invoice.findFirst({
+        where: { subscriptionId: subscription.id, state: "PAID" },
+        select: { id: true },
+      });
+      if (!paid) {
+        throw new BadRequestException(
+          "Subscription has no settled payment — provisioning is not allowed.",
+        );
+      }
+    }
+
+    // SECURITY (SEC-01b): one server per subscription. A subscription is billed
+    // for exactly one server (game-switch/resize keep the same server), so a
+    // single paid subscription must not be able to back multiple servers.
+    const existingServer = await this.prisma.server.findFirst({
+      where: { subscriptionId: subscription.id, deletedAt: null },
+      select: { id: true },
+    });
+    if (existingServer) {
+      throw new BadRequestException("Subscription already has a server.");
+    }
+
     const template = await this.prisma.gameTemplate.findUnique({
       where: { id: dto.templateId },
       include: { category: { select: { slug: true } } },

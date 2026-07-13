@@ -15,6 +15,7 @@ import {
   ramGuidance,
 } from "@/lib/modrinth";
 import { SITE_URL } from "@/lib/server-api";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 export const revalidate = 86_400;
 
@@ -99,7 +100,7 @@ export default async function ModpackLandingPage({
     <div className="mx-auto w-full max-w-4xl px-4 py-14 sm:px-6">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
 
       <Link

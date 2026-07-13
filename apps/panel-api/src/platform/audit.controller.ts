@@ -1,10 +1,9 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { GlobalRole } from '@prisma/client';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../common/decorators/roles.decorator';
+import { AdminPermissionGuard } from '../auth/guards/admin-permission.guard';
+import { RequirePerm } from '../common/decorators/require-permission.decorator';
 import { AuditQueryDto } from './dto/audit-query.dto';
 
 /**
@@ -13,13 +12,13 @@ import { AuditQueryDto } from './dto/audit-query.dto';
  */
 @ApiTags('platform')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(GlobalRole.ADMIN)
+@UseGuards(JwtAuthGuard, AdminPermissionGuard)
 @Controller('platform/audit-logs')
 export class AuditController {
   constructor(private readonly audit: AuditService) {}
 
   @Get()
+  @RequirePerm('audit.read')
   list(@Query() filter: AuditQueryDto) {
     return this.audit.listAuditLogs(filter);
   }

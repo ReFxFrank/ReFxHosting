@@ -6,6 +6,7 @@ import { Markdown } from "@/components/shared/markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SITE_URL, serverGet } from "@/lib/server-api";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 /**
  * Server-rendered so crawlers index the full article body — these pages
@@ -96,7 +97,7 @@ export default async function KnowledgeBaseArticlePage({
     <article className="mx-auto w-full max-w-3xl px-4 py-14 sm:px-6">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify([jsonLd, breadcrumbs]) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd([jsonLd, breadcrumbs]) }}
       />
       <Link
         href="/knowledge-base"

@@ -3,6 +3,7 @@ import { GameDetailClient } from "./game-detail-client";
 import { GameEditorial } from "@/components/public/game-editorial";
 import { getGameContent } from "@/data/games";
 import { SITE_URL, serverGet } from "@/lib/server-api";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 /**
  * Server shell for the game landing page: crawlable metadata + Product
@@ -141,7 +142,7 @@ export default async function GameDetailPage({
       {jsonLd.length > 0 && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
         />
       )}
       <GameDetailClient />

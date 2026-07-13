@@ -38,7 +38,12 @@ export class LoggingInterceptor implements NestInterceptor {
 
     const start = Date.now();
     const { method, url } = req;
-    const chatty = CHATTY_PATHS.some((p) => (url as string)?.includes(p));
+    // SECURITY (SEC-04): never log the query string. Some routes carry secrets
+    // in the query (e.g. GET /auth/reset-password/valid?token=…), and those
+    // tokens would otherwise land in application + proxy access logs, where any
+    // reader could redeem a live password-reset token. Log the path only.
+    const path = (url as string)?.split("?")[0] ?? url;
+    const chatty = CHATTY_PATHS.some((p) => (path as string)?.includes(p));
 
     return next.handle().pipe(
       tap(() => {
@@ -47,7 +52,7 @@ export class LoggingInterceptor implements NestInterceptor {
         // errored or was slow (a wedged agent path is exactly what we'd want to
         // see — and what would have kept the upload outage visible in the log).
         if (chatty && res.statusCode < 400 && ms < SLOW_MS) return;
-        this.logger.log(`${method} ${url} ${res.statusCode} ${ms}ms`);
+        this.logger.log(`${method} ${path} ${res.statusCode} ${ms}ms`);
       }),
     );
   }

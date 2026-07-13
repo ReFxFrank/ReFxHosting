@@ -551,7 +551,11 @@ export class AuthService {
       const codes = await this.prisma.recoveryCode.findMany({
         where: { userId, usedAt: null },
       });
-      const hash = this.crypto.hash(code.toUpperCase());
+      // SECURITY (SEC-03): codes are generated as mixed-case base64url
+      // (crypto.token(10)) and hashed verbatim, so verification must NOT
+      // case-fold — uppercasing here made every code containing a lowercase
+      // letter unmatchable, silently disabling the recovery-code MFA factor.
+      const hash = this.crypto.hash(code.trim());
       const match = codes.find((c) => c.codeHash === hash);
       if (!match) throw new UnauthorizedException("Invalid recovery code");
       await this.prisma.recoveryCode.update({

@@ -1,5 +1,6 @@
 import { PublicLayout } from "@/components/public/public-layout";
 import { SITE_URL } from "@/lib/server-api";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
 
@@ -28,7 +29,7 @@ export default function PublicGroupLayout({
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(WEBSITE_JSON_LD) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(WEBSITE_JSON_LD) }}
       />
       <PublicLayout>{children}</PublicLayout>
     </>

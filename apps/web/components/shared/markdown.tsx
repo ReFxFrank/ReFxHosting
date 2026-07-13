@@ -185,7 +185,18 @@ function renderInline(text: string): ReactNode {
       const lm = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token)!;
       const label = lm[1];
       const href = lm[2];
-      const internal = href.startsWith("/");
+      // SECURITY (SEC-07): allowlist link schemes. Same-origin paths must be a
+      // single leading slash (NOT "//host", which is protocol-relative and
+      // off-origin); external links must be http(s)/mailto. Anything else
+      // (javascript:, data:, vbscript:) renders as plain text so a KB article
+      // can't smuggle a click-to-execute link.
+      const internal = href.startsWith("/") && !href.startsWith("//");
+      const externalOk = /^(https?:|mailto:)/i.test(href);
+      if (!internal && !externalOk) {
+        nodes.push(<span key={key++}>{label}</span>);
+        rest = rest.slice(m.index + token.length); // keep the loop advancing
+        continue;
+      }
       nodes.push(
         internal ? (
           <Link key={key++} href={href} className="text-primary underline underline-offset-2 hover:text-foreground">

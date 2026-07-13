@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { SITE_URL } from "@/lib/server-api";
+import { serializeJsonLd } from "@/lib/json-ld";
 
 /**
  * Server-rendered shell shared by the free-tool pages: breadcrumb, H1,
@@ -62,7 +63,7 @@ export function ToolShell({
     <div className="mx-auto w-full max-w-3xl px-4 py-14 sm:px-6">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
       />
       <Link
         href="/tools"

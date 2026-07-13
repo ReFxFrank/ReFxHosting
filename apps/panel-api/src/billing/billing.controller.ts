@@ -10,7 +10,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { GlobalRole } from '@prisma/client';
 import { BillingService } from './billing.service';
 import { ReferralsService } from './referrals.service';
 import { CouponsService } from './coupons.service';
@@ -19,9 +18,9 @@ import { CreditService } from './credit.service';
 import { ValidateCouponDto } from './dto/coupon.dto';
 import { RedeemGiftCardDto } from './dto/gift-card.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
+import { AdminPermissionGuard } from '../auth/guards/admin-permission.guard';
+import { RequirePerm } from '../common/decorators/require-permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
 import { Audit } from '../common/decorators/audit.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import {
@@ -112,16 +111,16 @@ export class BillingController {
   }
 
   @Post('products')
-  @UseGuards(RolesGuard)
-  @Roles(GlobalRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequirePerm('catalog.manage')
   @Audit({ action: 'billing.product.create', targetType: 'Product' })
   createProduct(@Body() dto: CreateProductDto) {
     return this.billing.createProduct(dto);
   }
 
   @Post('prices')
-  @UseGuards(RolesGuard)
-  @Roles(GlobalRole.ADMIN)
+  @UseGuards(AdminPermissionGuard)
+  @RequirePerm('catalog.manage')
   @Audit({ action: 'billing.price.create', targetType: 'Price' })
   createPrice(@Body() dto: CreatePriceDto) {
     return this.billing.createPrice(dto);
