@@ -1290,6 +1290,19 @@ export const api = {
           backups: number;
           bytes: number;
         }[];
+        /** The panel's own encrypted Postgres backups (separate R2 bucket). */
+        panelDb: {
+          configured: boolean;
+          reason?: string;
+          bucket?: string;
+          prefix?: string;
+          backups?: number;
+          bytes?: number;
+          estMonthlyCostMinor?: number;
+          latestKey?: string;
+          latestModified?: string;
+          latestFresh?: boolean;
+        };
       }>("/admin/backups/stats"),
 
     // Database hosts (shared MySQL/MariaDB for per-server databases).

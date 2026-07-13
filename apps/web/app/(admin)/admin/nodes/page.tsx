@@ -24,6 +24,7 @@ import {
   Cpu,
   MemoryStick,
   HardDrive,
+  Database,
   MapPin,
   Wifi,
   WifiOff,
@@ -72,6 +73,7 @@ import {
   cn,
   formatMb,
   formatDateTime,
+  formatRelative,
   pct,
   copyToClipboard,
 } from "@/lib/utils";
@@ -739,7 +741,11 @@ function BackupStoragePanel() {
 
   if (isLoading) return <Skeleton className="h-40 w-full rounded-2xl" />;
   if (!data) return null;
-  const hasAny = data.offsite.backups > 0 || data.local.backups > 0;
+  const hasAny =
+    data.offsite.backups > 0 ||
+    data.local.backups > 0 ||
+    data.panelDb.configured ||
+    !!data.panelDb.reason;
   if (!hasAny) return null;
 
   const gb = (bytes: number) => (bytes / 1e9).toFixed(bytes >= 1e10 ? 0 : 2);
@@ -841,6 +847,58 @@ function BackupStoragePanel() {
             </Table>
           </div>
         )}
+
+        {/* Panel-DB backups: the platform's own encrypted Postgres dumps,
+            listed live from their R2 bucket (they aren't tracked as Backup rows). */}
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.015] p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Database className="size-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold">Panel database backups</h3>
+            <span className="text-xs text-muted-foreground">
+              encrypted pg_dumps · nightly cron
+            </span>
+          </div>
+          {data.panelDb.configured ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <EconTile
+                  label="Stored"
+                  value={`${gb(data.panelDb.bytes ?? 0)} GB`}
+                  sub={`${data.panelDb.backups ?? 0} dump(s) in ${data.panelDb.bucket}`}
+                />
+                <EconTile
+                  label="Est. R2 cost"
+                  value={fmtMoney(data.panelDb.estMonthlyCostMinor ?? 0, "USD")}
+                  sub="$0.015/GB-mo · egress free"
+                />
+                <EconTile
+                  label="Latest backup"
+                  value={
+                    data.panelDb.latestModified
+                      ? formatRelative(data.panelDb.latestModified)
+                      : "—"
+                  }
+                  tone={data.panelDb.latestFresh ? "good" : "bad"}
+                  sub={
+                    data.panelDb.latestModified
+                      ? "should be < 24h old"
+                      : "no dumps found yet"
+                  }
+                />
+              </div>
+              {data.panelDb.latestKey && (
+                <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
+                  latest: {data.panelDb.latestKey}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {data.panelDb.reason ??
+                "Panel-DB backup storage is not configured."}
+            </p>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

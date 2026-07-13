@@ -467,6 +467,100 @@ export class BackupsService {
         marginMinor: monthlyRevenueMinor - estMonthlyCostMinor,
       },
       topOffsite,
+      panelDb: await this.panelDbBackupStats(),
     };
+  }
+
+  /**
+   * Usage of the panel's own Postgres backup bucket (the encrypted pg_dumps the
+   * infra/scripts/backup-panel-db.sh cron ships to R2). These objects aren't in
+   * our DB — they're written by a shell script — so we list the bucket directly
+   * with a signed, read-only ListObjectsV2. Config comes from the same .env the
+   * script uses (S3_* + PANEL_BACKUP_*), which the container receives via
+   * env_file. Best-effort: any misconfig or R2 error returns configured:false
+   * with a reason rather than breaking the storage overview.
+   */
+  async panelDbBackupStats(): Promise<{
+    configured: boolean;
+    reason?: string;
+    bucket?: string;
+    prefix?: string;
+    backups?: number;
+    bytes?: number;
+    estMonthlyCostMinor?: number;
+    latestKey?: string;
+    latestModified?: string;
+    /** True when the newest dump is under ~36h old (nightly cron is healthy). */
+    latestFresh?: boolean;
+  }> {
+    const env = process.env;
+    const bucket = env.PANEL_BACKUP_BUCKET || env.S3_BUCKET || '';
+    const endpoint = env.S3_ENDPOINT || '';
+    const accessKey = env.S3_ACCESS_KEY || '';
+    const secretKey = env.S3_SECRET_KEY || '';
+    const prefix = (env.PANEL_BACKUP_PREFIX || 'panel-postgres') + '/';
+
+    if (!bucket || !endpoint || !accessKey || !secretKey) {
+      return {
+        configured: false,
+        reason:
+          'Panel-DB backup storage is not configured (S3_ENDPOINT / S3_ACCESS_KEY / S3_SECRET_KEY / PANEL_BACKUP_BUCKET in the panel .env).',
+      };
+    }
+    // MinIO dev default — not a real offsite target; don't present it as one.
+    if (/minio:9000|localhost/.test(endpoint)) {
+      return {
+        configured: false,
+        reason: `Panel-DB backups point at a local endpoint (${endpoint}), not offsite R2/S3.`,
+      };
+    }
+
+    try {
+      const { listObjects } = await import('../common/s3-lite');
+      const { objects, totalBytes } = await listObjects(
+        {
+          endpoint,
+          region: env.S3_REGION || 'auto',
+          bucket,
+          accessKey,
+          secretKey,
+          usePathStyle: (env.S3_FORCE_PATH_STYLE ?? 'true') !== 'false',
+        },
+        prefix,
+      );
+      const dumps = objects.filter((o) => o.key.endsWith('.dump.enc'));
+      const latest = dumps.reduce<(typeof dumps)[number] | undefined>(
+        (acc, o) => (!acc || o.lastModified > acc.lastModified ? o : acc),
+        undefined,
+      );
+      // R2 storage: $0.015/GB-month = 1.5 minor units per GB (egress free).
+      const estMonthlyCostMinor = Math.round((totalBytes / 1e9) * 1.5);
+      const latestFresh = latest
+        ? Date.now() - new Date(latest.lastModified).getTime() <
+          36 * 3600 * 1000
+        : false;
+      return {
+        configured: true,
+        bucket,
+        prefix,
+        backups: dumps.length,
+        bytes: totalBytes,
+        estMonthlyCostMinor,
+        latestKey: latest?.key,
+        latestModified: latest?.lastModified,
+        latestFresh,
+      };
+    } catch (err) {
+      this.logger.warn(
+        `panel-DB backup stats unavailable: ${(err as Error).message}`,
+      );
+      return {
+        configured: false,
+        bucket,
+        prefix,
+        reason:
+          'Could not list the panel-DB backup bucket (check the R2 token has list permission on this bucket).',
+      };
+    }
   }
 }
