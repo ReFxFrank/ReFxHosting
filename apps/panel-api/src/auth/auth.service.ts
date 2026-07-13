@@ -23,6 +23,7 @@ import { CryptoService } from "../common/crypto/crypto.service";
 import { EmailService } from "../email/email.service";
 import { uuidv7 } from "../common/util/uuid";
 import { AppConfig } from "../config/configuration";
+import { sanitizeAttribution } from "../common/dto/attribution.dto";
 import { LoginDto, RegisterDto, TokenResponseDto } from "./dto/auth.dto";
 
 const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -63,32 +64,6 @@ const ARGON_OPTS = {
   timeCost: 2,
   parallelism: 1,
 } as const;
-
-/**
- * Whitelist client-supplied acquisition data: known keys only, values
- * truncated — this lands in the DB verbatim otherwise.
- */
-function sanitizeAttribution(
-  raw: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!raw || typeof raw !== "object") return undefined;
-  const ALLOWED = [
-    "source",
-    "medium",
-    "campaign",
-    "term",
-    "content",
-    "ref",
-    "landing",
-    "referrer",
-  ];
-  const out: Record<string, string> = {};
-  for (const key of ALLOWED) {
-    const v = raw[key];
-    if (typeof v === "string" && v.trim()) out[key] = v.trim().slice(0, 200);
-  }
-  return Object.keys(out).length ? out : undefined;
-}
 
 @Injectable()
 export class AuthService {

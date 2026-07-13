@@ -5,6 +5,10 @@ import { CouponsService } from '../billing/coupons.service';
 import { GiftCardsService } from '../billing/gift-cards.service';
 import { CreditService } from '../billing/credit.service';
 import { ServersService } from '../servers/servers.service';
+import {
+  AttributionDto,
+  sanitizeAttribution,
+} from '../common/dto/attribution.dto';
 
 export interface OrderResult {
   serverId: string;
@@ -21,20 +25,6 @@ export interface OrderResult {
  * BillingService and ServersService end to end. The live payment capture is the
  * single external piece left as TODO(impl); the rest of the flow is wired.
  */
-/** Whitelist client-supplied acquisition data (known keys, truncated). */
-function sanitizeAttribution(
-  raw: Record<string, string> | undefined,
-): Record<string, string> | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const ALLOWED = ['source', 'medium', 'campaign', 'term', 'content', 'ref', 'landing', 'referrer'];
-  const out: Record<string, string> = {};
-  for (const key of ALLOWED) {
-    const v = raw[key];
-    if (typeof v === 'string' && v.trim()) out[key] = v.trim().slice(0, 200);
-  }
-  return Object.keys(out).length ? out : undefined;
-}
-
 @Injectable()
 export class OrdersService {
   constructor(
@@ -61,7 +51,7 @@ export class OrdersService {
       gateway?: 'stripe' | 'paypal';
       environment?: Record<string, string>;
       /** First-touch acquisition data (utm params, ref, landing); whitelisted here. */
-      attribution?: Record<string, string>;
+      attribution?: AttributionDto;
       expressBackups?: boolean;
       couponCode?: string;
       giftCardCode?: string;

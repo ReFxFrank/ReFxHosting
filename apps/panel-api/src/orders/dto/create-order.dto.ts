@@ -8,7 +8,10 @@ import {
   IsString,
   IsUUID,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
+import { AttributionDto } from '../../common/dto/attribution.dto';
 
 /**
  * Checkout payload from the storefront buy flow: subscribe to a product at a
@@ -84,4 +87,23 @@ export class CreateOrderDto {
   @IsOptional()
   @IsObject()
   environment?: Record<string, string>;
+
+  @ApiPropertyOptional({
+    description:
+      'Express Backups add-on: offsite object-storage backups with fast direct downloads, billed per cycle.',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  expressBackups?: boolean;
+
+  @ApiPropertyOptional({
+    type: AttributionDto,
+    description:
+      'First-touch acquisition data (utm params, ref, landing). Strictly whitelisted.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AttributionDto)
+  attribution?: AttributionDto;
 }

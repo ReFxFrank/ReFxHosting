@@ -12,9 +12,12 @@ import {
   Length,
   MaxLength,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiKeyScope } from '@prisma/client';
 import { IsStrongPassword } from '../password.validator';
+import { AttributionDto } from '../../common/dto/attribution.dto';
 
 export class RegisterDto {
   @ApiProperty()
@@ -37,12 +40,14 @@ export class RegisterDto {
   referralCode?: string;
 
   @ApiPropertyOptional({
+    type: AttributionDto,
     description:
-      'First-touch acquisition data captured client-side (utm params, ref, landing). Whitelisted server-side.',
+      'First-touch acquisition data captured client-side (utm params, ref, landing). Strictly whitelisted.',
   })
   @IsOptional()
-  @IsObject()
-  attribution?: Record<string, string>;
+  @ValidateNested()
+  @Type(() => AttributionDto)
+  attribution?: AttributionDto;
 
   @ApiPropertyOptional()
   @IsOptional()

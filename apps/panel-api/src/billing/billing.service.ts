@@ -31,6 +31,7 @@ import {
   paginate,
 } from "../common/dto/pagination.dto";
 import { uuidv7 } from "../common/util/uuid";
+import { sanitizeAttribution } from "../common/dto/attribution.dto";
 import { AppConfig } from "../config/configuration";
 import {
   JOB,
@@ -485,7 +486,9 @@ export class BillingService {
         interval: dto.interval,
         slots: dto.slots && dto.slots > 0 ? dto.slots : 1,
         expressBackups: dto.expressBackups ?? false,
-        attribution: dto.attribution ?? undefined,
+        // Sanitize again at the sink: the orders path pre-sanitizes, but the
+        // direct subscription endpoint validates attribution loosely (IsObject).
+        attribution: sanitizeAttribution(dto.attribution) ?? undefined,
         state: SubscriptionState.ACTIVE,
         currentPeriodStart: now,
         currentPeriodEnd,
