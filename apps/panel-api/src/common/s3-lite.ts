@@ -30,8 +30,15 @@ export interface S3Listing {
   totalBytes: number;
 }
 
-const CONTENTS_RE =
-  /<Contents>[\s\S]*?<Key>([\s\S]*?)<\/Key>[\s\S]*?<LastModified>([\s\S]*?)<\/LastModified>[\s\S]*?<Size>(\d+)<\/Size>[\s\S]*?<\/Contents>/g;
+// Match each <Contents> block, then extract fields from WITHIN it. Extracting
+// fields order-independently per block is essential: S3-compatible services
+// (R2 included) don't all emit Key/LastModified/Size in the same order, and a
+// single order-assuming regex will run past a block boundary and pair one
+// object's key with the next object's size.
+const CONTENTS_RE = /<Contents>([\s\S]*?)<\/Contents>/g;
+const KEY_RE = /<Key>([\s\S]*?)<\/Key>/;
+const SIZE_RE = /<Size>(\d+)<\/Size>/;
+const LASTMOD_RE = /<LastModified>([\s\S]*?)<\/LastModified>/;
 
 function decodeXml(s: string): string {
   return s
@@ -107,8 +114,16 @@ export async function listObjects(
     CONTENTS_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CONTENTS_RE.exec(xml)) !== null) {
-      const size = Number(m[3]);
-      objects.push({ key: decodeXml(m[1]), lastModified: m[2], size });
+      const block = m[1];
+      const keyMatch = block.match(KEY_RE);
+      const sizeMatch = block.match(SIZE_RE);
+      if (!keyMatch || !sizeMatch) continue;
+      const size = Number(sizeMatch[1]);
+      objects.push({
+        key: decodeXml(keyMatch[1]),
+        lastModified: block.match(LASTMOD_RE)?.[1] ?? '',
+        size,
+      });
       totalBytes += size;
     }
 

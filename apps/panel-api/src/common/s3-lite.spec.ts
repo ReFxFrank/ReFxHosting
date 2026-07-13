@@ -69,6 +69,24 @@ describe('listObjects', () => {
     expect(res.objects.map((o) => o.key)).toEqual(['a.dump.enc', 'b.dump.enc']);
   });
 
+  it('parses per-object regardless of field order (R2 vs AWS)', async () => {
+    // R2 can emit Size BEFORE LastModified. An order-assuming parser pairs the
+    // small LATEST pointer's key with the big dump's size (the real bug). Each
+    // object's fields must be read from within its own <Contents> block.
+    const xml =
+      '<?xml version="1.0"?><ListBucketResult>' +
+      '<Contents><Key>panel-postgres/LATEST</Key><Size>40</Size><LastModified>2026-07-13T06:46:00.000Z</LastModified><ETag>"a"</ETag></Contents>' +
+      '<Contents><Key>panel-postgres/dump.dump.enc</Key><Size>138703136</Size><LastModified>2026-07-13T06:45:00.000Z</LastModified><ETag>"b"</ETag></Contents>' +
+      '<IsTruncated>false</IsTruncated></ListBucketResult>';
+    jest.spyOn(global, 'fetch').mockResolvedValue(new Response(xml, { status: 200 }));
+    const res = await listObjects(CFG, 'panel-postgres/');
+    expect(res.objects).toEqual([
+      { key: 'panel-postgres/LATEST', size: 40, lastModified: '2026-07-13T06:46:00.000Z' },
+      { key: 'panel-postgres/dump.dump.enc', size: 138703136, lastModified: '2026-07-13T06:45:00.000Z' },
+    ]);
+    expect(res.totalBytes).toBe(138703176);
+  });
+
   it('handles an empty bucket', async () => {
     jest
       .spyOn(global, 'fetch')
