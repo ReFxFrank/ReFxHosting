@@ -1417,6 +1417,41 @@ export const api = {
         totals: { signups: number; payers: number; revenueMinor: number };
         referral: { signups: number; converted: number; creditIssuedMinor: number };
       }>("/admin/growth", { query: { days } }),
+    /** Panel↔node network health across the fleet (latency/loss/jitter/throughput). */
+    network: () =>
+      http.get<{
+        monitor: boolean;
+        windowSamples: number;
+        cadenceSec: number;
+        rollup: {
+          nodes: number;
+          healthy: number;
+          degraded: number;
+          down: number;
+          worstLossPct: number;
+          worstP95Ms: number;
+          totalRxMbps: number;
+          totalTxMbps: number;
+        };
+        nodes: {
+          nodeId: string;
+          name: string;
+          region: string;
+          state: string;
+          health: "healthy" | "degraded" | "down";
+          latencyMs: number | null;
+          avgMs: number | null;
+          p95Ms: number | null;
+          jitterMs: number;
+          lossPct: number;
+          uptimePct: number;
+          rxMbps: number;
+          txMbps: number;
+          heartbeatAgeMs: number | null;
+          samples: number;
+          latencyHistory: (number | null)[];
+        }[];
+      }>("/admin/network"),
     orders: (query?: { page?: number; q?: string }) =>
       http.get<Paginated<AdminSubscription>>("/admin/orders", { query }),
     deleteOrder: (id: string) => http.delete<void>(`/admin/orders/${id}`),

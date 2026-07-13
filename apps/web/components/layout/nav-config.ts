@@ -7,6 +7,7 @@ import {
   ShoppingCart,
   ServerCog,
   Boxes,
+  Activity,
   MapPin,
   Users,
   Package,
@@ -79,6 +80,12 @@ export const adminNav: NavSection[] = [
         perm: "servers.read",
       },
       { label: "Nodes", href: "/admin/nodes", icon: Boxes, perm: "nodes.read" },
+      {
+        label: "Network",
+        href: "/admin/network",
+        icon: Activity,
+        perm: "nodes.read",
+      },
       {
         label: "Database Hosts",
         href: "/admin/database-hosts",
