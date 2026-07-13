@@ -101,7 +101,8 @@ export class UsersService {
     if (dto.lastName !== undefined) data.lastName = dto.lastName;
     if (dto.locale !== undefined) data.locale = dto.locale;
     if (dto.timezone !== undefined) data.timezone = dto.timezone;
-    if (dto.avatarUrl !== undefined) data.avatarUrl = dto.avatarUrl;
+    // '' (the web's remove action) and null both clear the avatar.
+    if (dto.avatarUrl !== undefined) data.avatarUrl = dto.avatarUrl || null;
     // Contact / billing address.
     if (dto.phone !== undefined) data.phone = dto.phone;
     if (dto.addressLine1 !== undefined) data.addressLine1 = dto.addressLine1;

@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsOptional, IsString, IsUrl, MaxLength, ValidateIf } from 'class-validator';
 
 /**
  * Self-service profile fields a user may edit. All optional; only supplied
@@ -30,11 +30,13 @@ export class UpdateProfileDto {
   @MaxLength(64)
   timezone?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ description: 'Avatar URL; empty string or null clears it.' })
   @IsOptional()
+  // Empty string / null mean "remove the avatar" — only validate real values.
+  @ValidateIf((o) => o.avatarUrl !== '' && o.avatarUrl !== null)
   @IsUrl()
   @MaxLength(2048)
-  avatarUrl?: string;
+  avatarUrl?: string | null;
 
   // ---- Contact / billing address (all optional) -------------------------
 
