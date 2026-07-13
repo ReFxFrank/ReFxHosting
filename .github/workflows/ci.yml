@@ -51,6 +51,56 @@ jobs:
         working-directory: apps/panel-api
 
   # ---------------------------------------------------------------------------
+  # Applies the ENTIRE committed migration chain from an empty database on a real
+  # ephemeral Postgres, then fails on any schema drift between the migration
+  # history and schema.prisma. Also asserts the migrate entrypoint is fail-closed
+  # so a failed migration can never silently continue (no db push --accept-data-loss,
+  # no auto migrate-resolve, non-zero exit on deploy failure). See docs/25.
+  migrations:
+    name: Migrations (apply chain + drift + fail-closed)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: refx
+          POSTGRES_PASSWORD: refx
+          POSTGRES_DB: refx
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U refx"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql://refx:refx@localhost:5432/refx?schema=public
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci || npm install
+      - name: Generate Prisma client
+        working-directory: apps/panel-api
+        run: npx prisma generate
+      - name: Apply full migration chain from empty DB
+        working-directory: apps/panel-api
+        run: npx prisma migrate deploy
+      - name: Fail on schema drift (migrations vs schema.prisma)
+        working-directory: apps/panel-api
+        # --exit-code returns 2 when the migration chain and the datamodel diverge
+        # (i.e. a schema.prisma change shipped without a matching migration).
+        run: >-
+          npx prisma migrate diff
+          --from-migrations ../../database/prisma/migrations
+          --to-schema-datamodel ../../database/prisma/schema.prisma
+          --exit-code
+      - name: Assert migrate entrypoint is fail-closed
+        run: bash infra/scripts/assert-migrate-fail-closed.sh
+
+  # ---------------------------------------------------------------------------
   node-apps:
     name: ${{ matrix.app }} (lint · typecheck · build · test)
     runs-on: ubuntu-latest

@@ -87,38 +87,33 @@ EOF
 RUN npx prisma generate
 
 # ---------------------------------------------------------------------------
-# Entrypoint:
-#   1. Apply committed migrations (prisma migrate deploy — non-interactive,
-#      production-safe). If deploy fails (e.g. a prior partial run left the
+# Entrypoint — FAIL CLOSED:
+#   1. Apply committed migrations with `prisma migrate deploy` (non-interactive,
+#      production-safe). If deploy fails — e.g. a prior partial run left the
 #      _prisma_migrations history in a failed/P3009 state, or the live schema
-#      drifted), SELF-HEAL: reconcile the schema with `prisma db push` and then
-#      mark every committed migration as applied so future deploys stay clean.
-#      Our migrations are purely additive, so db push never loses data here.
-#   2. Run the TypeScript seed (idempotent upserts). Non-fatal: a failed seed
-#      must not block the API from starting, but we surface the exit clearly.
+#      drifted — we STOP with a nonzero exit and a diagnostic. We do NOT run
+#      `db push --accept-data-loss`, and we do NOT auto-mark migrations as
+#      applied: silently reconciling a drifted production database is how you
+#      lose data or mask a broken migration. Recovery is an explicit, documented
+#      operator action (see docs/25-database-migrations.md).
+#   2. Run the TypeScript seed (idempotent upserts of required data: game
+#      templates + owner bootstrap). In production a seed failure is FATAL — the
+#      panel must not boot on inconsistent/missing required data. Outside
+#      production it warns and continues so local dev isn't blocked.
 # ---------------------------------------------------------------------------
 COPY <<'EOF' /usr/local/bin/run-migrate.sh
 #!/bin/sh
-set -e
+set -eu
 # Prisma 7: the schema path + Migrate datasource url come from prisma.config.ts
 # (in /repo), and --schema / --skip-generate were removed from the CLI.
 
-reconcile() {
-  echo "[migrate] deploy failed — self-healing schema with 'prisma db push'"
-  # Bring the live database up to the schema (additive: adds the missing
-  # columns/tables without touching existing data). --accept-data-loss is
-  # required by the CLI flag set even when no destructive change is needed.
-  npx prisma db push --accept-data-loss
-  # Re-sync migration history so the next `migrate deploy` is a clean no-op
-  # instead of re-running ADD COLUMN against now-existing columns.
-  for dir in ./database/prisma/migrations/*/; do
-    name=$(basename "$dir")
-    [ -f "$dir/migration.sql" ] || continue
-    npx prisma migrate resolve --applied "$name" 2>/dev/null \
-      || true
-  done
-  echo "[migrate] self-heal complete"
-}
+# Is this a production run? Controls whether dev-only fallbacks are permitted
+# and whether a seed failure is fatal. Defaults to production-safe (fail closed)
+# unless NODE_ENV explicitly says otherwise — the image sets NODE_ENV=production.
+IS_PROD=1
+case "$(printf '%s' "${NODE_ENV:-production}" | tr '[:upper:]' '[:lower:]')" in
+  development|dev|test|ci) IS_PROD=0 ;;
+esac
 
 # A FRESH Postgres volume restarts the server mid-init: the compose healthcheck
 # (pg_isready on the unix socket) can pass while the network TCP listener is
@@ -128,24 +123,48 @@ echo "[migrate] waiting for the database to accept connections..."
 i=0
 until node -e "const{Client}=require('pg');const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.end()).then(()=>process.exit(0)).catch(()=>process.exit(1))" 2>/dev/null; do
   i=$((i+1))
-  if [ "$i" -ge 30 ]; then echo "[migrate] database unreachable after ~60s — giving up"; exit 1; fi
+  if [ "$i" -ge 30 ]; then echo "[migrate] database unreachable after ~60s — giving up" >&2; exit 1; fi
   echo "[migrate] db not ready (attempt $i) — retrying in 2s"
   sleep 2
 done
 echo "[migrate] database is reachable"
 
 echo "[migrate] applying migrations (prisma migrate deploy)"
-if [ -d ./database/prisma/migrations ]; then
-  npx prisma migrate deploy || reconcile
-else
-  echo "[migrate] no migrations/ dir — using prisma db push (dev fallback)"
-  npx prisma db push --accept-data-loss
+if [ ! -d ./database/prisma/migrations ]; then
+  if [ "$IS_PROD" = "1" ]; then
+    echo "[migrate] FATAL: no migrations/ directory in a production build." >&2
+    echo "[migrate] Refusing to 'db push' against a production database." >&2
+    exit 1
+  fi
+  echo "[migrate] no migrations/ dir — dev-only 'prisma db push' (no --accept-data-loss)"
+  npx prisma db push
+elif ! npx prisma migrate deploy; then
+  echo "[migrate] =========================================================" >&2
+  echo "[migrate] FATAL: 'prisma migrate deploy' failed." >&2
+  echo "[migrate] The database was NOT auto-reconciled. There is deliberately" >&2
+  echo "[migrate] no 'db push --accept-data-loss' and no auto 'migrate resolve'" >&2
+  echo "[migrate] here — those can destroy data or hide a broken migration." >&2
+  echo "[migrate] An operator must recover explicitly. Typical steps:" >&2
+  echo "[migrate]   1. npx prisma migrate status   (identify the failed/pending migration)" >&2
+  echo "[migrate]   2. inspect + fix the cause, then either re-run deploy, or" >&2
+  echo "[migrate]      'prisma migrate resolve' the specific migration after review." >&2
+  echo "[migrate] Full runbook: docs/25-database-migrations.md" >&2
+  echo "[migrate] =========================================================" >&2
+  exit 1
 fi
 
 if [ -f ./database/seed/seed.ts ]; then
   echo "[seed] running database/seed/seed.ts"
-  npx ts-node --transpile-only --project /repo/tsconfig.seed.json \
-    ./database/seed/seed.ts || echo "[seed] seed failed (non-fatal)"
+  if ! npx ts-node --transpile-only --project /repo/tsconfig.seed.json \
+    ./database/seed/seed.ts; then
+    echo "[seed] seed failed" >&2
+    if [ "$IS_PROD" = "1" ]; then
+      echo "[seed] FATAL: refusing to continue — required seed data (game" >&2
+      echo "[seed] templates, owner bootstrap) may be missing or inconsistent." >&2
+      exit 1
+    fi
+    echo "[seed] (non-production) continuing despite seed failure" >&2
+  fi
 else
   echo "[seed] no seed.ts found — skipping"
 fi
