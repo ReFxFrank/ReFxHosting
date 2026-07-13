@@ -899,6 +899,16 @@ export class BillingService {
    * PENDING_PAYMENT), freeing their allocations, and cancel the subscription if
    * nothing of it remains live. Used when an unpaid invoice is voided/deleted.
    */
+  /**
+   * Public entry point to abandon an order whose server could not be reserved
+   * (or whose reservation must be undone) BEFORE any payment cleared. Releases
+   * the reservation and cancels the subscription when nothing has been paid.
+   * Used by the order flow's fail-closed rollback (P0-C).
+   */
+  async abandonUnpaidOrder(subscriptionId: string): Promise<void> {
+    await this.releaseUnpaidReservation(subscriptionId);
+  }
+
   private async releaseUnpaidReservation(
     subscriptionId: string,
   ): Promise<void> {

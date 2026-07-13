@@ -193,8 +193,42 @@ export class OrdersService {
       await this.coupons.attachRedemption(couponRedemptionId, invoice.id, discountMinor);
     }
 
-    // 3) Apply a gift card, then account credit, toward the (discounted) total,
-    //    then settle the remaining balance through the gateway.
+    // 3) RESERVE THE SERVER BEFORE TAKING ANY MONEY (P0-C).
+    //    servers.create runs the template-whitelist, node-eligibility,
+    //    capacity, and allocation checks and reserves the row + port. We create
+    //    it in PENDING_PAYMENT (deferProvision) so nothing installs yet; the
+    //    settlement funnel below (markInvoicePaid -> provisionPaidServers) flips
+    //    it to INSTALLING once paid. If provisioning cannot be set up (no
+    //    capacity, no free port, template not on plan), we throw HERE — with the
+    //    invoice still OPEN and unpaid — instead of charging for a server we
+    //    can't build, and roll back the reservation so no dangling billable
+    //    subscription is left behind.
+    let server: { id: string };
+    try {
+      server = await this.servers.create(
+        userId,
+        {
+          name: dto.name,
+          subscriptionId: subscription.id,
+          templateId: dto.templateId,
+          regionId: dto.regionId,
+          nodeId: dto.nodeId,
+          environment: dto.environment,
+        },
+        { deferProvision: true },
+      );
+    } catch (e) {
+      // Nothing has been charged yet. Release the reservation (soft-deletes any
+      // partial server row, frees the allocation, and cancels the just-created
+      // subscription since it has no live server and no paid invoice), then
+      // re-throw the original provisionability error to the customer.
+      await this.billing.abandonUnpaidOrder(subscription.id).catch(() => {});
+      throw e;
+    }
+
+    // 4) Apply a gift card, then account credit, toward the (discounted) total,
+    //    then settle the remaining balance through the gateway. A successful
+    //    synchronous settlement provisions the reserved server automatically.
     let paidNow = false;
     let checkoutUrl: string | undefined;
     let applied = 0; // total non-gateway credit applied (gift card + store credit)
@@ -249,22 +283,10 @@ export class OrdersService {
       }
     }
 
-    // 4) Create the server, but only INSTALL it now if payment already cleared.
-    //    Otherwise it's reserved in PENDING_PAYMENT and provisioned by
-    //    billing.markInvoicePaid once the hosted payment settles (webhook).
-    const server = await this.servers.create(
-      userId,
-      {
-        name: dto.name,
-        subscriptionId: subscription.id,
-        templateId: dto.templateId,
-        regionId: dto.regionId,
-        nodeId: dto.nodeId,
-        environment: dto.environment,
-      },
-      { deferProvision: !paidNow },
-    );
-
+    // The server was reserved in step 3 and, if payment settled synchronously
+    // above, has already been flipped to INSTALLING by provisionPaidServers.
+    // If payment is still pending (hosted checkout / PayPal), it stays in
+    // PENDING_PAYMENT and is provisioned by the settlement webhook.
     return {
       serverId: server.id,
       subscriptionId: subscription.id,
