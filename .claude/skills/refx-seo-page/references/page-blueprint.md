@@ -4,6 +4,15 @@ Section order is deliberate. Game-specific content leads; templated blocks come 
 
 Word budgets are targets, not laws. Total ~1200–1800 words. Under ~800 words a programmatic page reads as thin.
 
+> **How this maps to refx.gg (read before drafting):** the page already exists at
+> `apps/web/app/(public)/games/[slug]/page.tsx` and renders for all ~40 games. You are almost never
+> creating a route — you are **filling the game's editorial module `apps/web/data/games/<slug>.ts`**
+> (fields `tagline`, `heroCopy`, `whyDedicated`, `recommendedSpecs`, `setupSteps`, `modSupport`,
+> `FAQ`, `relatedGames`, `searchTerms`). Sections 2–8 below are that module; the hero price/name/art
+> and the pricing table (§1, §5) come **live from the catalog API** (never hardcode them); the
+> JSON-LD (§Metadata) is already emitted from `setupSteps`/`FAQ`/prices, so writing good module data
+> *is* writing the schema. `<title>`/canonical/OG come from `pageMetadata()` in `apps/web/lib/seo.ts`.
+
 ---
 
 ## 1. Hero — templated shape, game-specific words (~60 words)

@@ -1,6 +1,8 @@
 # Game spec sheet — `<game-slug>`
 
-Copy this file to the specs directory and fill in every field. A blank field is a support ticket waiting to happen. Anything you cannot verify from an official source becomes a `TODO(frank)` line — never a guess.
+Copy this file and fill in every field. A blank field is a support ticket waiting to happen. Anything you cannot verify from an official source becomes a `TODO(frank)` line — never a guess.
+
+On refx.gg this sheet is the **research artifact that precedes the egg**: once it's complete, its values become the egg JSON at `database/seed/templates/<slug>.json` and the `GameTemplate` row's recommended specs (`recCpuCores`/`recMemoryMb`/`recDiskMb`, which also *drive the price* — see `add-game` Phase 2 and Phase 4). Keep the filled sheet alongside the skill for the next audit.
 
 ## Identity
 

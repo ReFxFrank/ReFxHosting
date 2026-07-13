@@ -25,13 +25,13 @@ Copy this shape. The searchable error string matters most — that's how future-
 
 ## Seeded entries
 
-These come from real incidents on the Medieval MC (MMC4) server. **TODO(frank): paste the exact log lines from your logs into the "searchable error string" fields** — the precise string is what makes this file findable later, and it's the exact query a customer will type into Google.
+These come from real incidents on the Medieval MC (MMC4) server. Canonical error signatures are filled in below where the failure has a well-known public form. **TODO(frank): confirm each against the exact line in your MMC4 logs / crash reports and tighten it** — the precise string is what makes this file findable later, and it's the exact query a customer will type into Google.
 
 ### Mekanism MekaSuit mixin crash on boot
 
 - **Game / stack**: Minecraft, Forge, Medieval MC (MMC4)
 - **Class**: B — crash with stack trace
-- **Searchable error string**: TODO(frank) — paste the `Mixin apply failed` / `InvalidInjectionException` line referencing `MekanismEnchantableMekaSuit`
+- **Searchable error string**: canonical signature — `Mixin apply failed` … `mixins.json:MekanismEnchantableMekaSuit`, and `org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException`. TODO(frank): paste the exact line from the crash report — the mod package printed *before* `MekanismEnchantableMekaSuit` names the culprit mod.
 - **Symptom**: Server crashes during mod loading, never reaches "Done". No world loads.
 - **Root cause**: A mixin from an enchantment-compatibility mod targeting Mekanism's MekaSuit failed to apply — the target class shape didn't match what the mixin expected. Version skew between the patching mod, Mekanism, and the modloader.
 - **Fix**: Align versions across the mod, Mekanism, and Forge — the mixin has to be built for the exact Mekanism version installed. Remove the patching mod if the pack doesn't actually need it.
@@ -48,14 +48,15 @@ These come from real incidents on the Medieval MC (MMC4) server. **TODO(frank): 
 - **Root cause**: Heap undersized for a heavy modpack, compounded by untuned GC. **Check first whether it's a real heap OOM or a container OOM-kill (exit 137) — the fixes are opposite.** See the table in SKILL.md class C.
 - **Fix**: Tune the JVM: `-Xms` = `-Xmx`, G1GC with Aikar's flag set, and `-Xmx` sized to leave ~1–1.5 GB of headroom below the container limit (the JVM's non-heap memory — metaspace, thread stacks, direct buffers, GC structures — lives *outside* `-Xmx`).
 - **Prevention**: Never ship `-Xmx` == container limit. It looks generous and it guarantees an OOM-kill. Encode this in the game definition defaults so no customer can trip over it.
-- **Platform bug?**: **Worth checking.** TODO(frank): if the default `-Xmx` in the Minecraft game definition equals the plan's RAM limit, that's a platform bug affecting every modded customer, not a one-off.
-- **Tutorial written?**: no ← very high-value. "Minecraft server out of memory" is a huge search term and almost every existing page gives the wrong advice (just raise Xmx).
+- **Platform bug?**: **Checked — NO.** The panel does not set `-Xmx` to the container limit. `SERVER_MEMORY` (which feeds `-Xmx`) is a read-only, system-managed variable set to `jvmHeapMb(server.memoryMb)` = allocation − 15% headroom, clamped to a 512 MB–2048 MB reserve (`apps/panel-api/src/servers/server-memory.util.ts`; applied in `nodes.service.ts` where the var is not user-editable). So every Java server already boots with ~15% headroom below its container cap — the container-OOM-kill trap is handled at the platform level, not per customer.
+  - **Real improvement opportunity (not a bug):** the Minecraft template starts with `-Xms128M -Xmx{{SERVER_MEMORY}}M` and no G1GC tuning (`database/seed/templates/minecraft.json`). Class C best practice for *modded* servers is `-Xms == -Xmx` plus Aikar's G1GC flag set. Adopting those in the modded Minecraft templates would be a platform-wide win — file it as template work, don't hand-tune one customer.
+- **Tutorial written?**: no ← very high-value. "Minecraft server out of memory" is a huge search term and almost every existing page gives the wrong advice (just raise Xmx). refx.gg can honestly explain the heap-vs-container distinction *and* point at its automatic headroom.
 
 ### Create: Steam 'n' Rails registry mismatch on join
 
 - **Game / stack**: Minecraft, Forge, Medieval MC (MMC4)
 - **Class**: D — runs, clients can't join
-- **Searchable error string**: TODO(frank) — paste the "missing registry entries" / registry-mismatch disconnect line
+- **Searchable error string**: canonical signature — `Missing registry entries` / registry-remapping mismatch referencing the Steam 'n' Rails mod id `railways:` (e.g. `railways:...`). TODO(frank): paste the exact client-side disconnect line — it enumerates the missing entries and their mod IDs, which names the diverging mod.
 - **Symptom**: Server boots and runs fine. Client connects, then is immediately disconnected with a registry/missing-entries error.
 - **Root cause**: Client and server mod sets diverged — the server's Create: Steam 'n' Rails version registered entries the client didn't have (or vice versa). Typically triggered by a mod being updated on one side only.
 - **Fix**: Bring both sides to identical mod versions. Ship the exact client pack matching the server, and verify the versions rather than trusting "I reinstalled it".

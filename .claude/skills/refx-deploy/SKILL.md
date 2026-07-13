@@ -19,7 +19,7 @@ Everything environment-specific lives in `references/environments.md`. Fill it i
 - **Never deploy from a dirty working tree or an unpushed commit.** You cannot roll back to something that only exists on your laptop.
 - **Never run a destructive migration in the same deploy as the code that depends on it.** Expand first, contract later (see below). A dropped column makes rollback impossible — you go from "revert" to "restore from backup" and that's an outage, not a blip.
 - **Never take a backup you haven't proven restores.** An untested backup is a hope.
-- **Never restart all game nodes at once.** Stagger them. Simultaneous restarts = every customer's server down at the same moment.
+- **Never restart all game nodes at once.** Stagger them. Simultaneous restarts = every customer's server down at the same moment. (Nuance: an **agent self-update** does *not* drop servers — the systemd unit is `KillMode=process` and game processes are re-adopted. It's **host reboots and game-image rollouts** that take servers down — stagger *those*.)
 - **Never deploy on a Friday evening, or into the peak window.** Game hosting peaks evenings and weekends — that's precisely when customers are on their servers. Deploy weekday mornings. (TODO(frank): record your customers' dominant timezone in `environments.md`.)
 - **Never echo secrets.** Not into logs, not into the console, not into a diff. If a secret is ever printed, it's rotated, not "probably fine".
 - **Decide rollback criteria before deploying, not during the incident.** Under pressure, everyone talks themselves into "let's give it five more minutes."
@@ -63,10 +63,10 @@ Never combine them. The moment a deploy contains a `DROP`, `git revert` stops be
 
 1. **Backup** — database, and any config you're about to overwrite. Confirm it exists and is non-zero. For anything destructive, confirm it *restores*.
 2. **Tag** the current production commit so "roll back" is one unambiguous command, not archaeology.
-3. **Deploy** to staging if it exists (TODO(frank)); otherwise deploy to the smallest possible slice of prod first — one node, one canary.
+3. **Deploy.** There is **no staging environment** (confirmed — see `environments.md`), so deploy to the smallest possible slice of prod first: run the canary-provision check below, and for node/image changes roll one node before the rest. The mechanism is manual — `infra/scripts/update-panel.sh` (compose) or `helm upgrade` (k8s); there is no automated CD.
 4. **Verify** (below). Do not skip because it looked fine.
 5. **Roll out** to the rest, staggered. Watch after each step, don't fire-and-forget.
-6. **Watch** for the length of the rollback window (TODO(frank): 15 min? 60 min?) before calling it done.
+6. **Watch** for the length of the rollback window (defaults: web ~15 min · panel/API ~30 min · migration or node/image rollout ~60 min — see `environments.md`) before calling it done.
 
 For node changes specifically: **drain, notify, restart, verify, next node.** Never in parallel. Customers on the node being restarted should know it's happening before their game server disappears.
 
@@ -86,7 +86,7 @@ Health endpoints returning 200 prove nothing. A hosting platform can have every 
 
 ## Rollback
 
-**Criteria — write these down before deploying.** Numbers, not vibes. Suggested defaults (TODO(frank): set your real ones):
+**Criteria — write these down before deploying.** Numbers, not vibes. The real numbers live in `environments.md` — capture your error-rate baseline from the panel `/metrics` (Prometheus) endpoint before deploying. Defaults:
 
 - Error rate > 2× baseline for 5 minutes
 - Any provisioning failure on the canary

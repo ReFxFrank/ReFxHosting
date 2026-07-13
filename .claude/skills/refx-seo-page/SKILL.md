@@ -9,13 +9,42 @@ Programmatic per-game landing pages are the core of the refx.gg SEO strategy, an
 
 The bar to clear: each landing page should be worth reading *even if refx.gg didn't sell anything*.
 
-## Project facts (fill these in once)
+## Project facts (the platform this skill runs against)
 
-- TODO(frank): Marketing site framework and repo path (Next.js? Astro? templates live where?).
-- TODO(frank): Existing URL pattern for game pages — is it `/<game>-server-hosting` or `/games/<slug>` or something else? **Do not change an existing pattern.** Migrating live URLs costs rankings; match what's already there.
-- TODO(frank): Where game data (name, slug, specs, price, features) is sourced from — a CMS, a JSON file, or the panel catalogue? The page should read from that source, not hardcode.
-- TODO(frank): Analytics + Search Console access — needed to audit whether any of this worked.
-- TODO(frank): Real, verifiable trust facts you're allowed to claim: uptime %, customer count, years operating, review count. **If the honest answer is "none yet," write that here.** It changes what the page is allowed to say.
+Verified against the repo. These pin down which files you edit and what the page is allowed to say.
+
+- **Framework + repo path**: Next.js (App Router), `apps/web`. Marketing lives in the `(public)`
+  route group (`apps/web/app/(public)/`). Per-game landing pages are already built for all ~40
+  games. SEO plumbing is **native Next.js**, not a plugin: `apps/web/app/sitemap.ts` (dynamic,
+  revalidates ~15 min) and `apps/web/app/robots.ts`; shared metadata via the `pageMetadata()`
+  helper in `apps/web/lib/seo.ts` (canonical + OpenGraph + Twitter); per-route
+  `opengraph-image.tsx` generators.
+- **URL pattern (do NOT change it)**: game landing pages are **`/games/<slug>`**
+  (`apps/web/app/(public)/games/[slug]/page.tsx`), where `<slug>` is the `GameTemplate.slug`.
+  There are **no URL rewrites** — the SEO `<h1>`/`<title>` is templated `"<Name> Server Hosting"`
+  but the URL stays `/games/<slug>`. The `/games` index and the sitemap both emit exactly
+  `/games/<slug>`. Never migrate this to `/<game>-server-hosting` — it would cost rankings.
+- **Where game data comes from** (read from source, never hardcode):
+  - **Live from the panel API** — name, slug, specs, art, and **price** come from
+    `GET /api/v1/catalog/games` and `/catalog/games/<slug>` (`StorefrontService`, backed by the DB
+    `GameTemplate` + `HardwareTier` + `Price` rows). **Prices are never hardcoded in the frontend**
+    and `startingPrice` is a real "from $X/mo" from the cheapest monthly `Price`.
+  - **Editorial / SEO copy** — hand-written per game in **`apps/web/data/games/<slug>.ts`**
+    (registry `apps/web/data/games/index.ts`, merged on the detail page via
+    `apps/web/lib/game-content.ts`): `tagline`, `heroCopy`, `whyDedicated`, `recommendedSpecs`,
+    `setupSteps`, `modSupport`, `FAQ`, `relatedGames`, `searchTerms`. **This module is where the
+    "≥50% game-specific" content actually lives — it is the file you create/edit for SEO work.**
+  - JSON-LD (`Product` + `AggregateOffer`, `HowTo` from `setupSteps`, `FAQPage`) is already emitted
+    by `games/[slug]/page.tsx` — extend the data module, don't re-invent the schema.
+- **Analytics + Search Console**: TODO(frank) — external accounts, repo can't know. (`sitemap.ts`
+  and `robots.ts` are wired; `NEXT_PUBLIC_SITE_URL` defaults to `https://refx.gg`.)
+- **Trust facts you're allowed to claim — the honest answer today is "none yet."** `docs/16-status.md`
+  states the platform is a working foundation, explicitly **"not a finished, load-tested commercial
+  SaaS."** So there is **no verified uptime %, customer count, years-operating, or review count** to
+  claim yet. **Sell on product capability** — real measured specs, named mod ecosystems, one-click
+  game switching, edge DDoS protection, backups — **not on social proof.** Do **not** emit
+  `aggregateRating`/`review` schema or "trusted by N gamers" copy. TODO(frank): replace this line
+  with real numbers once they exist — and only then may a page state them.
 
 ## Guardrails
 
