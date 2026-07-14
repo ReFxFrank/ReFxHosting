@@ -1191,7 +1191,12 @@ export interface KbArticle {
 export interface AuditLog {
   id: string;
   actorId: string | null;
-  actor?: Pick<User, "id" | "email"> | null;
+  /** Acting user's display identity (strict backend select); null = system. */
+  actor?: {
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
   action: string;
   targetType: string;
   targetId: string | null;
