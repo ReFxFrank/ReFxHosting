@@ -38,18 +38,47 @@ const MINECRAFT_EXCLUDES = [
 ];
 
 /**
+ * Palworld (SteamCMD app 2394010): SteamCMD re-downloads the entire dedicated
+ * server on reinstall — the UE `Engine/`, the game binaries (`Pal/Binaries`),
+ * and the multi-GB asset content (`Pal/Content`) — and our steamcmd bootstrap
+ * plus Steam's depot metadata are pure scratch. Excluding them keeps an
+ * essentials backup to what a redeploy actually needs: `Pal/Saved/` (SaveGames
+ * + Config), which is tens of MB instead of the ~8 GB full install.
+ *
+ * SAFETY: every glob here is strictly more specific than `Pal/Saved` and none is
+ * a prefix of it, so the agent's isIgnored (internal/backup/backup.go) keeps
+ * `Pal/Saved/**` while pruning the excluded dirs whole. NEVER add `Pal` or
+ * `Pal/Saved` here — that would drop the customer's world and config. (Like the
+ * Minecraft profile, a restore onto a fresh/empty server expects a reinstall to
+ * repopulate the excluded, re-downloadable content.)
+ */
+const PALWORLD_EXCLUDES = [
+  ...GENERIC_EXCLUDES,
+  'steamcmd', // our bootstrapped SteamCMD (refx shim) — re-created on install
+  'steamapps', // Steam depot manifests / appmanifest — scratch
+  'Engine', // Unreal Engine runtime — re-downloaded
+  'Pal/Binaries', // server executables — re-downloaded
+  'Pal/Content', // game assets (the bulk of the install) — re-downloaded
+  'Pal/Plugins', // engine plugins — re-downloaded
+];
+
+/**
  * Exclude-globs for an "essentials" backup of the given server. Minecraft is
  * detected the same way as elsewhere in the panel (template slug prefix or
- * the MINECRAFT_VERSION env the unified egg always sets).
+ * the MINECRAFT_VERSION env the unified egg always sets); other games use a
+ * per-slug profile where one exists, else just the generic regenerables.
  */
 export function essentialExcludes(
   templateSlug: string | null | undefined,
   environment: Record<string, unknown> | null | undefined,
 ): string[] {
+  const slug = templateSlug ?? '';
   const isMinecraft =
-    (templateSlug ?? '').startsWith('minecraft') ||
+    slug.startsWith('minecraft') ||
     (environment ?? {})['MINECRAFT_VERSION'] != null;
-  return isMinecraft ? [...MINECRAFT_EXCLUDES] : [...GENERIC_EXCLUDES];
+  if (isMinecraft) return [...MINECRAFT_EXCLUDES];
+  if (slug === 'palworld') return [...PALWORLD_EXCLUDES];
+  return [...GENERIC_EXCLUDES];
 }
 
 /** Merge profile + user globs, de-duplicated, empty entries dropped. */
