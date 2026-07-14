@@ -24,13 +24,7 @@
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\nmkdir -p /mnt/server\ncd /mnt/server\n# Locate or bootstrap steamcmd (the parkervcp/steamcmd image does NOT ship it\n# on PATH; eggs are expected to fetch it themselves).\nif command -v steamcmd >/dev/null 2>&1; then\n  STEAMCMD=steamcmd\nelse\n  echo \"[steam] bootstrapping steamcmd\"\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  STEAMCMD=/mnt/server/steamcmd/steamcmd.sh\nfi\n\"$STEAMCMD\" +force_install_dir /mnt/server +login anonymous +app_update 4020 validate +quit\necho \"Garry's Mod install complete.\"\n"
   },
-  "configFiles": [
-    {
-      "path": "garrysmod/cfg/server.cfg",
-      "parser": "file",
-      "find": {}
-    }
-  ],
+  "configFiles": [],
   "recCpuCores": 2,
   "recMemoryMb": 4096,
   "recDiskMb": 30720,
@@ -111,5 +105,5 @@
     "workshop",
     "multiplayer"
   ],
-  "longDescription": "Run any gamemode \u2014 sandbox, DarkRP, TTT and more \u2014 with full Steam Workshop support on your Garry's Mod server."
+  "longDescription": "Run any gamemode — sandbox, DarkRP, TTT and more — with full Steam Workshop support on your Garry's Mod server."
 }

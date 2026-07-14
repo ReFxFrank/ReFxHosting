@@ -21,17 +21,7 @@
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\napt-get update && apt-get install -y curl jq\ncd /mnt/server\nUA='User-Agent: ReFx-Hosting'\nVER=\"${MINECRAFT_VERSION}\"\nif [ \"$VER\" = \"latest\" ]; then VER=$(curl -fsSL https://launchermeta.mojang.com/mc/game/version_manifest_v2.json | jq -r '.latest.release'); fi\n# Prefer the current PaperMC v3 (fill) API; the legacy v2 API is retired 2026-07-01.\nDL=$(curl -fsSL -H \"$UA\" \"https://fill.papermc.io/v3/projects/paper/versions/${VER}/builds/latest\" 2>/dev/null | jq -r '.downloads.\"server:default\".url // empty')\nif [ -z \"$DL\" ]; then\n  BUILD=$(curl -fsSL -H \"$UA\" \"https://api.papermc.io/v2/projects/paper/versions/${VER}/builds\" 2>/dev/null | jq -r '.builds[-1].build // empty')\n  [ -n \"$BUILD\" ] && DL=\"https://api.papermc.io/v2/projects/paper/versions/${VER}/builds/${BUILD}/downloads/paper-${VER}-${BUILD}.jar\"\nfi\nif [ -z \"$DL\" ]; then\n  VER=$(curl -fsSL -H \"$UA\" https://fill.papermc.io/v3/projects/paper | jq -r '.versions | add | last // empty')\n  [ -n \"$VER\" ] && DL=$(curl -fsSL -H \"$UA\" \"https://fill.papermc.io/v3/projects/paper/versions/${VER}/builds/latest\" 2>/dev/null | jq -r '.downloads.\"server:default\".url // empty')\nfi\n[ -z \"$DL\" ] && { echo \"No Paper build found for ${VER}\" >&2; exit 1; }\ncurl -fsSL -H \"$UA\" -o \"${SERVER_JARFILE}\" \"$DL\"\nif [ \"${EULA}\" = \"true\" ]; then echo 'eula=true' > eula.txt; fi\necho 'Install complete.'\n"
   },
-  "configFiles": [
-    {
-      "path": "server.properties",
-      "parser": "properties",
-      "find": {
-        "server-port": "{{server.build.default.port}}",
-        "query.port": "{{server.build.default.port}}",
-        "enable-query": "true"
-      }
-    }
-  ],
+  "configFiles": [],
   "recCpuCores": 2,
   "recMemoryMb": 4096,
   "recDiskMb": 10240,

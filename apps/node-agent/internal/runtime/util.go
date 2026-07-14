@@ -109,6 +109,15 @@ func splitArgs(s string) []string {
 // {{VAR}} interpolation. Paths are cleaned and confined to dataDir.
 func renderConfigFiles(dataDir string, s *server.Server) error {
 	for _, cf := range s.Spec.ConfigFiles {
+		// Entries with no content are skipped entirely. Pterodactyl-style
+		// {path, parser, find} entries (which this agent has never implemented)
+		// decode with Content == "" — writing them used to truncate the game's
+		// primary config (e.g. PalWorldSettings.ini, server.properties) to zero
+		// bytes on every install AND preserve-data reinstall, destroying
+		// customer settings. An empty file is never a useful render target.
+		if cf.Content == "" {
+			continue
+		}
 		rel := filepath.Clean("/" + cf.Path) // force-absolute then trim leading slash
 		target := filepath.Join(dataDir, strings.TrimPrefix(rel, string(os.PathSeparator)))
 		if !strings.HasPrefix(target, filepath.Clean(dataDir)+string(os.PathSeparator)) && target != dataDir {

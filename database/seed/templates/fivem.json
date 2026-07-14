@@ -22,13 +22,7 @@
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\ncd /mnt/server\nARTIFACT_URL=\"https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/${FX_VERSION:-latest}/fx.tar.xz\"\nif [ \"${FX_VERSION:-latest}\" = \"latest\" ]; then\n  ARTIFACT_URL=\"https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/fx.tar.xz\"\nfi\ncurl -fsSL -o fx.tar.xz \"$ARTIFACT_URL\"\ntar xf fx.tar.xz && rm -f fx.tar.xz\nif [ ! -d resources ]; then\n  git clone --depth 1 https://github.com/citizenfx/cfx-server-data.git tmp_data && cp -r tmp_data/resources . && cp tmp_data/server.cfg . 2>/dev/null || true && rm -rf tmp_data\nfi\necho 'FiveM (FXServer) install complete.'\n"
   },
-  "configFiles": [
-    {
-      "path": "server.cfg",
-      "parser": "file",
-      "find": {}
-    }
-  ],
+  "configFiles": [],
   "recCpuCores": 4,
   "recMemoryMb": 6144,
   "recDiskMb": 20480,
