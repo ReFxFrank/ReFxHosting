@@ -1044,23 +1044,42 @@ async function seedVoiceProducts() {
  * creation (and the install spec uses `server.startupCommand ?? template`). So
  * when an egg switches to a ReFx **launcher** (`bash refx-*.sh` — Arma 3, DayZ,
  * TeamSpeak), existing servers keep their old direct command and never run it.
- * For launcher eggs ONLY (marked by the `bash refx-` startup), migrate existing
+ * For launcher eggs (marked by the `bash refx-` startup), migrate existing
  * server rows to the launcher. Scoped to launcher eggs so we never clobber a
  * user's custom startup on a normal egg. Idempotent (the NOT clause skips rows
  * already on the launcher).
+ *
+ * It ALSO migrates the reverse: when an egg DROPS its launcher for a direct
+ * command (e.g. Palworld moved its ini-sync into the install script), a server
+ * still carrying the stale `bash|sh refx-*` snapshot would try to run a launcher
+ * file that no longer exists and crash on boot. Those snapshots are always
+ * ReFx-generated (never a customer's custom startup), so they are safe to
+ * migrate to the template's new command; genuinely-custom direct snapshots are
+ * left untouched.
  */
 async function migrateLauncherStartup(
   templateId: string,
   startupCommand: string,
 ) {
   // Launcher startups are "bash refx-…" or "sh refx-…" (the TS3 egg moved to sh
-  // because the Alpine image has no bash). Only migrate launcher commands.
-  if (!/^(bash|sh) refx-/.test(startupCommand)) return;
+  // because the Alpine image has no bash).
+  if (/^(bash|sh) refx-/.test(startupCommand)) {
+    // Moving TO a launcher: migrate any server not already on it.
+    await prisma.server.updateMany({
+      where: { templateId, deletedAt: null, NOT: { startupCommand } },
+      data: { startupCommand },
+    });
+    return;
+  }
+  // Moving AWAY from a launcher: heal servers still on a stale refx-* launcher.
   await prisma.server.updateMany({
     where: {
       templateId,
       deletedAt: null,
-      NOT: { startupCommand },
+      OR: [
+        { startupCommand: { startsWith: "bash refx-" } },
+        { startupCommand: { startsWith: "sh refx-" } },
+      ],
     },
     data: { startupCommand },
   });

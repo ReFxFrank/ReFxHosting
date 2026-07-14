@@ -41,7 +41,7 @@ Pal/Saved/Config/LinuxServer/PalWorldSettings.ini
 
 ### 3. Know which settings the panel owns
 
-Six keys are **panel-managed**: on every boot, ReFx writes the values from your server's **Startup tab** (and the panel's port allocation) into \`PalWorldSettings.ini\` for you:
+A few keys are **panel-managed**: at **install and reinstall**, ReFx writes the values from your server's **Startup tab** (and the panel's port allocation) into \`PalWorldSettings.ini\` for you:
 
 | OptionSettings key | Where to change it |
 |---|---|
@@ -51,7 +51,7 @@ Six keys are **panel-managed**: on every boot, ReFx writes the values from your 
 | \`RCONEnabled\` / \`RCONPort\` | Startup tab → **Enable RCON** (the port is allocated by the panel) |
 | \`PublicPort\` | Set automatically to your allocated game port |
 
-Editing those keys directly in the ini gets overwritten at the next boot (except \`AdminPassword\`, which the panel only touches when the Startup-tab field is set). **Every other setting** — rates, death penalty, PvP, day/night speed, raids, crossplay — lives in the ini and is yours to edit.
+These are written **once, at install/reinstall** — after that the ini is the source of truth and a plain restart just reads it. So to change one of these via the panel, update the Startup-tab field and **Reinstall** (it preserves your world); or simply edit the key in the ini directly. **Every other setting** — rates, death penalty, PvP, day/night speed, raids, crossplay — lives in the ini and is yours to edit, applied on the next restart.
 
 ### 4. Configure PalWorldSettings.ini
 
@@ -73,7 +73,7 @@ Restart after saving. Rate changes (\`ExpRate\`, \`PalCaptureRate\`, day/night s
 
 ### 5. Set up admin access
 
-Set the **Admin Password** field on the server's **Startup tab** and restart — the panel writes it into the ini for you (or leave the field blank and set \`AdminPassword\` in the ini yourself). Then, in-game, open chat and authenticate:
+Set the **Admin Password** field on the server's **Startup tab** and **Reinstall** (it preserves your world) — the panel writes it into the ini at install (or leave the field blank and set \`AdminPassword\` in the ini yourself, then restart). Then, in-game, open chat and authenticate:
 
 \`\`\`
 /AdminPassword ChangeMe-Admin
@@ -104,7 +104,7 @@ Steam → Palworld → **Join Multiplayer Game** → enter \`address:8211\` in t
 
 ## Troubleshooting
 
-- **Settings don't apply** — first check it isn't a [panel-managed key](#3-know-which-settings-the-panel-owns) (server name, max players, admin password, RCON): those are set from the **Startup tab**, and the boot console prints a \`[refx] PalWorldSettings.ini synced\` line naming them. For everything else: you edited \`DefaultPalWorldSettings.ini\` (a reference file the server never reads), edited the live file while the server was running, or broke the single-line rule. Stop, fix, start.
+- **Settings don't apply** — first check it isn't a [panel-managed key](#3-know-which-settings-the-panel-owns) (server name, max players, admin password, RCON): those are written from the **Startup tab** at install/reinstall (the install log prints a \`[refx] PalWorldSettings.ini synced\` line naming them), so change them via **Reinstall** or by editing the ini. For everything else: you edited \`DefaultPalWorldSettings.ini\` (a reference file the server never reads), edited the live file while the server was running, or broke the single-line rule. Stop, fix, start.
 - **Memory climbs over time** — Palworld's server is known to bloat the longer it runs. Schedule a nightly restart (ReFx's Schedules tab does this in two clicks) and the problem disappears; crash auto-restart catches the rare hard fall in the meantime.
 - **Progress lost after a crash** — the world saves on interval and on graceful shutdown. Get in the habit of \`/Save\` before risky moments, and always stop the server from the panel rather than killing it.
 - **Friends can't see the server in the browser** — skip the browser; direct connect by \`address:8211\` always works.
