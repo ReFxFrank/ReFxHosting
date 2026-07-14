@@ -34,6 +34,7 @@ Legend:
 | `infra/scripts` | **Done** | `install-node.sh` (Ubuntu/Debian/Alma/Rocky), `install-node.ps1` (Windows Server), `refx-agent.service`, `bootstrap.sh`. |
 | `.github/workflows` | **Done** | `ci.yml`, `release.yml`, `security.yml` (CodeQL/Trivy/npm-audit), `dependabot.yml`. |
 | `docs` | **Done** | Complete architecture + operations set (this directory). |
+| Companion apps (external repos) | **Done** | **iOS app** (App Store; APNs push served by panel-api) and **ReFx Remote** — the Windows desktop companion ([`ReFxFrank/ReFx-Remote`](https://github.com/ReFxFrank/ReFx-Remote), ready-to-run `.exe` from GitHub Releases). Both sign in with the customer's account against the same public panel API. The storefront promotes both (homepage band + footer badges); see [docs/27](27-companion-apps.md). Source for both lives outside this monorepo. |
 
 ## panel-api (module detail)
 

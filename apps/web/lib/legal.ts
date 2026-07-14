@@ -39,6 +39,16 @@ export const LEGAL = {
   appStoreUrl:
     process.env.NEXT_PUBLIC_APP_STORE_URL ??
     "https://apps.apple.com/us/app/refx-server-manager/id6783853821",
+  /**
+   * ReFx Remote — the Windows desktop companion app (external repo). The
+   * download badge points at the latest GitHub Release, which always carries
+   * the ready-to-run .exe; override with a direct asset URL via
+   * NEXT_PUBLIC_REMOTE_DOWNLOAD_URL if you want a one-click download.
+   */
+  remoteRepoUrl: "https://github.com/ReFxFrank/ReFx-Remote",
+  remoteDownloadUrl:
+    process.env.NEXT_PUBLIC_REMOTE_DOWNLOAD_URL ??
+    "https://github.com/ReFxFrank/ReFx-Remote/releases/latest",
 } as const;
 
 /**

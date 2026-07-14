@@ -7,6 +7,7 @@ import { useAuthStore } from "@/store/auth";
 import { Button } from "@/components/ui/button";
 import { LogoWordmark } from "@/components/brand/logo";
 import { AppStoreBadge } from "@/components/public/app-store-badge";
+import { WindowsBadge } from "@/components/public/windows-badge";
 import { EffectsToggle } from "@/components/shared/effects-mode";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
@@ -150,8 +151,11 @@ export function PublicLayout({ children }: { children: React.ReactNode }) {
               anytime, manage everything from one panel.
             </p>
             <div className="space-y-2">
-              <p className="refx-eyebrow">Get the app</p>
-              <AppStoreBadge />
+              <p className="refx-eyebrow">Get the apps</p>
+              <div className="flex flex-col items-start gap-2">
+                <AppStoreBadge />
+                <WindowsBadge />
+              </div>
             </div>
           </div>
           <FooterCol

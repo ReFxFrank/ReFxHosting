@@ -1,15 +1,19 @@
-import { Bell, Power, CreditCard, LifeBuoy } from "lucide-react";
+import { Bell, Power, CreditCard, Monitor } from "lucide-react";
 import { AppStoreBadge } from "@/components/public/app-store-badge";
+import { WindowsBadge } from "@/components/public/windows-badge";
 import { LEGAL } from "@/lib/legal";
 
 const POINTS = [
   { icon: Power, label: "Start, stop & monitor your servers on the go" },
   { icon: Bell, label: "Instant push alerts for status, billing & support" },
   { icon: CreditCard, label: "Manage invoices, plans & payment methods" },
-  { icon: LifeBuoy, label: "Reply to support tickets from your pocket" },
+  {
+    icon: Monitor,
+    label: "ReFx Remote on Windows — a native desktop app, no browser needed",
+  },
 ];
 
-/** Marketing band promoting the iOS companion app. */
+/** Marketing band promoting the companion apps (iOS + ReFx Remote for Windows). */
 export function AppPromo() {
   return (
     <section
@@ -19,15 +23,16 @@ export function AppPromo() {
       <div className="refx-beam refx-beam-live relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[rgba(10,14,22,0.6)] p-8 sm:p-12">
         <div className="grid items-center gap-10 md:grid-cols-2">
           <div className="space-y-6">
-            <p className="refx-eyebrow">{LEGAL.brand} for iOS</p>
+            <p className="refx-eyebrow">{LEGAL.brand} companion apps</p>
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-              Your servers, in your pocket
+              Your servers, everywhere
             </h2>
             <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-              The {LEGAL.brand} app puts your whole control panel on your phone
-              — power your servers, watch their status live, handle billing, and
-              stay on top of support, with push notifications the moment
-              something changes.
+              Take the {LEGAL.brand} control panel beyond the browser — the
+              native <strong>iOS app</strong> puts your servers in your pocket,
+              and <strong>ReFx Remote</strong> brings them to your Windows
+              desktop as a ready-to-run app. Power servers, watch status live,
+              handle billing and support, wherever you are.
             </p>
             <ul className="space-y-3">
               {POINTS.map(({ icon: Icon, label }) => (
@@ -39,8 +44,9 @@ export function AppPromo() {
                 </li>
               ))}
             </ul>
-            <div className="pt-1">
+            <div className="flex flex-wrap items-center gap-3 pt-1">
               <AppStoreBadge />
+              <WindowsBadge />
             </div>
           </div>
 

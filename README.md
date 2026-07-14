@@ -6,7 +6,7 @@
 
 ### The open, multi‑OS **game & voice** server‑hosting platform — with GPortal‑style game switching
 
-**Game servers** sell on configurable **hardware tiers** (Low · Mid · High). **Voice servers** (TeamSpeak 3) sell **per slot**. Customers buy a server **once** and swap between Minecraft, Rust, ARK, Valheim, Palworld, CS2, FiveM and more **without redeploying** — a production‑grade, self‑hostable alternative to **Pterodactyl**, **AMP**, and **GPortal** with an original cross‑platform node agent, recurring **Stripe + PayPal** billing, a built‑in helpdesk, a **native iOS companion app** with **APNs push**, and a **public status page** with a live world map and operator incidents.
+**Game servers** sell on configurable **hardware tiers** (Low · Mid · High). **Voice servers** (TeamSpeak 3) sell **per slot**. Customers buy a server **once** and swap between Minecraft, Rust, ARK, Valheim, Palworld, CS2, FiveM and more **without redeploying** — a production‑grade, self‑hostable alternative to **Pterodactyl**, **AMP**, and **GPortal** with an original cross‑platform node agent, recurring **Stripe + PayPal** billing, a built‑in helpdesk, **native companion apps** — an **iOS app** with **APNs push** and **[ReFx Remote](https://github.com/ReFxFrank/ReFx-Remote)**, a **Windows desktop app** — and a **public status page** with a live world map and operator incidents.
 
 <br/>
 
@@ -25,7 +25,7 @@
 
 **<samp>Primary&nbsp;#0072FF</samp>** · Dark glassy control‑panel UI · One Go binary for Linux **and** Windows nodes
 
-[Quick start](#-quick-start) · [Cheat-sheet](#-operator-cheat-sheet-this-box) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [Pricing model](#-how-pricing-works) · [iOS app & status page](#-ios-companion-app--public-status-page) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
+[Quick start](#-quick-start) · [Cheat-sheet](#-operator-cheat-sheet-this-box) · [Node setup](#️-setting-up-game-nodes) · [Architecture](#-architecture) · [Game switching](#-the-signature-feature-game-switching) · [Pricing model](#-how-pricing-works) · [Companion apps & status page](#-companion-apps--public-status-page) · [API](#-api-reference) · [Docs](docs/00-index.md) · [Status](docs/16-status.md)
 
 </div>
 
@@ -60,7 +60,7 @@ Two product types, each with the right pricing model:
 | 🛠️ **Admin power tools** | Create servers straight from an egg (no SSH), manage & delete nodes, **start/stop/restart individual servers from the node view**, pick a node's **region from a dropdown**, and watch **live node CPU / RAM / disk / ping graphs** from heartbeats. |
 | 🗂️ **Real file manager + live SFTP** | Browse, edit, upload, compress/extract files in the browser, or connect over **SFTP** — credentials you rotate in the panel propagate to the node **immediately** (no restart). |
 | 🎨 **ReFx Glassy UI** | Dark, premium control-panel design (`#0072ff`) with a live `xterm.js` console that **survives page switches and refreshes**, real-time resource gauges, per-game storefront artwork, and **sessions that stay signed in across panel rebuilds**. |
-| 📱 **iOS app + push** | A **native iOS companion app** backed by **token-based APNs** (ES256 `.p8`, no SDK dependency). Customers register a device (`/account/push-tokens`) and get push for **server state** (online/offline/crashed, throttled), **invoices** (created/due/failed), **support replies**, and **status incidents**. Stale tokens auto-prune on `410/BadDeviceToken`; push disables cleanly when APNs isn't configured. |
+| 📱 **Companion apps — iOS + Windows** | A **native iOS companion app** backed by **token-based APNs** (ES256 `.p8`, no SDK dependency): customers register a device (`/account/push-tokens`) and get push for **server state** (online/offline/crashed, throttled), **invoices** (created/due/failed), **support replies**, and **status incidents**; stale tokens auto-prune on `410/BadDeviceToken`, and push disables cleanly when APNs isn't configured. **[ReFx Remote](https://github.com/ReFxFrank/ReFx-Remote)** is the same idea for the desktop — a **native Windows app** (ready-to-run `.exe` from [GitHub Releases](https://github.com/ReFxFrank/ReFx-Remote/releases/latest)) for managing your servers without opening the panel. The storefront carries download links for both. |
 | 🌍 **Public status page** | A polished **`/status`** page with a real **world map** (Natural Earth land paths, regions plotted at their datacenter coords) that rolls live node health into **per-region + per-component** status — **Control Panel API, Web Dashboard, Game Server Nodes, iOS App**. Operators post **incidents** with a timeline (admin CRUD, `content.manage`); active + 30-day history render publicly, and an incident update can **broadcast a push** to customers. |
 | 🔀 **Server transfers between nodes** | Admin-only, Pterodactyl-style **move a server to another node** (`POST /admin/servers/:id/transfer`). A `TRANSFER` job snapshots on the source (backup→S3), provisions + restores on the destination with fresh ports, then repoints atomically — the **server keeps its identity** and the **source is deleted only after the destination verifies**, so any failure rolls back and the server survives. |
 | 🔑 **Admin password management** | From **Admin → Users** an admin can **email a reset link** or **set a temporary password** (auto-generated or chosen). A temp password flags `mustChangePassword`, **revokes all the user's sessions**, and **forces a change at next sign-in** — enforced **server-side** (you can't skip it by hitting the API directly, or even via the WebSocket console). Admins can only act on **strictly lower-privileged** accounts. |
@@ -72,7 +72,7 @@ Two product types, each with the right pricing model:
 > **Project status.** ReFx Hosting is the **production platform that runs [refx.gg](https://refx.gg)** — not a demo or a scaffold. Every component builds/typechecks/tests/validates (**573 unit + 49 e2e tests green**, agent cross-compiles to 3 targets, schema validates). A few optional external-integration edges (e.g. additional payment SDKs, extra panel importers) are marked `// TODO(impl)`. The exact implemented-vs-stubbed matrix lives in **[docs/16-status.md](docs/16-status.md)**, and the frontend↔backend route map in **[docs/17-integration-map.md](docs/17-integration-map.md)**.
 
 > [!TIP]
-> **Recently shipped:** **native iOS companion app + token-based APNs push** (server state · invoices · support replies · status incidents) · **public status page** with a live world map, per-region/per-component health and operator **incidents** (+ customer push broadcast) · **admin-only server transfers between nodes** (snapshot → provision → restore → repoint, with rollback) · **admin password management** (email reset or temp password + forced change) · a **security-hardening pass** (server-side `mustChangePassword`, API-key write-scope ceiling, single-use/time-boxed bootstrap tokens, GraphQL introspection off in prod) verified against a self-audit · **legal/policy pages + cookie-consent banner** · **billing settlement/dunning/renewal test suite** · **Steam Workshop management** (per‑server Workshop tab + central SteamCMD login & Web API key) · **hardware‑tier game servers** (Low/Mid/High cards + admin tier editor) · **slot‑based voice hosting — TeamSpeak 3** · **recurring PayPal via the Subscriptions API** · **public "Meet the team" page** · **coupons + gift cards + account/store credit** · **custom RBAC** + permission‑gated admin · **admin Support ticket queue** · **owner‑only payment‑gateway/key editor** · unified **one‑Minecraft** product with loader/version tab · built‑in **Modrinth** mods + **modpack installer** · **rootless** game containers · in‑browser **file manager** + live **SFTP** rotation · console that **persists across navigations & refreshes**.
+> **Recently shipped:** **ReFx Remote — a native Windows desktop companion app** (ready-to-run `.exe`, downloads on the storefront) · **native iOS companion app + token-based APNs push** (server state · invoices · support replies · status incidents) · **public status page** with a live world map, per-region/per-component health and operator **incidents** (+ customer push broadcast) · **admin-only server transfers between nodes** (snapshot → provision → restore → repoint, with rollback) · **admin password management** (email reset or temp password + forced change) · a **security-hardening pass** (server-side `mustChangePassword`, API-key write-scope ceiling, single-use/time-boxed bootstrap tokens, GraphQL introspection off in prod) verified against a self-audit · **legal/policy pages + cookie-consent banner** · **billing settlement/dunning/renewal test suite** · **Steam Workshop management** (per‑server Workshop tab + central SteamCMD login & Web API key) · **hardware‑tier game servers** (Low/Mid/High cards + admin tier editor) · **slot‑based voice hosting — TeamSpeak 3** · **recurring PayPal via the Subscriptions API** · **public "Meet the team" page** · **coupons + gift cards + account/store credit** · **custom RBAC** + permission‑gated admin · **admin Support ticket queue** · **owner‑only payment‑gateway/key editor** · unified **one‑Minecraft** product with loader/version tab · built‑in **Modrinth** mods + **modpack installer** · **rootless** game containers · in‑browser **file manager** + live **SFTP** rotation · console that **persists across navigations & refreshes**.
 
 ---
 
@@ -126,9 +126,10 @@ all four evolve.)_
 
 ```mermaid
 flowchart TB
-    subgraph Client["🌐 Browser / mobile / API clients"]
+    subgraph Client["🌐 Browser / mobile / desktop / API clients"]
         UI["Web Panel — Next.js 14"]
         IOS["📱 iOS app"]
+        WIN["🖥️ ReFx Remote (Windows)"]
         API_C["REST / GraphQL clients"]
     end
 
@@ -152,6 +153,7 @@ flowchart TB
 
     UI --> API
     IOS --> API
+    WIN --> API
     API_C --> API
     API <--> DB
     API <--> R
@@ -237,7 +239,7 @@ Both models support **weekly · biweekly · monthly · quarterly · semi‑annua
 
 ---
 
-## 📱 iOS companion app & public status page
+## 📱 Companion apps & public status page
 
 ### 📱 iOS companion app + push
 
@@ -248,6 +250,14 @@ A **native iOS app** lets customers power/monitor their servers, watch billing, 
 - A `410 / BadDeviceToken` response **auto-prunes** the stale token. APNs is configured from `APNS_KEY_P8_BASE64` / `APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_BUNDLE_ID` (+ `APNS_PRODUCTION`); when unset, push **disables cleanly** and the rest of the panel is unaffected. The app's `apple-app-site-association` is served from `/.well-known`, and the storefront carries an **App Store** listing (`NEXT_PUBLIC_APP_STORE_URL`).
 
 > The iOS app's own Swift source lives outside this monorepo; everything the panel needs to **serve** it — push, token endpoints, deep-link payloads, the universal-links file and the store listing — ships here.
+
+### 🖥️ ReFx Remote — Windows desktop companion
+
+**[ReFx Remote](https://github.com/ReFxFrank/ReFx-Remote)** is the iOS app's counterpart for the desktop: a **native Windows application** for customers who'd rather manage their servers from an app than a browser tab. It signs in with the same refx.gg account and talks to the same public panel API — no special server-side integration required.
+
+- **Ready-to-run `.exe`** — download the latest build from **[GitHub Releases](https://github.com/ReFxFrank/ReFx-Remote/releases/latest)**; no installer ceremony.
+- The storefront promotes it alongside the iOS app (homepage **companion apps** band + footer **"Get the apps"** badges). The download badge points at the latest release; set `NEXT_PUBLIC_REMOTE_DOWNLOAD_URL` to pin a direct asset URL instead.
+- Source lives in its own repository, like the iOS app: [`ReFxFrank/ReFx-Remote`](https://github.com/ReFxFrank/ReFx-Remote).
 
 ### 🌍 Public status page (`/status`)
 
@@ -316,7 +326,7 @@ Next.js 14 customer + admin panel. **Builds, typechecks & lints clean.**
 - **Admin power tools** — create servers from an egg; manage nodes (region **dropdown** on create) with **per-server power controls**; **transfer a server to another node** with live progress; **Products** with an inline **price editor**; an **owner-only Payments** page with a gateway/key editor; **Orders/Invoices** (void/delete); a **Support** ticket queue + categories/canned responses; a **Status/Incidents** console; a **Roles & permissions** builder; **Customers/Users** with full account view, delete, and **password management** (email a reset or set a temp password).
 - **Public status page** (`/status`) — a world map of regions with per-component/per-region health and an incident feed (active + history), all driven by the live `/api/v1/status` feed.
 - **Legal & consent** — Terms / Privacy / Acceptable-Use / Refund pages, a footer that links them, and an honest **cookie-consent banner** (necessary + telemetry only).
-- **iOS app listing** — an App Store promo on the storefront plus the universal-links `apple-app-site-association`, ready for the native companion app.
+- **Companion-app listings** — a storefront promo band + footer badges for the **iOS app** (App Store, with the universal-links `apple-app-site-association`) and **ReFx Remote for Windows** (direct download from GitHub Releases).
 - Sessions **stay signed in across panel rebuilds** (transient-tolerant token refresh + optional "keep me signed in"); an **idle-session timeout** prompts before logging out; an admin-set temporary password triggers a **forced password change** (enforced server-side).
 - Plus dashboard, backups, databases, schedules, billing, account/security, and a glassy **storefront** with per-game artwork, node-derived server locations, and a public **Meet the team** page.
 

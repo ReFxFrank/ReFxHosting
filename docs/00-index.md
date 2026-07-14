@@ -20,6 +20,11 @@ consistent with the canonical data model in
 | `node-agent`| Go single static binary (Linux + Windows)       | `:8443` TLS + WebSocket, SFTP `:2022`      |
 | `shared`    | TypeScript types + generated OpenAPI client     | library (consumed by `web`)                |
 
+Two first-party **companion apps** live in their own repositories and consume the
+same public panel API: the **iOS app** (App Store) and **ReFx Remote** for
+Windows ([`ReFxFrank/ReFx-Remote`](https://github.com/ReFxFrank/ReFx-Remote),
+`.exe` from GitHub Releases) — see [27 — Companion Apps](27-companion-apps.md).
+
 ## Documentation map
 
 ### Architecture & data
@@ -32,6 +37,7 @@ consistent with the canonical data model in
 - [04 — Frontend Architecture](04-frontend.md) — Next.js App Router, route groups, data fetching, design system, websocket console.
 - [05 — Backend Architecture](05-backend.md) — NestJS modules, request lifecycle, BullMQ workers, technology rationale.
 - [06 — Node Agent Architecture](06-node-agent.md) — Go agent, bootstrap handshake, protocol, `Runtime` abstraction, console/files/backups/SFTP/stats.
+- [27 — Companion Apps](27-companion-apps.md) — the iOS app and ReFx Remote for Windows: what the panel serves them, download-link config, release flow.
 
 ### Domain subsystems
 - [07 — Billing Architecture](07-billing.md) — product/price/subscription/invoice/payment model, gateway abstraction, dunning, tax, suspension lifecycle.
