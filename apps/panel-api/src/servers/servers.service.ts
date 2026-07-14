@@ -2079,9 +2079,14 @@ export class ServersService {
     });
     if (!server) throw new NotFoundException("Server not found");
     if (!server.subscriptionId || !server.subscription) {
-      throw new BadRequestException(
-        "Server has no subscription to comp the add-on against.",
-      );
+      // Admin/internal server with no billing attached: there is no paid
+      // add-on to distinguish from, so the routing flag on the server row IS
+      // the comp state. Toggle it directly.
+      await this.prisma.server.update({
+        where: { id: serverId },
+        data: { expressBackups: on },
+      });
+      return { expressBackups: on, comped: on, paid: false };
     }
     const paid = server.subscription.expressBackups;
     const routing = paid || on;

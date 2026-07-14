@@ -78,14 +78,27 @@ describe("ServersService.setExpressBackupsComp", () => {
     );
   });
 
-  it("rejects a server with no subscription", async () => {
+  it("subscription-less (admin) server: toggles the routing flag directly", async () => {
     prisma.server.findFirst.mockResolvedValue({
       id: "srv-1",
       subscriptionId: null,
       subscription: null,
     });
-    await expect(service.setExpressBackupsComp("srv-1", true)).rejects.toThrow();
+    prisma.server.update = jest.fn().mockResolvedValue({});
+
+    const res = await service.setExpressBackupsComp("srv-1", true);
+    expect(res).toEqual({ expressBackups: true, comped: true, paid: false });
+    expect(prisma.server.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "srv-1" },
+        data: { expressBackups: true },
+      }),
+    );
+    // No billing rows touched — there is no subscription.
     expect(prisma.subscription.update).not.toHaveBeenCalled();
+
+    const off = await service.setExpressBackupsComp("srv-1", false);
+    expect(off).toEqual({ expressBackups: false, comped: false, paid: false });
   });
 
   it("404s an unknown server", async () => {

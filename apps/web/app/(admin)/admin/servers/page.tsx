@@ -1165,62 +1165,68 @@ export default function AdminServersPage() {
 
           {(() => {
             const paid = compTarget?.subscription?.expressBackups ?? false;
-            const comped = compTarget?.subscription?.expressBackupsComp ?? false;
+            // Subscription-less (admin/internal) servers have no paid add-on to
+            // distinguish from — the server routing flag IS the comp state.
+            const comped = compTarget?.subscription
+              ? compTarget.subscription.expressBackupsComp
+              : (compTarget?.expressBackups ?? false);
             const routing = compTarget?.expressBackups ?? (paid || comped);
             return (
-              <div className="space-y-3 text-sm">
-                <div
-                  className={`rounded-lg border p-3 ${
-                    routing
-                      ? "border-primary/30 bg-primary/[0.06]"
-                      : "border-white/10 bg-white/[0.02]"
-                  }`}
-                >
-                  Backups currently store{" "}
-                  <span className="font-medium">
-                    {routing ? "offsite (R2)" : "on the node's local disk"}
-                  </span>
-                  .{" "}
-                  {paid
-                    ? "Customer pays for Express Backups."
-                    : comped
-                      ? "Enabled by an admin comp (no charge)."
-                      : "No Express Backups add-on."}
-                </div>
-                {paid && (
+              <>
+                <div className="space-y-3 text-sm">
+                  <div
+                    className={`rounded-lg border p-3 ${
+                      routing
+                        ? "border-primary/30 bg-primary/[0.06]"
+                        : "border-white/10 bg-white/[0.02]"
+                    }`}
+                  >
+                    Backups currently store{" "}
+                    <span className="font-medium">
+                      {routing ? "offsite (R2)" : "on the node's local disk"}
+                    </span>
+                    .{" "}
+                    {paid
+                      ? "Customer pays for Express Backups."
+                      : comped
+                        ? "Enabled by an admin comp (no charge)."
+                        : "No Express Backups add-on."}
+                  </div>
+                  {paid && (
+                    <p className="text-xs text-muted-foreground">
+                      This customer already pays for Express Backups — a comp
+                      isn&apos;t needed. Removing a comp here won&apos;t turn
+                      off their paid offsite storage.
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    This customer already pays for Express Backups — a comp
-                    isn&apos;t needed. Removing a comp here won&apos;t turn off
-                    their paid offsite storage.
+                    New offsite routing applies to the server&apos;s next
+                    backup; existing archives stay where they are.
                   </p>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  New offsite routing applies to the server&apos;s next backup;
-                  existing archives stay where they are.
-                </p>
-              </div>
+                </div>
+
+                <DialogFooter>
+                  {comped ? (
+                    <Button
+                      variant="outline"
+                      loading={compExpress.isPending}
+                      onClick={() => compExpress.mutate(false)}
+                    >
+                      Remove comp
+                    </Button>
+                  ) : (
+                    <Button
+                      loading={compExpress.isPending}
+                      disabled={paid}
+                      onClick={() => compExpress.mutate(true)}
+                    >
+                      <Cloud className="size-4" /> Comp Express Backups
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
             );
           })()}
-
-          <DialogFooter>
-            {compTarget?.subscription?.expressBackupsComp ? (
-              <Button
-                variant="outline"
-                loading={compExpress.isPending}
-                onClick={() => compExpress.mutate(false)}
-              >
-                Remove comp
-              </Button>
-            ) : (
-              <Button
-                loading={compExpress.isPending}
-                disabled={compTarget?.subscription?.expressBackups}
-                onClick={() => compExpress.mutate(true)}
-              >
-                <Cloud className="size-4" /> Comp Express Backups
-              </Button>
-            )}
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
