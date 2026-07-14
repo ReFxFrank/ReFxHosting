@@ -1091,6 +1091,11 @@ model Subscription {
   // Paid add-on: offsite (S3/R2) backups with presigned direct downloads.
   // Billed as an extra line on every cycle invoice; drives Server.expressBackups.
   expressBackups  Boolean           @default(false)
+  // Admin comp of the Express Backups add-on: enables offsite routing WITHOUT
+  // the per-cycle charge (support/goodwill). Orthogonal to `expressBackups` —
+  // Server.expressBackups routing is (expressBackups || expressBackupsComp),
+  // but only the paid flag adds the invoice line.
+  expressBackupsComp Boolean        @default(false)
   // First-touch acquisition data at order time (UTM/ref/landing), for
   // channel-level revenue attribution.
   attribution     Json?

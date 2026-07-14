@@ -176,6 +176,13 @@ export interface Server {
 /** Server shape returned by the admin list (adds the owner relation). */
 export interface AdminServer extends Server {
   owner?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  /** Offsite (R2) backup routing flag on the server row. */
+  expressBackups?: boolean;
+  /** Express Backups billing state: `expressBackups` = paid, `expressBackupsComp` = admin comp. */
+  subscription?: {
+    expressBackups: boolean;
+    expressBackupsComp: boolean;
+  } | null;
 }
 
 /** Lifecycle of an admin-initiated server transfer between nodes. */

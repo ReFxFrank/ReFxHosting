@@ -1687,6 +1687,16 @@ export const api = {
       ),
     disableVoiceChat: (id: string) =>
       http.delete<{ disabled: boolean }>(`/admin/servers/${id}/voice-chat`),
+    /** Comp Express Backups (R2/offsite) for a server — enables routing, no charge. */
+    compExpressBackups: (id: string) =>
+      http.post<{ expressBackups: boolean; comped: boolean; paid: boolean }>(
+        `/admin/servers/${id}/express-backups-comp`,
+      ),
+    /** Remove the Express Backups comp; routing reverts to the paid add-on state. */
+    uncompExpressBackups: (id: string) =>
+      http.delete<{ expressBackups: boolean; comped: boolean; paid: boolean }>(
+        `/admin/servers/${id}/express-backups-comp`,
+      ),
     /** Move a server to another node (Pterodactyl-style). Returns the queued transfer. */
     transferServer: (id: string, toNodeId: string) =>
       http.post<ServerTransfer>(`/admin/servers/${id}/transfer`, { toNodeId }),
