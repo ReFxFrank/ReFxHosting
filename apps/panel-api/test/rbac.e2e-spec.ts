@@ -8,6 +8,7 @@ import { BillingService } from '../src/billing/billing.service';
 import { CouponsService } from '../src/billing/coupons.service';
 import { GiftCardsService } from '../src/billing/gift-cards.service';
 import { CreditService } from '../src/billing/credit.service';
+import { ReferralsService } from '../src/billing/referrals.service';
 import { StripeGateway } from '../src/billing/gateways/stripe.gateway';
 import { PayPalGateway } from '../src/billing/gateways/paypal.gateway';
 import { QUEUE } from '../src/queues/queue.constants';
@@ -26,6 +27,8 @@ describe('RBAC (e2e)', () => {
         CouponsService,
         GiftCardsService,
         CreditService,
+        // BillingService's referral hook (rewardFirstPayment on settle).
+        ReferralsService,
       ],
       overrides: [
         { token: StripeGateway, useValue: { name: 'stripe', verifyWebhook: jest.fn() } },
@@ -75,16 +78,38 @@ describe('RBAC (e2e)', () => {
       expect(res.status).toBe(403);
     });
 
-    it('allows an ADMIN (200)', async () => {
+    it('allows an ADMIN (200) and includes the acting user on each row', async () => {
       const token = await asUser('adm-1', 'ADMIN');
-      h.prisma.auditLog.findMany.mockResolvedValueOnce([]);
-      h.prisma.auditLog.count.mockResolvedValueOnce(0);
+      h.prisma.auditLog.findMany.mockResolvedValueOnce([
+        {
+          id: 'a-1',
+          actorId: 'u-1',
+          action: 'server.power.start',
+          targetType: 'Server',
+          targetId: 's-1',
+          metadata: {},
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+          // What the actor join (strict email/name select) yields.
+          actor: { email: 'admin@refx.gg', firstName: 'Ada', lastName: null },
+        },
+      ]);
+      h.prisma.auditLog.count.mockResolvedValueOnce(1);
 
       const res = await request(h.app.getHttpServer())
         .get(path)
         .set('Authorization', `Bearer ${token}`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+      // The nested actor must survive serialization so admin UIs can show the
+      // email instead of the bare actorId UUID. Paginated payloads are spread
+      // by the TransformInterceptor: { success, data: rows, meta }.
+      const row = res.body.data[0];
+      expect(row.actor).toEqual({
+        email: 'admin@refx.gg',
+        firstName: 'Ada',
+        lastName: null,
+      });
+      expect(row.actorId).toBe('u-1');
     });
 
     it('allows an OWNER (role hierarchy) (200)', async () => {

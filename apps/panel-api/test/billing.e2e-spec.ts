@@ -6,6 +6,7 @@ import { BillingService } from '../src/billing/billing.service';
 import { CouponsService } from '../src/billing/coupons.service';
 import { GiftCardsService } from '../src/billing/gift-cards.service';
 import { CreditService } from '../src/billing/credit.service';
+import { ReferralsService } from '../src/billing/referrals.service';
 import { StripeWebhookController } from '../src/billing/webhooks/stripe-webhook.controller';
 import { StripeGateway } from '../src/billing/gateways/stripe.gateway';
 import { PayPalGateway } from '../src/billing/gateways/paypal.gateway';
@@ -21,7 +22,7 @@ describe('Billing (e2e)', () => {
     stripe = { name: 'stripe', verifyWebhook: jest.fn() };
     h = await buildTestApp({
       controllers: [BillingController, StripeWebhookController],
-      providers: [BillingService, CouponsService, GiftCardsService, CreditService],
+      providers: [BillingService, CouponsService, GiftCardsService, CreditService, ReferralsService],
       overrides: [
         { token: StripeGateway, useValue: stripe },
         { token: PayPalGateway, useValue: { name: 'paypal', createCheckoutSession: jest.fn() } },
