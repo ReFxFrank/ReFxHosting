@@ -96,6 +96,21 @@ function ensure(serverId: string): Entry {
   entry.socket = new ConsoleSocket({
     serverId,
     onEvent: (ev) => {
+      // Backlog replay: seed scrollback only when we have no buffered lines yet
+      // (a genuinely blank console — fresh load / first connect). If the buffer
+      // already holds output (tab switch, reconnect within the session), it
+      // already covers this history, so we skip it to avoid duplicates. Forward
+      // each seeded line as a normal `line` event so the live terminal renders
+      // it in order, ahead of subsequent live output.
+      if (ev.type === "history") {
+        if (entry.lines.length === 0) {
+          for (const h of ev.lines) {
+            push(entry, h.line);
+            entry.listeners.forEach((fn) => fn({ type: "line", line: h.line }));
+          }
+        }
+        return;
+      }
       switch (ev.type) {
         case "open":
           entry.connected = true;

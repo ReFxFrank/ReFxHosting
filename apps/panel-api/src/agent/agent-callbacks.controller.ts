@@ -23,6 +23,10 @@ import { SettingsService } from '../platform/settings.service';
 import { NotificationsService } from '../platform/notifications.service';
 import { PushService } from '../push/push.service';
 import { ConsoleGateway } from './console.gateway';
+import {
+  ConsoleHistoryService,
+  RawConsoleLine,
+} from './console-history.service';
 import { AgentSignatureGuard } from './agent-signature.guard';
 import { uuidv7 } from '../common/util/uuid';
 
@@ -148,6 +152,7 @@ export class AgentCallbacksController {
     private readonly push: PushService,
     private readonly console: ConsoleGateway,
     private readonly settings: SettingsService,
+    private readonly history: ConsoleHistoryService,
   ) {}
 
   // ---- registration (token-only, unsigned) --------------------------------
@@ -273,14 +278,27 @@ export class AgentCallbacksController {
     // Only relay console lines for servers that belong to the calling node, so a
     // node can't inject output into another tenant's console stream.
     const owned = await this.ownedServerIds(req.refxNodeId!, lines.map((l) => l.serverId));
+
+    // Group owned lines by server (preserving order) so each server's batch gets
+    // one contiguous seq range and one Redis write.
+    const byServer = new Map<string, RawConsoleLine[]>();
     for (const line of lines) {
       if (!owned.has(line.serverId)) continue;
-      this.console.emitConsole(line.serverId, {
-        type: 'console',
+      const arr = byServer.get(line.serverId) ?? [];
+      arr.push({
         line: line.line,
         stream: line.stream ?? 'stdout',
-        at: line.at,
+        at: line.at ?? Date.now(),
       });
+      byServer.set(line.serverId, arr);
+    }
+
+    for (const [serverId, batch] of byServer) {
+      // record() persists the backlog AND stamps each line with a monotonic seq;
+      // we emit the SAME seq-stamped frames live so the live stream and the
+      // replayed history share one ordering/dedup key.
+      const frames = await this.history.record(serverId, batch);
+      for (const frame of frames) this.console.emitConsole(serverId, frame);
     }
     return { ok: true };
   }

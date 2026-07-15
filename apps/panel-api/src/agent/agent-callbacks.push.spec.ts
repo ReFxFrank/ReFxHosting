@@ -23,6 +23,7 @@ describe('AgentCallbacksController server-state push', () => {
       push as any,
       {} as any,
       {} as any,
+      {} as any, // ConsoleHistoryService (unused by applyServerState)
     );
     return { prisma, push, ctrl };
   }

@@ -21,10 +21,20 @@ export interface ConsoleStats {
   uptimeMs?: number;
 }
 
+/** One replayed backlog line — byte-compatible with a live `console` frame. */
+export interface ConsoleHistoryLine {
+  type: "console";
+  seq: number;
+  line: string;
+  stream: string;
+  at: number;
+}
+
 export type ConsoleEvent =
   | { type: "open" }
   | { type: "close" }
   | { type: "line"; line: string }
+  | { type: "history"; lines: ConsoleHistoryLine[] }
   | { type: "stats"; stats: ConsoleStats }
   | { type: "status"; state: ServerState }
   | { type: "error"; message: string };
@@ -83,6 +93,17 @@ export class ConsoleSocket {
     });
     socket.on("subscribed", () => {
       /* room joined */
+    });
+    // Backlog replayed to this socket on subscribe (oldest -> newest). Each line
+    // is byte-compatible with a live `console` frame plus a monotonic `seq`.
+    socket.on("console_history", (payload: unknown) => {
+      const lines = ((payload as { lines?: unknown })?.lines ?? []) as
+        | ConsoleHistoryLine[]
+        | unknown[];
+      this.onEvent({
+        type: "history",
+        lines: Array.isArray(lines) ? (lines as ConsoleHistoryLine[]) : [],
+      });
     });
     socket.on("console", (frame: unknown) =>
       this.onEvent({ type: "line", line: extractLine(frame) }),
