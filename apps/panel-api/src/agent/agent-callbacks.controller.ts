@@ -27,14 +27,23 @@ import { AgentSignatureGuard } from './agent-signature.guard';
 import { uuidv7 } from '../common/util/uuid';
 
 /**
- * Server-state transitions worth notifying the owner about. Deliberately limited
- * to involuntary / important events (crash, suspension) — routine start/stop the
- * owner performs themselves would just be noise (and would re-appear every time
- * they cycle the server).
+ * Server-state transitions written to the durable in-app notification feed for
+ * the owner. This now mirrors SERVER_STATE_PUSH (online/offline/crash) plus
+ * suspension, so the desktop app — which reads this feed, not push — reaches
+ * parity with the mobile app for start/restart/offline events. The 30-min
+ * per-server+state throttle below bounds the noise from routine power cycling.
+ *
+ * A side benefit: because RUNNING/OFFLINE now update `recentStateNotices`, an
+ * intervening "online" re-arms the throttle, so a server that crashes again
+ * after an auto-restart within 30 min gets a fresh feed row (previously the
+ * feed-side throttle stayed armed on CRASHED and swallowed the repeat, while
+ * push did not — desktop missed repeat crashes).
  */
 const SERVER_STATE_NOTICES: Partial<Record<ServerState, string>> = {
   [ServerState.CRASHED]: 'has crashed',
   [ServerState.SUSPENDED]: 'was suspended',
+  [ServerState.RUNNING]: 'is now online',
+  [ServerState.OFFLINE]: 'is now offline',
 };
 
 /**
