@@ -170,6 +170,25 @@ export class ServersController {
     return this.servers.reinstall(id);
   }
 
+  /**
+   * Update the game to the latest server build. This is a reinstall with the
+   * data volume PRESERVED — re-running the install script pulls the current
+   * build (SteamCMD app_update, latest jar, etc.) while the world, config and
+   * backups stay in place. Exposed as its own safe, first-class action (with a
+   * distinct audit label) so customers don't have to go through the destructive-
+   * sounding "reinstall" in the danger zone just to take a patch.
+   */
+  @Post(":serverId/update")
+  @RequirePermissions("control.reinstall")
+  @Audit({
+    action: "server.update",
+    targetType: "Server",
+    targetParam: "serverId",
+  })
+  update(@Param("serverId") id: string) {
+    return this.servers.reinstall(id, true);
+  }
+
   /** GPortal-style game switch — the signature feature. */
   @Post(":serverId/switch-game")
   @RequirePermissions("control.switch-game")

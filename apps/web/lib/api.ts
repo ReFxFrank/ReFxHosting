@@ -523,6 +523,9 @@ export const api = {
         `/servers/${id}/variables/${encodeURIComponent(envName)}`,
       ),
     reinstall: (id: string) => http.post<void>(`/servers/${id}/reinstall`),
+    // Update the game to the latest build (reinstall with data preserved —
+    // world/config/backups are kept). See the "Update game" card in Settings.
+    update: (id: string) => http.post<void>(`/servers/${id}/update`),
     changeMinecraftVersion: (id: string, version: string) =>
       http.patch<{ accepted: true; version: string }>(
         `/servers/${id}/minecraft-version`,

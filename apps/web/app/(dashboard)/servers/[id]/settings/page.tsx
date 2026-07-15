@@ -16,6 +16,7 @@ import {
   Trash2,
   Pencil,
   ShieldAlert,
+  DownloadCloud,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
@@ -113,6 +114,7 @@ export default function ServerSettingsPage() {
           <TabsContent value="general">
             <div className="space-y-6">
               <GeneralTab server={server} />
+              <UpdateGameCard server={server} />
               <AutoRestartCard server={server} />
               <VanityAddressCard server={server} />
             </div>
@@ -192,6 +194,89 @@ function GeneralTab({ server }: { server: Server }) {
           </Button>
         </div>
       </CardContent>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Update game — reinstall latest build with data preserved
+// ---------------------------------------------------------------------------
+function UpdateGameCard({ server }: { server: Server }) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const canUpdate = hasServerPermission(
+    server.viewerPermissions,
+    "control.reinstall",
+  );
+  const gameName = server.template?.name ?? "game";
+
+  const updateMutation = useMutation({
+    mutationFn: () => api.servers.update(server.id),
+    onSuccess: () => {
+      toast.success(`Updating ${gameName} — pulling the latest build`);
+      setConfirmOpen(false);
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to start update"),
+  });
+
+  // Hide for members without reinstall rights (the server enforces it too).
+  if (!canUpdate) return null;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <DownloadCloud className="size-5" /> Update game
+        </CardTitle>
+        <CardDescription>
+          Pull the latest {gameName} server build. Your world, config and backups
+          are kept — the server reinstalls the current build in place and
+          restarts on it.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
+          <div className="space-y-0.5">
+            <p className="text-sm font-medium">Update to the latest build</p>
+            <p className="text-xs text-muted-foreground">
+              Safe to run anytime. Best done while the server is stopped so the
+              newest save is already on disk.
+            </p>
+          </div>
+          <Button onClick={() => setConfirmOpen(true)}>
+            <DownloadCloud className="size-4" /> Update now
+          </Button>
+        </div>
+      </CardContent>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Update {gameName}?</DialogTitle>
+            <DialogDescription>
+              This reinstalls the latest server build with your data preserved —
+              world saves, config and backups are kept. The server goes offline
+              briefly while it updates, then you can start it again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+            Tip: stop the server first so its newest save is flushed to disk. For
+            an extra safety net, create a backup from the Backups tab before
+            updating.
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              loading={updateMutation.isPending}
+              onClick={() => updateMutation.mutate()}
+            >
+              <DownloadCloud className="size-4" /> Update now
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
