@@ -12,6 +12,7 @@ import {
   Clock,
   Wifi,
   GripVertical,
+  Globe,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -37,6 +38,8 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/sonner";
 import { formatRelative } from "@/lib/utils";
+import { TIMEZONES } from "@/lib/timezones";
+import { useAuthStore } from "@/store/auth";
 import type { Schedule, ScheduleAction, ScheduleTask } from "@/lib/types";
 
 const ACTIONS: { value: ScheduleAction; label: string }[] = [
@@ -47,11 +50,96 @@ const ACTIONS: { value: ScheduleAction; label: string }[] = [
 
 const POWER_SIGNALS = ["start", "stop", "restart"] as const;
 
-const CRON_PRESETS: { label: string; cron: string }[] = [
-  { label: "Every day at 4am", cron: "0 4 * * *" },
-  { label: "Every hour", cron: "0 * * * *" },
-  { label: "Weekly (Sun 4am)", cron: "0 4 * * 0" },
+/** Friendly frequency modes. `custom` falls back to a raw cron field. */
+type SchedMode = "daily" | "weekly" | "hourly" | "custom";
+
+const WEEKDAYS: { value: string; label: string }[] = [
+  { value: "0", label: "Sunday" },
+  { value: "1", label: "Monday" },
+  { value: "2", label: "Tuesday" },
+  { value: "3", label: "Wednesday" },
+  { value: "4", label: "Thursday" },
+  { value: "5", label: "Friday" },
+  { value: "6", label: "Saturday" },
 ];
+
+const pad2 = (s: string | number) => String(s).padStart(2, "0");
+
+/** Turn a cron string into friendly builder fields when it matches a simple
+ * daily / weekly / every-N-hours shape, else fall back to custom. */
+function cronToBuilder(cron: string): {
+  mode: SchedMode;
+  time: string;
+  weekday: string;
+  everyHours: string;
+} {
+  const base = { mode: "custom" as SchedMode, time: "04:00", weekday: "0", everyHours: "6" };
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return base;
+  const [m, h, dom, mon, dow] = parts;
+  const isNum = (s: string) => /^\d+$/.test(s);
+  if (dom === "*" && mon === "*") {
+    // Daily: m h * * *
+    if (isNum(m) && isNum(h) && dow === "*") {
+      return { ...base, mode: "daily", time: `${pad2(h)}:${pad2(m)}` };
+    }
+    // Weekly: m h * * D
+    if (isNum(m) && isNum(h) && isNum(dow)) {
+      return { ...base, mode: "weekly", time: `${pad2(h)}:${pad2(m)}`, weekday: dow };
+    }
+    // Every N hours: 0 */N * * *
+    const every = h.match(/^\*\/(\d+)$/);
+    if (m === "0" && every && dow === "*") {
+      return { ...base, mode: "hourly", everyHours: every[1] };
+    }
+  }
+  return base;
+}
+
+/** Compute the effective cron string for a draft. */
+function effectiveCron(d: ScheduleDraft): string {
+  if (d.mode === "custom") return d.cron.trim();
+  const [h, m] = d.time.split(":");
+  const hour = String(Number(h));
+  const min = String(Number(m));
+  if (d.mode === "daily") return `${min} ${hour} * * *`;
+  if (d.mode === "weekly") return `${min} ${hour} * * ${d.weekday}`;
+  if (d.mode === "hourly") return `0 */${d.everyHours} * * *`;
+  return "0 4 * * *";
+}
+
+/** A short human summary of the draft, shown live in the dialog. */
+function describeDraft(d: ScheduleDraft): string {
+  const timeLabel = (t: string) => {
+    const [h, m] = t.split(":").map(Number);
+    return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
+  if (d.mode === "daily") return `Runs every day at ${timeLabel(d.time)}`;
+  if (d.mode === "weekly")
+    return `Runs every ${WEEKDAYS.find((w) => w.value === d.weekday)?.label} at ${timeLabel(d.time)}`;
+  if (d.mode === "hourly")
+    return `Runs every ${d.everyHours} hour${d.everyHours === "1" ? "" : "s"}`;
+  return `Runs on cron: ${d.cron.trim() || "—"}`;
+}
+
+/** Absolute next-run time rendered in the customer's own timezone. */
+function formatInTz(iso: string, tz: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      timeZone: tz,
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return new Date(iso).toLocaleString();
+  }
+}
 
 /** Draft used by the create/edit dialog. */
 interface TaskDraft {
@@ -64,6 +152,11 @@ interface TaskDraft {
 
 interface ScheduleDraft {
   name: string;
+  mode: SchedMode;
+  time: string;
+  weekday: string;
+  everyHours: string;
+  /** Authoritative only when mode === "custom". */
   cron: string;
   onlyWhenOnline: boolean;
   isActive: boolean;
@@ -72,6 +165,10 @@ interface ScheduleDraft {
 
 const EMPTY_DRAFT: ScheduleDraft = {
   name: "",
+  mode: "daily",
+  time: "04:00",
+  weekday: "0",
+  everyHours: "6",
   cron: "0 4 * * *",
   onlyWhenOnline: true,
   isActive: true,
@@ -86,6 +183,10 @@ export default function SchedulesPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
 
+  const user = useAuthStore((s) => s.user);
+  const refreshUser = useAuthStore((s) => s.refreshUser);
+  const tz = user?.timezone || "UTC";
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Schedule | null>(null);
   const [draft, setDraft] = useState<ScheduleDraft>(EMPTY_DRAFT);
@@ -99,11 +200,23 @@ export default function SchedulesPage() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["server-schedules", id] });
 
+  const tzMutation = useMutation({
+    mutationFn: (timezone: string) => api.account.update({ timezone }),
+    onSuccess: async () => {
+      await refreshUser();
+      // Existing schedules had their nextRunAt recomputed server-side — reload.
+      invalidate();
+      toast.success("Timezone saved — your schedules were rescheduled");
+    },
+    onError: (e) =>
+      toast.error(e instanceof ApiError ? e.message : "Failed to update timezone"),
+  });
+
   const saveMutation = useMutation({
     mutationFn: () => {
       const payload: Partial<Schedule> = {
         name: draft.name,
-        cron: draft.cron,
+        cron: effectiveCron(draft),
         onlyWhenOnline: draft.onlyWhenOnline,
         isActive: draft.isActive,
         tasks: draft.tasks.map((t, i) => ({
@@ -166,8 +279,13 @@ export default function SchedulesPage() {
 
   const openEdit = (schedule: Schedule) => {
     setEditing(schedule);
+    const b = cronToBuilder(schedule.cron);
     setDraft({
       name: schedule.name,
+      mode: b.mode,
+      time: b.time,
+      weekday: b.weekday,
+      everyHours: b.everyHours,
       cron: schedule.cron,
       onlyWhenOnline: schedule.onlyWhenOnline,
       isActive: schedule.isActive,
@@ -204,6 +322,8 @@ export default function SchedulesPage() {
   const removeTask = (index: number) =>
     setDraft((d) => ({ ...d, tasks: d.tasks.filter((_, i) => i !== index) }));
 
+  const cronValid = effectiveCron(draft).split(/\s+/).length === 5;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -215,6 +335,40 @@ export default function SchedulesPage() {
           </Button>
         }
       />
+
+      {/* Timezone — everything below runs in this zone. Surfaced here because a
+          restart set for "4am" firing at the wrong hour is almost always a
+          timezone mismatch, not a cron mistake. */}
+      <Card>
+        <CardContent className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Globe className="mt-0.5 size-5 shrink-0 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Schedule timezone</p>
+              <p className="text-xs text-muted-foreground">
+                Times you pick (e.g. “4:00 AM”) run in this timezone. Changing it
+                reschedules your existing schedules.
+              </p>
+            </div>
+          </div>
+          <Select
+            value={tz}
+            disabled={tzMutation.isPending}
+            onValueChange={(v) => tzMutation.mutate(v)}
+          >
+            <SelectTrigger className="w-full sm:w-72">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIMEZONES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>
+                  {t.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CardContent>
+      </Card>
 
       {isLoading ? (
         <ListSkeleton rows={3} />
@@ -238,7 +392,16 @@ export default function SchedulesPage() {
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1">
                       <Clock className="size-3" /> Next:{" "}
-                      {schedule.nextRunAt ? formatRelative(schedule.nextRunAt) : "—"}
+                      {schedule.nextRunAt ? (
+                        <>
+                          {formatInTz(schedule.nextRunAt, tz)}{" "}
+                          <span className="opacity-70">
+                            ({formatRelative(schedule.nextRunAt)})
+                          </span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </span>
                     <span>
                       Last: {schedule.lastRunAt ? formatRelative(schedule.lastRunAt) : "never"}
@@ -341,31 +504,105 @@ export default function SchedulesPage() {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="sched-cron">Cron expression</Label>
-              <Input
-                id="sched-cron"
-                value={draft.cron}
-                onChange={(e) => setDraft((d) => ({ ...d, cron: e.target.value }))}
-                className="font-mono"
-              />
-              <p className="text-xs text-muted-foreground">
-                <span className="font-mono">minute hour day month weekday</span>
-              </p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {CRON_PRESETS.map((p) => (
-                  <Button
-                    key={p.cron}
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDraft((d) => ({ ...d, cron: p.cron }))}
-                  >
-                    {p.label}
-                  </Button>
-                ))}
+            {/* Friendly frequency builder */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Frequency</Label>
+                <Select
+                  value={draft.mode}
+                  onValueChange={(v) =>
+                    setDraft((d) => ({ ...d, mode: v as SchedMode }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="daily">Every day</SelectItem>
+                    <SelectItem value="weekly">Every week</SelectItem>
+                    <SelectItem value="hourly">Every few hours</SelectItem>
+                    <SelectItem value="custom">Custom (cron)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
+              {draft.mode === "weekly" && (
+                <div className="space-y-1.5">
+                  <Label>Day</Label>
+                  <Select
+                    value={draft.weekday}
+                    onValueChange={(v) => setDraft((d) => ({ ...d, weekday: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WEEKDAYS.map((w) => (
+                        <SelectItem key={w.value} value={w.value}>
+                          {w.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {(draft.mode === "daily" || draft.mode === "weekly") && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="sched-time">Time</Label>
+                  <Input
+                    id="sched-time"
+                    type="time"
+                    value={draft.time}
+                    onChange={(e) => setDraft((d) => ({ ...d, time: e.target.value }))}
+                  />
+                </div>
+              )}
+
+              {draft.mode === "hourly" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="sched-hours">Every</Label>
+                  <Select
+                    value={draft.everyHours}
+                    onValueChange={(v) => setDraft((d) => ({ ...d, everyHours: v }))}
+                  >
+                    <SelectTrigger id="sched-hours">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["1", "2", "3", "4", "6", "8", "12"].map((h) => (
+                        <SelectItem key={h} value={h}>
+                          {h} hour{h === "1" ? "" : "s"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
+
+            {draft.mode === "custom" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="sched-cron">Cron expression</Label>
+                <Input
+                  id="sched-cron"
+                  value={draft.cron}
+                  onChange={(e) => setDraft((d) => ({ ...d, cron: e.target.value }))}
+                  className="font-mono"
+                />
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-mono">minute hour day month weekday</span>
+                </p>
+              </div>
+            ) : (
+              <p className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                {describeDraft(draft)} ·{" "}
+                <span className="opacity-70">
+                  {tz} · cron{" "}
+                  <span className="font-mono">{effectiveCron(draft)}</span>
+                </span>
+              </p>
+            )}
 
             <label className="flex items-center justify-between rounded-lg border p-3">
               <div>
@@ -507,7 +744,7 @@ export default function SchedulesPage() {
             </Button>
             <Button
               loading={saveMutation.isPending}
-              disabled={!draft.name.trim() || !draft.cron.trim()}
+              disabled={!draft.name.trim() || !cronValid}
               onClick={() => saveMutation.mutate()}
             >
               {editing ? "Save changes" : "Create schedule"}
