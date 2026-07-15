@@ -1154,6 +1154,57 @@ export interface TicketCategory {
   slaResolutionMin: number;
 }
 
+// Bug reports
+export type BugSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type BugStatus =
+  | "NEW"
+  | "TRIAGED"
+  | "IN_PROGRESS"
+  | "RESOLVED"
+  | "CLOSED";
+
+export interface BugAttachment {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface BugComment {
+  id: string;
+  body: string;
+  isInternal: boolean;
+  author?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  createdAt: string;
+}
+
+export interface BugReport {
+  id: string;
+  number: number;
+  title: string;
+  description: string;
+  stepsToReproduce: string | null;
+  severity: BugSeverity;
+  status: BugStatus;
+  area: string | null;
+  reporterId: string | null;
+  assigneeId: string | null;
+  serverId: string | null;
+  pageUrl: string | null;
+  userAgent: string | null;
+  appVersion: string | null;
+  resolutionNote: string | null;
+  reporter?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  assignee?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  server?: { id: string; shortId: string; name: string } | null;
+  comments?: BugComment[];
+  attachments?: BugAttachment[];
+  _count?: { comments: number; attachments: number };
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CannedResponse {
   id: string;
   title: string;

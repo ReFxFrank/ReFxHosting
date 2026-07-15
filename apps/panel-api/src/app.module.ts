@@ -39,6 +39,7 @@ import { DashboardModule } from "./dashboard/dashboard.module";
 import { StatusModule } from "./status/status.module";
 import { ToolsModule } from "./tools/tools.module";
 import { NetworkModule } from "./network/network.module";
+import { BugsModule } from "./bugs/bugs.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
 import { QueuesModule } from "./queues/queues.module";
 import { MetricsInterceptor } from "./platform/metrics.interceptor";
@@ -152,6 +153,7 @@ import { MetricsInterceptor } from "./platform/metrics.interceptor";
     StatusModule,
     ToolsModule,
     NetworkModule,
+    BugsModule,
     WebhooksModule,
     QueuesModule,
   ],

@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   Database,
   TrendingUp,
+  Bug,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +50,7 @@ export const customerNav: NavItem[] = [
   { label: "Order", href: "/order", icon: ShoppingCart },
   { label: "Billing", href: "/billing", icon: CreditCard },
   { label: "Support", href: "/support", icon: LifeBuoy },
+  { label: "Bug reports", href: "/bugs", icon: Bug },
   { label: "Account", href: "/account", icon: UserCog },
 ];
 
@@ -167,6 +169,12 @@ export const adminNav: NavSection[] = [
         href: "/admin/support",
         icon: LifeBuoy,
         perm: "support.read",
+      },
+      {
+        label: "Bug reports",
+        href: "/admin/bugs",
+        icon: Bug,
+        perm: "bugs.read",
       },
     ],
   },
