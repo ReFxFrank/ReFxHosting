@@ -1,5 +1,5 @@
 import { ServersService } from "./servers.service";
-import { SERVER_SECRET_OMIT } from "./server-secrets.util";
+import { NODE_PUBLIC_SELECT, SERVER_SECRET_OMIT } from "./server-secrets.util";
 
 /**
  * Server rows returned by client-facing routes must have the secret columns
@@ -7,6 +7,10 @@ import { SERVER_SECRET_OMIT } from "./server-secrets.util";
  * at the Prisma layer — the schema documents them as never returned to the
  * client. These tests pin the `omit` on every read/update whose row reaches
  * an API response.
+ *
+ * The same routes must embed only the PUBLIC node projection (id, name, fqdn,
+ * regionId) — never the full Node row, which carries the bootstrap tokenHash,
+ * pinned agent cert, daemon address and internal ops config.
  */
 describe("ServersService secret-column omission", () => {
   let prisma: any;
@@ -41,24 +45,45 @@ describe("ServersService secret-column omission", () => {
     );
   });
 
-  it("get() (GET /servers/:id) omits the secret columns", async () => {
+  it("get() (GET /servers/:id) omits the secret columns and embeds only the public node projection", async () => {
     await service.get("srv-1");
     expect(prisma.server.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ omit: SERVER_SECRET_OMIT }),
     );
+    expect(prisma.server.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          node: { select: NODE_PUBLIC_SELECT },
+        }),
+      }),
+    );
   });
 
-  it("getForUser() (GraphQL) omits the secret columns", async () => {
+  it("getForUser() (GraphQL) omits the secret columns and embeds only the public node projection", async () => {
     await service.getForUser(USER, "srv-1");
     expect(prisma.server.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({ omit: SERVER_SECRET_OMIT }),
     );
+    expect(prisma.server.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          node: { select: NODE_PUBLIC_SELECT },
+        }),
+      }),
+    );
   });
 
-  it("list() (GET /servers) omits the secret columns", async () => {
+  it("list() (GET /servers) omits the secret columns and embeds only the public node projection", async () => {
     await service.list(USER, PAGINATION);
     expect(prisma.server.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ omit: SERVER_SECRET_OMIT }),
+    );
+    expect(prisma.server.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          node: { select: NODE_PUBLIC_SELECT },
+        }),
+      }),
     );
   });
 
@@ -82,6 +107,16 @@ describe("ServersService secret-column omission", () => {
       "steamGuardCode",
       "steamPasswordEnc",
       "steamUsername",
+    ]);
+  });
+
+  it("exposes exactly the node fields the web's Server type declares", () => {
+    // apps/web/lib/types.ts: node?: Pick<Node, "id" | "name" | "fqdn" | "regionId">
+    expect(Object.keys(NODE_PUBLIC_SELECT).sort()).toEqual([
+      "fqdn",
+      "id",
+      "name",
+      "regionId",
     ]);
   });
 });

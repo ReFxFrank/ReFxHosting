@@ -1,5 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { ServersService } from './servers.service';
+import { NODE_PUBLIC_SELECT } from './server-secrets.util';
 
 /**
  * Unit tests for invoice-gated plan changes in ServersService.upgrade (hardware
@@ -76,6 +77,10 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
   beforeEach(() => {
     prisma = {
       server: { findFirst: jest.fn().mockResolvedValue(server()), update: jest.fn() },
+      node: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        findUniqueOrThrow: jest.fn(),
+      },
       hardwareTier: { findFirst: jest.fn() },
       price: { findUnique: jest.fn() },
       subscription: { update: jest.fn() },
@@ -162,6 +167,48 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
     expect(pending.invoiceId).toBeUndefined();
     expect(prisma.server.update).not.toHaveBeenCalled();
     expect(agent.reconfigure).not.toHaveBeenCalled();
+    // The server row rides verbatim on the 'scheduled' result, so the fetch
+    // must embed only the PUBLIC node projection — never the full node row
+    // (tokenHash, pinned agent cert, daemon address).
+    expect(prisma.server.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        include: expect.objectContaining({
+          node: { select: NODE_PUBLIC_SELECT },
+        }),
+      }),
+    );
+  });
+
+  it('NO-COST change: applies immediately, re-fetching the FULL node for the agent call', async () => {
+    // Same recurring price → delta 0 → applied now (no invoice, no staging).
+    prisma.price.findUnique.mockResolvedValue({ currency: 'USD', amountMinor: 1000 });
+    prisma.hardwareTier.findFirst.mockResolvedValue(tier(1000));
+    prisma.subscription.update.mockResolvedValue({});
+    prisma.server.update.mockResolvedValue({
+      id: SERVER_ID,
+      cpuCores: 4,
+      memoryMb: 8192,
+      swapMb: 0,
+      diskMb: 40000,
+      ioWeight: 500,
+    });
+    // The plan-change fetch only carries the public node projection, so the
+    // agent reconfigure must be fed a freshly fetched full node row.
+    const fullNode = { id: 'node-1', fqdn: 'n1.example.com', scheme: 'https', daemonPort: 8443 };
+    prisma.node.findUniqueOrThrow.mockResolvedValue(fullNode);
+
+    const res = await service.upgrade(SERVER_ID, { hardwareTierId: TIER_ID });
+
+    expect(res.status).toBe('applied');
+    expect(billing.createUpgradeInvoice).not.toHaveBeenCalled();
+    expect(prisma.pendingPlanChange.create).not.toHaveBeenCalled();
+    expect(prisma.node.findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { id: 'node-1' },
+    });
+    expect(agent.reconfigure).toHaveBeenCalledWith(
+      fullNode,
+      expect.objectContaining({ serverId: SERVER_ID }),
+    );
   });
 
   it('rejects a second plan change while one is pending', async () => {

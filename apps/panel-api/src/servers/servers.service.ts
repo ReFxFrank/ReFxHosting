@@ -9,7 +9,6 @@ import {
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import {
-  Node,
   PendingPlanChange,
   Prisma,
   Server,
@@ -60,7 +59,12 @@ import {
 import { MinecraftResolverService } from "./minecraft-resolver.service";
 import { BillingService } from "../billing/billing.service";
 import { LOADER_STARTUP, isMinecraftLoader } from "./minecraft-loader.util";
-import { PublicServer, SERVER_SECRET_OMIT } from "./server-secrets.util";
+import {
+  NODE_PUBLIC_SELECT,
+  PublicNode,
+  PublicServer,
+  SERVER_SECRET_OMIT,
+} from "./server-secrets.util";
 
 /**
  * Outcome of a plan change. An UPGRADE is `invoiced` (server stays on the old
@@ -88,9 +92,10 @@ interface PlanChangeTarget {
   diskMb: number;
 }
 
-// Plan-change working shape: a secret-stripped row (it ends up embedded in the
-// PlanChangeResult the route returns) plus the node relation for agent calls.
-type ServerWithNode = PublicServer & { node: Node };
+// Plan-change working shape: a secret-stripped row with the PUBLIC node
+// projection — it ends up embedded verbatim in the PlanChangeResult the route
+// returns. Agent calls on this path re-fetch the full node row themselves.
+type ServerWithNode = PublicServer & { node: PublicNode };
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ["OFFLINE", "CRASHED"];
@@ -140,7 +145,7 @@ export class ServersService {
         omit: SERVER_SECRET_OMIT,
         include: {
           template: true,
-          node: { select: { name: true, fqdn: true } },
+          node: { select: NODE_PUBLIC_SELECT },
           allocations: true,
         },
       }),
@@ -159,7 +164,10 @@ export class ServersService {
       omit: SERVER_SECRET_OMIT,
       include: {
         template: true,
-        node: true,
+        // Display projection only — the full node row carries control-plane
+        // material (token hash, pinned agent cert, daemon address) that must
+        // not ride on a customer response.
+        node: { select: NODE_PUBLIC_SELECT },
         allocations: true,
         variables: true,
       },
@@ -223,7 +231,8 @@ export class ServersService {
       omit: SERVER_SECRET_OMIT,
       include: {
         template: true,
-        node: true,
+        // Same public projection as get() — never the full node row.
+        node: { select: NODE_PUBLIC_SELECT },
         allocations: true,
         variables: true,
       },
@@ -1109,9 +1118,14 @@ export class ServersService {
     // resizes raw resources.
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
-      // The row is embedded verbatim in the scheduled/invoiced results.
+      // The row is embedded verbatim in the scheduled/invoiced results, so the
+      // node embed is the public projection; the apply-now path re-fetches the
+      // full node for its agent call (see applyPlanChangeNow).
       omit: SERVER_SECRET_OMIT,
-      include: { node: true, subscription: { include: { product: true } } },
+      include: {
+        node: { select: NODE_PUBLIC_SELECT },
+        subscription: { include: { product: true } },
+      },
     });
     if (!server) throw new NotFoundException("Server not found");
     const sub = server.subscription;
@@ -1370,7 +1384,12 @@ export class ServersService {
       },
       omit: SERVER_SECRET_OMIT,
     });
-    await this.agent.reconfigure(server.node, {
+    // `server.node` is the customer-facing public projection; the agent client
+    // needs the full row (daemon address + pinned cert), so fetch it fresh.
+    const node = await this.prisma.node.findUniqueOrThrow({
+      where: { id: server.nodeId },
+    });
+    await this.agent.reconfigure(node, {
       serverId: server.id,
       limits: {
         cpuCores: updated.cpuCores,

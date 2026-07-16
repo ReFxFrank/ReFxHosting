@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { InvoiceState, SubscriptionState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AlertsService } from '../platform/alerts.service';
+import {
+  NODE_PUBLIC_SELECT,
+  SERVER_SECRET_OMIT,
+} from '../servers/server-secrets.util';
 
 /**
  * One-shot dashboard aggregate for the authenticated customer: their servers and
@@ -26,9 +30,12 @@ export class DashboardService {
               { subUsers: { some: { userId, state: 'ACTIVE' } } },
             ],
           },
+          // Same response hygiene as ServersService: never the secret Server
+          // columns, and only the public node projection.
+          omit: SERVER_SECRET_OMIT,
           include: {
             template: { select: { name: true, slug: true } },
-            node: { select: { name: true, fqdn: true } },
+            node: { select: NODE_PUBLIC_SELECT },
           },
           orderBy: { createdAt: 'desc' },
         }),
