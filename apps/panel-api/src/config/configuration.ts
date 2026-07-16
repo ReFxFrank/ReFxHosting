@@ -84,6 +84,14 @@ export interface AppConfig {
     /** URL the status feed pings to report Web Dashboard health. */
     healthUrl: string;
   };
+  console: {
+    /** Max recent console lines retained per server in Redis + replayed on
+     *  subscribe. Bounds memory and the replay payload. */
+    historyMax: number;
+    /** TTL (seconds) on a server's console backlog; refreshed on every new line,
+     *  so an idle server's buffer eventually expires. */
+    historyTtlSeconds: number;
+  };
 }
 
 const toInt = (v: string | undefined, fallback: number): number => {
@@ -205,6 +213,15 @@ export default (): AppConfig => {
       healthUrl:
         process.env.WEB_HEALTH_URL ??
         `${process.env.PANEL_URL ?? "http://localhost:3000"}/api/health`,
+    },
+    console: {
+      // Last N console lines kept per server (Redis list, capped by LTRIM) and
+      // replayed to a client on subscribe. 300 lines is a useful scrollback while
+      // bounding the replay payload; raise CONSOLE_HISTORY_MAX for more.
+      historyMax: toInt(process.env.CONSOLE_HISTORY_MAX, 300),
+      // 24h default; the TTL is refreshed on every new line, so only a server
+      // idle for a full day loses its (already stale) backlog.
+      historyTtlSeconds: toInt(process.env.CONSOLE_HISTORY_TTL, 86400),
     },
   };
 

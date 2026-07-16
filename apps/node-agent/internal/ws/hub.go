@@ -63,6 +63,10 @@ type room struct {
 	clients  map[*client]struct{}
 	console  *runtime.Console
 	cancel   context.CancelFunc
+	// nudge wakes the console maintainer immediately (e.g. on a client join)
+	// instead of waiting for its next tick; done ends it when the room empties.
+	nudge chan struct{}
+	done  chan struct{}
 }
 
 // client is a single WebSocket connection.
@@ -132,44 +136,112 @@ func (h *Hub) authenticate(c *client, serverID string) bool {
 	return true
 }
 
-// joinRoom adds the client to its server room, lazily attaching the shared
-// console and starting the fan-out pump.
+// joinRoom adds the client to its server room. Console attachment is owned by
+// the room's maintainer goroutine (started with the room), which (re)attaches
+// whenever the room has clients and no live console — so a console killed by a
+// server restart, or one that couldn't attach because the server was down when
+// the first viewer arrived, heals automatically instead of staying blank until
+// every viewer disconnects.
 func (h *Hub) joinRoom(srv *server.Server, c *client) *room {
 	h.mu.Lock()
 	rm, ok := h.rooms[srv.ID()]
+	if ok {
+		// A room whose last client just left is being torn down (done closed);
+		// don't join it — its maintainer has exited. Replace it instead.
+		select {
+		case <-rm.done:
+			ok = false
+		default:
+		}
+	}
 	if !ok {
-		rm = &room{serverID: srv.ID(), clients: make(map[*client]struct{})}
+		rm = &room{
+			serverID: srv.ID(),
+			clients:  make(map[*client]struct{}),
+			nudge:    make(chan struct{}, 1),
+			done:     make(chan struct{}),
+		}
 		h.rooms[srv.ID()] = rm
+		go h.maintainConsole(srv, rm)
 	}
 	h.mu.Unlock()
 
 	rm.mu.Lock()
 	rm.clients[c] = struct{}{}
-	first := rm.console == nil
 	rm.mu.Unlock()
 
-	if first {
-		ctx, cancel := context.WithCancel(context.Background())
-		if con, err := h.ctrl.AttachConsole(ctx, srv); err == nil {
-			rm.mu.Lock()
-			rm.console = con
-			rm.cancel = cancel
-			rm.mu.Unlock()
-			go h.pumpConsole(rm, con)
-		} else {
-			cancel()
-			h.log.Debug().Err(err).Str("server", srv.ID()).Msg("console not attachable yet")
-		}
+	// Wake the maintainer so the first viewer gets a console immediately.
+	select {
+	case rm.nudge <- struct{}{}:
+	default:
 	}
 	return rm
 }
 
+// maintainConsole keeps a room's shared console attached for as long as the
+// room has clients. It retries on a short tick, gated on the server actually
+// having a live container (RUNNING/STARTING/STOPPING) — attaching to a stopped
+// server would just EOF instantly and spam viewers with repeated scrollback
+// replays. One maintainer per room; it exits when the room empties.
+func (h *Hub) maintainConsole(srv *server.Server, rm *room) {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-rm.done:
+			return
+		case <-rm.nudge:
+		case <-t.C:
+		}
+
+		rm.mu.Lock()
+		need := len(rm.clients) > 0 && rm.console == nil
+		rm.mu.Unlock()
+		if !need {
+			continue
+		}
+		switch srv.State() {
+		case server.StateRunning, server.StateStarting, server.StateStopping:
+		default:
+			continue // no live container to attach to; retry on next tick
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		con, err := h.ctrl.AttachConsole(ctx, srv)
+		if err != nil {
+			cancel()
+			h.log.Debug().Err(err).Str("server", rm.serverID).Msg("console not attachable yet")
+			continue
+		}
+		rm.mu.Lock()
+		rm.console = con
+		rm.cancel = cancel
+		rm.mu.Unlock()
+		go h.pumpConsole(rm, con)
+	}
+}
+
 // pumpConsole reads the shared console and broadcasts to all room clients.
+// When the stream ends — the container exited or was REPLACED by a restart
+// (Start recreates the container, killing the old attach) — it clears the
+// room's console so the maintainer can re-attach to the new container.
+// Previously the dead attachment was left in place, which made the console
+// permanently blank after every restart while any viewer stayed connected.
 func (h *Hub) pumpConsole(rm *room, con *runtime.Console) {
 	for line := range con.Output {
 		msg := mustMsg(TypeConsoleOutput, ConsoleLine{Line: string(line)})
 		rm.broadcast(msg)
 	}
+	rm.mu.Lock()
+	if rm.console == con {
+		rm.console = nil
+		if rm.cancel != nil {
+			rm.cancel()
+			rm.cancel = nil
+		}
+	}
+	rm.mu.Unlock()
+	_ = con.Close()
 }
 
 // BroadcastInstall fans an install progress line out to any clients currently
@@ -211,6 +283,7 @@ func (h *Hub) leaveRoom(serverID string, c *client) {
 	close(c.send)
 
 	if empty {
+		close(rm.done) // stop the console maintainer
 		rm.mu.Lock()
 		if rm.console != nil {
 			_ = rm.console.Close()
@@ -221,7 +294,11 @@ func (h *Hub) leaveRoom(serverID string, c *client) {
 		}
 		rm.mu.Unlock()
 		h.mu.Lock()
-		delete(h.rooms, serverID)
+		// Only delete our own room — a replacement may already occupy the slot
+		// (see the teardown guard in joinRoom).
+		if h.rooms[serverID] == rm {
+			delete(h.rooms, serverID)
+		}
 		h.mu.Unlock()
 	}
 }

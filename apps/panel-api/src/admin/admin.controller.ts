@@ -1253,6 +1253,30 @@ export class AdminController {
     return this.servers.disableVoiceChat(id);
   }
 
+  // ---- Express Backups (R2/offsite) comp — admin goodwill, no charge --------
+
+  @Post("servers/:id/express-backups-comp")
+  @RequirePerm("servers.manage")
+  @Audit({
+    action: "admin.server.expressBackups.comp.enable",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  compExpressBackups(@Param("id") id: string) {
+    return this.servers.setExpressBackupsComp(id, true);
+  }
+
+  @Delete("servers/:id/express-backups-comp")
+  @RequirePerm("servers.manage")
+  @Audit({
+    action: "admin.server.expressBackups.comp.disable",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  uncompExpressBackups(@Param("id") id: string) {
+    return this.servers.setExpressBackupsComp(id, false);
+  }
+
   /**
    * Transfer a server to another node (Pterodactyl-style). Stops + snapshots on
    * the source, provisions + restores on the destination, then repoints the

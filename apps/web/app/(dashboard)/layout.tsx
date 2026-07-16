@@ -6,6 +6,7 @@ import { TopNav, MobileNav } from "@/components/layout/topnav";
 import { useRequireAuth } from "@/hooks/use-require-auth";
 import { IdleSessionGuard } from "@/components/auth/idle-session-guard";
 import { ForcePasswordChange } from "@/components/auth/force-password-change";
+import { ReportBugWidget } from "@/components/bugs/report-bug-widget";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME ?? "ReFx Hosting";
@@ -33,6 +34,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </main>
         <DashboardFooter />
       </div>
+      {authorized && <ReportBugWidget />}
     </div>
   );
 }

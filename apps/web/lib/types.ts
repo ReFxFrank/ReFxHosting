@@ -176,6 +176,13 @@ export interface Server {
 /** Server shape returned by the admin list (adds the owner relation). */
 export interface AdminServer extends Server {
   owner?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  /** Offsite (R2) backup routing flag on the server row. */
+  expressBackups?: boolean;
+  /** Express Backups billing state: `expressBackups` = paid, `expressBackupsComp` = admin comp. */
+  subscription?: {
+    expressBackups: boolean;
+    expressBackupsComp: boolean;
+  } | null;
 }
 
 /** Lifecycle of an admin-initiated server transfer between nodes. */
@@ -1145,6 +1152,57 @@ export interface TicketCategory {
   slug: string;
   slaFirstResponseMin: number;
   slaResolutionMin: number;
+}
+
+// Bug reports
+export type BugSeverity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type BugStatus =
+  | "NEW"
+  | "TRIAGED"
+  | "IN_PROGRESS"
+  | "RESOLVED"
+  | "CLOSED";
+
+export interface BugAttachment {
+  id: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: string;
+}
+
+export interface BugComment {
+  id: string;
+  body: string;
+  isInternal: boolean;
+  author?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  createdAt: string;
+}
+
+export interface BugReport {
+  id: string;
+  number: number;
+  title: string;
+  description: string;
+  stepsToReproduce: string | null;
+  severity: BugSeverity;
+  status: BugStatus;
+  area: string | null;
+  reporterId: string | null;
+  assigneeId: string | null;
+  serverId: string | null;
+  pageUrl: string | null;
+  userAgent: string | null;
+  appVersion: string | null;
+  resolutionNote: string | null;
+  reporter?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  assignee?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
+  server?: { id: string; shortId: string; name: string } | null;
+  comments?: BugComment[];
+  attachments?: BugAttachment[];
+  _count?: { comments: number; attachments: number };
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CannedResponse {

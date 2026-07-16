@@ -14,6 +14,7 @@ import {
 } from "../common/dto/pagination.dto";
 import { uuidv7 } from "../common/util/uuid";
 import { deriveGlobalRole } from "../common/permissions";
+import { nextCronRun } from "../servers/cron.util";
 import { AddSubUserDto } from "./dto/add-sub-user.dto";
 import { UpdateProfileDto } from "./dto/update-profile.dto";
 
@@ -94,7 +95,7 @@ export class UsersService {
 
   async updateProfile(userId: string, dto: UpdateProfileDto): Promise<User> {
     // Ensure the user exists / isn't soft-deleted before writing.
-    await this.getProfile(userId);
+    const before = await this.getProfile(userId);
 
     const data: Prisma.UserUpdateInput = {};
     if (dto.firstName !== undefined) data.firstName = dto.firstName;
@@ -112,11 +113,45 @@ export class UsersService {
     if (dto.postalCode !== undefined) data.postalCode = dto.postalCode;
     if (dto.country !== undefined) data.country = dto.country;
 
-    return (await this.prisma.user.update({
+    const updated = (await this.prisma.user.update({
       where: { id: userId },
       data,
       omit: USER_SECRET_OMIT,
     })) as User;
+
+    // Server schedules interpret their cron in the OWNER's timezone. The next
+    // occurrence is snapshotted on nextRunAt at create time, so a timezone
+    // change must recompute the pending run of every active schedule the user
+    // owns — otherwise a schedule keeps firing at the OLD offset until it fires
+    // once (at the wrong time). This is what makes "set my timezone" actually
+    // fix an already-created restart schedule.
+    if (dto.timezone !== undefined && dto.timezone !== before.timezone) {
+      await this.recomputeOwnerSchedules(userId, dto.timezone).catch(() => undefined);
+    }
+    return updated;
+  }
+
+  /** Re-snapshot nextRunAt for a user's active schedules in the given timezone. */
+  private async recomputeOwnerSchedules(
+    userId: string,
+    timezone: string,
+  ): Promise<void> {
+    const schedules = await this.prisma.schedule.findMany({
+      where: {
+        isActive: true,
+        server: { ownerId: userId, deletedAt: null },
+      },
+      select: { id: true, cron: true },
+    });
+    const now = new Date();
+    await Promise.all(
+      schedules.map((s) =>
+        this.prisma.schedule.update({
+          where: { id: s.id },
+          data: { nextRunAt: nextCronRun(s.cron, now, timezone) },
+        }),
+      ),
+    );
   }
 
   // ---- Admin: listing & lifecycle ---------------------------------------

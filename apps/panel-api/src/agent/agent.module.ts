@@ -2,8 +2,10 @@ import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { NodeAgentClient } from './agent.client';
 import { ConsoleGateway } from './console.gateway';
+import { ConsoleHistoryService } from './console-history.service';
 import { AgentCallbacksController } from './agent-callbacks.controller';
 import { AgentSignatureGuard } from './agent-signature.guard';
+import { RedisService } from '../common/redis/redis.service';
 import { NodesModule } from '../nodes/nodes.module';
 
 /**
@@ -16,7 +18,13 @@ import { NodesModule } from '../nodes/nodes.module';
 @Module({
   imports: [JwtModule.register({}), NodesModule],
   controllers: [AgentCallbacksController],
-  providers: [NodeAgentClient, ConsoleGateway, AgentSignatureGuard],
+  providers: [
+    NodeAgentClient,
+    ConsoleGateway,
+    ConsoleHistoryService,
+    RedisService,
+    AgentSignatureGuard,
+  ],
   exports: [NodeAgentClient],
 })
 export class AgentModule {}

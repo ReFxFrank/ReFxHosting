@@ -23,16 +23,7 @@
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\napt-get update && apt-get install -y curl jq unzip\ncd /mnt/server\nVER=\"${TSHOCK_VERSION}\"\nif [ \"$VER\" = \"latest\" ]; then\n  VER=$(curl -fsSL https://api.github.com/repos/Pryaxis/TShock/releases/latest | jq -r '.tag_name')\nfi\nURL=$(curl -fsSL \"https://api.github.com/repos/Pryaxis/TShock/releases/tags/${VER}\" | jq -r '.assets[] | select(.name | test(\"linux-x64\")) | .browser_download_url' | head -n1)\ncurl -fsSL -o tshock.zip \"$URL\"\nunzip -o tshock.zip -d /mnt/server && rm -f tshock.zip\nchmod +x TShock.Server || true\nmkdir -p /mnt/server/worlds\necho 'Terraria (TShock) install complete.'\n"
   },
-  "configFiles": [
-    {
-      "path": "tshock/config.json",
-      "parser": "json",
-      "find": {
-        "ServerPort": "{{server.build.default.port}}",
-        "MaxSlots": "{{MAX_PLAYERS}}"
-      }
-    }
-  ],
+  "configFiles": [],
   "recCpuCores": 1,
   "recMemoryMb": 2048,
   "recDiskMb": 4096,

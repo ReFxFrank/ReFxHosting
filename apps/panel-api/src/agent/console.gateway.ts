@@ -14,6 +14,7 @@ import { Server, Socket } from "socket.io";
 import { PrismaService } from "../prisma/prisma.service";
 import { AppConfig } from "../config/configuration";
 import { NodeAgentClient } from "./agent.client";
+import { ConsoleHistoryService } from "./console-history.service";
 
 /**
  * Bridges browser <-> node-agent live console + stats.
@@ -39,6 +40,7 @@ export class ConsoleGateway
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly agent: NodeAgentClient,
+    private readonly history: ConsoleHistoryService,
   ) {}
 
   async handleConnection(client: Socket): Promise<void> {
@@ -93,6 +95,20 @@ export class ConsoleGateway
     }
     client.data.serverId = body.serverId;
     await client.join(this.room(body.serverId));
+    // Replay the recent backlog to THIS socket only (never the room), oldest ->
+    // newest, so a (re)connecting client sees scrollback instead of a blank
+    // console. We read AFTER joining the room on purpose: a line that lands
+    // between the join and this read is delivered live AND may appear in the
+    // backlog — the per-line `seq` lets the client dedup that small overlap
+    // exactly (dropping into a room before reading would instead LOSE such a
+    // line). Frames are byte-identical to live `console` payloads.
+    const backlog = await this.history.recent(body.serverId);
+    if (backlog.length > 0) {
+      client.emit("console_history", {
+        serverId: body.serverId,
+        lines: backlog,
+      });
+    }
     client.emit("subscribed", { serverId: body.serverId });
   }
 

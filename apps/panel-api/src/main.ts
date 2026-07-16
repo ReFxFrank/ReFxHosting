@@ -114,6 +114,13 @@ async function bootstrap(): Promise<void> {
     "/api/v1/servers/:id/files/upload",
     raw({ type: () => true, limit: "40mb" }),
   );
+  // Bug-report screenshot uploads: raw image bytes. BugsService caps each at
+  // 5 MiB and rejects non-image types; buffer a little above the cap so it can
+  // return a clean 413.
+  app.use(
+    "/api/v1/bugs/:id/attachments",
+    raw({ type: () => true, limit: "6mb" }),
+  );
   app.use(
     json({
       limit: "5mb",

@@ -15,21 +15,15 @@
     "Proton": "ghcr.io/parkervcp/steamcmd:proton"
   },
   "steamAppId": 2394010,
-  "startupCommand": "./PalServer.sh -port={{SERVER_PORT}} -players={{MAX_PLAYERS}} -servername=\"{{SERVER_NAME}}\" -AdminPassword=\"{{ADMIN_PASS}}\" -RCONEnabled={{RCON_ENABLED}} -RCONPort={{RCON_PORT}} -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS",
+  "startupCommand": "./PalServer.sh -port={{SERVER_PORT}} -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS",
   "startupDetect": "Setting breakpad minidump|Running Palworld dedicated server",
   "stopCommand": "^C",
   "installScript": {
     "container": "ghcr.io/parkervcp/steamcmd:proton",
     "entrypoint": "bash",
-    "script": "#!/bin/bash\n# ReFx steamcmd shim — the steamcmd:debian/proton install image ships no\n# `steamcmd` on PATH. Bootstrap SteamCMD and expose it on PATH so the egg's\n# `steamcmd ...` calls resolve (otherwise the game server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -euo pipefail\ncd /mnt/server\nsteamcmd +force_install_dir /mnt/server +login anonymous +app_update 2394010 validate +quit\nmkdir -p /mnt/server/Pal/Saved/Config/LinuxServer\nchmod +x PalServer.sh || true\necho 'Palworld install complete.'\n"
+    "script": "#!/bin/bash\n# ReFx steamcmd shim \u2014 the steamcmd:debian/proton install image ships no\n# `steamcmd` on PATH. Bootstrap SteamCMD and expose it on PATH so the egg's\n# `steamcmd ...` calls resolve (otherwise the game server never downloads).\nif ! command -v steamcmd >/dev/null 2>&1; then\n  mkdir -p /mnt/server/steamcmd\n  curl -sSL https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz | tar zxf - -C /mnt/server/steamcmd || { echo \"ERROR: failed to fetch steamcmd\"; exit 1; }\n  chmod +x /mnt/server/steamcmd/steamcmd.sh /mnt/server/steamcmd/linux32/steamcmd 2>/dev/null || true\n  printf '#!/bin/sh\\nexec /mnt/server/steamcmd/steamcmd.sh \"$@\"\\n' > /usr/local/bin/steamcmd\n  chmod +x /usr/local/bin/steamcmd\nfi\nset -uo pipefail\ncd /mnt/server\n# ---- Update / validate the game via SteamCMD -------------------------------\n# A reinstall's job is to bring the game to the CURRENT build. The install runs\n# as root (the runtime re-chowns the data dir to the game uid on start), so a\n# genuine unix-permission wall is unlikely \u2014 SteamCMD's \"Missing file\n# permissions\" here is almost always (a) stale partial-download state under\n# steamapps/, or (b) the volume being out of free disk (SteamCMD misreports\n# ENOSPC exactly that way). So: make the tree fully writable, attempt the\n# update, and if it does not CONFIRM success, clear stale steam state + retry\n# once. Crucially we do NOT claim success on failure \u2014 a silently-skipped update\n# leaves the server on the OLD build, which clients reject as a \"wrong build\" /\n# version mismatch on join. Customer world saves under Pal/Saved are never\n# touched by any of this.\nchown -R root:root /mnt/server 2>/dev/null || true\nchmod -R u+rwX /mnt/server 2>/dev/null || true\nSTEAM_LOG=\"$(mktemp 2>/dev/null || echo /tmp/refx-steam.log)\"\nAPPMANIFEST=/mnt/server/steamapps/appmanifest_2394010.acf\nsteam_update() {\n  steamcmd +force_install_dir /mnt/server +login anonymous +app_update 2394010 validate +quit 2>&1 | tee \"$STEAM_LOG\"\n  grep -q \"Success! App '2394010' fully installed\" \"$STEAM_LOG\"\n}\nif steam_update; then\n  echo \"[refx] Palworld is on the current build (SteamCMD confirmed).\"\nelse\n  # SteamCMD failed. Installs run as root on a local FS, so this is NOT a real\n  # unix-permission wall \u2014 the tell-tale \"state is 0x6 ... progress 0.00 (0/0)\"\n  # (and SteamCMD's misleading \"Missing file permissions\") is a corrupt/stuck\n  # appmanifest + download state that `validate` won't reconcile. Print ground\n  # truth (uid + ownership + disk), then drop the app manifest and scratch dirs\n  # so SteamCMD re-acquires the build from scratch and writes it in place. Game\n  # files are overwritten; the customer world under Pal/Saved is untouched.\n  echo \"[refx] SteamCMD did not confirm the build \u2014 recovering and retrying once\u2026\"\n  echo \"[refx][diag] install uid:gid = $(id -u 2>/dev/null):$(id -g 2>/dev/null)\"\n  df -h /mnt/server 2>/dev/null | sed 's/^/[refx][disk] /' || true\n  ls -ln /mnt/server 2>/dev/null | sed 's/^/[refx][diag] /' | head -20 || true\n  ls -ln /mnt/server/steamapps 2>/dev/null | sed 's/^/[refx][diag] /' | head || true\n  rm -f \"$APPMANIFEST\" 2>/dev/null || true\n  rm -rf /mnt/server/steamapps/downloading /mnt/server/steamapps/temp /mnt/server/steamapps/shadercache 2>/dev/null || true\n  chown -R root:root /mnt/server 2>/dev/null || true\n  chmod -R u+rwX /mnt/server 2>/dev/null || true\n  if steam_update; then\n    echo \"[refx] Palworld updated successfully after clearing stale Steam state.\"\n  else\n    echo \"[refx] ERROR: SteamCMD could not update Palworld (app 2394010) after recovery.\"\n    echo \"[refx] The game files were NOT changed, so the server is still on its previous\"\n    echo \"[refx] build and clients will see a 'wrong build' / version-mismatch error on join.\"\n    echo \"[refx] Disk is not the constraint if the [refx][disk] line above shows ample free\"\n    echo \"[refx] space; check the [refx][diag] ownership lines and escalate to ReFx support.\"\n    echo \"[refx] Your world saves under Pal/Saved were left untouched.\"\n    exit 1\n  fi\nfi\nchmod +x PalServer.sh 2>/dev/null || true\n# ---- Apply panel Startup-tab variables into PalWorldSettings.ini -----------\n# Palworld reads gameplay settings from this ini and (silently) lets CLI flags\n# override them, so we do NOT pass gameplay flags at boot; instead the panel\n# writes the keys it owns into the ini here, at install/reinstall. Everything\n# else in the ini belongs to the customer (file manager). Values are sanitized\n# so they can't corrupt the single-line OptionSettings tuple.\nINI_DIR=/mnt/server/Pal/Saved/Config/LinuxServer\nINI=\"$INI_DIR/PalWorldSettings.ini\"\nmkdir -p \"$INI_DIR\"\nif ! grep -q 'OptionSettings=(' \"$INI\" 2>/dev/null; then\n  if [ -f /mnt/server/DefaultPalWorldSettings.ini ]; then\n    cp /mnt/server/DefaultPalWorldSettings.ini \"$INI\"\n    echo \"[refx] seeded PalWorldSettings.ini from DefaultPalWorldSettings.ini\"\n  else\n    printf '[/Script/Pal.PalGameWorldSettings]\\nOptionSettings=()\\n' > \"$INI\"\n  fi\nfi\nD=$'\\x01'\nsstr()  { printf '%s' \"$1\" | tr -d '\"[:cntrl:]'; }\nsnum()  { printf '%s' \"$1\" | tr -cd '0-9'; }\nsbool() { case \"$(printf '%s' \"$1\" | tr '[:upper:]' '[:lower:]')\" in 1|true|yes|on) printf 'True';; *) printf 'False';; esac; }\nesc()   { printf '%s' \"$1\" | sed -e 's/[\\\\&]/\\\\&/g'; }\nset_opt() {\n  key=\"$1\"; rep=\"$(esc \"$key=$2\")\"\n  if grep -Eq \"[(,][[:space:]]*$key=\" \"$INI\"; then\n    sed -i -E \"s${D}([(,][[:space:]]*)$key=(\\\"[^\\\"]*\\\"|[^,)]*)${D}\\1${rep}${D}\" \"$INI\"\n  elif grep -q 'OptionSettings=()' \"$INI\"; then\n    sed -i \"s${D}OptionSettings=()${D}OptionSettings=(${rep})${D}\" \"$INI\"\n  else\n    sed -i \"s${D}OptionSettings=(${D}OptionSettings=(${rep},${D}\" \"$INI\"\n  fi\n}\n[ -n \"${SERVER_NAME:-}\" ] && set_opt ServerName \"\\\"$(sstr \"$SERVER_NAME\")\\\"\"\nmp=\"$(snum \"${MAX_PLAYERS:-}\")\"; [ -n \"$mp\" ] && set_opt ServerPlayerMaxNum \"$mp\"\nif [ -n \"${ADMIN_PASS:-}\" ]; then set_opt AdminPassword \"\\\"$(sstr \"$ADMIN_PASS\")\\\"\"; else echo \"[refx] AdminPassword: Startup-tab field empty \u2014 leaving PalWorldSettings.ini untouched\"; fi\nset_opt RCONEnabled \"$(sbool \"${RCON_ENABLED:-true}\")\"\nrp=\"$(snum \"${RCON_PORT:-}\")\"; [ -n \"$rp\" ] && set_opt RCONPort \"$rp\"\ngp=\"$(snum \"${SERVER_PORT:-8211}\")\"; [ -n \"$gp\" ] && set_opt PublicPort \"$gp\"\necho \"[refx] PalWorldSettings.ini synced (panel keys: ServerName, ServerPlayerMaxNum, RCONEnabled, RCONPort, PublicPort${ADMIN_PASS:+, AdminPassword}); all other settings read from the ini as saved.\"\necho 'Palworld install complete.'\n"
   },
-  "configFiles": [
-    {
-      "path": "Pal/Saved/Config/LinuxServer/PalWorldSettings.ini",
-      "parser": "ini",
-      "find": {}
-    }
-  ],
+  "configFiles": [],
   "recCpuCores": 4,
   "recMemoryMb": 12288,
   "recDiskMb": 30720,
@@ -37,7 +31,7 @@
     {
       "envName": "SERVER_NAME",
       "displayName": "Server Name",
-      "description": "Name shown in the in-game community server list.",
+      "description": "Name shown in the in-game server browser. Panel-managed: written into PalWorldSettings.ini (ServerName) at install/reinstall.",
       "type": "STRING",
       "defaultValue": "A ReFx Hosting Palworld Server",
       "rules": {
@@ -51,7 +45,7 @@
     {
       "envName": "MAX_PLAYERS",
       "displayName": "Max Players",
-      "description": "Maximum concurrent players (hard cap of 32).",
+      "description": "Maximum concurrent players (hard cap of 32). Panel-managed: written into PalWorldSettings.ini (ServerPlayerMaxNum) at install/reinstall.",
       "type": "NUMBER",
       "defaultValue": "16",
       "rules": {
@@ -66,11 +60,11 @@
     {
       "envName": "ADMIN_PASS",
       "displayName": "Admin Password",
-      "description": "Server admin password used for in-game admin commands.",
+      "description": "Password for in-game admin commands (/AdminPassword) and RCON. When set, it is written into PalWorldSettings.ini (AdminPassword) at install/reinstall; leave blank to manage it directly in the ini. To change it later, update this field and Reinstall (preserves your world), or edit the ini in the file manager.",
       "type": "SECRET",
       "defaultValue": "",
       "rules": {
-        "required": true,
+        "required": false,
         "minLength": 8
       },
       "userEditable": true,
@@ -80,7 +74,7 @@
     {
       "envName": "RCON_ENABLED",
       "displayName": "Enable RCON",
-      "description": "Enable the remote console interface.",
+      "description": "Enable the remote console interface. Panel-managed: written into PalWorldSettings.ini (RCONEnabled) at install/reinstall.",
       "type": "BOOLEAN",
       "defaultValue": "true",
       "rules": {},
@@ -91,7 +85,7 @@
     {
       "envName": "RCON_PORT",
       "displayName": "RCON Port",
-      "description": "TCP port for the RCON interface.",
+      "description": "TCP port for the RCON interface (allocated by the panel and written into PalWorldSettings.ini at install/reinstall).",
       "type": "NUMBER",
       "defaultValue": "25575",
       "rules": {

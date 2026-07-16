@@ -6,6 +6,11 @@ import { getTokens, setTokens, clearTokens } from "@/lib/auth";
 import type {
   AuthTokens,
   Backup,
+  BugAttachment,
+  BugComment,
+  BugReport,
+  BugSeverity,
+  BugStatus,
   GameCategory,
   GameTemplate,
   HardwareTier,
@@ -518,6 +523,9 @@ export const api = {
         `/servers/${id}/variables/${encodeURIComponent(envName)}`,
       ),
     reinstall: (id: string) => http.post<void>(`/servers/${id}/reinstall`),
+    // Update the game to the latest build (reinstall with data preserved —
+    // world/config/backups are kept). See the "Update game" card in Settings.
+    update: (id: string) => http.post<void>(`/servers/${id}/update`),
     changeMinecraftVersion: (id: string, version: string) =>
       http.patch<{ accepted: true; version: string }>(
         `/servers/${id}/minecraft-version`,
@@ -1176,6 +1184,41 @@ export const api = {
     kbArticle: (slug: string) => http.get<KbArticle>(`/support/kb/${slug}`),
   },
 
+  // Bug reports — customer submission + tracking. Admin/board actions live in
+  // `api.admin.bugs*` below.
+  bugs: {
+    list: (query?: {
+      status?: string;
+      severity?: string;
+      q?: string;
+      page?: number;
+      mine?: boolean;
+    }) => http.get<Paginated<BugReport>>("/bugs", { query }),
+    get: (id: string) => http.get<BugReport>(`/bugs/${id}`),
+    create: (input: {
+      title: string;
+      description: string;
+      stepsToReproduce?: string;
+      severity?: BugSeverity;
+      pageUrl?: string;
+      userAgent?: string;
+      appVersion?: string;
+      serverId?: string;
+    }) => http.post<BugReport>("/bugs", input),
+    comment: (id: string, body: string) =>
+      http.post<BugComment>(`/bugs/${id}/comments`, { body }),
+    // Raw image upload; the content-type + filename ride in headers.
+    uploadAttachment: (id: string, file: File) =>
+      http.post<BugAttachment>(`/bugs/${id}/attachments`, file, {
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+          "X-File-Name": encodeURIComponent(file.name),
+        },
+      }),
+    attachmentUrl: (id: string, attachmentId: string) =>
+      `${API_BASE}/bugs/${id}/attachments/${attachmentId}`,
+  },
+
   dashboard: {
     summary: () =>
       http.get<{
@@ -1687,6 +1730,38 @@ export const api = {
       ),
     disableVoiceChat: (id: string) =>
       http.delete<{ disabled: boolean }>(`/admin/servers/${id}/voice-chat`),
+    /** Comp Express Backups (R2/offsite) for a server — enables routing, no charge. */
+    compExpressBackups: (id: string) =>
+      http.post<{ expressBackups: boolean; comped: boolean; paid: boolean }>(
+        `/admin/servers/${id}/express-backups-comp`,
+      ),
+    /** Remove the Express Backups comp; routing reverts to the paid add-on state. */
+    uncompExpressBackups: (id: string) =>
+      http.delete<{ expressBackups: boolean; comped: boolean; paid: boolean }>(
+        `/admin/servers/${id}/express-backups-comp`,
+      ),
+
+    // ---- Bug reports (triage board) — the /bugs endpoints; staff see all ----
+    bugs: (query?: { status?: string; severity?: string; q?: string; page?: number }) =>
+      http.get<Paginated<BugReport>>("/bugs", { query }),
+    bug: (id: string) => http.get<BugReport>(`/bugs/${id}`),
+    bugStaff: () =>
+      getList<Pick<User, "id" | "email" | "firstName" | "lastName">>(
+        "/bugs/staff",
+      ),
+    updateBug: (
+      id: string,
+      input: Partial<{
+        status: BugStatus;
+        severity: BugSeverity;
+        area: string | null;
+        assigneeId: string | null;
+        resolutionNote: string;
+      }>,
+    ) => http.patch<BugReport>(`/bugs/${id}`, input),
+    bugComment: (id: string, body: string, isInternal = false) =>
+      http.post<BugComment>(`/bugs/${id}/comments`, { body, isInternal }),
+    deleteBug: (id: string) => http.delete<void>(`/bugs/${id}`),
     /** Move a server to another node (Pterodactyl-style). Returns the queued transfer. */
     transferServer: (id: string, toNodeId: string) =>
       http.post<ServerTransfer>(`/admin/servers/${id}/transfer`, { toNodeId }),

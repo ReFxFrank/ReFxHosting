@@ -160,6 +160,23 @@ export const TicketPriority = {
 export type TicketPriority =
   (typeof TicketPriority)[keyof typeof TicketPriority];
 
+export const BugSeverity = {
+  LOW: 'LOW',
+  MEDIUM: 'MEDIUM',
+  HIGH: 'HIGH',
+  CRITICAL: 'CRITICAL',
+} as const;
+export type BugSeverity = (typeof BugSeverity)[keyof typeof BugSeverity];
+
+export const BugStatus = {
+  NEW: 'NEW',
+  TRIAGED: 'TRIAGED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  RESOLVED: 'RESOLVED',
+  CLOSED: 'CLOSED',
+} as const;
+export type BugStatus = (typeof BugStatus)[keyof typeof BugStatus];
+
 export const AlertSeverity = {
   INFO: 'INFO',
   WARNING: 'WARNING',

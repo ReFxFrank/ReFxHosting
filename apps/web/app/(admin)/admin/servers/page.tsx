@@ -18,6 +18,7 @@ import {
   Loader2,
   TriangleAlert,
   Mic,
+  Cloud,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -172,6 +173,30 @@ export default function AdminServersPage() {
   const { data: servers, isLoading } = useQuery({
     queryKey: ["admin", "servers"],
     queryFn: () => api.admin.servers(),
+  });
+
+  // Express Backups (R2) comp — admin goodwill, no charge.
+  const [compTarget, setCompTarget] = useState<AdminServer | null>(null);
+  const compExpress = useMutation({
+    mutationFn: (on: boolean) =>
+      on
+        ? api.admin.compExpressBackups(compTarget!.id)
+        : api.admin.uncompExpressBackups(compTarget!.id),
+    onSuccess: (r) => {
+      toast.success(
+        r.comped
+          ? "Express Backups comped — offsite (R2) storage enabled, no charge"
+          : r.paid
+            ? "Comp removed — server keeps offsite storage on its paid add-on"
+            : "Comp removed — backups revert to local node storage",
+      );
+      queryClient.invalidateQueries({ queryKey: ["admin", "servers"] });
+      setCompTarget(null);
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to update Express Backups",
+      ),
   });
 
   // Form option sources (loaded lazily when the dialog opens).
@@ -524,6 +549,17 @@ export default function AdminServersPage() {
                           onClick={() => setVoiceTarget(s)}
                         >
                           <Mic className="size-4" /> Voice
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          title="Express Backups (R2) — comp offsite storage, no charge"
+                          onClick={() => setCompTarget(s)}
+                        >
+                          <Cloud
+                            className={`size-4 ${s.expressBackups ? "text-primary" : ""}`}
+                          />{" "}
+                          R2
                         </Button>
                         <Button
                           variant="ghost"
@@ -1111,6 +1147,86 @@ export default function AdminServersPage() {
               </Button>
             )}
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Express Backups (R2) comp — enable offsite storage without charge */}
+      <Dialog open={!!compTarget} onOpenChange={(o) => !o && setCompTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Express Backups (R2) — {compTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Comp the offsite-backup add-on: this server&apos;s backups go to
+              R2 with fast direct downloads, at no charge to the customer.
+              Billing is untouched — only the customer&apos;s paid add-on adds
+              the per-cycle line.
+            </DialogDescription>
+          </DialogHeader>
+
+          {(() => {
+            const paid = compTarget?.subscription?.expressBackups ?? false;
+            // Subscription-less (admin/internal) servers have no paid add-on to
+            // distinguish from — the server routing flag IS the comp state.
+            const comped = compTarget?.subscription
+              ? compTarget.subscription.expressBackupsComp
+              : (compTarget?.expressBackups ?? false);
+            const routing = compTarget?.expressBackups ?? (paid || comped);
+            return (
+              <>
+                <div className="space-y-3 text-sm">
+                  <div
+                    className={`rounded-lg border p-3 ${
+                      routing
+                        ? "border-primary/30 bg-primary/[0.06]"
+                        : "border-white/10 bg-white/[0.02]"
+                    }`}
+                  >
+                    Backups currently store{" "}
+                    <span className="font-medium">
+                      {routing ? "offsite (R2)" : "on the node's local disk"}
+                    </span>
+                    .{" "}
+                    {paid
+                      ? "Customer pays for Express Backups."
+                      : comped
+                        ? "Enabled by an admin comp (no charge)."
+                        : "No Express Backups add-on."}
+                  </div>
+                  {paid && (
+                    <p className="text-xs text-muted-foreground">
+                      This customer already pays for Express Backups — a comp
+                      isn&apos;t needed. Removing a comp here won&apos;t turn
+                      off their paid offsite storage.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    New offsite routing applies to the server&apos;s next
+                    backup; existing archives stay where they are.
+                  </p>
+                </div>
+
+                <DialogFooter>
+                  {comped ? (
+                    <Button
+                      variant="outline"
+                      loading={compExpress.isPending}
+                      onClick={() => compExpress.mutate(false)}
+                    >
+                      Remove comp
+                    </Button>
+                  ) : (
+                    <Button
+                      loading={compExpress.isPending}
+                      disabled={paid}
+                      onClick={() => compExpress.mutate(true)}
+                    >
+                      <Cloud className="size-4" /> Comp Express Backups
+                    </Button>
+                  )}
+                </DialogFooter>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 

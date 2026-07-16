@@ -21,17 +21,7 @@
     "entrypoint": "bash",
     "script": "#!/bin/bash\nset -euo pipefail\napt-get update && apt-get install -y curl jq\ncd /mnt/server\nMC_VER=\"${MINECRAFT_VERSION}\"\nLOADER=\"${LOADER_VERSION}\"\nif [ \"$MC_VER\" = \"latest\" ]; then\n  MC_VER=$(curl -fsSL https://meta.fabricmc.net/v2/versions/game | jq -r '[.[] | select(.stable==true)][0].version')\nfi\nif [ \"$LOADER\" = \"latest\" ] || [ \"$LOADER\" = \"recommended\" ]; then\n  LOADER=$(curl -fsSL https://meta.fabricmc.net/v2/versions/loader | jq -r '[.[] | select(.stable==true)][0].version')\nfi\nINSTALLER=$(curl -fsSL https://meta.fabricmc.net/v2/versions/installer | jq -r '[.[] | select(.stable==true)][0].version')\necho \"Installing Fabric: minecraft=${MC_VER} loader=${LOADER} installer=${INSTALLER}\"\ncurl -fsSL -o \"${SERVER_JARFILE}\" \"https://meta.fabricmc.net/v2/versions/loader/${MC_VER}/${LOADER}/${INSTALLER}/server/jar\"\nif [ \"${EULA}\" = \"true\" ]; then echo 'eula=true' > eula.txt; fi\necho 'Install complete.'\n"
   },
-  "configFiles": [
-    {
-      "path": "server.properties",
-      "parser": "properties",
-      "find": {
-        "server-port": "{{server.build.default.port}}",
-        "query.port": "{{server.build.default.port}}",
-        "enable-query": "true"
-      }
-    }
-  ],
+  "configFiles": [],
   "recCpuCores": 2,
   "recMemoryMb": 4096,
   "recDiskMb": 10240,

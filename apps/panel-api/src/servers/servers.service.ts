@@ -566,6 +566,11 @@ export class ServersService {
             select: { id: true, email: true, firstName: true, lastName: true },
           },
           allocations: true,
+          // Express Backups state so the admin UI can show paid vs comped vs off
+          // (Server.expressBackups is the routing flag, already a scalar here).
+          subscription: {
+            select: { expressBackups: true, expressBackupsComp: true },
+          },
         },
       }),
       this.prisma.server.count({ where }),
@@ -2046,6 +2051,60 @@ export class ServersService {
     });
     if (res.count > 0) await this.pushSpecReload(server.nodeId, serverId);
     return { disabled: res.count > 0 };
+  }
+
+  /**
+   * Admin comp of the Express Backups (R2/offsite) add-on for a server, with no
+   * charge. Sets `Subscription.expressBackupsComp` and points the server's
+   * routing flag (`Server.expressBackups`) at (paid || comp), so backups go
+   * offsite immediately. Turning the comp OFF reverts routing to the paid flag,
+   * so a customer who actually pays keeps offsite storage. Billing is untouched
+   * — the per-cycle add-on line keys on the PAID flag only, never the comp.
+   */
+  async setExpressBackupsComp(
+    serverId: string,
+    on: boolean,
+  ): Promise<{
+    expressBackups: boolean;
+    comped: boolean;
+    paid: boolean;
+  }> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: {
+        id: true,
+        subscriptionId: true,
+        subscription: { select: { id: true, expressBackups: true } },
+      },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+    if (!server.subscriptionId || !server.subscription) {
+      // Admin/internal server with no billing attached: there is no paid
+      // add-on to distinguish from, so the routing flag on the server row IS
+      // the comp state. Toggle it directly.
+      await this.prisma.server.update({
+        where: { id: serverId },
+        data: { expressBackups: on },
+      });
+      return { expressBackups: on, comped: on, paid: false };
+    }
+    const paid = server.subscription.expressBackups;
+    const routing = paid || on;
+
+    await this.prisma.$transaction([
+      this.prisma.subscription.update({
+        where: { id: server.subscription.id },
+        data: { expressBackupsComp: on },
+      }),
+      // Point routing for EVERY live server on the subscription (a sub can hold
+      // one server today, but keep it correct if that ever changes).
+      this.prisma.server.updateMany({
+        where: { subscriptionId: server.subscriptionId, deletedAt: null },
+        data: { expressBackups: routing },
+      }),
+    ]);
+
+    return { expressBackups: routing, comped: on, paid };
   }
 
   /**
