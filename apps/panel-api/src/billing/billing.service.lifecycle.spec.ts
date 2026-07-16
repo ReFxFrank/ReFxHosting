@@ -1,4 +1,5 @@
 import { BillingService } from "./billing.service";
+import { SUBSCRIPTION_PUBLIC_SELECT } from "./subscription-public.util";
 
 /**
  * P0-D (cancellation lifecycle) + P0-E (gateway-aware renewal). Prisma, gateways
@@ -123,6 +124,75 @@ describe("BillingService lifecycle (P0-D / P0-E)", () => {
         expect.objectContaining({ serverId: "srv-1", action: "suspend" }),
         expect.anything(),
       );
+    });
+  });
+
+  // ---- Response hygiene: raw Subscription rows never reach the customer ----
+  describe("subscription response projection", () => {
+    it("cancelSubscription returns only the public projection (both branches)", async () => {
+      const { svc, prisma } = make();
+      prisma.subscription.findFirst.mockResolvedValue({
+        id: "sub-1",
+        userId: "u-1",
+        gateway: "stripe",
+        gatewaySubId: null,
+        state: "ACTIVE",
+      });
+
+      await svc.cancelSubscription("u-1", "sub-1", true);
+      expect(prisma.subscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({ select: SUBSCRIPTION_PUBLIC_SELECT }),
+      );
+
+      prisma.subscription.update.mockClear();
+      await svc.cancelSubscription("u-1", "sub-1", false);
+      expect(prisma.subscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({ select: SUBSCRIPTION_PUBLIC_SELECT }),
+      );
+    });
+
+    it("resumeSubscription returns only the public projection", async () => {
+      const { svc, prisma } = make();
+      prisma.subscription.findFirst.mockResolvedValue({
+        id: "sub-1",
+        userId: "u-1",
+        state: "ACTIVE",
+      });
+
+      await svc.resumeSubscription("u-1", "sub-1");
+      expect(prisma.subscription.update).toHaveBeenCalledWith(
+        expect.objectContaining({ select: SUBSCRIPTION_PUBLIC_SELECT }),
+      );
+    });
+
+    it("createSubscription returns only the public projection", async () => {
+      const { svc, prisma } = make();
+      prisma.price = {
+        findUnique: jest.fn().mockResolvedValue({
+          id: "price-1",
+          productId: "prod-1",
+          interval: "MONTHLY",
+          hardwareTierId: null,
+        }),
+      };
+      prisma.subscription.create = jest.fn().mockResolvedValue({ id: "sub-1" });
+
+      await svc.createSubscription("u-1", {
+        productId: "prod-1",
+        priceId: "price-1",
+        interval: "MONTHLY",
+      } as any);
+      expect(prisma.subscription.create).toHaveBeenCalledWith(
+        expect.objectContaining({ select: SUBSCRIPTION_PUBLIC_SELECT }),
+      );
+    });
+
+    it("the public projection carries no processor linkage or attribution", () => {
+      const keys = Object.keys(SUBSCRIPTION_PUBLIC_SELECT);
+      expect(keys).not.toContain("gatewaySubId");
+      expect(keys).not.toContain("attribution");
+      expect(keys).not.toContain("renewalReminderSentAt");
+      expect(keys).not.toContain("expressBackupsComp");
     });
   });
 

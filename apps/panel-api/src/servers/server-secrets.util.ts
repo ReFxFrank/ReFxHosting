@@ -43,3 +43,39 @@ export const NODE_PUBLIC_SELECT = {
 export type PublicNode = Prisma.NodeGetPayload<{
   select: typeof NODE_PUBLIC_SELECT;
 }>;
+
+/**
+ * Subscription projection for the plan-change path (POST /servers/:id/upgrade),
+ * whose fetched row is embedded verbatim in the "scheduled"/"invoiced" results.
+ * Covers exactly what the flow reads internally (pricing/period math) plus the
+ * owner-safe `state` — and deliberately NOT the processor linkage
+ * (`gateway`/`gatewaySubId`), the `attribution` acquisition JSON, or other
+ * internal billing bookkeeping. The customer-facing subscription surface proper
+ * is BillingService.listSubscriptions, which hand-picks its own fields.
+ */
+export const PLAN_CHANGE_SUBSCRIPTION_SELECT = {
+  id: true,
+  state: true,
+  priceId: true,
+  interval: true,
+  slots: true,
+  currentPeriodStart: true,
+  currentPeriodEnd: true,
+  product: {
+    select: {
+      id: true,
+      name: true,
+      perSlot: true,
+      minSlots: true,
+      maxSlots: true,
+      cpuPerSlot: true,
+      memoryMbPerSlot: true,
+      diskMbPerSlot: true,
+    },
+  },
+} as const satisfies Prisma.SubscriptionSelect;
+
+/** The subscription shape the plan-change flow works with and may embed. */
+export type PlanChangeSubscription = Prisma.SubscriptionGetPayload<{
+  select: typeof PLAN_CHANGE_SUBSCRIPTION_SELECT;
+}>;

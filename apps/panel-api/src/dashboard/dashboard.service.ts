@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { InvoiceState, SubscriptionState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AlertsService } from '../platform/alerts.service';
+import { SUBSCRIPTION_PUBLIC_SELECT } from '../billing/subscription-public.util';
+import { withPrimaryAllocation } from '../servers/allocation-port.util';
 import {
   NODE_PUBLIC_SELECT,
   SERVER_SECRET_OMIT,
@@ -20,7 +22,7 @@ export class DashboardService {
   ) {}
 
   async summary(userId: string) {
-    const [servers, subscriptions, openInvoices, nextInvoice, activity, alerts] =
+    const [serverRows, subscriptions, openInvoices, nextInvoice, activity, alerts] =
       await Promise.all([
         this.prisma.server.findMany({
           where: {
@@ -36,6 +38,7 @@ export class DashboardService {
           include: {
             template: { select: { name: true, slug: true } },
             node: { select: NODE_PUBLIC_SELECT },
+            allocations: true,
           },
           orderBy: { createdAt: 'desc' },
         }),
@@ -46,7 +49,13 @@ export class DashboardService {
               in: [SubscriptionState.ACTIVE, SubscriptionState.TRIALING],
             },
           },
-          include: { product: { select: { name: true } } },
+          // Owner-safe projection — the raw row carries the processor linkage
+          // (gatewaySubId) and acquisition attribution, which never belong on
+          // a customer payload.
+          select: {
+            ...SUBSCRIPTION_PUBLIC_SELECT,
+            product: { select: { name: true } },
+          },
           orderBy: { currentPeriodEnd: 'asc' },
         }),
         this.prisma.invoice.count({
@@ -64,6 +73,10 @@ export class DashboardService {
         }),
         this.alerts.listActiveAlerts(),
       ]);
+
+    // Flatten the connection address the same way the servers list does — the
+    // web renders {alias || ip}:{port} from `primaryAllocation` on each card.
+    const servers = serverRows.map((s) => withPrimaryAllocation(s));
 
     // Server state breakdown.
     const states: Record<string, number> = {};

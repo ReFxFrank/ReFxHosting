@@ -47,6 +47,10 @@ import { NotificationsService } from "../platform/notifications.service";
 import { PushService } from "../push/push.service";
 import { addInterval } from "./interval.util";
 import {
+  PublicSubscription,
+  SUBSCRIPTION_PUBLIC_SELECT,
+} from "./subscription-public.util";
+import {
   buildAllocationAlias,
   normalizeGameDomain,
 } from "../servers/allocation-port.util";
@@ -454,7 +458,7 @@ export class BillingService {
   async createSubscription(
     userId: string,
     dto: CreateSubscriptionDto,
-  ): Promise<Subscription> {
+  ): Promise<PublicSubscription> {
     const price = await this.prisma.price.findUnique({
       where: { id: dto.priceId },
     });
@@ -496,6 +500,8 @@ export class BillingService {
         autoRenew: true,
         gateway: dto.gateway ?? "stripe",
       },
+      // Customer-facing route: never echo gatewaySubId/attribution back.
+      select: SUBSCRIPTION_PUBLIC_SELECT,
     });
   }
 
@@ -573,7 +579,7 @@ export class BillingService {
     userId: string,
     id: string,
     atPeriodEnd: boolean,
-  ): Promise<Subscription> {
+  ): Promise<PublicSubscription> {
     const sub = await this.getOwnedSubscription(userId, id);
 
     // Stop future PayPal auto-charges either way (immediate cancel, or cancel at
@@ -593,6 +599,7 @@ export class BillingService {
       return this.prisma.subscription.update({
         where: { id },
         data: { cancelAtPeriodEnd: true, autoRenew: false },
+        select: SUBSCRIPTION_PUBLIC_SELECT,
       });
     }
 
@@ -604,6 +611,7 @@ export class BillingService {
         autoRenew: false,
         currentPeriodEnd: new Date(),
       },
+      select: SUBSCRIPTION_PUBLIC_SELECT,
     });
     // P0-D: an immediate cancel must actually stop the service — enqueue a
     // suspend for each live server (previously the server kept running).
@@ -642,7 +650,10 @@ export class BillingService {
    * Resume a subscription scheduled to cancel at period end: clear the flag and
    * re-enable auto-renew. Only valid while it is still in good standing.
    */
-  async resumeSubscription(userId: string, id: string): Promise<Subscription> {
+  async resumeSubscription(
+    userId: string,
+    id: string,
+  ): Promise<PublicSubscription> {
     const sub = await this.getOwnedSubscription(userId, id);
     if (
       sub.state === SubscriptionState.CANCELED ||
@@ -653,6 +664,7 @@ export class BillingService {
     return this.prisma.subscription.update({
       where: { id },
       data: { cancelAtPeriodEnd: false, autoRenew: true },
+      select: SUBSCRIPTION_PUBLIC_SELECT,
     });
   }
 

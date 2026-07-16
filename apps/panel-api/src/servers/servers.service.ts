@@ -13,7 +13,6 @@ import {
   Prisma,
   Server,
   ServerState,
-  Subscription,
 } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { CryptoService } from "../common/crypto/crypto.service";
@@ -51,6 +50,7 @@ import {
   pickFreePort,
   isPortEnvName,
   buildAllocationAlias,
+  withPrimaryAllocation,
 } from "./allocation-port.util";
 import {
   isJavaImage,
@@ -61,6 +61,8 @@ import { BillingService } from "../billing/billing.service";
 import { LOADER_STARTUP, isMinecraftLoader } from "./minecraft-loader.util";
 import {
   NODE_PUBLIC_SELECT,
+  PLAN_CHANGE_SUBSCRIPTION_SELECT,
+  PlanChangeSubscription,
   PublicNode,
   PublicServer,
   SERVER_SECRET_OMIT,
@@ -152,7 +154,7 @@ export class ServersService {
       this.prisma.server.count({ where }),
     ]);
     return paginate(
-      data.map((s) => this.withPrimaryAllocation(s)),
+      data.map((s) => withPrimaryAllocation(s)),
       total,
       pagination,
     );
@@ -173,7 +175,7 @@ export class ServersService {
       },
     });
     if (!server) throw new NotFoundException("Server not found");
-    return this.withPrimaryAllocation(server);
+    return withPrimaryAllocation(server);
   }
 
   /**
@@ -238,7 +240,7 @@ export class ServersService {
       },
     });
     if (!server) throw new NotFoundException("Server not found");
-    return this.withPrimaryAllocation(server);
+    return withPrimaryAllocation(server);
   }
 
   /** Game-switch history, gated on the caller's access to the server first. */
@@ -599,7 +601,7 @@ export class ServersService {
       this.prisma.server.count({ where }),
     ]);
     return paginate(
-      data.map((s) => this.withPrimaryAllocation(s)),
+      data.map((s) => withPrimaryAllocation(s)),
       total,
       pagination,
     );
@@ -1118,13 +1120,14 @@ export class ServersService {
     // resizes raw resources.
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
-      // The row is embedded verbatim in the scheduled/invoiced results, so the
-      // node embed is the public projection; the apply-now path re-fetches the
-      // full node for its agent call (see applyPlanChangeNow).
+      // The row is embedded verbatim in the scheduled/invoiced results, so
+      // node and subscription are narrowed projections (no processor linkage,
+      // no attribution); the apply-now path re-fetches the full node for its
+      // agent call (see applyPlanChangeNow).
       omit: SERVER_SECRET_OMIT,
       include: {
         node: { select: NODE_PUBLIC_SELECT },
-        subscription: { include: { product: true } },
+        subscription: { select: PLAN_CHANGE_SUBSCRIPTION_SELECT },
       },
     });
     if (!server) throw new NotFoundException("Server not found");
@@ -1241,7 +1244,7 @@ export class ServersService {
    */
   private async stagePlanChange(
     server: ServerWithNode,
-    sub: Subscription,
+    sub: PlanChangeSubscription,
     target: PlanChangeTarget,
     currentRecurringMinor: number,
     newRecurringMinor: number,
@@ -2235,20 +2238,6 @@ export class ServersService {
         }`,
       );
     }
-  }
-
-  /**
-   * Surface the server's connection address by flattening its allocations into a
-   * single `primaryAllocation` (the one flagged primary, else the first). The web
-   * panel renders {ip}:{port} from this; without it the address never shows.
-   */
-  private withPrimaryAllocation<
-    T extends { allocations?: { isPrimary: boolean }[] | null },
-  >(server: T) {
-    const allocations = server.allocations ?? [];
-    const primary =
-      allocations.find((a) => a.isPrimary) ?? allocations[0] ?? null;
-    return { ...server, primaryAllocation: primary };
   }
 
   private assertTemplateAllowed(allowed: string[], templateId: string): void {

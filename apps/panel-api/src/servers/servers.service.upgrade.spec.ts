@@ -1,6 +1,10 @@
 import { ConflictException } from '@nestjs/common';
 import { ServersService } from './servers.service';
-import { NODE_PUBLIC_SELECT } from './server-secrets.util';
+import {
+  NODE_PUBLIC_SELECT,
+  PLAN_CHANGE_SUBSCRIPTION_SELECT,
+  SERVER_SECRET_OMIT,
+} from './server-secrets.util';
 
 /**
  * Unit tests for invoice-gated plan changes in ServersService.upgrade (hardware
@@ -168,13 +172,18 @@ describe('ServersService.upgrade (invoice-gated plan changes)', () => {
     expect(prisma.server.update).not.toHaveBeenCalled();
     expect(agent.reconfigure).not.toHaveBeenCalled();
     // The server row rides verbatim on the 'scheduled' result, so the fetch
-    // must embed only the PUBLIC node projection — never the full node row
-    // (tokenHash, pinned agent cert, daemon address).
+    // must omit the secret Server columns and embed only the PUBLIC node
+    // projection (never tokenHash, pinned agent cert, daemon address) and the
+    // narrowed subscription projection (never gateway/gatewaySubId processor
+    // linkage or the attribution JSON). Deep-equality on omit + include so
+    // neither can silently widen again.
     expect(prisma.server.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        include: expect.objectContaining({
+        omit: SERVER_SECRET_OMIT,
+        include: {
           node: { select: NODE_PUBLIC_SELECT },
-        }),
+          subscription: { select: PLAN_CHANGE_SUBSCRIPTION_SELECT },
+        },
       }),
     );
   });

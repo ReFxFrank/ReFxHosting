@@ -1,5 +1,9 @@
 import { ServersService } from "./servers.service";
-import { NODE_PUBLIC_SELECT, SERVER_SECRET_OMIT } from "./server-secrets.util";
+import {
+  NODE_PUBLIC_SELECT,
+  PLAN_CHANGE_SUBSCRIPTION_SELECT,
+  SERVER_SECRET_OMIT,
+} from "./server-secrets.util";
 
 /**
  * Server rows returned by client-facing routes must have the secret columns
@@ -117,6 +121,33 @@ describe("ServersService secret-column omission", () => {
       "id",
       "name",
       "regionId",
+    ]);
+  });
+
+  it("plan-change subscription projection carries no processor linkage or attribution", () => {
+    // Embedded in POST /servers/:id/upgrade results — must stay free of
+    // gateway/gatewaySubId, the attribution JSON and billing bookkeeping.
+    expect(Object.keys(PLAN_CHANGE_SUBSCRIPTION_SELECT).sort()).toEqual([
+      "currentPeriodEnd",
+      "currentPeriodStart",
+      "id",
+      "interval",
+      "priceId",
+      "product",
+      "slots",
+      "state",
+    ]);
+    expect(
+      Object.keys(PLAN_CHANGE_SUBSCRIPTION_SELECT.product.select).sort(),
+    ).toEqual([
+      "cpuPerSlot",
+      "diskMbPerSlot",
+      "id",
+      "maxSlots",
+      "memoryMbPerSlot",
+      "minSlots",
+      "name",
+      "perSlot",
     ]);
   });
 });

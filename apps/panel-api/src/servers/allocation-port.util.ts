@@ -63,3 +63,19 @@ export function normalizeGameDomain(
     .toLowerCase();
   return cleaned || null;
 }
+
+/**
+ * Surface a server's connection address by flattening its allocations into a
+ * single `primaryAllocation` (the one flagged primary, else the first). The web
+ * panel renders {alias || ip}:{port} from this; without it the address never
+ * shows. Shared by every endpoint that returns server rows to the panel
+ * (servers list/detail, dashboard).
+ */
+export function withPrimaryAllocation<
+  T extends { allocations?: { isPrimary: boolean }[] | null },
+>(server: T) {
+  const allocations = server.allocations ?? [];
+  const primary =
+    allocations.find((a) => a.isPrimary) ?? allocations[0] ?? null;
+  return { ...server, primaryAllocation: primary };
+}
