@@ -816,7 +816,7 @@ export const api = {
       mkdir: (id: string, path: string) =>
         http.post<void>(`/servers/${id}/files/mkdir`, { path }),
       rename: (id: string, from: string, to: string) =>
-        http.put<void>(`/servers/${id}/files/rename`, { from, to }),
+        http.post<void>(`/servers/${id}/files/rename`, { from, to }),
       delete: (id: string, paths: string[]) =>
         http.post<void>(`/servers/${id}/files/delete`, { paths }),
       compress: (id: string, paths: string[]) =>

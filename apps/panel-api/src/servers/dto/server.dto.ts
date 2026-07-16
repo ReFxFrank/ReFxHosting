@@ -55,6 +55,20 @@ export class CreateServerDto {
   environment?: Record<string, string>;
 }
 
+export class UpdateServerDetailsDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  name?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  description?: string;
+}
+
 export class PowerActionDto {
   @ApiProperty({ enum: ["start", "stop", "restart", "kill"] })
   @IsString()

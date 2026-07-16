@@ -9,6 +9,7 @@ import {
 import { InjectQueue } from "@nestjs/bullmq";
 import { Queue } from "bullmq";
 import {
+  Node,
   PendingPlanChange,
   Prisma,
   Server,
@@ -59,6 +60,7 @@ import {
 import { MinecraftResolverService } from "./minecraft-resolver.service";
 import { BillingService } from "../billing/billing.service";
 import { LOADER_STARTUP, isMinecraftLoader } from "./minecraft-loader.util";
+import { PublicServer, SERVER_SECRET_OMIT } from "./server-secrets.util";
 
 /**
  * Outcome of a plan change. An UPGRADE is `invoiced` (server stays on the old
@@ -66,15 +68,15 @@ import { LOADER_STARTUP, isMinecraftLoader } from "./minecraft-loader.util";
  * `scheduled` to apply at the next renewal; a no-cost change is `applied` now.
  */
 export type PlanChangeResult =
-  | { status: "applied"; server: Server }
+  | { status: "applied"; server: PublicServer }
   | {
       status: "invoiced";
-      server: Server;
+      server: PublicServer;
       invoiceId: string;
       amountMinor: number;
       currency: string;
     }
-  | { status: "scheduled"; server: Server; effectiveAt: Date };
+  | { status: "scheduled"; server: PublicServer; effectiveAt: Date };
 
 /** Target plan configuration staged by a plan change. */
 interface PlanChangeTarget {
@@ -86,7 +88,9 @@ interface PlanChangeTarget {
   diskMb: number;
 }
 
-type ServerWithNode = Prisma.ServerGetPayload<{ include: { node: true } }>;
+// Plan-change working shape: a secret-stripped row (it ends up embedded in the
+// PlanChangeResult the route returns) plus the node relation for agent calls.
+type ServerWithNode = PublicServer & { node: Node };
 
 /** Power signals that require the server to first be RUNNING/STARTING. */
 const STOPPED_STATES: ServerState[] = ["OFFLINE", "CRASHED"];
@@ -112,7 +116,7 @@ export class ServersService {
   async list(
     user: AuthUser,
     pagination: PaginationDto,
-  ): Promise<Paginated<Server>> {
+  ): Promise<Paginated<PublicServer>> {
     // Client area is always scoped to the caller: servers they OWN or are an
     // active sub-user on. Staff do NOT get a platform-wide view here even though
     // they're ADMIN/OWNER — that lives in the admin panel (adminList). This keeps
@@ -133,6 +137,7 @@ export class ServersService {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { createdAt: "desc" },
+        omit: SERVER_SECRET_OMIT,
         include: {
           template: true,
           node: { select: { name: true, fqdn: true } },
@@ -148,9 +153,10 @@ export class ServersService {
     );
   }
 
-  async get(id: string): Promise<Server> {
+  async get(id: string): Promise<PublicServer> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
+      omit: SERVER_SECRET_OMIT,
       include: {
         template: true,
         node: true,
@@ -172,10 +178,10 @@ export class ServersService {
   async getWithViewer(
     user: AuthUser,
     id: string,
-  ): Promise<Server & { viewerPermissions: string[] }> {
+  ): Promise<PublicServer & { viewerPermissions: string[] }> {
     const server = await this.get(id);
     const viewerPermissions = await this.viewerPermissions(user, server);
-    return { ...(server as Server), viewerPermissions };
+    return { ...server, viewerPermissions };
   }
 
   /** Concrete (wildcard-expanded) list of per-server permissions `user` holds
@@ -183,7 +189,7 @@ export class ServersService {
    * the sub-user's granted set plus the implicit baseline. */
   private async viewerPermissions(
     user: AuthUser,
-    server: Server,
+    server: Pick<Server, "id" | "ownerId">,
   ): Promise<string[]> {
     if (
       hasPermission(user.permissions ?? [], "servers.manage") ||
@@ -204,7 +210,7 @@ export class ServersService {
    * active sub-user on — same scoping as list() — so it can't be used as an IDOR
    * to read another tenant's server. Staff use the admin surface, not this.
    */
-  async getForUser(user: AuthUser, id: string): Promise<Server> {
+  async getForUser(user: AuthUser, id: string): Promise<PublicServer> {
     const server = await this.prisma.server.findFirst({
       where: {
         id,
@@ -214,6 +220,7 @@ export class ServersService {
           { subUsers: { some: { userId: user.id, state: "ACTIVE" } } },
         ],
       },
+      omit: SERVER_SECRET_OMIT,
       include: {
         template: true,
         node: true,
@@ -237,7 +244,7 @@ export class ServersService {
     ownerId: string,
     dto: CreateServerDto,
     opts: { deferProvision?: boolean } = {},
-  ): Promise<Server> {
+  ): Promise<PublicServer> {
     const subscription = await this.prisma.subscription.findFirst({
       where: { id: dto.subscriptionId, userId: ownerId },
       include: { product: true, hardwareTier: true },
@@ -425,7 +432,10 @@ export class ServersService {
       );
     }
 
-    return this.prisma.server.findUniqueOrThrow({ where: { id: server.id } });
+    return this.prisma.server.findUniqueOrThrow({
+      where: { id: server.id },
+      omit: SERVER_SECRET_OMIT,
+    });
   }
 
   /**
@@ -435,7 +445,7 @@ export class ServersService {
    * enqueues provisioning identically to the customer `create()` path so the node
    * agent installs it.
    */
-  async adminCreate(dto: AdminCreateServerDto): Promise<Server> {
+  async adminCreate(dto: AdminCreateServerDto): Promise<PublicServer> {
     const owner = await this.prisma.user.findFirst({
       where: { id: dto.ownerId, deletedAt: null },
       select: { id: true },
@@ -542,11 +552,14 @@ export class ServersService {
       serverId: server.id,
     } satisfies ProvisionJob);
 
-    return this.prisma.server.findUniqueOrThrow({ where: { id: server.id } });
+    return this.prisma.server.findUniqueOrThrow({
+      where: { id: server.id },
+      omit: SERVER_SECRET_OMIT,
+    });
   }
 
   /** Admin list of every (non-deleted) server with node/owner/template names. */
-  async adminList(pagination: PaginationDto): Promise<Paginated<Server>> {
+  async adminList(pagination: PaginationDto): Promise<Paginated<PublicServer>> {
     const where: Prisma.ServerWhereInput = {
       deletedAt: null,
       ...(pagination.q
@@ -559,6 +572,7 @@ export class ServersService {
         skip: pagination.skip,
         take: pagination.take,
         orderBy: { createdAt: "desc" },
+        omit: SERVER_SECRET_OMIT,
         include: {
           template: { select: { id: true, name: true, slug: true } },
           node: { select: { id: true, name: true, fqdn: true } },
@@ -947,7 +961,7 @@ export class ServersService {
 
   // ---- resize (upgrade/downgrade) ----------------------------------------
 
-  async resize(id: string, dto: ResizeServerDto): Promise<Server> {
+  async resize(id: string, dto: ResizeServerDto): Promise<PublicServer> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
       include: { node: true },
@@ -977,6 +991,7 @@ export class ServersService {
         swapMb: dto.swapMb ?? server.swapMb,
         diskMb: dto.diskMb ?? server.diskMb,
       },
+      omit: SERVER_SECRET_OMIT,
     });
 
     // Apply new limits live on the agent (no reinstall needed).
@@ -1029,10 +1044,36 @@ export class ServersService {
     };
   }
 
+  /** Rename / re-describe a server (Settings → General). Cosmetic only. */
+  async updateDetails(
+    id: string,
+    dto: { name?: string; description?: string | null },
+  ): Promise<PublicServer> {
+    const server = await this.prisma.server.findFirst({
+      where: { id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!server) throw new NotFoundException("Server not found");
+    const name = dto.name?.trim();
+    if (dto.name !== undefined && !name) {
+      throw new BadRequestException("Server name cannot be empty");
+    }
+    return this.prisma.server.update({
+      where: { id },
+      data: {
+        ...(name ? { name } : {}),
+        ...(dto.description !== undefined
+          ? { description: dto.description?.trim() || null }
+          : {}),
+      },
+      omit: SERVER_SECRET_OMIT,
+    });
+  }
+
   async setStartup(
     id: string,
     dto: { startupCommand?: string; dockerImage?: string },
-  ): Promise<Server> {
+  ): Promise<PublicServer> {
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
       select: { id: true },
@@ -1048,6 +1089,7 @@ export class ServersService {
           ? { dockerImage: dto.dockerImage }
           : {}),
       },
+      omit: SERVER_SECRET_OMIT,
     });
   }
 
@@ -1067,6 +1109,8 @@ export class ServersService {
     // resizes raw resources.
     const server = await this.prisma.server.findFirst({
       where: { id, deletedAt: null },
+      // The row is embedded verbatim in the scheduled/invoiced results.
+      omit: SERVER_SECRET_OMIT,
       include: { node: true, subscription: { include: { product: true } } },
     });
     if (!server) throw new NotFoundException("Server not found");
@@ -1307,7 +1351,7 @@ export class ServersService {
   private async applyPlanChangeNow(
     server: ServerWithNode,
     target: PlanChangeTarget,
-  ): Promise<Server> {
+  ): Promise<PublicServer> {
     await this.prisma.subscription.update({
       where: { id: server.subscriptionId! },
       data: {
@@ -1324,6 +1368,7 @@ export class ServersService {
         diskMb: target.diskMb,
         slots: target.slots,
       },
+      omit: SERVER_SECRET_OMIT,
     });
     await this.agent.reconfigure(server.node, {
       serverId: server.id,

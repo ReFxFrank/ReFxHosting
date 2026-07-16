@@ -50,6 +50,7 @@ import {
   SetAutoRestartDto,
   SetJavaVersionDto,
   SwitchGameDto,
+  UpdateServerDetailsDto,
   UpdateStartupDto,
   UpgradeServerDto,
   AddWorkshopDto,
@@ -102,6 +103,21 @@ export class ServersController {
     // the web can gate the tabs/actions a sub-user sees to exactly what the
     // owner granted.
     return this.servers.getWithViewer(user, id);
+  }
+
+  /** Rename / re-describe (the Settings → General card). */
+  @Patch(":serverId")
+  @RequirePermissions("settings.update")
+  @Audit({
+    action: "server.rename",
+    targetType: "Server",
+    targetParam: "serverId",
+  })
+  updateDetails(
+    @Param("serverId") id: string,
+    @Body() dto: UpdateServerDetailsDto,
+  ) {
+    return this.servers.updateDetails(id, dto);
   }
 
   // ---- web-app domains (WEB_APP servers) ---------------------------------
