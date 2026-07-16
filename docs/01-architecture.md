@@ -13,7 +13,7 @@ data model itself is covered in [02 — Database Schema](02-database.md).
 | Component   | Tech                                            | Ports / endpoints                                            | Role |
 |-------------|-------------------------------------------------|-------------------------------------------------------------|------|
 | `panel-api` | NestJS, Prisma, PostgreSQL, Redis/BullMQ        | `:4000` — REST `/api/v1`, GraphQL `/graphql`, Swagger `/docs` | Central brain: auth, RBAC, billing, orchestration, queues |
-| `web`       | Next.js 14, TypeScript, Tailwind, shadcn/ui     | `:3000`                                                      | Customer + admin web panel |
+| `web`       | Next.js 16, TypeScript, Tailwind, shadcn/ui     | `:3000`                                                      | Customer + admin web panel |
 | `node-agent`| Go single static binary (Linux + Windows)       | `:8443` TLS + WebSocket, SFTP `:2022`                       | Per-node daemon: containers/processes, console, files, backups, stats, SFTP |
 | `shared`    | TypeScript types + generated OpenAPI client     | library (consumed by `web`)                                 | Compile-time contract between `web` and `panel-api` |
 
@@ -36,7 +36,7 @@ flowchart TB
   end
 
   subgraph App["Application tier (stateless, horizontally scaled)"]
-    WEB["web<br/>Next.js 14 :3000"]
+    WEB["web<br/>Next.js 16 :3000"]
     API["panel-api<br/>NestJS :4000<br/>REST /api/v1 · GraphQL /graphql · /docs"]
     WRK["BullMQ workers<br/>(provisioning · backups · renewals · schedules)"]
   end

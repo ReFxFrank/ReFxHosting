@@ -54,7 +54,7 @@ Path filters (`paths:` / `dorny/paths-filter`) decide which jobs run.
    PostgreSQL + Redis service containers.
 5. Build; export the OpenAPI document used by `shared`.
 
-### `web` (Next.js 14)
+### `web` (Next.js 16)
 1. Install + cache.
 2. `eslint`, `tsc`.
 3. Component/unit tests; `next build`.

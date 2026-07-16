@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-The `web` app is the customer- and admin-facing panel: **Next.js 14** (App
+The `web` app is the customer- and admin-facing panel: **Next.js 16** (App
 Router) with **TypeScript**, **Tailwind CSS**, and **shadcn/ui**, served on
 `:3000`. It talks to `panel-api` over REST `/api/v1` and GraphQL `/graphql`
 (see [03 — API Specification](03-api.md)) and, for the live server console and

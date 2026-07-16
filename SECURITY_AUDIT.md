@@ -8,7 +8,7 @@ proposal). Secrets are masked throughout; any real secret discovered is filed
 Critical with "rotate immediately" and never printed.
 
 - **Scope:** `apps/panel-api` (NestJS/Prisma/Postgres/Redis/BullMQ), `apps/web`
-  (Next.js 14), `apps/node-agent` (Go), `database/`, `infra/` — all owned by
+  (Next.js 16), `apps/node-agent` (Go), `database/`, `infra/` — all owned by
   Frank. Third-party services (Stripe, PayPal, Cloudflare, R2) are **out of
   scope** except how we integrate with them.
 - **Stack confirmed:** monorepo; panel-api REST+GraphQL; web SSR/RSC; Go agent

@@ -6,7 +6,7 @@ earlier commits `e28840e`/`0db8968`).
 
 ## Stack
 
-- **Web:** Next.js 14, App Router, React server + client components mixed.
+- **Web:** Next.js 16, App Router, React server + client components mixed.
   Marketing pages under `apps/web/app/(public)`; store under `(store)`;
   authenticated panel under `(dashboard)`/`(admin)` (out of scope).
 - **Styling:** Tailwind + local shadcn-style components (`components/ui`),

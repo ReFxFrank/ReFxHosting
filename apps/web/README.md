@@ -1,7 +1,7 @@
 # ReFx Hosting — Web Panel
 
 The customer & admin web panel for [ReFx Hosting](../../README.md): a GPortal-style
-game-server hosting platform. Built with **Next.js 14 (App Router)**, **TypeScript**,
+game-server hosting platform. Built with **Next.js 16 (App Router)**, **TypeScript**,
 **TailwindCSS**, **shadcn/ui** primitives, **TanStack Query**, **Zustand**,
 **react-hook-form + Zod**, **xterm.js** (live console) and **Recharts** (graphs).
 

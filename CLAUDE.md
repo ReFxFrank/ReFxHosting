@@ -13,7 +13,7 @@ and a Windows companion ("ReFx Remote") consume the same panel-api.
 
 ```
 apps/panel-api   NestJS + Prisma 7 + Redis/BullMQ — central brain (REST + GraphQL)  :4000
-apps/web         Next.js 14 + Tailwind + shadcn/ui — customer & admin panel         :3000
+apps/web         Next.js 16 + Tailwind + shadcn/ui — customer & admin panel         :3000
 apps/node-agent  Go single binary — runs game servers on Linux/Windows nodes        :8443 / :2022
 packages/shared  TS contract: enums, panel↔agent WS protocol, permissions, DTOs
 database/prisma  schema.prisma = canonical data model (+ migrations/, seed/)

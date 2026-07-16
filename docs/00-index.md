@@ -16,7 +16,7 @@ consistent with the canonical data model in
 | Component   | Tech                                            | Ports / endpoints                          |
 |-------------|-------------------------------------------------|--------------------------------------------|
 | `panel-api` | NestJS, Prisma, PostgreSQL, Redis/BullMQ        | `:4000` — REST `/api/v1`, GraphQL `/graphql`, Swagger `/docs` |
-| `web`       | Next.js 14, TypeScript, Tailwind, shadcn/ui     | `:3000`                                     |
+| `web`       | Next.js 16, TypeScript, Tailwind, shadcn/ui     | `:3000`                                     |
 | `node-agent`| Go single static binary (Linux + Windows)       | `:8443` TLS + WebSocket, SFTP `:2022`      |
 | `shared`    | TypeScript types + generated OpenAPI client     | library (consumed by `web`)                |
 

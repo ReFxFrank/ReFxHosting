@@ -127,7 +127,7 @@ all four evolve.)_
 ```mermaid
 flowchart TB
     subgraph Client["🌐 Browser / mobile / desktop / API clients"]
-        UI["Web Panel — Next.js 14"]
+        UI["Web Panel — Next.js 16"]
         IOS["📱 iOS app"]
         WIN["🖥️ ReFx Remote (Windows)"]
         API_C["REST / GraphQL clients"]
@@ -274,7 +274,7 @@ A polished, **public** status page (no login) that turns real telemetry into an 
 | Layer | Choice | Why |
 |-------|--------|-----|
 | **Panel API** | NestJS · Prisma · BullMQ | I/O-bound orchestration; REST **and** GraphQL in one app; TS types shared with the frontend |
-| **Web** | Next.js 14 · TypeScript · Tailwind · shadcn/ui | App Router, dark-mode-first, Linear/Vercel-inspired |
+| **Web** | Next.js 16 · TypeScript · Tailwind · shadcn/ui | App Router, dark-mode-first, Linear/Vercel-inspired |
 | **Node agent** | **Go** (single static binary) | Trivial cross-compile, great concurrency, Docker SDK, no runtime to install |
 | **Data** | PostgreSQL · Redis · OpenSearch · S3/MinIO | Relational integrity for billing; cache/queues; search; object storage |
 | **Infra** | Docker Compose · Helm/K8s · GitHub Actions | Local → production with the same images; HPA + observability |
@@ -312,7 +312,7 @@ Content-Type: application/json
 ```
 
 ### 🖥️ web — [`apps/web`](apps/web)
-Next.js 14 customer + admin panel. **Builds, typechecks & lints clean.**
+Next.js 16 customer + admin panel. **Builds, typechecks & lints clean.**
 
 - **Live console** — `xterm.js` wired to the panel WebSocket (`lib/ws.ts`), with power controls and live CPU/RAM/disk gauges (Recharts). A shared console hub keeps the socket + scrollback **alive across tab switches and full page refreshes** (`lib/console-hub.ts`).
 - **Minecraft tab** — for Minecraft servers, pick the loader (Vanilla/Paper/Fabric/Forge/NeoForge) and exact version; switch any time.
