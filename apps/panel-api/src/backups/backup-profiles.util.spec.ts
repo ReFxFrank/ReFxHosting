@@ -43,6 +43,27 @@ describe('backup profiles', () => {
     }
   });
 
+  it('Palworld Windows/UE4SS excludes the Proton/wine runtime + game, keeps world + Lua mods', () => {
+    const globs = essentialExcludes('palworld-windows', {});
+    // Steam + Proton/wine runtime (the failure/bloat source) is dropped...
+    for (const g of ['steamcmd', 'steamapps', 'Steam', '.steam', '.proton', '.wine']) {
+      expect(globs).toContain(g);
+    }
+    // ...along with the re-downloadable game content + the ~152 MB server exe.
+    for (const g of ['Engine', 'Pal/Content', 'Pal/Plugins', 'Pal/Binaries/Win64/PalServer-Win64-Shipping.exe']) {
+      expect(globs).toContain(g);
+    }
+    // Crucially, UE4SS + the customer's uploaded mods (Win64/ue4ss) are KEPT:
+    // we prune only the exe, not the whole Pal/Binaries tree.
+    expect(globs).not.toContain('Pal/Binaries');
+    // The world/config must NEVER be excluded.
+    expect(globs).not.toContain('Pal');
+    expect(globs).not.toContain('Pal/Saved');
+    for (const g of globs) {
+      expect(g === 'Pal/Saved' || 'Pal/Saved'.startsWith(g.replace(/\/$/, '') + '/')).toBe(false);
+    }
+  });
+
   it('never excludes redeploy-critical content', () => {
     const globs = essentialExcludes('minecraft', {});
     for (const critical of [

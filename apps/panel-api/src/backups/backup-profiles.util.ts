@@ -63,6 +63,34 @@ const PALWORLD_EXCLUDES = [
 ];
 
 /**
+ * Palworld Windows/UE4SS egg (`palworld-windows`, the Windows build run under
+ * Proton). Same re-downloadable game content as Linux, PLUS the Steam + Proton/
+ * wine runtime, which is both huge AND contains a wine prefix whose `dosdevices`
+ * symlinks (e.g. `z: -> /`) would otherwise bloat — or, on older agents, break —
+ * the archive. We keep `Pal/Saved/` (world + config) and, unlike the Linux
+ * profile, `Pal/Binaries/Win64/ue4ss/` (UE4SS + the customer's uploaded mods) —
+ * only the ~152 MB game exe under Win64 is pruned, not the whole Binaries tree.
+ *
+ * SAFETY: as with PALWORLD_EXCLUDES, no glob here is `Pal`, `Pal/Saved`, or a
+ * prefix of them, so the world/config always survive. `Pal/Content` is pruned,
+ * which drops blueprint `.pak` mods under Content/Paks/LogicMods from an
+ * essentials backup (re-addable); Lua/UE4SS mods under Win64/ue4ss are kept.
+ */
+const PALWORLD_WINDOWS_EXCLUDES = [
+  ...GENERIC_EXCLUDES,
+  'steamcmd', // bootstrapped SteamCMD — re-created on install
+  'steamapps', // Steam depot metadata — scratch
+  'Steam', // steamcmd's Steam client dir — scratch
+  '.steam', // Proton/steamclient runtime + the wine prefix (compatdata) — scratch
+  '.proton', // Proton compat prefix — scratch
+  '.wine', // wine prefix — scratch (has dosdevices symlinks)
+  'Engine', // Unreal Engine runtime — re-downloaded
+  'Pal/Content', // game assets (the bulk) — re-downloaded
+  'Pal/Plugins', // engine plugins — re-downloaded
+  'Pal/Binaries/Win64/PalServer-Win64-Shipping.exe', // ~152 MB server exe — re-downloaded
+];
+
+/**
  * Exclude-globs for an "essentials" backup of the given server. Minecraft is
  * detected the same way as elsewhere in the panel (template slug prefix or
  * the MINECRAFT_VERSION env the unified egg always sets); other games use a
@@ -78,6 +106,7 @@ export function essentialExcludes(
     (environment ?? {})['MINECRAFT_VERSION'] != null;
   if (isMinecraft) return [...MINECRAFT_EXCLUDES];
   if (slug === 'palworld') return [...PALWORLD_EXCLUDES];
+  if (slug === 'palworld-windows') return [...PALWORLD_WINDOWS_EXCLUDES];
   return [...GENERIC_EXCLUDES];
 }
 
