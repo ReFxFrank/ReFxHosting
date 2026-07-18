@@ -979,6 +979,26 @@ export function isPalSecret(v: PalFieldValue): v is PalSecretView {
   return typeof v === "object" && v !== null && !Array.isArray(v) && "set" in v;
 }
 
+// ---- Palworld UE4SS mods (Windows/Proton egg) -----------------------------
+
+/** A UE4SS mod folder under ue4ss/Mods on a palworld-windows server. */
+export interface PalworldMod {
+  name: string;
+  /** enabled.txt present (or listed enabled in mods.txt). */
+  enabled: boolean;
+  /** A UE4SS built-in — shown read-only (can't toggle/remove). */
+  builtin: boolean;
+  kind: "lua" | "dll" | "blueprint" | "other";
+}
+
+export interface PalworldModsView {
+  /** Data-relative UE4SS mods directory. */
+  modsDir: string;
+  /** False when UE4SS isn't bootstrapped yet (reinstall the server). */
+  installed: boolean;
+  mods: PalworldMod[];
+}
+
 // Billing
 export type BillingInterval =
   "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";

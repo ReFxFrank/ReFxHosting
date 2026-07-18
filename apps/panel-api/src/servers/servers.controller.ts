@@ -19,6 +19,7 @@ import { ModsService } from "./mods.service";
 import { ModpackService } from "./modpack.service";
 import { WorldRecoveryService } from "./world-recovery.service";
 import { PalworldSettingsService } from "./palworld-settings.service";
+import { PalworldModsService } from "./palworld-mods.service";
 import { VanityAddressService } from "./vanity-address.service";
 import { PlayersService } from "./players.service";
 import { WorkshopService } from "./workshop.service";
@@ -81,6 +82,7 @@ export class ServersController {
     private readonly domains: DomainsService,
     private readonly worldRecovery: WorldRecoveryService,
     private readonly palworldSettings: PalworldSettingsService,
+    private readonly palworldMods: PalworldModsService,
     private readonly vanity: VanityAddressService,
     private readonly playersService: PlayersService,
   ) {}
@@ -408,6 +410,56 @@ export class ServersController {
     @Body() dto: { fields?: Record<string, unknown> },
   ) {
     return this.palworldSettings.update(id, dto?.fields);
+  }
+
+  // ---- Palworld UE4SS mods (Windows/Proton egg) --------------------------
+
+  @Get(":id/palworld-mods")
+  @RequirePermissions("files.read")
+  palworldModsList(@Param("id") id: string) {
+    return this.palworldMods.list(id);
+  }
+
+  // Install a mod from a .zip the client already uploaded into the UE4SS Mods
+  // dir via POST :id/files/upload (extract in place + drop the archive).
+  @Post(":id/palworld-mods/install")
+  @RequirePermissions("files.write")
+  @Audit({
+    action: "server.palworld-mod.install",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  palworldModsInstall(
+    @Param("id") id: string,
+    @Body() dto: { archive: string },
+  ) {
+    return this.palworldMods.install(id, dto?.archive);
+  }
+
+  @Patch(":id/palworld-mods/:name")
+  @RequirePermissions("files.write")
+  @Audit({
+    action: "server.palworld-mod.toggle",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  palworldModsToggle(
+    @Param("id") id: string,
+    @Param("name") name: string,
+    @Body() dto: { enabled: boolean },
+  ) {
+    return this.palworldMods.setEnabled(id, name, !!dto?.enabled);
+  }
+
+  @Delete(":id/palworld-mods/:name")
+  @RequirePermissions("files.write")
+  @Audit({
+    action: "server.palworld-mod.remove",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  palworldModsRemove(@Param("id") id: string, @Param("name") name: string) {
+    return this.palworldMods.remove(id, name);
   }
 
   // ---- modpacks (Modrinth) ----------------------------------------------

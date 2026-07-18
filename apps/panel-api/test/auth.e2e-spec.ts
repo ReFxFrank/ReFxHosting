@@ -17,6 +17,7 @@ import { VoiceService } from '../src/servers/voice.service';
 import { DomainsService } from '../src/servers/domains.service';
 import { WorldRecoveryService } from '../src/servers/world-recovery.service';
 import { PalworldSettingsService } from '../src/servers/palworld-settings.service';
+import { PalworldModsService } from '../src/servers/palworld-mods.service';
 import { VanityAddressService } from '../src/servers/vanity-address.service';
 import { PlayersService } from '../src/servers/players.service';
 import { MinecraftResolverService } from '../src/servers/minecraft-resolver.service';
@@ -61,6 +62,7 @@ describe('Auth (e2e)', () => {
         // player lists) — not exercised by these routing/validation tests.
         { provide: WorldRecoveryService, useValue: {} },
         { provide: PalworldSettingsService, useValue: {} },
+        { provide: PalworldModsService, useValue: {} },
         { provide: VanityAddressService, useValue: {} },
         { provide: PlayersService, useValue: {} },
         {

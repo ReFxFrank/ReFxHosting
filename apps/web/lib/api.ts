@@ -49,6 +49,7 @@ import type {
   VanityAddressStatus,
   LevelDatRestoreResult,
   PalworldSettings,
+  PalworldModsView,
   JavaVersionState,
   AuditLog,
   GlobalAlert,
@@ -562,6 +563,24 @@ export const api = {
       http.patch<PalworldSettings>(`/servers/${id}/palworld-settings`, {
         fields,
       }),
+    // UE4SS mod manager (palworld-windows egg): list/install-from-zip/toggle/
+    // delete mods in ue4ss/Mods. Upload the zip via files.upload first, then call
+    // installPalworldMod with its filename to extract it in place.
+    palworldMods: (id: string) =>
+      http.get<PalworldModsView>(`/servers/${id}/palworld-mods`),
+    installPalworldMod: (id: string, archive: string) =>
+      http.post<PalworldModsView>(`/servers/${id}/palworld-mods/install`, {
+        archive,
+      }),
+    setPalworldModEnabled: (id: string, name: string, enabled: boolean) =>
+      http.patch<PalworldModsView>(
+        `/servers/${id}/palworld-mods/${encodeURIComponent(name)}`,
+        { enabled },
+      ),
+    removePalworldMod: (id: string, name: string) =>
+      http.delete<PalworldModsView>(
+        `/servers/${id}/palworld-mods/${encodeURIComponent(name)}`,
+      ),
     mods: {
       context: (id: string) =>
         http.get<{
