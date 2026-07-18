@@ -51,6 +51,19 @@ func NewS3Storage(ctx context.Context, cfg S3Config) (*S3Storage, error) {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
 		}
 		o.UsePathStyle = cfg.UsePathStyle
+		// Cloudflare R2 (and MinIO/Backblaze B2/other S3-compatible stores)
+		// reject the data-integrity checksums aws-sdk-go-v2 began adding BY
+		// DEFAULT in newer releases (the streaming CRC32 trailer:
+		// x-amz-content-sha256: STREAMING-UNSIGNED-PAYLOAD-TRAILER +
+		// x-amz-trailer). On R2 this surfaces as upload failures (e.g. 501
+		// "Not Implemented" / signature or checksum errors) — which is why
+		// offsite backups that used to work start failing after an agent
+		// update pulls a newer SDK. Restore classic S3 behavior: only compute a
+		// request checksum when the operation REQUIRES it, and only validate a
+		// response checksum when required. Real AWS S3 is unaffected (it also
+		// works fine without the opportunistic checksum).
+		o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
+		o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
 	})
 	return &S3Storage{
 		bucket:   cfg.Bucket,
