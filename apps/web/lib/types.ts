@@ -945,6 +945,40 @@ export interface LevelDatRestoreResult {
   restoredBytes: number | null;
 }
 
+// ---- Palworld settings (PalWorldSettings.ini editor) ----------------------
+
+/** A masked secret field — only whether a value is set is ever exposed. */
+export interface PalSecretView {
+  set: boolean;
+}
+
+/** A decoded curated value, or null when the key is absent from the ini. */
+export type PalFieldValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | PalSecretView
+  | null;
+
+/** GET/PATCH payload for the Palworld settings panel. */
+export interface PalworldSettings {
+  state: ServerState;
+  /** True when the server is stopped and the ini can be safely rewritten. */
+  editable: boolean;
+  /** Keys also written from the Startup tab — rendered read-only in the form. */
+  managedKeys: string[];
+  /** Curated fields keyed by ini key (secrets masked to `{ set }`). */
+  fields: Record<string, PalFieldValue>;
+  /** Every non-curated key, round-tripped verbatim (shown read-only). */
+  extraKeys: { key: string; value: string }[];
+}
+
+/** True for a masked secret field value. */
+export function isPalSecret(v: PalFieldValue): v is PalSecretView {
+  return typeof v === "object" && v !== null && !Array.isArray(v) && "set" in v;
+}
+
 // Billing
 export type BillingInterval =
   "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";

@@ -1465,6 +1465,12 @@ async function seedTemplates(
       "minecraft-forge",
       "minecraft-neoforge",
     ]);
+    // Experimental eggs (e.g. Windows-via-Proton + UE4SS) are usable in the
+    // admin panel and via switch-game, but must NOT auto-appear in the public
+    // storefront — they're spikes, not first-class products. Kept unpublished on
+    // create; an admin's publish toggle then persists across reseeds (createOnly
+    // path leaves storefront state alone for existing rows).
+    const EXPERIMENTAL = new Set(["palworld-windows"]);
     // Per-game art (apps/web/public/games/<slug>.svg); the web GameImage falls
     // back to a default placeholder if a file is missing.
     const preset = `/games/${tpl.slug}.svg`;
@@ -1506,8 +1512,9 @@ async function seedTemplates(
       });
     }
 
-    // Hide superseded per-loader Minecraft eggs from the public storefront.
-    if (DEPRECATED.has(tpl.slug)) {
+    // Hide superseded per-loader Minecraft eggs and experimental spikes from the
+    // public storefront (they remain fully usable in the admin panel).
+    if (DEPRECATED.has(tpl.slug) || EXPERIMENTAL.has(tpl.slug)) {
       await prisma.gameTemplate.update({
         where: { id: template.id },
         data: { isPublished: false },

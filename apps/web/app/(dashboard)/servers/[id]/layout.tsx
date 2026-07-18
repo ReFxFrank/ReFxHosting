@@ -30,6 +30,7 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
   const slug = server?.template?.slug ?? "";
   const loader = server?.environment?.LOADER;
   const isMinecraft = slug === "minecraft" || slug.startsWith("minecraft-");
+  const isPalworld = slug === "palworld";
   const supportsMods = isMinecraft && loader !== "vanilla";
   const supportsWorkshop = !!server?.template?.supportsWorkshop;
   const isVoice = isVoiceServer(server);
@@ -54,6 +55,7 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
     if (t.href.endsWith("/domains")) return isWeb;
     if (isWeb) return WEB_TABS.some((s) => t.href.endsWith(s));
     if (t.href.endsWith("/minecraft")) return isMinecraft;
+    if (t.href.endsWith("/palworld")) return isPalworld;
     if (t.href.endsWith("/mods")) return supportsMods;
     if (t.href.endsWith("/modpacks")) return isMinecraft;
     if (t.href.endsWith("/workshop")) return supportsWorkshop;

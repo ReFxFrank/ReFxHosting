@@ -48,6 +48,7 @@ import type {
   LevelDatStatus,
   VanityAddressStatus,
   LevelDatRestoreResult,
+  PalworldSettings,
   JavaVersionState,
   AuditLog,
   GlobalAlert,
@@ -552,6 +553,15 @@ export const api = {
       http.post<LevelDatRestoreResult>(
         `/servers/${id}/world/restore-level-dat`,
       ),
+    // Palworld settings — read/edit PalWorldSettings.ini (OptionSettings) via a
+    // curated form. Writes only apply while the server is stopped (Palworld reads
+    // the ini once at boot and clobbers live edits).
+    palworldSettings: (id: string) =>
+      http.get<PalworldSettings>(`/servers/${id}/palworld-settings`),
+    setPalworldSettings: (id: string, fields: Record<string, unknown>) =>
+      http.patch<PalworldSettings>(`/servers/${id}/palworld-settings`, {
+        fields,
+      }),
     mods: {
       context: (id: string) =>
         http.get<{

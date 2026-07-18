@@ -278,6 +278,7 @@ export const serverTabs = (id: string): ServerTab[] => [
     perm: "schedule.read",
   },
   { label: "Minecraft", href: `/servers/${id}/minecraft`, perm: "files.read" },
+  { label: "Palworld", href: `/servers/${id}/palworld`, perm: "settings.read" },
   { label: "Mods", href: `/servers/${id}/mods`, perm: "files.read" },
   { label: "Modpacks", href: `/servers/${id}/modpacks`, perm: "files.read" },
   { label: "Workshop", href: `/servers/${id}/workshop`, perm: "files.read" },

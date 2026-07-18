@@ -7,6 +7,7 @@ import { ModrinthService } from "./modrinth.service";
 import { ModsService } from "./mods.service";
 import { ModpackService } from "./modpack.service";
 import { WorldRecoveryService } from "./world-recovery.service";
+import { PalworldSettingsService } from "./palworld-settings.service";
 import { VanityAddressService } from "./vanity-address.service";
 import { PlayersService } from "./players.service";
 import { WorkshopService } from "./workshop.service";
@@ -47,6 +48,7 @@ import { QUEUE } from "../queues/queue.constants";
     ModsService,
     ModpackService,
     WorldRecoveryService,
+    PalworldSettingsService,
     VanityAddressService,
     PlayersService,
     WorkshopService,

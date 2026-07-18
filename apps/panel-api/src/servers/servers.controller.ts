@@ -18,6 +18,7 @@ import { ScheduleRunner } from "./schedule.runner";
 import { ModsService } from "./mods.service";
 import { ModpackService } from "./modpack.service";
 import { WorldRecoveryService } from "./world-recovery.service";
+import { PalworldSettingsService } from "./palworld-settings.service";
 import { VanityAddressService } from "./vanity-address.service";
 import { PlayersService } from "./players.service";
 import { WorkshopService } from "./workshop.service";
@@ -79,6 +80,7 @@ export class ServersController {
     private readonly scheduleRunner: ScheduleRunner,
     private readonly domains: DomainsService,
     private readonly worldRecovery: WorldRecoveryService,
+    private readonly palworldSettings: PalworldSettingsService,
     private readonly vanity: VanityAddressService,
     private readonly playersService: PlayersService,
   ) {}
@@ -381,6 +383,31 @@ export class ServersController {
   })
   restoreLevelDat(@Param("id") id: string) {
     return this.worldRecovery.restoreLevelDat(id);
+  }
+
+  // ---- Palworld settings (PalWorldSettings.ini editor) -------------------
+
+  @Get(":id/palworld-settings")
+  @RequirePermissions("settings.read")
+  palworldSettingsGet(@Param("id") id: string) {
+    return this.palworldSettings.get(id);
+  }
+
+  // The body carries curated fields (incl. ServerPassword). @Audit is safe here:
+  // the interceptor redacts any key whose name matches /pass|secret|.../ at every
+  // depth, so `fields.ServerPassword` is logged as [redacted].
+  @Patch(":id/palworld-settings")
+  @RequirePermissions("settings.update")
+  @Audit({
+    action: "server.palworld-settings.update",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  palworldSettingsUpdate(
+    @Param("id") id: string,
+    @Body() dto: { fields?: Record<string, unknown> },
+  ) {
+    return this.palworldSettings.update(id, dto?.fields);
   }
 
   // ---- modpacks (Modrinth) ----------------------------------------------
