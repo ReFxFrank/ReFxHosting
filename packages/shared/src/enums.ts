@@ -54,8 +54,22 @@ export const ServerState = {
   REINSTALLING: 'REINSTALLING',
   SWITCHING_GAME: 'SWITCHING_GAME',
   TRANSFERRING: 'TRANSFERRING',
+  /** Reserved at order time; provisioning starts when the invoice settles. */
+  PENDING_PAYMENT: 'PENDING_PAYMENT',
 } as const;
 export type ServerState = (typeof ServerState)[keyof typeof ServerState];
+
+/** Lifecycle of an admin-initiated server transfer between nodes. */
+export const TransferState = {
+  PENDING: 'PENDING',
+  SNAPSHOTTING: 'SNAPSHOTTING',
+  PROVISIONING: 'PROVISIONING',
+  RESTORING: 'RESTORING',
+  FINALIZING: 'FINALIZING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED',
+} as const;
+export type TransferState = (typeof TransferState)[keyof typeof TransferState];
 
 export const VariableType = {
   STRING: 'STRING',
@@ -74,6 +88,13 @@ export const BackupState = {
 } as const;
 export type BackupState = (typeof BackupState)[keyof typeof BackupState];
 
+/** Where a backup archive lives: node-local disk or offsite S3/R2 ("Express"). */
+export const BackupStorage = {
+  LOCAL: 'LOCAL',
+  S3: 'S3',
+} as const;
+export type BackupStorage = (typeof BackupStorage)[keyof typeof BackupStorage];
+
 export const DbEngine = {
   MYSQL: 'MYSQL',
   MARIADB: 'MARIADB',
@@ -81,17 +102,57 @@ export const DbEngine = {
 } as const;
 export type DbEngine = (typeof DbEngine)[keyof typeof DbEngine];
 
+/** What a schedule task does (multi-step schedules chain these). */
+export const ScheduleAction = {
+  COMMAND: 'COMMAND',
+  POWER: 'POWER',
+  BACKUP: 'BACKUP',
+} as const;
+export type ScheduleAction =
+  (typeof ScheduleAction)[keyof typeof ScheduleAction];
+
 /**
- * Distinguishes a voice (e.g. TeamSpeak 3) server from a game server. Set once
- * at server creation and immutable — the authoritative game-vs-voice
- * discriminator (replaces the old template-slug heuristic). Distinct from
- * ProductType.VOICE_SERVER, which classifies a billing *product*, not a server.
+ * What kind of workload a server hosts (game, voice e.g. TeamSpeak 3, web app,
+ * or Discord bot). Set once at server creation and immutable — the
+ * authoritative discriminator (replaces the old template-slug heuristic).
+ * Distinct from ProductType, which classifies a billing *product*, not a server.
  */
 export const ServerType = {
   GAME_SERVER: 'GAME_SERVER',
   VOICE_SERVER: 'VOICE_SERVER',
+  WEB_APP: 'WEB_APP',
+  BOT_APP: 'BOT_APP',
 } as const;
 export type ServerType = (typeof ServerType)[keyof typeof ServerType];
+
+/** What a GameTemplate provisions (game server, web app container, or bot). */
+export const TemplateKind = {
+  GAME: 'GAME',
+  WEB: 'WEB',
+  BOT: 'BOT',
+} as const;
+export type TemplateKind = (typeof TemplateKind)[keyof typeof TemplateKind];
+
+/** TLS issuance state for a WEB_APP custom domain. */
+export const SslStatus = {
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE',
+  FAILED: 'FAILED',
+} as const;
+export type SslStatus = (typeof SslStatus)[keyof typeof SslStatus];
+
+/** A Steam Workshop entry: a single item or a whole collection. */
+export const WorkshopKind = {
+  ITEM: 'ITEM',
+  COLLECTION: 'COLLECTION',
+} as const;
+export type WorkshopKind = (typeof WorkshopKind)[keyof typeof WorkshopKind];
+
+export const SubUserState = {
+  ACTIVE: 'ACTIVE',
+  REVOKED: 'REVOKED',
+} as const;
+export type SubUserState = (typeof SubUserState)[keyof typeof SubUserState];
 
 export const ProductType = {
   GAME_SERVER: 'GAME_SERVER',
@@ -99,6 +160,8 @@ export const ProductType = {
   VPS: 'VPS',
   DEDICATED: 'DEDICATED',
   ADDON: 'ADDON',
+  WEB_HOSTING: 'WEB_HOSTING',
+  BOT_HOSTING: 'BOT_HOSTING',
 } as const;
 export type ProductType = (typeof ProductType)[keyof typeof ProductType];
 
@@ -141,6 +204,31 @@ export const InvoiceState = {
 } as const;
 export type InvoiceState = (typeof InvoiceState)[keyof typeof InvoiceState];
 
+export const CouponKind = {
+  PERCENT: 'PERCENT',
+  FIXED: 'FIXED',
+} as const;
+export type CouponKind = (typeof CouponKind)[keyof typeof CouponKind];
+
+/** Why a store-credit ledger entry exists. */
+export const CreditReason = {
+  ADMIN_GRANT: 'ADMIN_GRANT',
+  REFUND: 'REFUND',
+  GIFT_CARD: 'GIFT_CARD',
+  INVOICE_PAYMENT: 'INVOICE_PAYMENT',
+  ADJUSTMENT: 'ADJUSTMENT',
+  REFERRAL: 'REFERRAL',
+} as const;
+export type CreditReason = (typeof CreditReason)[keyof typeof CreditReason];
+
+export const PaymentState = {
+  PENDING: 'PENDING',
+  SUCCEEDED: 'SUCCEEDED',
+  FAILED: 'FAILED',
+  REFUNDED: 'REFUNDED',
+} as const;
+export type PaymentState = (typeof PaymentState)[keyof typeof PaymentState];
+
 export const TicketState = {
   OPEN: 'OPEN',
   PENDING_CUSTOMER: 'PENDING_CUSTOMER',
@@ -176,6 +264,14 @@ export const BugStatus = {
   CLOSED: 'CLOSED',
 } as const;
 export type BugStatus = (typeof BugStatus)[keyof typeof BugStatus];
+
+/** Delivery channel for a user notification. */
+export const NotificationChannel = {
+  IN_APP: 'IN_APP',
+  EMAIL: 'EMAIL',
+} as const;
+export type NotificationChannel =
+  (typeof NotificationChannel)[keyof typeof NotificationChannel];
 
 export const AlertSeverity = {
   INFO: 'INFO',
@@ -216,5 +312,7 @@ export const ApiKeyScope = {
   READ: 'READ',
   WRITE: 'WRITE',
   ADMIN: 'ADMIN',
+  /** Isolated to the public status routes (e.g. the Helios bot) — denied everywhere else. */
+  STATUS_READ: 'STATUS_READ',
 } as const;
 export type ApiKeyScope = (typeof ApiKeyScope)[keyof typeof ApiKeyScope];
