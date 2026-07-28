@@ -23,6 +23,32 @@ export interface EggConfigEntry {
 }
 
 export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
+  "schedule1": {
+    "files": [
+      {
+        "path": "server_config.toml",
+        "label": "Server config",
+        "description": "Server name, password, [server].serverPort, [server].maxPlayers, auth and networking. The panel passes port/max-players on the command line, which overrides the matching keys here",
+        "format": "toml",
+        "createdBy": "first-boot"
+      },
+      {
+        "path": "UserData/permissions.toml",
+        "label": "Permissions",
+        "description": "Operator/admin lists for in-game and console commands",
+        "format": "toml",
+        "createdBy": "first-boot"
+      },
+      {
+        "path": "UserData/client_mod_policy.toml",
+        "label": "Client mod policy",
+        "description": "Which client-side mods joining players may (or must) have",
+        "format": "toml",
+        "createdBy": "first-boot"
+      }
+    ],
+    "note": "All three are generated on the server's first successful start. The panel supplies --server-port and --max-players on the command line, so those two win over server_config.toml; everything else here is authoritative. Restart to apply."
+  },
   "american-truck-simulator": {
     "files": [
       {
