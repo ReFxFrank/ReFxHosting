@@ -26,9 +26,9 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
   "schedule1": {
     "files": [
       {
-        "path": "server_config.toml",
+        "path": "UserData/server_config.toml",
         "label": "Server config",
-        "description": "Server name, password, [server].serverPort, [server].maxPlayers, auth and networking. The panel passes port/max-players on the command line, which overrides the matching keys here",
+        "description": "Server name, password, [server].serverPort, [server].maxPlayers, auth and networking. serverPort here is authoritative for BOTH the gameplay UDP port and the status TCP port — the panel keeps it aligned to your allocation on every start",
         "format": "toml",
         "createdBy": "first-boot"
       },
@@ -47,7 +47,7 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
         "createdBy": "first-boot"
       }
     ],
-    "note": "All three are generated on the server's first successful start. The panel supplies --server-port and --max-players on the command line, so those two win over server_config.toml; everything else here is authoritative. Restart to apply."
+    "note": "All three are generated on the server's first successful start. This is the only config the server reads (a copy at the install root is ignored). The panel re-asserts serverPort on every boot so it matches your allocated port; --max-players is passed on the command line and wins over the file. Restart to apply."
   },
   "american-truck-simulator": {
     "files": [
