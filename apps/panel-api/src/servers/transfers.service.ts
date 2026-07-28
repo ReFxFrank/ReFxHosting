@@ -28,7 +28,7 @@ import {
   PORT_RANGE_END,
   buildAllocationAlias,
 } from './allocation-port.util';
-import { buildInstallSpec, steamLogin } from '../queues/processors/install-spec.util';
+import { buildInstallSpec, steamLogin, templateWantsGameSteam } from '../queues/processors/install-spec.util';
 
 /** Transfer states from which a new transfer must NOT be allowed to start. */
 const ACTIVE_TRANSFER_STATES: TransferState[] = [
@@ -532,7 +532,7 @@ export class TransfersService {
     const sftpPassword = server.sftpPasswordEnc
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
-    const ws = server.template?.supportsWorkshop ?? false;
+    const ws = server.template ? templateWantsGameSteam(server.template) : false;
     const steamCfg = ws ? await this.settings.steamConfig() : undefined;
     const gameSteam = steamCfg ? steamLogin(steamCfg) : undefined;
     if (gameSteam && steamCfg?.guardCode) gameSteam.guardCode = steamCfg.guardCode;

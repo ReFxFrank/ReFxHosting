@@ -1,4 +1,4 @@
-import { buildInstallSpec } from './install-spec.util';
+import { buildInstallSpec, templateWantsGameSteam } from './install-spec.util';
 
 /**
  * buildInstallSpec env derivation — specifically that SERVER_MEMORY (-Xmx) is
@@ -72,5 +72,76 @@ describe('buildInstallSpec SERVER_MEMORY', () => {
     (server as { template: { variables: unknown[] } }).template.variables = [];
     const spec = buildInstallSpec(server);
     expect(spec.environment.SERVER_MEMORY).toBeUndefined();
+  });
+});
+
+describe('templateWantsGameSteam + STEAM_GAME_* injection', () => {
+  const gameSteam = { username: 'host-acct', password: 'pw', guardCode: 'ABC12' };
+  const server = (template: Record<string, unknown>) =>
+    ({
+      id: 'srv-1',
+      shortId: 'aabbccdd',
+      deployMethod: 'DOCKER',
+      startupCommand: 'bash refx-run.sh',
+      dockerImage: 'img',
+      environment: {},
+      cpuCores: 2,
+      memoryMb: 4096,
+      swapMb: 0,
+      diskMb: 10240,
+      ioWeight: null,
+      allocations: [],
+      variables: [],
+      template: {
+        startupCommand: 'bash refx-run.sh',
+        startupDetect: '',
+        stopCommand: '^C',
+        dockerImages: { Default: 'img' },
+        installScript: null,
+        configFiles: null,
+        supportsWorkshop: false,
+        workshopAppId: null,
+        variables: [],
+        ...template,
+      },
+    }) as never;
+
+  it('workshop templates get creds + WORKSHOP_APP_ID (unchanged behavior)', () => {
+    const spec = buildInstallSpec(
+      server({ supportsWorkshop: true, workshopAppId: 107410 }),
+      { gameSteam },
+    );
+    expect(spec.environment.STEAM_GAME_USERNAME).toBe('host-acct');
+    expect(spec.environment.STEAM_GAME_PASSWORD).toBe('pw');
+    expect(spec.environment.STEAM_GAME_GUARD).toBe('ABC12');
+    expect(spec.environment.WORKSHOP_APP_ID).toBe('107410');
+  });
+
+  it('a paid non-Workshop egg that consumes the creds gets them (no WORKSHOP_APP_ID)', () => {
+    const spec = buildInstallSpec(
+      server({
+        installScript: {
+          container: 'img',
+          entrypoint: 'bash',
+          script: 'GLOGIN=(+login "$STEAM_GAME_USERNAME" "$STEAM_GAME_PASSWORD")',
+        },
+      }),
+      { gameSteam },
+    );
+    expect(spec.environment.STEAM_GAME_USERNAME).toBe('host-acct');
+    expect(spec.environment.STEAM_GAME_PASSWORD).toBe('pw');
+    expect(spec.environment.WORKSHOP_APP_ID).toBeUndefined();
+    expect(templateWantsGameSteam({ supportsWorkshop: false, installScript: { script: 'STEAM_GAME_USERNAME' } })).toBe(true);
+  });
+
+  it('an egg that neither supports workshop nor consumes creds never receives them', () => {
+    const spec = buildInstallSpec(
+      server({ installScript: { script: 'steamcmd +login anonymous +app_update 1 +quit' } }),
+      { gameSteam },
+    );
+    expect(spec.environment.STEAM_GAME_USERNAME).toBeUndefined();
+    expect(spec.environment.STEAM_GAME_PASSWORD).toBeUndefined();
+    expect(spec.environment.STEAM_GAME_GUARD).toBeUndefined();
+    expect(templateWantsGameSteam({ supportsWorkshop: false, installScript: null })).toBe(false);
   });
 });

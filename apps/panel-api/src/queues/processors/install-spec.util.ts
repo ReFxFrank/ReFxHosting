@@ -52,6 +52,25 @@ export function steamLogin(cfg: {
 }
 
 /**
+ * Whether this template's install needs the host game-download Steam account
+ * (STEAM_GAME_USERNAME/PASSWORD/GUARD). True for Workshop-enabled games AND for
+ * any egg whose install script actually consumes the credentials — paid games
+ * with no Workshop (e.g. Schedule I) opt in simply by referencing
+ * STEAM_GAME_USERNAME in their install script, without growing a Workshop tab
+ * (the web gates that tab, and WorkshopService gates its routes, on
+ * `supportsWorkshop` alone).
+ */
+export function templateWantsGameSteam(template: {
+  supportsWorkshop: boolean;
+  installScript: unknown;
+}): boolean {
+  if (template.supportsWorkshop) return true;
+  return JSON.stringify(template.installScript ?? '').includes(
+    'STEAM_GAME_USERNAME',
+  );
+}
+
+/**
  * Egg templates set the install container under `container`, but the node-agent's
  * InstallScript reads `image`. Map it through so an install can run in a DIFFERENT
  * image than the game runtime (e.g. a steamcmd downloader image to fetch the game,
@@ -110,13 +129,15 @@ export function buildInstallSpec(
     env[k] = v;
   }
 
-  // Steam Workshop appid + host game-download login for Workshop-enabled games.
-  // The egg's install script uses these for both +app_update and Workshop
-  // +workshop_download_item (one account, the host's — never a customer's).
-  if (template.supportsWorkshop) {
-    if (template.workshopAppId != null) {
-      env.WORKSHOP_APP_ID = String(template.workshopAppId);
-    }
+  // Steam Workshop appid for Workshop-enabled games.
+  if (template.supportsWorkshop && template.workshopAppId != null) {
+    env.WORKSHOP_APP_ID = String(template.workshopAppId);
+  }
+  // Host game-download login: Workshop-enabled games AND paid non-Workshop
+  // games whose install script consumes it (templateWantsGameSteam). The egg's
+  // install script uses these for +app_update and +workshop_download_item (one
+  // account, the host's — never a customer's).
+  if (templateWantsGameSteam(template)) {
     if (opts.gameSteam?.username && opts.gameSteam.password) {
       env.STEAM_GAME_USERNAME = opts.gameSteam.username;
       env.STEAM_GAME_PASSWORD = opts.gameSteam.password;

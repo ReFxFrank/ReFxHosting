@@ -6,7 +6,7 @@ import { NodeAgentClient } from '../../agent/agent.client';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { SettingsService } from '../../platform/settings.service';
 import { JOB, QUEUE, ReinstallJob } from '../queue.constants';
-import { buildInstallSpec, steamLogin } from './install-spec.util';
+import { buildInstallSpec, steamLogin, templateWantsGameSteam } from './install-spec.util';
 
 /**
  * Handles both plain reinstalls and game switches (the latter carry a
@@ -54,7 +54,8 @@ export class ReinstallProcessor extends WorkerHost {
       : undefined;
     // The HOST game-download account (admin → Settings → Steam) downloads both
     // the game and any Workshop mods — customers never supply Steam credentials.
-    const ws = server.template.supportsWorkshop;
+    // Also feeds paid non-Workshop eggs that consume STEAM_GAME_* creds.
+    const ws = templateWantsGameSteam(server.template);
     const steamCfg = ws ? await this.settings.steamConfig() : undefined;
     const gameSteam = steamCfg ? steamLogin(steamCfg) : undefined;
     if (gameSteam && steamCfg?.guardCode) gameSteam.guardCode = steamCfg.guardCode;

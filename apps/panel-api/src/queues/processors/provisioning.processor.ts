@@ -6,7 +6,7 @@ import { NodeAgentClient, InstallSpec } from '../../agent/agent.client';
 import { CryptoService } from '../../common/crypto/crypto.service';
 import { SettingsService } from '../../platform/settings.service';
 import { JOB, ProvisionJob, ReconfigureJob, QUEUE } from '../queue.constants';
-import { buildInstallSpec, steamLogin } from './install-spec.util';
+import { buildInstallSpec, steamLogin, templateWantsGameSteam } from './install-spec.util';
 
 /**
  * Provisions a freshly-created server: instructs the node agent to pull the
@@ -53,7 +53,9 @@ export class ProvisioningProcessor extends WorkerHost {
       ? this.crypto.decrypt(server.sftpPasswordEnc)
       : undefined;
     // The HOST game-download account downloads the game AND any Workshop mods.
-    const ws = server.template.supportsWorkshop;
+    // Needed by Workshop games and by paid non-Workshop games whose egg consumes
+    // the STEAM_GAME_* credentials (templateWantsGameSteam).
+    const ws = templateWantsGameSteam(server.template);
     const steamCfg = ws ? await this.settings.steamConfig() : undefined;
     const gameSteam = steamCfg ? steamLogin(steamCfg) : undefined;
     if (gameSteam && steamCfg?.guardCode) gameSteam.guardCode = steamCfg.guardCode;
