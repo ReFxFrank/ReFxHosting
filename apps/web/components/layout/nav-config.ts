@@ -290,6 +290,7 @@ export const serverTabs = (id: string): ServerTab[] => [
     href: `/servers/${id}/switch-game`,
     perm: "control.switch-game",
   },
+  { label: "Config", href: `/servers/${id}/config`, perm: "files.read" },
   { label: "Upgrade", href: `/servers/${id}/upgrade`, perm: "control.resize" },
   { label: "Settings", href: `/servers/${id}/settings`, perm: "settings.read" },
 ];

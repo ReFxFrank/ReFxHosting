@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { serverTabs } from "@/components/layout/nav-config";
+import { configFilesFor } from "@/lib/config-files";
 
 export default function ServerLayout({ children }: { children: React.ReactNode }) {
   const params = useParams<{ id: string }>();
@@ -50,9 +51,12 @@ export default function ServerLayout({ children }: { children: React.ReactNode }
   const canSeeTab = (perm?: string) =>
     !perm || !viewerPermissions || viewerPermissions.includes(perm);
 
-  const WEB_TABS = ["/console", "/files", "/domains", "/backups", "/settings", "/upgrade"];
+  const WEB_TABS = ["/console", "/files", "/config", "/domains", "/backups", "/settings", "/upgrade"];
   const filtered = serverTabs(id).filter((t) => {
     if (!canSeeTab(t.perm)) return false;
+    // Config: only for games with a catalogued config set (also gated for web
+    // servers via WEB_TABS membership below).
+    if (t.href.endsWith("/config") && configFilesFor(slug).length === 0) return false;
     if (t.href.endsWith("/domains")) return isWeb;
     if (isWeb) return WEB_TABS.some((s) => t.href.endsWith(s));
     if (t.href.endsWith("/minecraft")) return isMinecraft;
