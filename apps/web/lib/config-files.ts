@@ -262,9 +262,9 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
       {
         "path": "user_jvm_args.txt",
         "label": "Forge/NeoForge JVM args",
-        "description": "Extra JVM flags for Forge/NeoForge servers (heap is supplied by the panel)",
+        "description": "Extra JVM flags — only present on Forge/NeoForge servers (heap is supplied by the panel)",
         "format": "txt",
-        "createdBy": "install"
+        "createdBy": "unknown"
       }
     ],
     "note": "Every (re)install re-runs write_props(): the server-port key in server.properties is rewritten from SERVER_PORT (other keys untouched), and eula.txt is overwritten to eula=true while EULA is true."
@@ -300,7 +300,7 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
       {
         "path": "Pal/Binaries/Win64/ue4ss/UE4SS-settings.ini",
         "label": "UE4SS mod-loader settings",
-        "description": "RE-UE4SS loader options (GraphicsAPI, caches); mods go in the sibling Mods/ folder",
+        "description": "UE4SS loader options (GraphicsAPI, caches); mods go in the sibling Mods/ folder. A generic-UE4SS fallback install puts these one level up in Win64/ instead",
         "format": "ini",
         "createdBy": "install"
       }

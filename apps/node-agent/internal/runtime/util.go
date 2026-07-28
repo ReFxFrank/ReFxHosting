@@ -149,6 +149,33 @@ func envSlice(env map[string]string) []string {
 	return out
 }
 
+// installOnlyEnvNames are spec env vars the INSTALL step needs but the running
+// game must never see. STEAM_GAME_* is the host's fleet-wide game-download Steam
+// account (Admin → Settings → Steam): the install script logs in with it to run
+// `steamcmd +app_update`, but no game consumes it at runtime. Leaving it in the
+// runtime environment let a customer read the operator's plaintext Steam
+// password out of their OWN server — the launcher script and mod directories
+// live in the customer-writable data dir (edit refx-run.sh to `env`, or load a
+// mod that reads getenv), which is a privilege boundary the panel can't police.
+var installOnlyEnvNames = map[string]bool{
+	"STEAM_GAME_USERNAME": true,
+	"STEAM_GAME_PASSWORD": true,
+	"STEAM_GAME_GUARD":    true,
+}
+
+// runtimeEnvSlice is envSlice minus the install-only secrets — use it for every
+// RUNNING game process/container. The install path keeps using envSlice.
+func runtimeEnvSlice(env map[string]string) []string {
+	out := make([]string, 0, len(env))
+	for k, v := range env {
+		if installOnlyEnvNames[strings.ToUpper(k)] {
+			continue
+		}
+		out = append(out, k+"="+v)
+	}
+	return out
+}
+
 // secretEnvNames are host env vars that must never reach a hosted game/install
 // process. Combined with the REFX_ prefix rule below, this drops the agent's own
 // configuration and any operator secret so a hosted process — which on native
@@ -200,6 +227,16 @@ func chownTreeStrict(dir string, uid, gid int) error {
 // Deliberately not `append(os.Environ(), …)` — that inherited every secret the
 // agent held (CWE-668). Spec.Env overrides any surviving base key.
 func processEnv(specEnv map[string]string) []string {
+	return processEnvFiltered(specEnv, false)
+}
+
+// processRuntimeEnv is processEnv for a RUNNING game: additionally drops the
+// install-only STEAM_GAME_* host credentials (see installOnlyEnvNames).
+func processRuntimeEnv(specEnv map[string]string) []string {
+	return processEnvFiltered(specEnv, true)
+}
+
+func processEnvFiltered(specEnv map[string]string, runtime bool) []string {
 	out := make([]string, 0, len(specEnv)+32)
 	for _, kv := range os.Environ() {
 		eq := strings.IndexByte(kv, '=')
@@ -209,8 +246,15 @@ func processEnv(specEnv map[string]string) []string {
 		if isSecretEnvKey(kv[:eq]) {
 			continue
 		}
+		if runtime && installOnlyEnvNames[strings.ToUpper(kv[:eq])] {
+			continue
+		}
 		out = append(out, kv)
 	}
-	out = append(out, envSlice(specEnv)...)
+	if runtime {
+		out = append(out, runtimeEnvSlice(specEnv)...)
+	} else {
+		out = append(out, envSlice(specEnv)...)
+	}
 	return out
 }

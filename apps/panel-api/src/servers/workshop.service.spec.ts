@@ -87,6 +87,18 @@ describe('WorkshopService.status', () => {
     expect(by['222']).toMatchObject({ downloaded: false, applied: true });
   });
 
+  it('never shows a COLLECTION row as not-downloaded on a steamcmd game', async () => {
+    prisma.workshopMod.findMany.mockResolvedValue([
+      mod('m1', '111'),
+      mod('c1', '999', { kind: 'COLLECTION' }),
+    ]);
+    const st = await svc.status('srv-1');
+    const by = Object.fromEntries(st.items.map((i) => [i.workshopId, i]));
+    // The collection id itself is never a download target (its members are).
+    expect(by['999'].downloaded).toBeNull();
+    expect(by['111'].downloaded).toBe(true);
+  });
+
   it('reports runtime-collection games as RUNTIME with unknown disk state', async () => {
     prisma.server.findFirst.mockResolvedValue({
       id: 'srv-1',

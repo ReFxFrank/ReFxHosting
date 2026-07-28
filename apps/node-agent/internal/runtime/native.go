@@ -238,7 +238,9 @@ func (n *NativeRuntime) Start(ctx context.Context, s *server.Server) error {
 	cmd.Dir = s.DataDir
 	// Scrubbed env — a hosted game process (which on native nodes runs as the
 	// agent's OS user) must not inherit the agent's secrets (see processEnv).
-	cmd.Env = processEnv(s.Spec.Env)
+	// Runtime env: strips the install-only STEAM_GAME_* host credentials so the
+	// game (and any customer-supplied mod) can never read the operator account.
+	cmd.Env = processRuntimeEnv(s.Spec.Env)
 	osabstraction.SetProcessGroup(cmd) // own process group for clean signalling
 
 	// Optional per-server privilege drop: run under a dedicated unprivileged

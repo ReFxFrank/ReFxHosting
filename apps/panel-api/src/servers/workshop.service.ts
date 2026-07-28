@@ -116,7 +116,12 @@ export class WorkshopService {
       items: mods.map((m) => ({
         id: m.id,
         workshopId: m.workshopId,
-        downloaded: onDisk.has(m.workshopId),
+        // A COLLECTION row on a steamcmd game is a container: `add` expands it
+        // into member ITEM rows and steamcmd only ever downloads those, so the
+        // collection id itself never appears on disk. Reporting `false` would
+        // be a permanent, unfixable "Not downloaded" badge — report unknown.
+        downloaded:
+          m.kind === WorkshopKind.COLLECTION ? null : onDisk.has(m.workshopId),
         applied: applied.has(m.workshopId),
       })),
     };

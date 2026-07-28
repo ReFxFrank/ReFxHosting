@@ -536,7 +536,10 @@ func (d *DockerRuntime) Start(ctx context.Context, s *server.Server) error {
 	cfg := &container.Config{
 		Image:        s.Spec.Image,
 		Cmd:          splitArgs(renderTemplate(s.Spec.StartupCommand, s.Spec.Env)),
-		Env:          append(envSlice(s.Spec.Env), "HOME=/home/container"),
+		// runtimeEnvSlice (not envSlice): strips the install-only STEAM_GAME_*
+		// host credentials so the running game — whose launcher and mod dirs are
+		// customer-writable — can never read the operator's Steam account.
+		Env:          append(runtimeEnvSlice(s.Spec.Env), "HOME=/home/container"),
 		ExposedPorts: ports,
 		WorkingDir:   "/home/container",
 		// Always run the game as a non-root user — never as root, on any OS. On a

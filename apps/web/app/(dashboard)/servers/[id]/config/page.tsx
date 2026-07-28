@@ -94,6 +94,7 @@ export default function ConfigPage() {
               serverId={id}
               file={active}
               canWrite={canWrite}
+              running={server.state === "RUNNING"}
             />
           )}
         </>
@@ -106,10 +107,12 @@ function ConfigFileEditor({
   serverId,
   file,
   canWrite,
+  running,
 }: {
   serverId: string;
   file: ConfigFileMeta;
   canWrite: boolean;
+  running: boolean;
 }) {
   const qc = useQueryClient();
   const [draft, setDraft] = useState<string | null>(null);
@@ -124,15 +127,21 @@ function ConfigFileEditor({
   const save = useMutation({
     mutationFn: (content: string) =>
       api.servers.files.write(serverId, file.path, content),
-    onSuccess: () => {
+    onSuccess: (_res, saved) => {
       toast.success(`${file.label} saved — restart the server to apply.`);
-      setDraft(null);
+      // Only clear the draft if the user hasn't typed since this save started,
+      // otherwise in-flight keystrokes would be silently discarded.
+      setDraft((d) => (d === saved ? null : d));
       qc.invalidateQueries({ queryKey: ["config-file", serverId, file.path] });
     },
     onError: (e) =>
       toast.error(e instanceof ApiError ? e.message : "Failed to save"),
   });
 
+  // A 404 means the file isn't on disk yet; anything else is a real read error
+  // (agent offline, permission) and must not be mislabelled as "doesn't exist".
+  const notFound =
+    !!error && (!(error instanceof ApiError) || error.status === 404);
   const content = draft ?? data ?? "";
   const dirty = draft !== null && draft !== (data ?? "");
 
@@ -154,16 +163,47 @@ function ConfigFileEditor({
       <CardContent className="space-y-3">
         {isLoading ? (
           <Skeleton className="h-72 w-full" />
-        ) : error ? (
+        ) : error && !notFound ? (
+          <div className="space-y-3 rounded-lg border border-warning/40 bg-warning/5 p-4 text-sm text-muted-foreground">
+            <p>
+              Couldn&apos;t load this file:{" "}
+              {error instanceof ApiError ? error.message : "read failed"}. The
+              node may be offline.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => refetch()}>
+              <RotateCcw className="size-4" /> Retry
+            </Button>
+          </div>
+        ) : error && notFound && !canWrite ? (
           <div className="rounded-lg border border-warning/40 bg-warning/5 p-4 text-sm text-muted-foreground">
             This file doesn&apos;t exist yet
             {file.createdBy === "install"
-              ? " — reinstall/Update the server to (re)create it"
-              : " — it's created the first time the server starts"}
-            . ({error instanceof ApiError ? error.message : "not found"})
+              ? " — reinstall/Update the server to create it"
+              : file.createdBy === "first-boot"
+                ? " — it's created the first time the server starts"
+                : " — this game doesn't create it automatically"}
+            .
           </div>
         ) : (
           <>
+            {notFound && (
+              <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
+                This file doesn&apos;t exist yet
+                {file.createdBy === "install"
+                  ? " (a reinstall/Update creates it)"
+                  : file.createdBy === "first-boot"
+                    ? " (the first server start creates it)"
+                    : " — this game doesn't create it automatically"}
+                . You can write it here: enter its contents and Save.
+              </div>
+            )}
+            {running && (
+              <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
+                The server is <strong>running</strong>. Most games read these
+                files only at boot, and some rewrite them on shutdown — stop the
+                server first if your change doesn&apos;t stick.
+              </div>
+            )}
             <textarea
               value={content}
               onChange={(e) => setDraft(e.target.value)}
