@@ -1470,7 +1470,7 @@ async function seedTemplates(
     // storefront — they're spikes, not first-class products. Kept unpublished on
     // create; an admin's publish toggle then persists across reseeds (createOnly
     // path leaves storefront state alone for existing rows).
-    const EXPERIMENTAL = new Set(["palworld-windows"]);
+    const EXPERIMENTAL = new Set(["palworld-windows", "schedule1"]);
     // Per-game art (apps/web/public/games/<slug>.svg); the web GameImage falls
     // back to a default placeholder if a file is missing.
     const preset = `/games/${tpl.slug}.svg`;
