@@ -60,6 +60,7 @@ import type {
   StorefrontGameDetail,
   TeamMember,
   WorkshopMod,
+  WorkshopStatus,
   SteamConfigMasked,
   VoiceInfo,
   VoiceStatus,
@@ -763,6 +764,9 @@ export const api = {
 
     // Steam Workshop
     workshop: (id: string) => getList<WorkshopMod>(`/servers/${id}/workshop`),
+    // Per-item download/applied status, disk-checked on the node via the agent.
+    workshopStatus: (id: string) =>
+      http.get<WorkshopStatus>(`/servers/${id}/workshop/status`),
     workshopAdd: (id: string, input: string) =>
       http.post<{ added: number }>(`/servers/${id}/workshop`, { input }),
     workshopToggle: (id: string, modId: string, enabled: boolean) =>

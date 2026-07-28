@@ -565,6 +565,13 @@ export class ServersController {
     return this.workshop.list(id);
   }
 
+  /** Per-item download/applied status (disk-checked via the agent). */
+  @Get(":id/workshop/status")
+  @RequirePermissions("files.read")
+  workshopStatus(@Param("id") id: string) {
+    return this.workshop.status(id);
+  }
+
   @Post(":id/workshop")
   @RequirePermissions("files.write")
   @Audit({

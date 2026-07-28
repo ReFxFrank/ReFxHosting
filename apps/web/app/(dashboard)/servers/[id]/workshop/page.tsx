@@ -12,6 +12,8 @@ import {
   RefreshCw,
   ExternalLink,
   Layers,
+  CheckCircle2,
+  CloudDownload,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { EmptyState } from "@/components/shared";
@@ -34,7 +36,18 @@ export default function WorkshopPage() {
     queryFn: () => api.servers.workshop(id),
   });
   const mods = data ?? [];
-  const invalidate = () => qc.invalidateQueries({ queryKey: ["server", id, "workshop"] });
+  // Disk-checked download state; refreshed while an apply/install is running.
+  const { data: status } = useQuery({
+    queryKey: ["server", id, "workshop-status"],
+    queryFn: () => api.servers.workshopStatus(id),
+    refetchInterval: 20_000,
+    retry: false,
+  });
+  const statusById = new Map((status?.items ?? []).map((s) => [s.id, s]));
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ["server", id, "workshop"] });
+    qc.invalidateQueries({ queryKey: ["server", id, "workshop-status"] });
+  };
 
   const add = useMutation({
     mutationFn: () => api.servers.workshopAdd(id, input.trim()),
@@ -164,6 +177,30 @@ export default function WorkshopPage() {
                           <Layers className="size-3" /> Collection
                         </Badge>
                       )}
+                      {(() => {
+                        const st = statusById.get(m.id);
+                        if (!st || st.downloaded === null) return null; // runtime-download game
+                        if (st.downloaded)
+                          return (
+                            <Badge variant="success" className="gap-1 text-[10px]">
+                              <CheckCircle2 className="size-3" /> Downloaded
+                            </Badge>
+                          );
+                        return (
+                          <Badge
+                            variant={m.enabled ? "secondary" : "muted"}
+                            className="gap-1 text-[10px]"
+                            title={
+                              m.enabled
+                                ? "Not on the node yet — Apply & reinstall downloads it (large mods resume across runs)."
+                                : "Enable it and Apply to download."
+                            }
+                          >
+                            <CloudDownload className="size-3" />
+                            {m.enabled ? "Not downloaded — apply to fetch" : "Not downloaded"}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                     <a
                       href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${m.workshopId}`}

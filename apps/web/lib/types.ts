@@ -999,6 +999,24 @@ export interface PalworldModsView {
   mods: PalworldMod[];
 }
 
+// ---- Steam Workshop download status ---------------------------------------
+
+export interface WorkshopItemStatus {
+  id: string;
+  workshopId: string;
+  /** On the node's disk (null for runtime-download games like GMod). */
+  downloaded: boolean | null;
+  /** In the applied WORKSHOP_ITEMS set (a reinstall picked it up). */
+  applied: boolean;
+}
+
+export interface WorkshopStatus {
+  /** STEAMCMD games download at (re)install; RUNTIME games at server boot. */
+  mode: "STEAMCMD" | "RUNTIME";
+  appId: number | null;
+  items: WorkshopItemStatus[];
+}
+
 // Billing
 export type BillingInterval =
   "WEEKLY" | "BIWEEKLY" | "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "ANNUAL";

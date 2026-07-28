@@ -7,8 +7,26 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { WorkshopKind } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { NodeAgentClient } from '../agent/agent.client';
 import { uuidv7 } from '../common/util/uuid';
 import { JOB, QUEUE, ReinstallJob } from '../queues/queue.constants';
+
+/** Per-item download state for the Workshop tab's status badges. */
+export interface WorkshopItemStatus {
+  id: string;
+  workshopId: string;
+  /** Item content exists on the node's disk (null for runtime-download games). */
+  downloaded: boolean | null;
+  /** Item is in the applied WORKSHOP_ITEMS set (i.e. a reinstall picked it up). */
+  applied: boolean;
+}
+
+export interface WorkshopStatus {
+  /** STEAMCMD games download at (re)install; RUNTIME games at server boot. */
+  mode: 'STEAMCMD' | 'RUNTIME';
+  appId: number | null;
+  items: WorkshopItemStatus[];
+}
 
 /**
  * Steam Workshop management for a server: add/remove/reorder Workshop items and
@@ -25,12 +43,13 @@ export class WorkshopService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(QUEUE.REINSTALL) private readonly reinstallQueue: Queue<ReinstallJob>,
+    private readonly agent: NodeAgentClient,
   ) {}
 
   private async loadServer(serverId: string) {
     const server = await this.prisma.server.findFirst({
       where: { id: serverId, deletedAt: null },
-      include: { template: true },
+      include: { template: true, node: true },
     });
     if (!server) throw new NotFoundException('Server not found');
     if (!server.template?.supportsWorkshop) {
@@ -46,6 +65,61 @@ export class WorkshopService {
       where: { serverId },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
+  }
+
+  /**
+   * Per-item download status for the Workshop tab: whether each item's content
+   * actually exists on the node's disk (steamcmd-download games) and whether it
+   * is in the applied WORKSHOP_ITEMS set. Runtime-collection games (e.g. GMod)
+   * fetch content at server boot, so disk state is reported as unknown (null).
+   * Read-only and best-effort: an unreachable agent reports nothing downloaded
+   * rather than failing the tab.
+   */
+  async status(serverId: string): Promise<WorkshopStatus> {
+    const server = await this.loadServer(serverId);
+    const mods = await this.list(serverId);
+
+    const appliedVar = await this.prisma.serverVariable.findUnique({
+      where: { serverId_envName: { serverId, envName: 'WORKSHOP_ITEMS' } },
+    });
+    const applied = new Set((appliedVar?.value ?? '').split(/\s+/).filter(Boolean));
+
+    if (WorkshopService.usesRuntimeCollection(server.template!)) {
+      return {
+        mode: 'RUNTIME',
+        appId: server.template!.workshopAppId ?? server.template!.steamAppId,
+        items: mods.map((m) => ({
+          id: m.id,
+          workshopId: m.workshopId,
+          downloaded: null,
+          applied: applied.has(m.workshopId) || m.kind === WorkshopKind.COLLECTION,
+        })),
+      };
+    }
+
+    const appId = server.template!.workshopAppId ?? server.template!.steamAppId;
+    let onDisk = new Set<string>();
+    try {
+      const entries = await this.agent.listFiles(
+        server.node,
+        server.id,
+        `steamapps/workshop/content/${appId}`,
+      );
+      onDisk = new Set(entries.filter((e) => e.isDir).map((e) => e.name));
+    } catch {
+      /* content dir absent (nothing downloaded yet) or node unreachable */
+    }
+
+    return {
+      mode: 'STEAMCMD',
+      appId,
+      items: mods.map((m) => ({
+        id: m.id,
+        workshopId: m.workshopId,
+        downloaded: onDisk.has(m.workshopId),
+        applied: applied.has(m.workshopId),
+      })),
+    };
   }
 
   /** Pull a numeric published-file id out of a raw id or a Steam Workshop URL. */
