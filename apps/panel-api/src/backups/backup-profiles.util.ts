@@ -91,6 +91,19 @@ const PALWORLD_WINDOWS_EXCLUDES = [
 ];
 
 /**
+ * BeamMP (`beammp`): the server binary + bundled liblua are re-downloaded by a
+ * reinstall; everything the customer cares about — ServerConfig.toml and the
+ * Resources/ mod folders (auto-distributed to joining players, often the bulk
+ * of the data dir) — is KEPT.
+ */
+const BEAMMP_EXCLUDES = [
+  ...GENERIC_EXCLUDES,
+  'BeamMP-Server', // server binary — re-downloaded on install
+  'libs', // bundled liblua5.3 runtime — re-created on install
+  'Server.log', // BeamMP's own log file
+];
+
+/**
  * Exclude-globs for an "essentials" backup of the given server. Minecraft is
  * detected the same way as elsewhere in the panel (template slug prefix or
  * the MINECRAFT_VERSION env the unified egg always sets); other games use a
@@ -107,6 +120,7 @@ export function essentialExcludes(
   if (isMinecraft) return [...MINECRAFT_EXCLUDES];
   if (slug === 'palworld') return [...PALWORLD_EXCLUDES];
   if (slug === 'palworld-windows') return [...PALWORLD_WINDOWS_EXCLUDES];
+  if (slug === 'beammp') return [...BEAMMP_EXCLUDES];
   return [...GENERIC_EXCLUDES];
 }
 

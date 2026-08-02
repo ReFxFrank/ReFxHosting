@@ -1,0 +1,138 @@
+{
+  "name": "BeamMP (BeamNG.drive)",
+  "slug": "beammp",
+  "author": "ops@refx.example",
+  "description": "Multiplayer for BeamNG.drive via the open-source BeamMP mod. Standalone lightweight server \u2014 physics run on players' machines, so it boots fast and runs lean.",
+  "category": "simulation",
+  "deployMethods": [
+    "DOCKER"
+  ],
+  "supportsLinux": true,
+  "supportsWindows": false,
+  "dockerImages": {
+    "Default": "ghcr.io/parkervcp/steamcmd:debian"
+  },
+  "steamAppId": null,
+  "startupCommand": "env LD_LIBRARY_PATH=./libs ./BeamMP-Server",
+  "startupDetect": "ALL SYSTEMS STARTED SUCCESSFULLY",
+  "stopCommand": "exit",
+  "installScript": {
+    "container": "ghcr.io/parkervcp/installers:debian",
+    "entrypoint": "bash",
+    "script": "#!/bin/bash\n# ReFx installer for BeamMP (the BeamNG.drive multiplayer server).\n# The server is a standalone binary from GitHub releases \u2014 no SteamCMD, no game\n# files, no Steam login. Idempotent: safe to re-run on an existing server; the\n# customer's ServerConfig.toml edits, Resources/ mods and logs are preserved.\nset -uo pipefail\ncd /mnt/server\n\n# ---- Resolve the release tag (default: latest stable) ----------------------\nVER=\"${BEAMMP_VERSION:-latest}\"\nif [ -z \"$VER\" ] || [ \"$VER\" = \"latest\" ]; then\n  TAG=\"$(curl -fsSL https://api.github.com/repos/BeamMP/BeamMP-Server/releases/latest \\\n    | grep -oE '\"tag_name\"[[:space:]]*:[[:space:]]*\"[^\"]+\"' | head -n1 | sed -E 's/.*\"(v[^\"]+)\".*/\\1/')\"\nelse\n  case \"$VER\" in v*) TAG=\"$VER\";; *) TAG=\"v$VER\";; esac\nfi\n[ -n \"${TAG:-}\" ] || { echo \"[refx] ERROR: could not resolve a BeamMP-Server release tag (GitHub API unreachable?)\"; exit 1; }\necho \"[refx] installing BeamMP-Server $TAG\"\n\n# ---- Download the Linux binary (runtime image is Debian 12/bookworm) -------\n# Assets are named BeamMP-Server.<distro>.<version>.x86_64; try newest-matching\n# first. HARD-FAIL if none downloads \u2014 never claim success on a missing binary.\nDL=\"\"\nfor ASSET in \"BeamMP-Server.debian.12.x86_64\" \"BeamMP-Server.debian.11.x86_64\" \"BeamMP-Server.ubuntu.22.04.x86_64\"; do\n  if curl -fsSL -o /tmp/BeamMP-Server \"https://github.com/BeamMP/BeamMP-Server/releases/download/$TAG/$ASSET\"; then\n    DL=\"$ASSET\"; break\n  fi\ndone\n[ -n \"$DL\" ] || { echo \"[refx] ERROR: no Linux BeamMP-Server asset found for $TAG\"; exit 1; }\nmv /tmp/BeamMP-Server ./BeamMP-Server && chmod +x ./BeamMP-Server\necho \"[refx] downloaded $DL\"\n\n# ---- Bundle liblua5.3 (BeamMP's Lua plugin runtime; not in the game image) --\n# The startup command runs with LD_LIBRARY_PATH=./libs so the runtime container\n# never needs root/apt. Install containers run as root, so fetch it here.\nmkdir -p libs\nif ! ls libs/liblua5.3.so* >/dev/null 2>&1; then\n  ( cd /tmp \\\n    && apt-get update -qq \\\n    && apt-get download -qq liblua5.3-0 \\\n    && dpkg-deb -x liblua5.3-0_*.deb /tmp/lua-extract ) \\\n  && cp -v /tmp/lua-extract/usr/lib/x86_64-linux-gnu/liblua5.3.so* libs/ 2>/dev/null || true\nfi\nls libs/liblua5.3.so* >/dev/null 2>&1 || { echo \"[refx] ERROR: liblua5.3 could not be bundled \u2014 BeamMP-Server cannot start without it\"; exit 1; }\n\n# Mods live here: Resources/Client is auto-distributed to joining players.\nmkdir -p Resources/Server Resources/Client\n\n# ---- ServerConfig.toml sync (panel-owned keys only) -------------------------\n# BeamMP reads its config at boot; the panel owns Name/Port/AuthKey/MaxPlayers/\n# MaxCars/Map/Private (Startup-tab variables). Everything else in the file\n# (Description, Tags, Debug, ResourceFolder, ...) belongs to the customer.\nCFG=ServerConfig.toml\nif [ ! -f \"$CFG\" ]; then\n  cat > \"$CFG\" <<'TOML'\n[General]\nName = \"A ReFx Hosting BeamMP Server\"\nPort = 30814\nAuthKey = \"\"\nPrivate = true\nMaxCars = 1\nMaxPlayers = 8\nMap = \"/levels/gridmap_v2/info.json\"\nDescription = \"BeamMP Default Description\"\nTags = \"Freeroam\"\nDebug = false\nResourceFolder = \"Resources\"\nLogChat = true\nTOML\n  echo \"[refx] seeded a fresh ServerConfig.toml\"\nfi\nesc()  { printf '%s' \"$1\" | tr -d '\"[:cntrl:]'; }\nnum()  { printf '%s' \"$1\" | tr -cd '0-9'; }\nbool() { case \"$(printf '%s' \"$1\" | tr '[:upper:]' '[:lower:]')\" in 1|true|yes|on) printf 'true';; *) printf 'false';; esac; }\nset_key() { # $1 = TOML key, $2 = raw TOML value (already quoted if a string)\n  if grep -Eq \"^[[:space:]]*$1[[:space:]]*=\" \"$CFG\"; then\n    sed -i -E \"s|^[[:space:]]*$1[[:space:]]*=.*|$1 = $2|\" \"$CFG\"\n  else\n    sed -i \"/^\\[General\\]/a $1 = $2\" \"$CFG\"\n  fi\n}\nset_key Name \"\\\"$(esc \"${SERVER_NAME:-A ReFx Hosting BeamMP Server}\")\\\"\"\nset_key Port \"$(num \"${SERVER_PORT:-30814}\")\"\nif [ -n \"${AUTH_KEY:-}\" ]; then\n  set_key AuthKey \"\\\"$(esc \"$AUTH_KEY\")\\\"\"\nelse\n  echo \"[refx] WARNING: no AuthKey set. Get a FREE key at https://keymaster.beammp.com (Discord login),\"\n  echo \"[refx] paste it into the Startup tab's Auth Key field, then run Update \u2014 players cannot join without it.\"\nfi\nmp=\"$(num \"${MAX_PLAYERS:-8}\")\";  [ -n \"$mp\" ] && set_key MaxPlayers \"$mp\"\nmc=\"$(num \"${MAX_CARS:-1}\")\";     [ -n \"$mc\" ] && set_key MaxCars \"$mc\"\nset_key Map \"\\\"$(esc \"${MAP:-/levels/gridmap_v2/info.json}\")\\\"\"\nset_key Private \"$(bool \"${PRIVATE:-true}\")\"\necho \"[refx] ServerConfig.toml synced (panel keys: Name, Port${AUTH_KEY:+, AuthKey}, MaxPlayers, MaxCars, Map, Private); all other settings are yours to edit.\"\necho 'BeamMP install complete.'\n"
+  },
+  "configFiles": [],
+  "recCpuCores": 2,
+  "recMemoryMb": 2048,
+  "recDiskMb": 5120,
+  "variables": [
+    {
+      "envName": "SERVER_NAME",
+      "displayName": "Server Name",
+      "description": "Name shown in the BeamMP server list. Panel-managed: written into ServerConfig.toml (Name) at install/update.",
+      "type": "STRING",
+      "defaultValue": "A ReFx Hosting BeamMP Server",
+      "rules": {
+        "required": true,
+        "maxLength": 128
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 0
+    },
+    {
+      "envName": "AUTH_KEY",
+      "displayName": "BeamMP Auth Key",
+      "description": "Your personal BeamMP AuthKey \u2014 get one FREE at keymaster.beammp.com (Discord login). One key per server; players cannot join without it. Written into ServerConfig.toml at install/update; leave blank to manage it in the file yourself.",
+      "type": "SECRET",
+      "defaultValue": "",
+      "rules": {
+        "required": false,
+        "maxLength": 128
+      },
+      "userEditable": true,
+      "userViewable": false,
+      "sortOrder": 1
+    },
+    {
+      "envName": "MAX_PLAYERS",
+      "displayName": "Max Players",
+      "description": "Maximum concurrent players. Panel-managed: written into ServerConfig.toml (MaxPlayers) at install/update.",
+      "type": "NUMBER",
+      "defaultValue": "8",
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 100
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 2
+    },
+    {
+      "envName": "MAX_CARS",
+      "displayName": "Max Cars per Player",
+      "description": "How many vehicles each player may spawn (MaxCars). Higher values increase client load.",
+      "type": "NUMBER",
+      "defaultValue": "1",
+      "rules": {
+        "required": true,
+        "min": 1,
+        "max": 20
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 3
+    },
+    {
+      "envName": "MAP",
+      "displayName": "Map",
+      "description": "Level path, e.g. /levels/gridmap_v2/info.json or /levels/west_coast_usa/info.json. Custom maps: upload the mod zip to Resources/Client and use its level path.",
+      "type": "STRING",
+      "defaultValue": "/levels/gridmap_v2/info.json",
+      "rules": {
+        "required": true,
+        "maxLength": 190
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 4
+    },
+    {
+      "envName": "PRIVATE",
+      "displayName": "Hide from Server List",
+      "description": "true keeps the server OFF the public BeamMP server list (join via Direct Connect); false lists it publicly.",
+      "type": "BOOLEAN",
+      "defaultValue": "true",
+      "rules": {},
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 5
+    },
+    {
+      "envName": "BEAMMP_VERSION",
+      "displayName": "Server Version",
+      "description": "BeamMP-Server release to install: latest, or a pin like v3.9.3 (applied at install/update).",
+      "type": "STRING",
+      "defaultValue": "latest",
+      "rules": {
+        "required": true,
+        "maxLength": 32
+      },
+      "userEditable": true,
+      "userViewable": true,
+      "sortOrder": 6
+    }
+  ],
+  "tags": [
+    "beamng",
+    "beamng.drive",
+    "beam.ng",
+    "driving",
+    "racing",
+    "cars",
+    "crash",
+    "freeroam"
+  ],
+  "longDescription": "Host BeamMP \u2014 synced multiplayer for BeamNG.drive. The server is a lightweight relay (soft-body physics run on each player's machine), so it's fast to boot and easy on resources. Auto-distributes your mods and custom maps to joining players from the Resources folder."
+}

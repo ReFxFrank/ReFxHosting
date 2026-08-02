@@ -1143,4 +1143,58 @@ Yes — the vanity subdomain above. It's the practical choice when you don't own
 
 Name it, then play it: [pick a game server](/games) and give it an address worth remembering.`,
   },
+  {
+    slug: "host-beammp-server",
+    title: "How to host a BeamMP server — AuthKey, mods and custom maps",
+    category: "Guides",
+    body: `BeamMP adds synced multiplayer to BeamNG.drive. The server itself is a lightweight relay — the soft-body physics run on each player's machine — so it boots in seconds and doesn't need big hardware. The one step everyone trips on is the **AuthKey**: without it, nobody can join. This guide covers that, plus mods and custom maps.
+
+## 1. Get your BeamMP AuthKey (required)
+
+Every BeamMP server needs its own key from the BeamMP project — it's free:
+
+1. Go to [keymaster.beammp.com](https://keymaster.beammp.com) and sign in with Discord.
+2. Create a key (one key runs one server at a time).
+3. In your ReFx panel, open **Settings → Startup** and paste it into **BeamMP Auth Key**.
+4. Run **Update** (Settings → Update game) — the key is written into the server's config, and the server restarts ready to accept players.
+
+> No key = the server runs, but players cannot join. If joining fails with an authentication error, this is almost always the missing/typo'd key.
+
+## 2. Pick your settings
+
+The Startup tab manages the common settings — they're applied on install/update:
+
+- **Server Name** — what players see in the server browser.
+- **Max Players** and **Max Cars per Player** — more cars per player means more load on every client.
+- **Map** — a level path like \`/levels/west_coast_usa/info.json\`. Defaults to Gridmap.
+- **Hide from Server List** — keep \`true\` for a friends-only server (join by IP), \`false\` to appear on the public BeamMP list.
+
+Everything else (Description, Tags, chat logging, …) lives in \`ServerConfig.toml\` — edit it in the **Files** tab. Restart to apply.
+
+## 3. Connect
+
+In BeamNG.drive with the BeamMP mod installed:
+
+1. Launch via the **BeamMP launcher** so the multiplayer mod loads.
+2. If your server is public, find it in the in-game server list by name.
+3. If it's private, use **Direct Connect** with your server address and port from the panel's overview page.
+
+## 4. Mods and custom maps
+
+BeamMP auto-distributes content to joining players — you do not need to send files around:
+
+- Drop mod \`.zip\` files into \`Resources/Client\` (Files tab or SFTP). Players download them automatically on join.
+- For a custom **map**, upload its zip to \`Resources/Client\`, then set **Map** to the level path inside the zip (e.g. \`/levels/mymap/info.json\`) and restart.
+- Server-side Lua plugins go in \`Resources/Server\`.
+
+Big mod packs make the first join slower — players download everything the first time. Keep the folder tidy.
+
+## 5. Good to know
+
+- **Backups** keep your \`ServerConfig.toml\` and all of \`Resources/\` — the server binary is re-downloaded on reinstall, so archives stay small.
+- **Version pinning**: the Startup tab's **Server Version** defaults to \`latest\`; pin e.g. \`v3.9.3\` if a new release misbehaves, then Update.
+- Players must own **BeamNG.drive** — BeamMP is free, the game is not.
+
+Ready to drive? [Order a BeamMP server](/games/beammp) and you'll be crashing with friends in minutes.`,
+  },
 ];

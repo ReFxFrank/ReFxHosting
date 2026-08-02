@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450" role="img" aria-label="BeamMP">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.8" y2="1"><stop offset="0" stop-color="#0c1830"/><stop offset="1" stop-color="#070b12"/></linearGradient>
+    <radialGradient id="acc" cx="0.5" cy="0.34" r="0.7"><stop offset="0" stop-color="#ff6a00" stop-opacity="0.38"/><stop offset="0.6" stop-color="#ff6a00" stop-opacity="0.06"/><stop offset="1" stop-color="#ff6a00" stop-opacity="0"/></radialGradient>
+    <linearGradient id="car" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff8a3d"/><stop offset="1" stop-color="#d84f10"/></linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#bg)"/>
+  <rect width="800" height="450" fill="url(#acc)"/>
+  <!-- road -->
+  <path d="M0 360 L800 320 L800 450 L0 450 Z" fill="#0e1524"/>
+  <path d="M60 392 L200 384 M300 378 L440 371 M540 365 L680 359" stroke="#3b4a66" stroke-width="8" stroke-linecap="round" stroke-dasharray="70 60"/>
+  <!-- car body (soft-body silhouette) -->
+  <g transform="translate(215 205)">
+    <path d="M20 96 C24 70 48 52 84 44 L128 12 C140 3 152 0 172 0 L252 0 C272 0 284 6 296 18 L330 46 C358 52 372 66 374 88 L374 110 C374 120 366 126 356 126 L38 126 C26 126 18 118 20 96 Z" fill="url(#car)"/>
+    <path d="M140 18 L246 18 C258 18 266 22 274 30 L292 46 L142 46 Z" fill="#0c1830" opacity="0.9"/>
+    <circle cx="96" cy="126" r="30" fill="#0a0f1a" stroke="#3b4a66" stroke-width="8"/>
+    <circle cx="298" cy="126" r="30" fill="#0a0f1a" stroke="#3b4a66" stroke-width="8"/>
+    <circle cx="96" cy="126" r="10" fill="#8fa3c4"/>
+    <circle cx="298" cy="126" r="10" fill="#8fa3c4"/>
+  </g>
+  <!-- multiplayer link nodes -->
+  <g stroke="#6ea8ff" stroke-width="4" opacity="0.85">
+    <line x1="560" y1="120" x2="640" y2="88"/>
+    <line x1="640" y1="88" x2="700" y2="140"/>
+    <line x1="560" y1="120" x2="700" y2="140"/>
+  </g>
+  <g fill="#9cc2ff">
+    <circle cx="560" cy="120" r="10"/>
+    <circle cx="640" cy="88" r="10"/>
+    <circle cx="700" cy="140" r="10"/>
+  </g>
+  <text x="52" y="86" font-family="Inter, Arial, sans-serif" font-size="56" font-weight="800" fill="#f4f7ff">BeamMP</text>
+  <text x="54" y="118" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="600" fill="#8fa3c4">BeamNG.drive multiplayer</text>
+</svg>
