@@ -864,12 +864,19 @@ export class ServersController {
   // anyway; deletes (no secret in the request) are audited below.
   @Put(":serverId/variables/:envName")
   @RequirePermissions("settings.update")
-  setVariable(
+  async setVariable(
     @Param("serverId") id: string,
     @Param("envName") envName: string,
     @Body() dto: SetVariableDto,
   ) {
-    return this.resources.setVariable(id, envName, dto.value);
+    const saved = await this.resources.setVariable(id, envName, dto.value);
+    // Refresh the agent's cached spec so the NEXT restart boots with the new
+    // env value (mirrors setJavaVersion). Without this, a saved Startup
+    // variable only reached the container after a full reinstall — which read
+    // as "the Startup tab doesn't save" for eggs whose launcher applies env
+    // into the game's config at boot (e.g. BeamMP's ServerConfig.toml).
+    await this.servers.reloadSpec(id);
+    return saved;
   }
 
   @Delete(":serverId/variables/:envName")
@@ -879,11 +886,15 @@ export class ServersController {
     targetType: "Server",
     targetParam: "serverId",
   })
-  deleteVariable(
+  async deleteVariable(
     @Param("serverId") id: string,
     @Param("envName") envName: string,
   ) {
-    return this.resources.deleteVariable(id, envName);
+    const res = await this.resources.deleteVariable(id, envName);
+    // Same as setVariable: reverting to the template default must reach the
+    // agent's spec so the next restart uses it.
+    await this.servers.reloadSpec(id);
+    return res;
   }
 
   // ---- Java version selector (Minecraft/Java servers) --------------------

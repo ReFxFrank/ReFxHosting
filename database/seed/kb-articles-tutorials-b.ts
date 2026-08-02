@@ -1156,13 +1156,13 @@ Every BeamMP server needs its own key from the BeamMP project — it's free:
 1. Go to [keymaster.beammp.com](https://keymaster.beammp.com) and sign in with Discord.
 2. Create a key (one key runs one server at a time).
 3. In your ReFx panel, open **Settings → Startup** and paste it into **BeamMP Auth Key**.
-4. Run **Update** (Settings → Update game) — the key is written into the server's config, and the server restarts ready to accept players.
+4. **Restart the server** — Startup-tab settings are applied to the server's config on every boot.
 
 > No key = the server runs, but players cannot join. If joining fails with an authentication error, this is almost always the missing/typo'd key.
 
 ## 2. Pick your settings
 
-The Startup tab manages the common settings — they're applied on install/update:
+The Startup tab manages the common settings — save, then restart to apply:
 
 - **Server Name** — what players see in the server browser.
 - **Max Players** and **Max Cars per Player** — more cars per player means more load on every client.
