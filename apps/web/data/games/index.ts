@@ -6,6 +6,7 @@ import armaReforger from "./arma-reforger";
 import arma3 from "./arma3";
 import astroneer from "./astroneer";
 import avorion from "./avorion";
+import beammp from "./beammp";
 import conanExiles from "./conan-exiles";
 import coreKeeper from "./core-keeper";
 import cs2 from "./cs2";
@@ -53,6 +54,7 @@ const MODULES: GameContent[] = [
   arma3,
   astroneer,
   avorion,
+  beammp,
   conanExiles,
   coreKeeper,
   cs2,
