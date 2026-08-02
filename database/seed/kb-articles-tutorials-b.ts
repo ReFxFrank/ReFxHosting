@@ -1158,7 +1158,7 @@ Every BeamMP server needs its own key from the BeamMP project — it's free:
 3. In your ReFx panel, open **Settings → Startup** and paste it into **BeamMP Auth Key**.
 4. **Restart the server** — Startup-tab settings are applied to the server's config on every boot.
 
-> No key = the server runs, but players cannot join. If joining fails with an authentication error, this is almost always the missing/typo'd key.
+> No key = the server runs, but players cannot join. If joining fails with an authentication error, this is almost always the missing/typo'd key — see [BeamMP AuthKey errors and fixes](/knowledge-base/beammp-authkey-errors) for every failure mode.
 
 ## 2. Pick your settings
 
@@ -1184,7 +1184,7 @@ In BeamNG.drive with the BeamMP mod installed:
 BeamMP auto-distributes content to joining players — you do not need to send files around:
 
 - Drop mod \`.zip\` files into \`Resources/Client\` (Files tab or SFTP). Players download them automatically on join.
-- For a custom **map**, upload its zip to \`Resources/Client\`, then set **Map** to the level path inside the zip (e.g. \`/levels/mymap/info.json\`) and restart.
+- For a custom **map**, upload its zip to \`Resources/Client\`, then set **Map** to the level path inside the zip (e.g. \`/levels/mymap/info.json\`) and restart — full walkthrough in [installing custom maps on BeamMP](/knowledge-base/beammp-custom-maps).
 - Server-side Lua plugins go in \`Resources/Server\`.
 
 Big mod packs make the first join slower — players download everything the first time. Keep the folder tidy.
@@ -1196,5 +1196,100 @@ Big mod packs make the first join slower — players download everything the fir
 - Players must own **BeamNG.drive** — BeamMP is free, the game is not.
 
 Ready to drive? [Order a BeamMP server](/games/beammp) and you'll be crashing with friends in minutes.`,
+  },
+  {
+    slug: "beammp-custom-maps",
+    title: "How to install custom maps on a BeamMP server",
+    category: "Guides",
+    body: `BeamMP makes custom maps painless in one specific way: the server distributes them. Upload the map once to the server, and every player downloads it automatically when they join — nobody hand-installs anything. The whole job is two steps: put the zip in the right folder, and point the Map setting at the right path. The second step is where most people get stuck, so let's do it properly.
+
+## 1. Base-game maps need no upload
+
+If you just want a different official map, skip the upload entirely — every player already owns it with BeamNG.drive. Set **Map** in your Startup tab to the level path and restart:
+
+- \`/levels/gridmap_v2/info.json\` — the default
+- \`/levels/west_coast_usa/info.json\`
+- \`/levels/east_coast_usa/info.json\`
+- \`/levels/italy/info.json\`
+- \`/levels/utah/info.json\`
+- \`/levels/jungle_rock_island/info.json\`
+
+Save, restart, done — Startup-tab settings are applied to the server config on every boot.
+
+## 2. Upload a modded map
+
+1. Download the map mod as a \`.zip\` (BeamNG mod repository or your usual modding site). Don't unzip it.
+2. In your ReFx panel, open the **Files** tab and upload the zip into \`Resources/Client\` (SFTP works too, and is faster for multi-GB maps).
+3. Leave the filename simple — no spaces or special characters saves you pain later.
+
+## 3. Find the level path inside the zip
+
+This is the step that decides success. The **Map** setting must match the folder name *inside* the zip, not the zip's filename:
+
+1. Open the zip locally and look for the \`levels/\` folder.
+2. Inside it there's one folder — that's the level name, e.g. \`levels/car_jump_arena/\`.
+3. Your Map value is \`/levels/car_jump_arena/info.json\`.
+
+Set **Map** in the Startup tab to that path and **restart the server**.
+
+> If the path doesn't match exactly, BeamMP silently falls back to gridmap. Booted into gridmap when you expected your custom map? The level path is wrong — re-check the folder name inside the zip, not the zip name.
+
+## 4. What to expect on first join
+
+Players download everything in \`Resources/Client\` the first time they connect, map included. A 1–2 GB map means a real wait at the loading screen on the first join — that's normal, and it's cached afterwards. Keep your Resources folder tidy: every zip in there is pushed to every player.
+
+## Quick checklist when a map won't load
+
+- Zip is in \`Resources/Client\` (not \`Resources/Server\` — that's for Lua plugins).
+- Map path is \`/levels/<folder-inside-zip>/info.json\`, exactly.
+- You restarted after changing the Map setting.
+- The map mod actually supports the game version you're running — check its comments.
+
+More BeamMP guides: [getting started + AuthKey setup](/knowledge-base/host-beammp-server) and [fixing AuthKey errors](/knowledge-base/beammp-authkey-errors). Don't have your server yet? [Host BeamMP with ReFx](/games/beammp).`,
+  },
+  {
+    slug: "beammp-authkey-errors",
+    title: "BeamMP AuthKey errors — why players can't join and how to fix it",
+    category: "Guides",
+    body: `Nine out of ten "my BeamMP server is broken" reports are the AuthKey. The server process runs fine without a valid key — it starts, it logs, it looks healthy — but players can't join, or the console complains about authentication at boot. Here's every AuthKey failure mode and the fix.
+
+## How the key works (30 seconds)
+
+Every BeamMP server authenticates to the BeamMP network with its own key from [keymaster.beammp.com](https://keymaster.beammp.com). Keys are free (sign in with Discord) and **one key runs one server at a time**. The config file itself says it plainly: *AuthKey has to be filled out in order to run the server.*
+
+## Error: no key set at all
+
+**Symptom:** the console warns that no AuthKey is set; nobody can join.
+
+**Fix:** get a key at keymaster.beammp.com → panel **Settings → Startup** → paste into **BeamMP Auth Key** → **restart**. ReFx writes it into \`ServerConfig.toml\` on boot. Done.
+
+## Error: invalid or rejected key
+
+**Symptom:** an authentication/invalid-key error at startup even though you pasted a key.
+
+**Fixes, in order of likelihood:**
+
+1. **Whitespace or a missed character.** Re-copy the key from Keymaster carefully — a trailing space or a cut-off character is the classic. Paste it fresh into the Startup tab and restart.
+2. **The key was deleted or regenerated in Keymaster.** Keys you remove or re-roll on the site stop working immediately. Copy the current one.
+3. **Hand-edited config got clobbered.** If you pasted the key straight into \`ServerConfig.toml\` but ALSO have a different (or empty) value in the Startup tab, the panel's value wins on every restart. Keep the key in the Startup tab — that's the source of truth on ReFx.
+
+## Error: key already in use
+
+**Symptom:** authentication fails and you (or a friend) run another server with the same key — often an old test server on your home PC you forgot about.
+
+**Fix:** one key, one server, at a time. Stop the other server, or create a second key in Keymaster (accounts get a limited number; more are available via BeamMP's project support) and give each server its own.
+
+## Players still can't join with a valid key
+
+Work through these:
+
+- **They're not using the BeamMP launcher.** BeamNG started normally has no multiplayer — the launcher must start the game.
+- **Private server, wrong address.** With *Hide from server list* on, the server never appears in the browser — players must Direct Connect to the exact \`address:port\` from your panel overview (default port **30814**, and it's both TCP and UDP).
+- **Mod download stalls.** A huge \`Resources/Client\` folder can look like a hang on first join — it's downloading. See [custom maps and mods](/knowledge-base/beammp-custom-maps) for keeping packs lean.
+- **Version mismatch.** If you've pinned an old server version in the Startup tab, players on the newest BeamMP launcher may fail to connect — unpin (set \`latest\`) and run Update, or have players match versions.
+
+## Still stuck?
+
+Open a ticket from the panel with your server's console output around startup — the authentication lines tell us exactly which case you're in. And if you're reading this before you have a server: [BeamMP hosting on ReFx](/games/beammp) has the key flow built into setup.`,
   },
 ];
