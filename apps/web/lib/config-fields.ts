@@ -16,9 +16,10 @@ import type { ConfigFieldMeta } from "./config-files";
 
 /**
  * Arma 3 `server.cfg`. Panel-managed keys come from the egg's refx-run.sh,
- * which rewrites hostname, maxPlayers, password/passwordAdmin (when the
- * Startup variable is set), battleyeLicense and the headless-client allowlist
- * on EVERY boot.
+ * which rewrites hostname, maxPlayers, battleyeLicense and the headless-client
+ * allowlist on EVERY boot. password/passwordAdmin are only rewritten when the
+ * Startup tab's SERVER_PASSWORD is non-empty — a public server never has them
+ * touched — so they are editable here and carry the caveat in their copy.
  */
 export const ARMA3_SERVER_CFG_FIELDS: ConfigFieldMeta[] = [
   // ---- Identity & access ---------------------------------------------------
@@ -33,18 +34,18 @@ export const ARMA3_SERVER_CFG_FIELDS: ConfigFieldMeta[] = [
   {
     key: "password",
     label: "Join password",
-    description: "Required to connect. Empty means anyone can join.",
+    description:
+      "Required to connect. Empty means anyone can join. Setting a password on the Startup tab rewrites this on every boot; while that is blank, this value is what applies.",
     type: "password",
     group: "Identity & access",
-    managedByPanel: true,
   },
   {
     key: "passwordAdmin",
     label: "Admin password",
-    description: "Used with #login to take admin in-game.",
+    description:
+      "Used with #login to take admin in-game. Seeded at install from the Startup password, or “changeme” on a public server — change it here. A Startup-tab password, once set, overwrites this on every boot.",
     type: "password",
     group: "Identity & access",
-    managedByPanel: true,
   },
   {
     key: "serverCommandPassword",
@@ -440,20 +441,12 @@ export const ARMA3_SERVER_CFG_FIELDS: ConfigFieldMeta[] = [
   {
     key: "maxpacketloss",
     label: "Max packet loss (%)",
-    description: "Packet loss above which a player is warned or kicked.",
+    description:
+      "Packet loss above which a player is warned. Exceeding the three limits above only logs by default — to actually kick, add kickClientsOnSlowNetwork[] = {MaxPing, MaxPacketLoss, MaxDesync, DisconnectTimeout} (0 = log, 1 = kick) in the raw editor.",
     type: "int",
     min: 0,
     max: 100,
     default: "50",
-    group: "Network & timeouts",
-  },
-  {
-    key: "kickClientsOnSlowNetwork",
-    label: "Kick on slow network",
-    description:
-      "Actually kick players who exceed the limits above instead of only warning them.",
-    type: "bool",
-    default: "false",
     group: "Network & timeouts",
   },
   {

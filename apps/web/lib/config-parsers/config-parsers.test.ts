@@ -157,6 +157,20 @@ describe("cfg (Arma) parser", () => {
     expect(parseConfig("cfg", "class X {\n  a = 1;\n").issues)
       .not.toHaveLength(0);
   });
+
+  it("refuses a value that runs past its line instead of swallowing the next key", () => {
+    // A hand-edit that dropped one `;`. Indexing this would make `hostname`
+    // own the `maxPlayers` line, and saving would delete it.
+    const broken = 'hostname = "My Server"\nmaxPlayers = 32;\npersistent = 1;\n';
+    const brokenDoc = parseConfig("cfg", broken);
+    expect(brokenDoc.issues).not.toHaveLength(0);
+    expect(applyEdits(brokenDoc, [])).toBe(broken);
+    // A trailing comment before the `;` is not a broken value.
+    expect(
+      parseConfig("cfg", 'hostname = "x"; // the name\nmaxPlayers = 32;\n')
+        .issues,
+    ).toEqual([]);
+  });
 });
 
 describe("toml parser", () => {
@@ -231,6 +245,47 @@ describe("properties and ini parsers", () => {
     const doc = parseConfig("ini", ini);
     const out = applyEdits(doc, [{ key: "Three", section: "A", raw: "3" }]);
     expect(out).toBe("[A]\nOne=1\nThree=3\n\n[B]\nTwo=2\n");
+  });
+
+  it("edits an empty value on the last line while also adding a key", () => {
+    // No trailing newline, so the empty value's region and the append point
+    // are the same offset — the two splices must not swap places.
+    const doc = parseConfig("properties", "max-players=20\nmotd=");
+    const out = applyEdits(doc, [
+      { key: "motd", raw: "Hello world" },
+      { key: "pvp", raw: "true" },
+    ]);
+    expect(out).toBe("max-players=20\nmotd=Hello world\npvp=true");
+  });
+
+  it("reads a section header that carries a trailing comment", () => {
+    const toml = '[General] # main settings\nName = "x"\n';
+    const doc = parseConfig("toml", toml);
+    expect(doc.issues).toEqual([]);
+    expect(findEntry(doc, "Name", "General")?.raw).toBe('"x"');
+    // The key is edited in place rather than a duplicate table being appended.
+    expect(applyEdits(doc, [{ key: "Name", section: "General", raw: '"y"' }]))
+      .toBe('[General] # main settings\nName = "y"\n');
+
+    const ini = "[A] ; notes\nOne=1\n";
+    const iniDoc = parseConfig("ini", ini);
+    expect(iniDoc.issues).toEqual([]);
+    expect(findEntry(iniDoc, "One", "A")?.raw).toBe("1");
+  });
+
+  it("refuses a bracketed line that isn't a readable header", () => {
+    expect(parseConfig("toml", "[oops = 1\n").issues).not.toHaveLength(0);
+  });
+
+  it("keeps new-section keys out of an existing trailing section", () => {
+    const doc = parseConfig("toml", '[General]\nName = "x"\n');
+    const out = applyEdits(doc, [
+      { key: "SendErrors", section: "Misc", raw: "true" },
+      { key: "Port", section: "General", raw: "30814" },
+    ]);
+    expect(out).toBe(
+      '[General]\nName = "x"\nPort = 30814\n[Misc]\nSendErrors = true\n',
+    );
   });
 
   it("keeps a Palworld-style single-line tuple intact", () => {
@@ -314,5 +369,22 @@ describe("value codec", () => {
   it("leaves numeric enums unquoted", () => {
     const enumField = field({ type: "enum", options: ["0", "1", "2"] });
     expect(encodeFromDraft("cfg", enumField, "2")).toEqual({ raw: "2" });
+  });
+
+  it("decodes Java .properties escapes so enums still match", () => {
+    // Minecraft writes server.properties with Properties.store(), which
+    // escapes the colon: level-type=minecraft\:normal.
+    const levelType = field({
+      type: "enum",
+      options: ["minecraft:normal", "minecraft:flat"],
+    });
+    expect(decodeToDraft("properties", levelType, "minecraft\\:normal")).toEqual(
+      { draft: "minecraft:normal", recognised: true },
+    );
+    const text = field({});
+    const encoded = encodeFromDraft("properties", text, "a\\b:c");
+    expect(encoded).toEqual({ raw: "a\\\\b\\:c" });
+    expect(decodeToDraft("properties", text, (encoded as { raw: string }).raw))
+      .toEqual({ draft: "a\\b:c", recognised: true });
   });
 });

@@ -34,6 +34,35 @@ function numericEnum(field: ConfigFieldMeta): boolean {
   );
 }
 
+/**
+ * Java `.properties` escapes. `Properties.store()` — which is what Minecraft
+ * writes server.properties with — emits `\:`, `\=`, `\#`, `\!` and `\\` inside
+ * values, so `level-type=minecraft\:normal` has to decode back to
+ * `minecraft:normal` before it is matched against a field's options.
+ */
+function unescapeProperties(raw: string): string {
+  return raw.replace(/\\(u[0-9a-fA-F]{4}|[\s\S])/g, (_m, c: string) => {
+    switch (c[0]) {
+      case "n":
+        return "\n";
+      case "t":
+        return "\t";
+      case "r":
+        return "\r";
+      case "f":
+        return "\f";
+      case "u":
+        return String.fromCharCode(parseInt(c.slice(1), 16));
+      default:
+        return c;
+    }
+  });
+}
+
+function escapeProperties(value: string): string {
+  return value.replace(/[\\:=#!]/g, (c) => `\\${c}`);
+}
+
 function unquote(format: ConfigParserFormat, raw: string): string {
   if (format === "cfg") {
     if (raw.length >= 2 && raw.startsWith('"') && raw.endsWith('"')) {
@@ -67,6 +96,7 @@ function unquote(format: ConfigParserFormat, raw: string): string {
     }
     return raw;
   }
+  if (format === "properties") return unescapeProperties(raw);
   return raw;
 }
 
@@ -75,6 +105,7 @@ function quote(format: ConfigParserFormat, value: string): string {
   if (format === "toml") {
     return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
   }
+  if (format === "properties") return escapeProperties(value);
   return value;
 }
 

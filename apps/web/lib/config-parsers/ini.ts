@@ -62,7 +62,9 @@ function parse(text: string, opts: IniOptions): ConfigDoc {
     // Section headers close the previous section BEFORE they count as content,
     // otherwise new keys would be inserted past the next header.
     if (opts.sections && trimmed.startsWith("[")) {
-      const match = /^\[([^\]]*)\]$/.exec(trimmed);
+      // A trailing `; comment` on the header is legal and common; the header
+      // line itself is never rewritten, so skipping it costs nothing.
+      const match = /^\[([^\]]*)\]\s*(?:[;#].*)?$/.exec(trimmed);
       if (match) {
         closeSection(pos);
         section = match[1].trim();
@@ -71,6 +73,11 @@ function parse(text: string, opts: IniOptions): ConfigDoc {
         pos = nextPos;
         continue;
       }
+      issues.push(
+        `the section header on line ${lineNo} isn't one the form can read safely`,
+      );
+      pos = nextPos;
+      continue;
     }
 
     lastContent = lineAfter;

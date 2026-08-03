@@ -57,6 +57,7 @@ export class HeadlessClientsService {
         id: true,
         ownerId: true,
         subscriptionId: true,
+        headlessClientsComp: true,
         template: {
           select: {
             slug: true,
@@ -100,42 +101,34 @@ export class HeadlessClientsService {
     return Math.max(0, Math.min(MAX_HEADLESS_CLIENTS, Math.round(count)));
   }
 
-  /** Paid + comped counts, or null for a server with no subscription. */
-  private async counts(
-    subscriptionId: string | null,
-  ): Promise<{ paid: number; comped: number } | null> {
-    if (!subscriptionId) return null;
+  /** Purchased count on the subscription; 0 when the server has none. */
+  private async paidCount(subscriptionId: string | null): Promise<number> {
+    if (!subscriptionId) return 0;
     const sub = await this.prisma.subscription.findUnique({
       where: { id: subscriptionId },
-      select: { headlessClients: true, headlessClientsComp: true },
+      select: { headlessClients: true },
     });
-    return {
-      paid: sub?.headlessClients ?? 0,
-      comped: sub?.headlessClientsComp ?? 0,
-    };
+    return sub?.headlessClients ?? 0;
   }
 
   async status(serverId: string): Promise<HeadlessClientsStatus> {
     const server = await this.load(serverId);
     const cfg = await this.settings.headlessClientsConfig();
-    const applied = Number(server.variables[0]?.value ?? "0") || 0;
-    const counts = await this.counts(server.subscriptionId);
-    // Without a subscription there is no paid/comped split to report: the
-    // variable on the server IS the state, exactly like the express-backups
-    // comp on an admin-made server.
-    const count = counts ? counts.paid : applied;
-    const compedCount = counts ? counts.comped : 0;
+    const paid = await this.paidCount(server.subscriptionId);
+    const comped = server.headlessClientsComp ?? 0;
+    const unbilled = !server.subscriptionId;
     return {
       enabled: cfg.enabled,
       monthlyMinor: cfg.monthlyMinor,
       currency: await this.currencyFor(server.subscriptionId),
-      count,
-      compedCount,
-      appliedCount: counts
-        ? this.clamp(Math.max(counts.paid, counts.comped))
-        : applied,
+      // Nothing is billed without a subscription, so the single stored count
+      // is reported as the owner's own — a "comped by staff" split would be
+      // meaningless when neither side is ever charged.
+      count: unbilled ? comped : paid,
+      compedCount: unbilled ? 0 : comped,
+      appliedCount: this.clamp(Math.max(paid, comped)),
       max: MAX_HEADLESS_CLIENTS,
-      unbilled: !server.subscriptionId,
+      unbilled,
     };
   }
 
@@ -167,18 +160,21 @@ export class HeadlessClientsService {
     // Billing side: persist the purchased count on the subscription (renewal
     // invoices add the line). Admin-made servers have no subscription — apply
     // unbilled, mirroring how express-backups comp works for those servers.
-    let effective = count;
     if (server.subscriptionId) {
-      const counts = await this.counts(server.subscriptionId);
       await this.prisma.subscription.update({
         where: { id: server.subscriptionId },
         data: { headlessClients: count },
       });
-      // A staff comp keeps applying even when the customer buys fewer.
-      effective = this.clamp(Math.max(count, counts?.comped ?? 0));
+    } else {
+      // No subscription, so no paid count to record: the server's own column
+      // IS the applied state here, which also lets the owner lower it again.
+      await this.prisma.server.update({
+        where: { id: serverId },
+        data: { headlessClientsComp: count },
+      });
     }
-
-    await this.apply(serverId, effective);
+    // A staff comp keeps applying even when the customer buys fewer.
+    await this.apply(serverId);
     return this.status(serverId);
   }
 
@@ -189,6 +185,10 @@ export class HeadlessClientsService {
    * becomes max(paid, comped). Passing 0 removes the comp and drops the server
    * back to the paid count. Not gated on the add-on being publicly offered —
    * staff must be able to comp a server whatever the storefront is doing.
+   *
+   * The count lives on the SERVER row so a subscription-less (admin-made)
+   * server can be comped and un-comped like any other; the subscription's copy
+   * is kept in step for the billing domain but is never what applies.
    */
   async setComp(
     serverId: string,
@@ -197,29 +197,54 @@ export class HeadlessClientsService {
     const server = await this.load(serverId);
     const comped = this.clamp(countRaw);
 
-    let effective = comped;
+    await this.prisma.server.update({
+      where: { id: serverId },
+      data: { headlessClientsComp: comped },
+    });
+    // Mirror onto the subscription so the comp is visible from the billing
+    // domain, exactly as `expressBackupsComp` is. It never drives the count.
     if (server.subscriptionId) {
-      const counts = await this.counts(server.subscriptionId);
       await this.prisma.subscription.update({
         where: { id: server.subscriptionId },
         data: { headlessClientsComp: comped },
       });
-      effective = this.clamp(Math.max(counts?.paid ?? 0, comped));
     }
-    // Subscription-less (admin/internal) servers have no paid count to
-    // distinguish from, so the applied variable IS the comp state — the same
-    // lesson as the express-backups comp, which must not error out here.
-
-    await this.apply(serverId, effective);
+    await this.apply(serverId);
     return this.status(serverId);
   }
 
-  /** Write the variable the launcher consumes, fresh on the next boot. */
-  private async apply(serverId: string, count: number): Promise<void> {
-    await this.prisma.serverVariable.upsert({
-      where: { serverId_envName: { serverId, envName: HC_VAR } },
-      create: { id: uuidv7(), serverId, envName: HC_VAR, value: String(count) },
-      update: { value: String(count) },
+  /**
+   * Re-derive the variable the launcher consumes from whichever side just
+   * changed plus the current value of the other, then push the spec. Both
+   * counts are read back INSIDE the write transaction, so two concurrent
+   * mutators (a customer purchase and a staff comp) can't apply a count
+   * derived from a stale snapshot of the other.
+   */
+  private async apply(serverId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      const server = await tx.server.findUnique({
+        where: { id: serverId },
+        select: {
+          headlessClientsComp: true,
+          subscription: { select: { headlessClients: true } },
+        },
+      });
+      const effective = this.clamp(
+        Math.max(
+          server?.subscription?.headlessClients ?? 0,
+          server?.headlessClientsComp ?? 0,
+        ),
+      );
+      await tx.serverVariable.upsert({
+        where: { serverId_envName: { serverId, envName: HC_VAR } },
+        create: {
+          id: uuidv7(),
+          serverId,
+          envName: HC_VAR,
+          value: String(effective),
+        },
+        update: { value: String(effective) },
+      });
     });
     await this.servers.reloadSpec(serverId);
   }

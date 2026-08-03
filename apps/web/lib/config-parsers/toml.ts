@@ -104,7 +104,9 @@ export function parseToml(text: string): ConfigDoc {
     // Close the previous table BEFORE this header counts as content, so its
     // new keys are inserted above the header rather than below it.
     if (trimmed.startsWith("[")) {
-      const match = /^\[([^\]]*)\]$/.exec(trimmed);
+      // A trailing `# comment` on the header is legal TOML; the header line is
+      // never rewritten, so ignoring it for naming purposes is lossless.
+      const match = /^\[([^\]]*)\]\s*(?:#.*)?$/.exec(trimmed);
       if (match) {
         closeSection(pos);
         section = match[1].trim();
@@ -113,6 +115,11 @@ export function parseToml(text: string): ConfigDoc {
         pos = nextPos;
         continue;
       }
+      issues.push(
+        `the table header on line ${lineNo} isn't one the form can read safely`,
+      );
+      pos = nextPos;
+      continue;
     }
 
     lastContent = lineAfter;

@@ -48,6 +48,14 @@ export function buildConfigRows(
     const fallback = original ?? (isAdded ? (field.default ?? "") : null);
     const draft = drafts[id] ?? fallback;
 
+    // Arma writes list settings as `key[] = {...}`. If the file's shape and the
+    // field's type disagree, splicing only the value would produce a scalar
+    // under an array key (or vice versa) — refuse rather than corrupt it.
+    const shapeMismatch =
+      !!entry &&
+      doc.format === "cfg" &&
+      entry.array !== (field.type === "string[]");
+
     // Panel-managed keys are rewritten from Startup variables at boot, so the
     // form never writes them even if a draft somehow exists for the row.
     const changed =
@@ -55,7 +63,9 @@ export function buildConfigRows(
 
     let error: string | undefined;
     let raw: string | undefined;
-    if (changed) {
+    if (changed && shapeMismatch) {
+      error = `The file writes this key as ${entry.array ? "an array (key[] = {…})" : "a single value"} — edit it in the raw editor.`;
+    } else if (changed) {
       const encoded = encodeFromDraft(doc.format, field, draft);
       if ("error" in encoded) error = encoded.error;
       else raw = encoded.raw;
@@ -68,7 +78,7 @@ export function buildConfigRows(
       original,
       draft,
       added: isAdded,
-      recognised: decoded?.recognised ?? true,
+      recognised: (decoded?.recognised ?? true) && !shapeMismatch,
       changed,
       error,
       raw,

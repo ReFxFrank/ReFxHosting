@@ -179,6 +179,12 @@ export interface AdminServer extends Server {
   /** Offsite (R2) backup routing flag on the server row. */
   expressBackups?: boolean;
   /**
+   * Staff-granted headless clients on the server row. On a server with no
+   * subscription this is simply the applied count (nothing is billed either
+   * way), which is what makes it clearable for those servers.
+   */
+  headlessClientsComp?: number;
+  /**
    * Add-on billing state — the `*Comp` fields are admin comps (granted, never
    * billed); the plain fields are what the customer actually pays for.
    */
@@ -186,7 +192,6 @@ export interface AdminServer extends Server {
     expressBackups: boolean;
     expressBackupsComp: boolean;
     headlessClients: number;
-    headlessClientsComp: number;
   } | null;
 }
 

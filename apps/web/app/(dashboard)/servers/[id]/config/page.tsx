@@ -43,6 +43,19 @@ import { ConfigFieldForm } from "@/components/server/config-field-form";
 /** Above this the structured form is skipped — such a file is not hand-authored. */
 const MAX_FORM_BYTES = 512_000;
 
+const sameList = (a: string[], b: string[]) =>
+  a.length === b.length && a.every((x, i) => x === b[i]);
+
+const sameDrafts = (
+  a: Record<string, string>,
+  b: Record<string, string>,
+) => {
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k])
+  );
+};
+
 /**
  * Quick config editor: the egg-appropriate config files for this game, editable
  * in place without digging through the file manager. Grounded per egg in
@@ -149,15 +162,23 @@ function ConfigFileEditor({
   });
 
   const save = useMutation({
-    mutationFn: (content: string) =>
-      api.servers.files.write(serverId, file.path, content),
-    onSuccess: (_res, saved) => {
+    mutationFn: (vars: {
+      content: string;
+      from: string | null;
+      drafts: Record<string, string>;
+      added: string[];
+    }) => api.servers.files.write(serverId, file.path, vars.content),
+    onSuccess: (_res, vars) => {
       toast.success(`${file.label} saved — restart the server to apply.`);
-      // Only clear the draft if the user hasn't typed since this save started,
-      // otherwise in-flight keystrokes would be silently discarded.
-      setRawDraft((d) => (d === saved ? null : d));
-      setDrafts({});
-      setAdded([]);
+      // Only clear state the user hasn't touched since this save started, so
+      // in-flight keystrokes aren't silently discarded. The raw carrier is
+      // dropped when it still holds the text this save was computed from —
+      // leaving it behind would shadow the fresh file and revert the save.
+      setRawDraft((d) =>
+        d === vars.content || d === vars.from ? null : d,
+      );
+      setDrafts((d) => (sameDrafts(d, vars.drafts) ? {} : d));
+      setAdded((a) => (sameList(a, vars.added) ? [] : a));
       qc.invalidateQueries({ queryKey: ["config-file", serverId, file.path] });
     },
     onError: (e) =>
@@ -201,9 +222,16 @@ function ConfigFileEditor({
   /**
    * Both views edit the same string: leaving the form folds its pending edits
    * into the raw draft, and returning re-reads the values out of that text —
-   * so a switch never loses work and never needs to block on unsaved changes.
+   * so a switch never loses work. The one case it blocks on is a value that
+   * can't be encoded, which by definition can't be carried into the text.
    */
   const toRaw = () => {
+    if (invalidRows > 0) {
+      toast.error(
+        `Fix or revert the ${invalidRows} highlighted setting${invalidRows === 1 ? "" : "s"} first — an invalid value can't be carried into the raw editor.`,
+      );
+      return;
+    }
     if (dirty) setRawDraft(nextText);
     setDrafts({});
     setAdded([]);
@@ -363,7 +391,14 @@ function ConfigFileEditor({
                     !canWrite || !dirty || invalidRows > 0 || save.isPending
                   }
                   loading={save.isPending}
-                  onClick={() => save.mutate(nextText)}
+                  onClick={() =>
+                    save.mutate({
+                      content: nextText,
+                      from: rawDraft,
+                      drafts,
+                      added,
+                    })
+                  }
                 >
                   <Save className="size-4" /> Save
                 </Button>

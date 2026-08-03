@@ -111,9 +111,17 @@ function insertionPoint(
 export function applyEdits(doc: ConfigDoc, edits: ConfigEdit[]): string {
   if (edits.length === 0) return doc.text;
 
-  const splices: { start: number; end: number; text: string }[] = [];
+  const splices: {
+    start: number;
+    end: number;
+    text: string;
+    append?: boolean;
+  }[] = [];
   /** Pending additions, grouped per section so each header is written once. */
-  const additions = new Map<string, { at: number; lines: string[] }>();
+  const additions = new Map<
+    string,
+    { at: number; headed: boolean; lines: string[] }
+  >();
 
   for (const edit of edits) {
     const section = edit.section ?? "";
@@ -125,7 +133,7 @@ export function applyEdits(doc: ConfigDoc, edits: ConfigEdit[]): string {
     const { at, header } = insertionPoint(doc, section);
     let group = additions.get(section);
     if (!group) {
-      group = { at, lines: [] };
+      group = { at, headed: !!header, lines: [] };
       if (header) group.lines.push(header);
       additions.set(section, group);
     }
@@ -134,10 +142,16 @@ export function applyEdits(doc: ConfigDoc, edits: ConfigEdit[]): string {
     );
   }
 
-  // Several sections can land on the same offset (e.g. both appended at EOF);
-  // merge them in edit order so their headers stay with their keys.
+  // Several sections can land on the same offset (an existing trailing section
+  // whose end IS the end of the file, plus brand-new sections appended there).
+  // Keys joining a section that already exists must be written before any new
+  // header, or that header would capture them. The sort is stable, so edit
+  // order within each class — and each header's own keys — stay put.
   const byOffset = new Map<number, string[]>();
-  for (const group of additions.values()) {
+  const ordered = [...additions.values()].sort(
+    (a, b) => Number(a.headed) - Number(b.headed),
+  );
+  for (const group of ordered) {
     byOffset.set(group.at, [...(byOffset.get(group.at) ?? []), ...group.lines]);
   }
 
@@ -149,10 +163,15 @@ export function applyEdits(doc: ConfigDoc, edits: ConfigEdit[]): string {
     const trailing = at === doc.text.length && needsLeadingBreak ? "" : doc.eol;
     const text =
       (needsLeadingBreak ? doc.eol : "") + lines.join(doc.eol) + trailing;
-    splices.push({ start: at, end: at, text });
+    splices.push({ start: at, end: at, text, append: true });
   }
 
-  splices.sort((a, b) => b.start - a.start);
+  // Descending by offset; at the same offset the appended block goes in first,
+  // so a replacement landing on that exact offset (an empty value on the last
+  // line of a file with no trailing newline) stays in front of it.
+  splices.sort(
+    (a, b) => b.start - a.start || Number(!!b.append) - Number(!!a.append),
+  );
   let out = doc.text;
   for (const splice of splices) {
     out = out.slice(0, splice.start) + splice.text + out.slice(splice.end);

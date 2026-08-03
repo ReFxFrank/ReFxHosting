@@ -8,28 +8,62 @@ const ARMA = {
   id: 's1',
   ownerId: 'owner',
   subscriptionId: 'sub1',
+  headlessClientsComp: 0,
   template: { slug: 'arma3', variables: [{ envName: 'HEADLESS_CLIENTS' }] },
   variables: [{ value: '0' }],
 };
 
+/**
+ * `server` is what load() sees; `paid` is Subscription.headlessClients. The
+ * applied value is re-read inside apply()'s transaction, so the mock's
+ * server.findUnique reflects whatever the mutators just wrote.
+ */
 function make(
   server: any = ARMA,
   cfg = { enabled: true, monthlyMinor: 400 },
-  sub: any = { headlessClients: 0, headlessClientsComp: 0, priceId: 'p1' },
+  paid = 0,
 ) {
+  const state = {
+    comped: server.headlessClientsComp ?? 0,
+    paid,
+  };
   const prisma: any = {
-    server: { findFirst: jest.fn().mockResolvedValue(server) },
+    server: {
+      findFirst: jest.fn(async () => ({
+        ...server,
+        headlessClientsComp: state.comped,
+      })),
+      findUnique: jest.fn(async () => ({
+        headlessClientsComp: state.comped,
+        subscription: server.subscriptionId
+          ? { headlessClients: state.paid }
+          : null,
+      })),
+      update: jest.fn(async ({ data }: any) => {
+        if (data.headlessClientsComp !== undefined) {
+          state.comped = data.headlessClientsComp;
+        }
+        return {};
+      }),
+    },
     subscription: {
-      findUnique: jest.fn().mockResolvedValue(sub),
-      update: jest.fn().mockResolvedValue({}),
+      findUnique: jest.fn(async () => ({
+        headlessClients: state.paid,
+        priceId: 'p1',
+      })),
+      update: jest.fn(async ({ data }: any) => {
+        if (data.headlessClients !== undefined) state.paid = data.headlessClients;
+        return {};
+      }),
     },
     price: { findUnique: jest.fn().mockResolvedValue({ currency: 'USD' }) },
     serverVariable: { upsert: jest.fn().mockResolvedValue({}) },
+    $transaction: jest.fn((fn: any) => fn(prisma)),
   };
   const settings = { headlessClientsConfig: jest.fn().mockResolvedValue(cfg) };
   const servers = { reloadSpec: jest.fn().mockResolvedValue(undefined) };
   const svc = new HeadlessClientsService(prisma, settings as any, servers as any);
-  return { svc, prisma, settings, servers };
+  return { svc, prisma, settings, servers, state };
 }
 
 /** The HEADLESS_CLIENTS value the launcher would read after the call. */
@@ -59,12 +93,7 @@ describe('HeadlessClientsService', () => {
       where: { id: 'sub1' },
       data: { headlessClients: 3 },
     });
-    expect(prisma.serverVariable.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        create: expect.objectContaining({ envName: 'HEADLESS_CLIENTS', value: '3' }),
-        update: { value: '3' },
-      }),
-    );
+    expect(appliedValue(prisma)).toBe('3');
     expect(servers.reloadSpec).toHaveBeenCalledWith('s1');
   });
 
@@ -72,7 +101,17 @@ describe('HeadlessClientsService', () => {
     const { svc, prisma } = make({ ...ARMA, subscriptionId: null });
     await svc.setCount('s1', 'owner', 2);
     expect(prisma.subscription.update).not.toHaveBeenCalled();
-    expect(prisma.serverVariable.upsert).toHaveBeenCalled();
+    expect(appliedValue(prisma)).toBe('2');
+  });
+
+  it('lets the owner lower the count again on an unbilled server', async () => {
+    const { svc, prisma } = make({
+      ...ARMA,
+      subscriptionId: null,
+      headlessClientsComp: 3,
+    });
+    await svc.setCount('s1', 'owner', 0);
+    expect(appliedValue(prisma)).toBe('0');
   });
 
   it('refuses when the add-on is disabled', async () => {
@@ -88,8 +127,8 @@ describe('HeadlessClientsService', () => {
     it('applies the comped count without touching the billed count', async () => {
       const { svc, prisma, servers } = make();
       await svc.setComp('s1', 2);
-      expect(prisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: 'sub1' },
+      expect(prisma.server.update).toHaveBeenCalledWith({
+        where: { id: 's1' },
         data: { headlessClientsComp: 2 },
       });
       // The billed field is never written by a comp.
@@ -102,12 +141,17 @@ describe('HeadlessClientsService', () => {
       expect(servers.reloadSpec).toHaveBeenCalledWith('s1');
     });
 
-    it('applies max(paid, comped) — a smaller comp never takes clients away', async () => {
-      const { svc, prisma } = make(ARMA, undefined, {
-        headlessClients: 3,
-        headlessClientsComp: 0,
-        priceId: 'p1',
+    it('mirrors the comp onto the subscription for the billing domain', async () => {
+      const { svc, prisma } = make();
+      await svc.setComp('s1', 2);
+      expect(prisma.subscription.update).toHaveBeenCalledWith({
+        where: { id: 'sub1' },
+        data: { headlessClientsComp: 2 },
       });
+    });
+
+    it('applies max(paid, comped) — a smaller comp never takes clients away', async () => {
+      const { svc, prisma } = make(ARMA, undefined, 3);
       await svc.setComp('s1', 1);
       expect(appliedValue(prisma)).toBe('3');
     });
@@ -115,33 +159,32 @@ describe('HeadlessClientsService', () => {
     it('clamps the comp to the maximum', async () => {
       const { svc, prisma } = make();
       await svc.setComp('s1', 99);
-      expect(prisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: 'sub1' },
+      expect(prisma.server.update).toHaveBeenCalledWith({
+        where: { id: 's1' },
         data: { headlessClientsComp: 3 },
       });
       expect(appliedValue(prisma)).toBe('3');
     });
 
     it('clearing the comp drops back to the paid count', async () => {
-      const { svc, prisma } = make(ARMA, undefined, {
-        headlessClients: 1,
-        headlessClientsComp: 3,
-        priceId: 'p1',
-      });
+      const { svc, prisma } = make({ ...ARMA, headlessClientsComp: 3 }, undefined, 1);
       await svc.setComp('s1', 0);
-      expect(prisma.subscription.update).toHaveBeenCalledWith({
-        where: { id: 'sub1' },
+      expect(prisma.server.update).toHaveBeenCalledWith({
+        where: { id: 's1' },
         data: { headlessClientsComp: 0 },
       });
       expect(appliedValue(prisma)).toBe('1');
     });
 
-    it('works on a subscription-less server instead of erroring', async () => {
+    it('works on a subscription-less server, and can be cleared again', async () => {
       const { svc, prisma, servers } = make({ ...ARMA, subscriptionId: null });
       await svc.setComp('s1', 2);
       expect(prisma.subscription.update).not.toHaveBeenCalled();
       expect(appliedValue(prisma)).toBe('2');
       expect(servers.reloadSpec).toHaveBeenCalledWith('s1');
+
+      await svc.setComp('s1', 0);
+      expect(appliedValue(prisma)).toBe('0');
     });
 
     it('is allowed even when the add-on is not being offered', async () => {
@@ -160,11 +203,7 @@ describe('HeadlessClientsService', () => {
 
   describe('setCount with a comp in place', () => {
     it('keeps the comped clients when the customer buys fewer', async () => {
-      const { svc, prisma } = make(ARMA, undefined, {
-        headlessClients: 2,
-        headlessClientsComp: 3,
-        priceId: 'p1',
-      });
+      const { svc, prisma } = make({ ...ARMA, headlessClientsComp: 3 }, undefined, 2);
       await svc.setCount('s1', 'owner', 1);
       expect(prisma.subscription.update).toHaveBeenCalledWith({
         where: { id: 'sub1' },
@@ -172,15 +211,21 @@ describe('HeadlessClientsService', () => {
       });
       expect(appliedValue(prisma)).toBe('3');
     });
+
+    it('does not let a customer save wipe a staff grant on an unbilled server', async () => {
+      const { svc, prisma } = make({
+        ...ARMA,
+        subscriptionId: null,
+        headlessClientsComp: 2,
+      });
+      await svc.setCount('s1', 'owner', 2);
+      expect(appliedValue(prisma)).toBe('2');
+    });
   });
 
   describe('status', () => {
     it('separates the billed count from the comped and applied ones', async () => {
-      const { svc } = make(ARMA, undefined, {
-        headlessClients: 1,
-        headlessClientsComp: 3,
-        priceId: 'p1',
-      });
+      const { svc } = make({ ...ARMA, headlessClientsComp: 3 }, undefined, 1);
       const status = await svc.status('s1');
       expect(status.count).toBe(1);
       expect(status.compedCount).toBe(3);
@@ -188,11 +233,11 @@ describe('HeadlessClientsService', () => {
       expect(status.unbilled).toBe(false);
     });
 
-    it('reports the applied variable on a subscription-less server', async () => {
+    it('reports the single stored count as the owner-s on an unbilled server', async () => {
       const { svc } = make({
         ...ARMA,
         subscriptionId: null,
-        variables: [{ value: '2' }],
+        headlessClientsComp: 2,
       });
       const status = await svc.status('s1');
       expect(status).toEqual(

@@ -211,11 +211,17 @@ export default function AdminServersPage() {
         : api.admin.uncompHeadlessClients(hcTarget!.id),
     onSuccess: (r) => {
       toast.success(
-        r.compedCount > 0
-          ? `${r.compedCount} headless client${r.compedCount === 1 ? "" : "s"} comped — ${r.appliedCount} run after a restart, no charge`
-          : r.count > 0
-            ? `Comp removed — server keeps its ${r.count} paid client${r.count === 1 ? "" : "s"}`
-            : "Comp removed — headless clients off after the next restart",
+        // A server with no subscription has no paid count to contrast with —
+        // the granted count simply is what runs, and nothing is billed.
+        r.unbilled
+          ? r.appliedCount > 0
+            ? `${r.appliedCount} headless client${r.appliedCount === 1 ? "" : "s"} granted — running after a restart, no charge`
+            : "Headless clients off after the next restart"
+          : r.compedCount > 0
+            ? `${r.compedCount} headless client${r.compedCount === 1 ? "" : "s"} comped — ${r.appliedCount} run after a restart, no charge`
+            : r.count > 0
+              ? `Comp removed — server keeps its ${r.count} paid client${r.count === 1 ? "" : "s"}`
+              : "Comp removed — headless clients off after the next restart",
       );
       queryClient.invalidateQueries({ queryKey: ["admin", "servers"] });
       setHcTarget(null);
@@ -594,15 +600,13 @@ export default function AdminServersPage() {
                             size="sm"
                             title="Headless clients — comp AI-offload clients, no charge"
                             onClick={() => {
-                              setHcDraft(
-                                s.subscription?.headlessClientsComp ?? 0,
-                              );
+                              setHcDraft(s.headlessClientsComp ?? 0);
                               setHcTarget(s);
                             }}
                           >
                             <Cpu
                               className={`size-4 ${
-                                (s.subscription?.headlessClientsComp ?? 0) > 0
+                                (s.headlessClientsComp ?? 0) > 0
                                   ? "text-primary"
                                   : ""
                               }`}
@@ -1293,7 +1297,7 @@ export default function AdminServersPage() {
 
           {(() => {
             const paid = hcTarget?.subscription?.headlessClients ?? 0;
-            const comped = hcTarget?.subscription?.headlessClientsComp ?? 0;
+            const comped = hcTarget?.headlessClientsComp ?? 0;
             const applied = Math.max(paid, hcDraft);
             return (
               <>

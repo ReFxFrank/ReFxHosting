@@ -639,6 +639,14 @@ model Server {
   dockerImage     String?
   // Backups for this server go to offsite object storage (paid add-on).
   expressBackups  Boolean       @default(false)
+  // Staff-granted headless clients for this server, free of charge, and what
+  // the applied HEADLESS_CLIENTS count is derived from: max(paid, this).
+  // Lives on the server (not only the subscription) so admin-made servers,
+  // which have no subscription, can be comped and un-comped too. On such a
+  // server there is no paid count to distinguish from, so this column simply
+  // holds the applied count — the same shape Server.expressBackups takes for
+  // the backups comp.
+  headlessClientsComp Int       @default(0)
 
   // Billing linkage
   subscriptionId  String?       @db.Uuid

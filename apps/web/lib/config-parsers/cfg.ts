@@ -71,25 +71,37 @@ function skipTrivia(text: string, i: number): number {
   }
 }
 
-/** Offset of the `;` closing a value, or -1 when the file ends first. */
-function findValueEnd(text: string, start: number): number {
+/**
+ * Offset of the `;` closing a value (-1 at EOF), plus whether the value ran
+ * past a line break outside `{}`. A value that crosses a newline means the
+ * previous line simply lost its `;` — indexing it would swallow the following
+ * assignments and a save would delete them.
+ */
+function findValueEnd(
+  text: string,
+  start: number,
+): { semi: number; multiline: boolean } {
   let i = start;
   let depth = 0;
+  let multiline = false;
   while (i < text.length) {
     const c = text[i];
     if (c === '"') {
       const next = skipString(text, i);
-      if (next === -1) return -1;
+      if (next === -1) return { semi: -1, multiline };
       i = next;
       continue;
     }
     if (c === "/" && text[i + 1] === "/") {
+      // A line comment eats the rest of the line, so any `;` is on a later one.
+      if (depth <= 0) multiline = true;
       i = endOfLine(text, i);
       continue;
     }
     if (c === "/" && text[i + 1] === "*") {
       const next = skipBlockComment(text, i);
-      if (next === -1) return -1;
+      if (next === -1) return { semi: -1, multiline };
+      if (depth <= 0 && text.slice(i, next).includes("\n")) multiline = true;
       i = next;
       continue;
     }
@@ -103,10 +115,11 @@ function findValueEnd(text: string, start: number): number {
       i++;
       continue;
     }
-    if (c === ";" && depth <= 0) return i;
+    if (c === "\n" && depth <= 0) multiline = true;
+    if (c === ";" && depth <= 0) return { semi: i, multiline };
     i++;
   }
-  return -1;
+  return { semi: -1, multiline };
 }
 
 export function parseCfg(text: string): ConfigDoc {
@@ -175,10 +188,17 @@ export function parseCfg(text: string): ConfigDoc {
         continue;
       }
       const valueStart = skipTrivia(text, k + 1);
-      const semi = findValueEnd(text, valueStart);
+      const { semi, multiline } = findValueEnd(text, valueStart);
       if (semi === -1) {
         issues.push(`"${key}" is missing its closing ";"`);
         i = j;
+        continue;
+      }
+      if (multiline) {
+        issues.push(
+          `"${key}" is missing its closing ";" — its value runs into the following line`,
+        );
+        i = semi + 1;
         continue;
       }
       if (depth === 0) {

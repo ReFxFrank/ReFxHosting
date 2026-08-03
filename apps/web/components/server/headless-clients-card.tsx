@@ -122,7 +122,7 @@ export function HeadlessClientsCard({ server }: { server: Server }) {
             </span>{" "}
             {count > comped
               ? `You pay for ${count}, so ${applied} run in total.`
-              : `${applied} run in total and you're billed for ${count}. Buying up to ${comped} adds nothing to your bill.`}
+              : `${applied} run in total and you're billed for ${count}. Buying up to ${comped} adds no extra clients — the comp already covers them.`}
           </p>
         )}
         {count > 0 && !status.unbilled && (
