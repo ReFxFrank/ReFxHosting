@@ -18,7 +18,7 @@ Legend:
 > typechecks; the node-agent builds/vets/tests on linux/amd64, linux/arm64,
 > windows/amd64; `apps/web` builds, typechecks, and lints; and `apps/panel-api`
 > compiles with 0 type errors, boots (all modules init, all REST routes map, the
-> code-first GraphQL schema generates), and passes **718 unit + 49 e2e tests**.
+> code-first GraphQL schema generates), and passes **721 unit + 49 e2e tests**.
 
 ## Components
 

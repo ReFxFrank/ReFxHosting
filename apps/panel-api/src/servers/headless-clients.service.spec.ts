@@ -212,14 +212,17 @@ describe('HeadlessClientsService', () => {
       expect(appliedValue(prisma)).toBe('3');
     });
 
-    it('does not let a customer save wipe a staff grant on an unbilled server', async () => {
+    // Without a subscription there is nothing to bill, so the owner's count
+    // and a staff grant deliberately share one slot: whoever writes last wins
+    // and the owner can still turn the clients off again.
+    it('shares a single slot with a staff grant on an unbilled server', async () => {
       const { svc, prisma } = make({
         ...ARMA,
         subscriptionId: null,
         headlessClientsComp: 2,
       });
-      await svc.setCount('s1', 'owner', 2);
-      expect(appliedValue(prisma)).toBe('2');
+      await svc.setCount('s1', 'owner', 1);
+      expect(appliedValue(prisma)).toBe('1');
     });
   });
 
