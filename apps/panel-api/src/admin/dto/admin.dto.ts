@@ -542,6 +542,23 @@ export class SetBackupStorageDto {
 }
 
 /** Owner-editable express-backups (offsite storage add-on) settings. */
+export class SetHeadlessClientsConfigDto {
+  @ApiPropertyOptional({
+    description: "Offer the paid headless-clients add-on (Arma 3 AI offload).",
+  })
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @ApiPropertyOptional({
+    description: "Monthly fee PER CLIENT in minor units (400 = $4.00/mo).",
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  monthlyMinor?: number;
+}
+
 export class SetExpressBackupsConfigDto {
   @ApiPropertyOptional({
     description:

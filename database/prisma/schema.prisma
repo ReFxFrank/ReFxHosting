@@ -1100,6 +1100,10 @@ model Subscription {
   // Paid add-on: offsite (S3/R2) backups with presigned direct downloads.
   // Billed as an extra line on every cycle invoice; drives Server.expressBackups.
   expressBackups  Boolean           @default(false)
+  // Paid Arma-3-style headless clients (AI offload processes inside the
+  // server's container). Count is billed as a per-cycle line (count x monthly
+  // fee) and drives the server's HEADLESS_CLIENTS variable via the panel card.
+  headlessClients Int               @default(0)
   // Admin comp of the Express Backups add-on: enables offsite routing WITHOUT
   // the per-cycle charge (support/goodwill). Orthogonal to `expressBackups` —
   // Server.expressBackups routing is (expressBackups || expressBackupsComp),

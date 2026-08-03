@@ -49,6 +49,7 @@ import {
   ALL_GRANTABLE_KEYS,
   hasServerPermission,
 } from "@/lib/server-permissions";
+import { HeadlessClientsCard } from "@/components/server/headless-clients-card";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -115,6 +116,9 @@ export default function ServerSettingsPage() {
             <div className="space-y-6">
               <GeneralTab server={server} />
               <UpdateGameCard server={server} />
+              {server.template?.slug === "arma3" && (
+                <HeadlessClientsCard server={server} />
+              )}
               <AutoRestartCard server={server} />
               <VanityAddressCard server={server} />
             </div>

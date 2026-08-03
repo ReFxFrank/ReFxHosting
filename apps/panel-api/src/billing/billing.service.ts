@@ -1912,17 +1912,32 @@ export class BillingService {
     // Express-backups add-on: a per-cycle line on top of the plan, scaled from
     // the admin-configured monthly fee to the subscription's interval. Charged
     // for as long as the subscription carries the flag.
-    let addonMinor = 0;
-    let addonLabel = '';
+    const addons: { label: string; amountMinor: number }[] = [];
     if (subscription.expressBackups) {
       const cfg = await this.settings.expressBackupsConfig();
       if (cfg.monthlyMinor > 0) {
-        addonMinor = Math.round(
-          cfg.monthlyMinor * intervalMonths(subscription.interval),
-        );
-        addonLabel = 'Express backups — offsite storage & fast downloads';
+        addons.push({
+          label: 'Express backups — offsite storage & fast downloads',
+          amountMinor: Math.round(
+            cfg.monthlyMinor * intervalMonths(subscription.interval),
+          ),
+        });
       }
     }
+    // Headless-clients add-on: count × monthly fee, scaled to the interval.
+    if ((subscription.headlessClients ?? 0) > 0) {
+      const cfg = await this.settings.headlessClientsConfig();
+      if (cfg.monthlyMinor > 0) {
+        const n = subscription.headlessClients;
+        addons.push({
+          label: `Headless clients × ${n} — Arma AI offload`,
+          amountMinor: Math.round(
+            n * cfg.monthlyMinor * intervalMonths(subscription.interval),
+          ),
+        });
+      }
+    }
+    const addonMinor = addons.reduce((sum, a) => sum + a.amountMinor, 0);
     const subtotalMinor = unitMinor * quantity + addonMinor;
     // Coupon discount reduces the taxable base; never exceeds the subtotal.
     const discountMinor = Math.max(
@@ -1984,17 +1999,15 @@ export class BillingService {
               unitMinor,
               amountMinor: unitMinor * quantity,
             },
-            ...(addonMinor > 0
-              ? [
-                  {
-                    id: uuidv7(),
-                    description: addonLabel,
-                    quantity: 1,
-                    unitMinor: addonMinor,
-                    amountMinor: addonMinor,
-                  },
-                ]
-              : []),
+            ...addons
+              .filter((a) => a.amountMinor > 0)
+              .map((a) => ({
+                id: uuidv7(),
+                description: a.label,
+                quantity: 1,
+                unitMinor: a.amountMinor,
+                amountMinor: a.amountMinor,
+              })),
           ],
         },
       },

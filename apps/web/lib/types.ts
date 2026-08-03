@@ -924,6 +924,16 @@ export interface VanityAddressStatus {
 }
 
 /** State of the level.dat / level.dat_old pair for the world-recovery card. */
+/** Paid Arma 3 headless-clients add-on (GET/POST /servers/:id/headless-clients). */
+export interface HeadlessClientsStatus {
+  enabled: boolean;
+  monthlyMinor: number;
+  currency: string;
+  count: number;
+  max: number;
+  unbilled: boolean;
+}
+
 export interface LevelDatStatus {
   world: string;
   hasLevelDat: boolean;

@@ -20,6 +20,7 @@ import { ModpackService } from "./modpack.service";
 import { WorldRecoveryService } from "./world-recovery.service";
 import { PalworldSettingsService } from "./palworld-settings.service";
 import { PalworldModsService } from "./palworld-mods.service";
+import { HeadlessClientsService } from "./headless-clients.service";
 import { VanityAddressService } from "./vanity-address.service";
 import { PlayersService } from "./players.service";
 import { WorkshopService } from "./workshop.service";
@@ -83,6 +84,7 @@ export class ServersController {
     private readonly worldRecovery: WorldRecoveryService,
     private readonly palworldSettings: PalworldSettingsService,
     private readonly palworldMods: PalworldModsService,
+    private readonly headlessClients: HeadlessClientsService,
     private readonly vanity: VanityAddressService,
     private readonly playersService: PlayersService,
   ) {}
@@ -229,6 +231,29 @@ export class ServersController {
   @RequirePermissions("server.read")
   gameHistory(@Param("serverId") id: string) {
     return this.servers.gameHistory(id);
+  }
+
+  // ---- headless clients (paid add-on; Arma 3 AI offload) -----------------
+
+  @Get(":id/headless-clients")
+  @RequirePermissions("settings.read")
+  headlessClientsStatus(@Param("id") id: string) {
+    return this.headlessClients.status(id);
+  }
+
+  @Post(":id/headless-clients")
+  @RequirePermissions("settings.update")
+  @Audit({
+    action: "server.headless-clients.set",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  setHeadlessClients(
+    @Param("id") id: string,
+    @CurrentUser("id") userId: string,
+    @Body() dto: { count: number },
+  ) {
+    return this.headlessClients.setCount(id, userId, Number(dto?.count ?? 0));
   }
 
   /** Templates this server may switch to (product whitelist; empty = all). */

@@ -45,6 +45,7 @@ import type {
   StaffMember,
   User,
   FileEntry,
+  HeadlessClientsStatus,
   LevelDatStatus,
   VanityAddressStatus,
   LevelDatRestoreResult,
@@ -549,6 +550,12 @@ export const api = {
       ),
     // World recovery — restore a corrupt level.dat from Minecraft's own
     // level.dat_old backup ("Failed to load datapacks" / empty world-gen).
+    headlessClients: (id: string) =>
+      http.get<HeadlessClientsStatus>(`/servers/${id}/headless-clients`),
+    setHeadlessClients: (id: string, count: number) =>
+      http.post<HeadlessClientsStatus>(`/servers/${id}/headless-clients`, {
+        count,
+      }),
     levelDatStatus: (id: string) =>
       http.get<LevelDatStatus>(`/servers/${id}/world/level-dat-status`),
     restoreLevelDat: (id: string) =>

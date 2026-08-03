@@ -97,7 +97,7 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
         "createdBy": "install"
       }
     ],
-    "note": "server.cfg is seeded from SERVER_NAME/SERVER_PASSWORD/MAX_PLAYERS only when absent ([ ! -f ] guard); reinstall does not overwrite it, but deleting it reseeds from panel variables. After first install, panel variable changes do NOT reach server.cfg — the file is authoritative."
+    "note": "The panel-owned keys (hostname, maxPlayers, password/passwordAdmin when set, battleyeLicense, headlessClients allowlist) are re-synced from the Startup tab into server.cfg on EVERY boot - change them there, restart, done. Everything else in the file is yours: edit it here and restart to apply. Deleting the file reseeds it from panel variables."
   },
   "astroneer": {
     "files": [

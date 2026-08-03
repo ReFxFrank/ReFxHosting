@@ -30,6 +30,8 @@ const KEY = {
   vanityReservedWords: 'features.vanityAddress.reservedWords',
   expressBackupsEnabled: 'features.expressBackups.enabled',
   expressBackupsMonthlyMinor: 'billing.expressBackupsMonthlyMinor',
+  headlessClientsEnabled: 'features.headlessClients.enabled',
+  headlessClientsMonthlyMinor: 'billing.headlessClientsMonthlyMinor',
   backupS3Endpoint: 'backup.s3.endpoint',
   backupS3Region: 'backup.s3.region',
   backupS3Bucket: 'backup.s3.bucket',
@@ -380,6 +382,43 @@ export class SettingsService {
       enabled: enabledStr === 'true',
       monthlyMinor: Number.isFinite(fee) && fee >= 0 ? Math.round(fee) : 200,
     };
+  }
+
+  /**
+   * Paid headless-clients add-on (Arma 3 AI offload). Enabled by DEFAULT with a
+   * $4/mo-per-client fee so the card works out of the box; operators tune or
+   * disable it via PATCH /admin/settings/headless-clients.
+   */
+  async headlessClientsConfig(): Promise<{
+    enabled: boolean;
+    monthlyMinor: number;
+  }> {
+    const enabledStr = await this.get(KEY.headlessClientsEnabled);
+    const feeStr = await this.get(KEY.headlessClientsMonthlyMinor);
+    const fee = feeStr ? Number(feeStr) : NaN;
+    return {
+      enabled: enabledStr !== 'false',
+      monthlyMinor: Number.isFinite(fee) && fee >= 0 ? Math.round(fee) : 400,
+    };
+  }
+
+  /** Apply owner edits to the headless-clients config. */
+  async setHeadlessClientsConfig(dto: {
+    enabled?: boolean;
+    monthlyMinor?: number;
+  }): Promise<void> {
+    if (dto.enabled !== undefined)
+      await this.set(
+        KEY.headlessClientsEnabled,
+        dto.enabled ? 'true' : 'false',
+        false,
+      );
+    if (dto.monthlyMinor !== undefined)
+      await this.set(
+        KEY.headlessClientsMonthlyMinor,
+        String(Math.max(0, Math.round(dto.monthlyMinor))),
+        false,
+      );
   }
 
   /** Apply owner edits to the express-backups config. */

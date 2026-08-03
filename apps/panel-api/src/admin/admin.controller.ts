@@ -110,6 +110,7 @@ import {
   SetSteamConfigDto,
   SetVanityConfigDto,
   SetExpressBackupsConfigDto,
+  SetHeadlessClientsConfigDto,
   SetBackupStorageDto,
   SetReferralConfigDto,
   VerifySteamLoginDto,
@@ -903,6 +904,23 @@ export class AdminController {
   }
 
   // ---- Express backups (offsite storage add-on) ---------------------------
+
+  @Get("settings/headless-clients")
+  @RequirePerm("settings.manage")
+  headlessClientsConfig() {
+    return this.settings.headlessClientsConfig();
+  }
+
+  @Patch("settings/headless-clients")
+  @RequirePerm("settings.manage")
+  @Audit({
+    action: "admin.settings.headlessClients.update",
+    targetType: "PlatformSetting",
+  })
+  async setHeadlessClientsConfig(@Body() dto: SetHeadlessClientsConfigDto) {
+    await this.settings.setHeadlessClientsConfig(dto);
+    return this.settings.headlessClientsConfig();
+  }
 
   @Get("settings/express-backups")
   @RequirePerm("settings.manage")
