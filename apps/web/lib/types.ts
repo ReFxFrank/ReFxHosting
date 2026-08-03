@@ -178,10 +178,15 @@ export interface AdminServer extends Server {
   owner?: Pick<User, "id" | "email" | "firstName" | "lastName"> | null;
   /** Offsite (R2) backup routing flag on the server row. */
   expressBackups?: boolean;
-  /** Express Backups billing state: `expressBackups` = paid, `expressBackupsComp` = admin comp. */
+  /**
+   * Add-on billing state — the `*Comp` fields are admin comps (granted, never
+   * billed); the plain fields are what the customer actually pays for.
+   */
   subscription?: {
     expressBackups: boolean;
     expressBackupsComp: boolean;
+    headlessClients: number;
+    headlessClientsComp: number;
   } | null;
 }
 
@@ -929,7 +934,12 @@ export interface HeadlessClientsStatus {
   enabled: boolean;
   monthlyMinor: number;
   currency: string;
+  /** Purchased count — the only number that is billed. */
   count: number;
+  /** Free clients granted by staff; never billed. */
+  compedCount: number;
+  /** What actually runs: max(count, compedCount). */
+  appliedCount: number;
   max: number;
   unbilled: boolean;
 }

@@ -541,7 +541,7 @@ export class SetBackupStorageDto {
   usePathStyle?: boolean;
 }
 
-/** Owner-editable express-backups (offsite storage add-on) settings. */
+/** Owner-editable headless-clients (Arma 3 AI offload add-on) settings. */
 export class SetHeadlessClientsConfigDto {
   @ApiPropertyOptional({
     description: "Offer the paid headless-clients add-on (Arma 3 AI offload).",
@@ -557,6 +557,20 @@ export class SetHeadlessClientsConfigDto {
   @IsInt()
   @Min(0)
   monthlyMinor?: number;
+}
+
+/** Admin comp of headless clients for one server — granted, never billed. */
+export class SetHeadlessClientsCompDto {
+  @ApiProperty({
+    description:
+      "Free headless clients to grant (0 removes the comp). The applied count becomes max(paid, comped).",
+    minimum: 0,
+    maximum: 3,
+  })
+  @IsInt()
+  @Min(0)
+  @Max(3)
+  count!: number;
 }
 
 export class SetExpressBackupsConfigDto {

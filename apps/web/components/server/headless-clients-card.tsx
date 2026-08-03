@@ -37,9 +37,12 @@ export function HeadlessClientsCard({ server }: { server: Server }) {
     onSuccess: (s) => {
       setDraft(null);
       queryClient.invalidateQueries({ queryKey: ["headless-clients", server.id] });
+      // Report what will actually run, which a staff comp can keep above the
+      // count the customer just chose.
+      const running = Math.max(s.count, s.compedCount);
       toast.success(
-        s.count > 0
-          ? `${s.count} headless client${s.count === 1 ? "" : "s"} — applies on next restart`
+        running > 0
+          ? `${running} headless client${running === 1 ? "" : "s"} — applies on next restart`
           : "Headless clients disabled — applies on next restart",
       );
     },
@@ -49,9 +52,13 @@ export function HeadlessClientsCard({ server }: { server: Server }) {
       ),
   });
 
-  if (!status?.enabled) return null;
+  // Staff can comp clients on a server whose add-on isn't publicly offered —
+  // the customer still needs to see what they've been given.
+  if (!status || (!status.enabled && status.compedCount === 0)) return null;
   const count = draft ?? status.count;
   const dirty = draft !== null && draft !== status.count;
+  const comped = status.compedCount;
+  const applied = Math.max(count, comped);
 
   return (
     <Card>
@@ -81,7 +88,7 @@ export function HeadlessClientsCard({ server }: { server: Server }) {
             <Button
               variant="outline"
               size="icon-sm"
-              disabled={count <= 0 || save.isPending}
+              disabled={count <= 0 || save.isPending || !status.enabled}
               onClick={() => setDraft(Math.max(0, count - 1))}
               aria-label="Fewer headless clients"
             >
@@ -91,7 +98,7 @@ export function HeadlessClientsCard({ server }: { server: Server }) {
             <Button
               variant="outline"
               size="icon-sm"
-              disabled={count >= status.max || save.isPending}
+              disabled={count >= status.max || save.isPending || !status.enabled}
               onClick={() => setDraft(Math.min(status.max, count + 1))}
               aria-label="More headless clients"
             >
@@ -101,18 +108,28 @@ export function HeadlessClientsCard({ server }: { server: Server }) {
               size="sm"
               className="ml-2"
               loading={save.isPending}
-              disabled={!dirty}
+              disabled={!dirty || !status.enabled}
               onClick={() => save.mutate(count)}
             >
               Save
             </Button>
           </div>
         </div>
+        {comped > 0 && (
+          <p className="rounded-lg border border-success/30 bg-success/5 p-3 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {comped} client{comped === 1 ? "" : "s"} comped by staff — free.
+            </span>{" "}
+            {count > comped
+              ? `You pay for ${count}, so ${applied} run in total.`
+              : `${applied} run in total and you're billed for ${count}. Buying up to ${comped} adds nothing to your bill.`}
+          </p>
+        )}
         {count > 0 && !status.unbilled && (
           <p className="text-xs text-muted-foreground">
             Total: {formatMoney(status.monthlyMinor * count, status.currency)}/mo
-            for {count} client{count === 1 ? "" : "s"}. The mission must support
-            headless clients.
+            for {count} paid client{count === 1 ? "" : "s"}. The mission must
+            support headless clients.
           </p>
         )}
       </CardContent>

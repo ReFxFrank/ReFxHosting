@@ -21,8 +21,12 @@ export interface HeadlessClientsStatus {
   /** Fee per client per month, minor units. */
   monthlyMinor: number;
   currency: string;
-  /** Currently purchased/applied count. */
+  /** Purchased count — the only number that is ever billed. */
   count: number;
+  /** Free clients granted by staff (admin comp); never billed. */
+  compedCount: number;
+  /** What actually runs on the server: max(count, compedCount). */
+  appliedCount: number;
   max: number;
   /** True when the server has no subscription (admin-made) — changes apply
    *  without billing, mirroring the express-backups comp behavior. */
@@ -92,23 +96,44 @@ export class HeadlessClientsService {
     return price?.currency || "USD";
   }
 
+  private clamp(count: number): number {
+    return Math.max(0, Math.min(MAX_HEADLESS_CLIENTS, Math.round(count)));
+  }
+
+  /** Paid + comped counts, or null for a server with no subscription. */
+  private async counts(
+    subscriptionId: string | null,
+  ): Promise<{ paid: number; comped: number } | null> {
+    if (!subscriptionId) return null;
+    const sub = await this.prisma.subscription.findUnique({
+      where: { id: subscriptionId },
+      select: { headlessClients: true, headlessClientsComp: true },
+    });
+    return {
+      paid: sub?.headlessClients ?? 0,
+      comped: sub?.headlessClientsComp ?? 0,
+    };
+  }
+
   async status(serverId: string): Promise<HeadlessClientsStatus> {
     const server = await this.load(serverId);
     const cfg = await this.settings.headlessClientsConfig();
     const applied = Number(server.variables[0]?.value ?? "0") || 0;
-    let count = applied;
-    if (server.subscriptionId) {
-      const sub = await this.prisma.subscription.findUnique({
-        where: { id: server.subscriptionId },
-        select: { headlessClients: true },
-      });
-      count = sub?.headlessClients ?? applied;
-    }
+    const counts = await this.counts(server.subscriptionId);
+    // Without a subscription there is no paid/comped split to report: the
+    // variable on the server IS the state, exactly like the express-backups
+    // comp on an admin-made server.
+    const count = counts ? counts.paid : applied;
+    const compedCount = counts ? counts.comped : 0;
     return {
       enabled: cfg.enabled,
       monthlyMinor: cfg.monthlyMinor,
       currency: await this.currencyFor(server.subscriptionId),
       count,
+      compedCount,
+      appliedCount: counts
+        ? this.clamp(Math.max(counts.paid, counts.comped))
+        : applied,
       max: MAX_HEADLESS_CLIENTS,
       unbilled: !server.subscriptionId,
     };
@@ -137,29 +162,65 @@ export class HeadlessClientsService {
         "Headless clients are not available right now.",
       );
     }
-    const count = Math.max(
-      0,
-      Math.min(MAX_HEADLESS_CLIENTS, Math.round(countRaw)),
-    );
+    const count = this.clamp(countRaw);
 
     // Billing side: persist the purchased count on the subscription (renewal
     // invoices add the line). Admin-made servers have no subscription — apply
     // unbilled, mirroring how express-backups comp works for those servers.
+    let effective = count;
     if (server.subscriptionId) {
+      const counts = await this.counts(server.subscriptionId);
       await this.prisma.subscription.update({
         where: { id: server.subscriptionId },
         data: { headlessClients: count },
       });
+      // A staff comp keeps applying even when the customer buys fewer.
+      effective = this.clamp(Math.max(count, counts?.comped ?? 0));
     }
 
-    // Server side: the variable the launcher consumes, fresh on next boot.
+    await this.apply(serverId, effective);
+    return this.status(serverId);
+  }
+
+  /**
+   * Admin comp: grant N headless clients free of charge (support/goodwill).
+   * Never touches `Subscription.headlessClients`, so the renewal invoice line
+   * keeps billing only what the customer actually bought; the applied count
+   * becomes max(paid, comped). Passing 0 removes the comp and drops the server
+   * back to the paid count. Not gated on the add-on being publicly offered —
+   * staff must be able to comp a server whatever the storefront is doing.
+   */
+  async setComp(
+    serverId: string,
+    countRaw: number,
+  ): Promise<HeadlessClientsStatus> {
+    const server = await this.load(serverId);
+    const comped = this.clamp(countRaw);
+
+    let effective = comped;
+    if (server.subscriptionId) {
+      const counts = await this.counts(server.subscriptionId);
+      await this.prisma.subscription.update({
+        where: { id: server.subscriptionId },
+        data: { headlessClientsComp: comped },
+      });
+      effective = this.clamp(Math.max(counts?.paid ?? 0, comped));
+    }
+    // Subscription-less (admin/internal) servers have no paid count to
+    // distinguish from, so the applied variable IS the comp state — the same
+    // lesson as the express-backups comp, which must not error out here.
+
+    await this.apply(serverId, effective);
+    return this.status(serverId);
+  }
+
+  /** Write the variable the launcher consumes, fresh on the next boot. */
+  private async apply(serverId: string, count: number): Promise<void> {
     await this.prisma.serverVariable.upsert({
       where: { serverId_envName: { serverId, envName: HC_VAR } },
       create: { id: uuidv7(), serverId, envName: HC_VAR, value: String(count) },
       update: { value: String(count) },
     });
     await this.servers.reloadSpec(serverId);
-
-    return this.status(serverId);
   }
 }

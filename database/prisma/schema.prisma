@@ -1109,6 +1109,11 @@ model Subscription {
   // Server.expressBackups routing is (expressBackups || expressBackupsComp),
   // but only the paid flag adds the invoice line.
   expressBackupsComp Boolean        @default(false)
+  // Admin comp of headless clients: grants clients WITHOUT the per-cycle
+  // charge (support/goodwill). Orthogonal to `headlessClients` — the applied
+  // HEADLESS_CLIENTS count is max(headlessClients, headlessClientsComp),
+  // but only the paid count adds the invoice line.
+  headlessClientsComp Int           @default(0)
   // First-touch acquisition data at order time (UTM/ref/landing), for
   // channel-level revenue attribution.
   attribution     Json?

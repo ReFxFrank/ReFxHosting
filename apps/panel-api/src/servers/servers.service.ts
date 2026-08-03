@@ -592,10 +592,15 @@ export class ServersService {
             select: { id: true, email: true, firstName: true, lastName: true },
           },
           allocations: true,
-          // Express Backups state so the admin UI can show paid vs comped vs off
+          // Add-on state so the admin UI can show paid vs comped vs off
           // (Server.expressBackups is the routing flag, already a scalar here).
           subscription: {
-            select: { expressBackups: true, expressBackupsComp: true },
+            select: {
+              expressBackups: true,
+              expressBackupsComp: true,
+              headlessClients: true,
+              headlessClientsComp: true,
+            },
           },
         },
       }),

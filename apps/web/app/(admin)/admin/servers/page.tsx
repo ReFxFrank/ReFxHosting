@@ -19,6 +19,7 @@ import {
   TriangleAlert,
   Mic,
   Cloud,
+  Cpu,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader, EmptyState, ListSkeleton } from "@/components/shared";
@@ -196,6 +197,32 @@ export default function AdminServersPage() {
     onError: (e) =>
       toast.error(
         e instanceof ApiError ? e.message : "Failed to update Express Backups",
+      ),
+  });
+
+  // Headless-clients comp — grant Arma AI-offload clients, no charge. The API
+  // clamps to the same maximum; this is only what the stepper allows.
+  const [hcTarget, setHcTarget] = useState<AdminServer | null>(null);
+  const [hcDraft, setHcDraft] = useState(0);
+  const compHeadless = useMutation({
+    mutationFn: (count: number) =>
+      count > 0
+        ? api.admin.compHeadlessClients(hcTarget!.id, count)
+        : api.admin.uncompHeadlessClients(hcTarget!.id),
+    onSuccess: (r) => {
+      toast.success(
+        r.compedCount > 0
+          ? `${r.compedCount} headless client${r.compedCount === 1 ? "" : "s"} comped — ${r.appliedCount} run after a restart, no charge`
+          : r.count > 0
+            ? `Comp removed — server keeps its ${r.count} paid client${r.count === 1 ? "" : "s"}`
+            : "Comp removed — headless clients off after the next restart",
+      );
+      queryClient.invalidateQueries({ queryKey: ["admin", "servers"] });
+      setHcTarget(null);
+    },
+    onError: (e) =>
+      toast.error(
+        e instanceof ApiError ? e.message : "Failed to update headless clients",
       ),
   });
 
@@ -561,6 +588,28 @@ export default function AdminServersPage() {
                           />{" "}
                           R2
                         </Button>
+                        {s.template?.slug === "arma3" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Headless clients — comp AI-offload clients, no charge"
+                            onClick={() => {
+                              setHcDraft(
+                                s.subscription?.headlessClientsComp ?? 0,
+                              );
+                              setHcTarget(s);
+                            }}
+                          >
+                            <Cpu
+                              className={`size-4 ${
+                                (s.subscription?.headlessClientsComp ?? 0) > 0
+                                  ? "text-primary"
+                                  : ""
+                              }`}
+                            />{" "}
+                            HC
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon-sm"
@@ -1223,6 +1272,97 @@ export default function AdminServersPage() {
                       <Cloud className="size-4" /> Comp Express Backups
                     </Button>
                   )}
+                </DialogFooter>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Headless-clients comp — grant Arma AI offload without billing it */}
+      <Dialog open={!!hcTarget} onOpenChange={(o) => !o && setHcTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Headless clients — {hcTarget?.name}</DialogTitle>
+            <DialogDescription>
+              Grant headless clients at no charge. Billing is untouched — the
+              renewal invoice keeps charging only what the customer bought, and
+              the server runs whichever count is higher.
+            </DialogDescription>
+          </DialogHeader>
+
+          {(() => {
+            const paid = hcTarget?.subscription?.headlessClients ?? 0;
+            const comped = hcTarget?.subscription?.headlessClientsComp ?? 0;
+            const applied = Math.max(paid, hcDraft);
+            return (
+              <>
+                <div className="space-y-3 text-sm">
+                  <div className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+                    {hcTarget?.subscription ? (
+                      <>
+                        Customer pays for{" "}
+                        <span className="font-medium">{paid}</span>, staff
+                        comped <span className="font-medium">{comped}</span>.
+                      </>
+                    ) : (
+                      "This server has no subscription — nothing is billed either way, so the comp simply sets the applied count."
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-white/10 p-3">
+                    <span className="text-xs text-muted-foreground">
+                      Comped clients (0 removes the comp)
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        disabled={hcDraft <= 0 || compHeadless.isPending}
+                        onClick={() => setHcDraft((n) => Math.max(0, n - 1))}
+                        aria-label="Fewer comped clients"
+                      >
+                        <Minus className="size-4" />
+                      </Button>
+                      <span className="w-8 text-center font-semibold">
+                        {hcDraft}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon-sm"
+                        disabled={hcDraft >= 3 || compHeadless.isPending}
+                        onClick={() => setHcDraft((n) => Math.min(3, n + 1))}
+                        aria-label="More comped clients"
+                      >
+                        <Plus className="size-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    {applied} client{applied === 1 ? "" : "s"} will run after the
+                    next restart. Each one uses the server&apos;s own CPU and
+                    RAM, and the mission has to support headless clients.
+                  </p>
+                </div>
+
+                <DialogFooter>
+                  {comped > 0 && (
+                    <Button
+                      variant="outline"
+                      loading={compHeadless.isPending}
+                      onClick={() => compHeadless.mutate(0)}
+                    >
+                      Remove comp
+                    </Button>
+                  )}
+                  <Button
+                    loading={compHeadless.isPending}
+                    disabled={hcDraft === comped}
+                    onClick={() => compHeadless.mutate(hcDraft)}
+                  >
+                    <Cpu className="size-4" /> Apply comp
+                  </Button>
                 </DialogFooter>
               </>
             );

@@ -65,6 +65,11 @@ import { QUEUE } from "../queues/queue.constants";
     DomainsService,
     ServersResolver,
   ],
-  exports: [ServersService, TransfersService, VanityAddressService],
+  exports: [
+    ServersService,
+    TransfersService,
+    VanityAddressService,
+    HeadlessClientsService,
+  ],
 })
 export class ServersModule {}

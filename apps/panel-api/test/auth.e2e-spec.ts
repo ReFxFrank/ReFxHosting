@@ -20,6 +20,7 @@ import { PalworldSettingsService } from '../src/servers/palworld-settings.servic
 import { PalworldModsService } from '../src/servers/palworld-mods.service';
 import { VanityAddressService } from '../src/servers/vanity-address.service';
 import { PlayersService } from '../src/servers/players.service';
+import { HeadlessClientsService } from '../src/servers/headless-clients.service';
 import { MinecraftResolverService } from '../src/servers/minecraft-resolver.service';
 import { NodesService } from '../src/nodes/nodes.service';
 import { NodeAgentClient } from '../src/agent/agent.client';
@@ -65,6 +66,7 @@ describe('Auth (e2e)', () => {
         { provide: PalworldModsService, useValue: {} },
         { provide: VanityAddressService, useValue: {} },
         { provide: PlayersService, useValue: {} },
+        { provide: HeadlessClientsService, useValue: {} },
         {
           provide: MinecraftResolverService,
           useValue: { resolve: jest.fn(async (_s: unknown, v: string) => v ?? 'latest'), resolveByLoader: jest.fn(async (_l: unknown, v: string) => v ?? 'latest') },

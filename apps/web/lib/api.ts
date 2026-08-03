@@ -1780,6 +1780,17 @@ export const api = {
       http.delete<{ expressBackups: boolean; comped: boolean; paid: boolean }>(
         `/admin/servers/${id}/express-backups-comp`,
       ),
+    /** Grant free headless clients for a server; the customer is never billed for them. */
+    compHeadlessClients: (id: string, count: number) =>
+      http.post<HeadlessClientsStatus>(
+        `/admin/servers/${id}/headless-clients-comp`,
+        { count },
+      ),
+    /** Remove the headless-clients comp; the server drops back to the paid count. */
+    uncompHeadlessClients: (id: string) =>
+      http.delete<HeadlessClientsStatus>(
+        `/admin/servers/${id}/headless-clients-comp`,
+      ),
 
     // ---- Bug reports (triage board) — the /bugs endpoints; staff see all ----
     bugs: (query?: { status?: string; severity?: string; q?: string; page?: number }) =>

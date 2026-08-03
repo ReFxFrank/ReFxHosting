@@ -19,6 +19,7 @@ import { UsersService } from "../users/users.service";
 import { BillingService } from "../billing/billing.service";
 import { TemplatesService } from "../templates/templates.service";
 import { ServersService } from "../servers/servers.service";
+import { HeadlessClientsService } from "../servers/headless-clients.service";
 import { BackupsService } from "../backups/backups.service";
 import { TransfersService } from "../servers/transfers.service";
 import { DatabaseHostsService } from "../databases/database-hosts.service";
@@ -111,6 +112,7 @@ import {
   SetVanityConfigDto,
   SetExpressBackupsConfigDto,
   SetHeadlessClientsConfigDto,
+  SetHeadlessClientsCompDto,
   SetBackupStorageDto,
   SetReferralConfigDto,
   VerifySteamLoginDto,
@@ -159,6 +161,7 @@ export class AdminController {
     private readonly credit: CreditService,
     private readonly dbHosts: DatabaseHostsService,
     private readonly vanity: VanityAddressService,
+    private readonly headlessClients: HeadlessClientsService,
   ) {}
 
   // ---- Coupons -----------------------------------------------------------
@@ -1293,6 +1296,33 @@ export class AdminController {
   })
   uncompExpressBackups(@Param("id") id: string) {
     return this.servers.setExpressBackupsComp(id, false);
+  }
+
+  // ---- Headless clients comp — admin goodwill, no charge -------------------
+
+  @Post("servers/:id/headless-clients-comp")
+  @RequirePerm("servers.manage")
+  @Audit({
+    action: "admin.server.headlessClients.comp.set",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  compHeadlessClients(
+    @Param("id") id: string,
+    @Body() dto: SetHeadlessClientsCompDto,
+  ) {
+    return this.headlessClients.setComp(id, Number(dto?.count ?? 0));
+  }
+
+  @Delete("servers/:id/headless-clients-comp")
+  @RequirePerm("servers.manage")
+  @Audit({
+    action: "admin.server.headlessClients.comp.clear",
+    targetType: "Server",
+    targetParam: "id",
+  })
+  uncompHeadlessClients(@Param("id") id: string) {
+    return this.headlessClients.setComp(id, 0);
   }
 
   /**
