@@ -6,6 +6,56 @@
  * the install (or first boot) creates them — the UI handles that.
  */
 
+import {
+  ARMA3_BASIC_CFG_FIELDS,
+  ARMA3_SERVER_CFG_FIELDS,
+  BEAMMP_SERVER_CONFIG_FIELDS,
+  MINECRAFT_PROPERTIES_FIELDS,
+  PROJECT_ZOMBOID_INI_FIELDS,
+} from "./config-fields";
+
+export type ConfigFieldType =
+  | "string"
+  | "password"
+  | "int"
+  | "float"
+  | "bool"
+  | "enum"
+  | "string[]";
+
+export type ConfigFieldOption = string | { value: string; label: string };
+
+/**
+ * One typed setting inside a config file. Files that carry `fields` get the
+ * form view on the Config tab; everything else keeps the raw editor. Values
+ * are matched by `key` (plus `fileSection` for INI/TOML), so a key missing
+ * from the file simply renders as "not set".
+ */
+export interface ConfigFieldMeta {
+  /** Key exactly as the game writes it (Arma array keys omit the `[]`). */
+  key: string;
+  label: string;
+  description?: string;
+  type: ConfigFieldType;
+  /** Allowed values for `enum`; plain strings when value and label match. */
+  options?: ConfigFieldOption[];
+  min?: number;
+  max?: number;
+  /** Documented game default — shown as a hint and used to prefill "Add". */
+  default?: string;
+  /**
+   * The panel rewrites this key from a Startup-tab variable, so editing it in
+   * the file gets overwritten. Rendered read-only with a pointer to Settings.
+   */
+  managedByPanel?: boolean;
+  /** Form grouping heading. */
+  group?: string;
+  /** INI/TOML section the key lives under ("" or omitted = top level). */
+  fileSection?: string;
+  /** Rarely-changed or risky — collapsed behind "Show advanced". */
+  advanced?: boolean;
+}
+
 export interface ConfigFileMeta {
   /** Data-dir-relative path, exact case. */
   path: string;
@@ -14,6 +64,8 @@ export interface ConfigFileMeta {
   format: "ini" | "properties" | "cfg" | "json" | "toml" | "yaml" | "xml" | "txt" | "lua";
   /** Whether the install script or the game's first boot creates it. */
   createdBy: "install" | "first-boot" | "unknown";
+  /** Typed settings for the form view; absent = raw editor only. */
+  fields?: ConfigFieldMeta[];
 }
 
 export interface EggConfigEntry {
@@ -87,14 +139,16 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
         "label": "Server config",
         "description": "Main Arma 3 server config: hostname, passwords, maxPlayers, persistence, mission rotation (class Missions).",
         "format": "cfg",
-        "createdBy": "install"
+        "createdBy": "install",
+        "fields": ARMA3_SERVER_CFG_FIELDS
       },
       {
         "path": "basic.cfg",
         "label": "Network tuning (basic.cfg)",
         "description": "Bandwidth/network performance tuning (MaxMsgSend, MinBandwidth, etc.).",
         "format": "cfg",
-        "createdBy": "install"
+        "createdBy": "install",
+        "fields": ARMA3_BASIC_CFG_FIELDS
       }
     ],
     "note": "The panel-owned keys (hostname, maxPlayers, password/passwordAdmin when set, battleyeLicense, headlessClients allowlist) are re-synced from the Startup tab into server.cfg on EVERY boot - change them there, restart, done. Everything else in the file is yours: edit it here and restart to apply. Deleting the file reseeds it from panel variables."
@@ -122,6 +176,19 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
       }
     ],
     "note": "None — the install script only runs steamcmd and stages steamclient.so. Name/players/ports are startupCommand flags (--server-name, --max-players, --port), which override the matching server.ini keys each boot."
+  },
+  "beammp": {
+    "files": [
+      {
+        "path": "ServerConfig.toml",
+        "label": "Server config",
+        "description": "BeamMP [General] settings: name, description, tags, map, player/car limits, auth key.",
+        "format": "toml",
+        "createdBy": "install",
+        "fields": BEAMMP_SERVER_CONFIG_FIELDS
+      }
+    ],
+    "note": "The panel-owned keys (Name, Port, AuthKey when set, MaxPlayers, MaxCars, Map, Private) are re-synced from the Startup tab into [General] on EVERY boot — change them there, restart, done. Description, Tags, LogChat, Debug and ResourceFolder are yours: edit them here and restart to apply. Deleting the file recreates a minimal [General] section on the next boot."
   },
   "conan-exiles": {
     "files": [
@@ -276,7 +343,8 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
         "label": "Server config",
         "description": "Main Minecraft settings: MOTD, gamemode, difficulty, whitelist, etc. (server-port is panel-managed)",
         "format": "properties",
-        "createdBy": "install"
+        "createdBy": "install",
+        "fields": MINECRAFT_PROPERTIES_FIELDS
       },
       {
         "path": "eula.txt",
@@ -352,7 +420,8 @@ export const CONFIG_CATALOG: Record<string, EggConfigEntry> = {
         "label": "Server config (refx preset)",
         "description": "Main PZ server settings: PublicName, MaxPlayers, ports, Mods list, PVP, etc.",
         "format": "ini",
-        "createdBy": "install"
+        "createdBy": "install",
+        "fields": PROJECT_ZOMBOID_INI_FIELDS
       },
       {
         "path": "Zomboid/Server/refx_SandboxVars.lua",

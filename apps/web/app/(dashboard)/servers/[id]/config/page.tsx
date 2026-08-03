@@ -1,9 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileCog, Save, RotateCcw, Info, Lock } from "lucide-react";
+import {
+  FileCog,
+  Save,
+  RotateCcw,
+  Info,
+  Lock,
+  ListChecks,
+  Code2,
+} from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { PageHeader } from "@/components/shared";
 import {
@@ -23,12 +31,24 @@ import {
   configNoteFor,
   type ConfigFileMeta,
 } from "@/lib/config-files";
+import {
+  applyEdits,
+  isParseableFormat,
+  parseConfig,
+  type ConfigParserFormat,
+} from "@/lib/config-parsers";
+import { buildConfigRows, rowsToEdits } from "@/lib/config-form";
+import { ConfigFieldForm } from "@/components/server/config-field-form";
+
+/** Above this the structured form is skipped — such a file is not hand-authored. */
+const MAX_FORM_BYTES = 512_000;
 
 /**
  * Quick config editor: the egg-appropriate config files for this game, editable
  * in place without digging through the file manager. Grounded per egg in
  * lib/config-files.ts; files that don't exist yet get a clear explanation
- * instead of an error.
+ * instead of an error. Files that carry typed field metadata get a form view,
+ * with the raw editor always one click away.
  */
 export default function ConfigPage() {
   const { id } = useParams<{ id: string }>();
@@ -115,7 +135,11 @@ function ConfigFileEditor({
   running: boolean;
 }) {
   const qc = useQueryClient();
-  const [draft, setDraft] = useState<string | null>(null);
+  /** Raw editor's pending text; also the carrier when switching views. */
+  const [rawDraft, setRawDraft] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [added, setAdded] = useState<string[]>([]);
+  const [view, setView] = useState<"form" | "raw">("form");
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["config-file", serverId, file.path],
@@ -131,7 +155,9 @@ function ConfigFileEditor({
       toast.success(`${file.label} saved — restart the server to apply.`);
       // Only clear the draft if the user hasn't typed since this save started,
       // otherwise in-flight keystrokes would be silently discarded.
-      setDraft((d) => (d === saved ? null : d));
+      setRawDraft((d) => (d === saved ? null : d));
+      setDrafts({});
+      setAdded([]);
       qc.invalidateQueries({ queryKey: ["config-file", serverId, file.path] });
     },
     onError: (e) =>
@@ -142,13 +168,68 @@ function ConfigFileEditor({
   // (agent offline, permission) and must not be mislabelled as "doesn't exist".
   const notFound =
     !!error && (!(error instanceof ApiError) || error.status === 404);
-  const content = draft ?? data ?? "";
-  const dirty = draft !== null && draft !== (data ?? "");
+  const base = rawDraft ?? data ?? "";
+
+  const fields = useMemo(() => file.fields ?? [], [file.fields]);
+  const formCapable =
+    fields.length > 0 &&
+    isParseableFormat(file.format) &&
+    base.length <= MAX_FORM_BYTES;
+
+  const doc = useMemo(
+    () =>
+      formCapable
+        ? parseConfig(file.format as ConfigParserFormat, base)
+        : null,
+    [formCapable, file.format, base],
+  );
+  const rows = useMemo(
+    () => (doc ? buildConfigRows(doc, fields, drafts, added) : []),
+    [doc, fields, drafts, added],
+  );
+  const nextText = useMemo(
+    () => (doc ? applyEdits(doc, rowsToEdits(doc, rows)) : base),
+    [doc, rows, base],
+  );
+
+  const parseIssue = doc?.issues[0];
+  const formUsable = !!doc && !parseIssue;
+  const invalidRows = rows.filter((r) => r.error).length;
+  const dirty = nextText !== (data ?? "");
+  const showForm = formUsable && view === "form";
+
+  /**
+   * Both views edit the same string: leaving the form folds its pending edits
+   * into the raw draft, and returning re-reads the values out of that text —
+   * so a switch never loses work and never needs to block on unsaved changes.
+   */
+  const toRaw = () => {
+    if (dirty) setRawDraft(nextText);
+    setDrafts({});
+    setAdded([]);
+    setView("raw");
+  };
+  const toForm = () => {
+    if (!formCapable) return;
+    const parsed = parseConfig(file.format as ConfigParserFormat, base);
+    if (parsed.issues.length > 0) {
+      toast.error(`Can't show a form for this file — ${parsed.issues[0]}.`);
+      return;
+    }
+    setView("form");
+  };
+
+  const discard = () => {
+    setRawDraft(null);
+    setDrafts({});
+    setAdded([]);
+    refetch();
+  };
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle className="flex flex-wrap items-center gap-2 text-base">
           <FileCog className="size-4" />
           <span className="font-mono text-sm">{file.path}</span>
           <Badge variant="outline" className="text-[10px]">{file.format}</Badge>
@@ -156,6 +237,26 @@ function ConfigFileEditor({
             <Badge variant="muted" className="gap-1 text-[10px] font-normal">
               <Lock className="size-2.5" /> read-only
             </Badge>
+          )}
+          {formCapable && formUsable && (
+            <div className="ml-auto flex items-center gap-1 rounded-md border border-white/10 p-0.5">
+              <Button
+                type="button"
+                size="sm"
+                variant={view === "form" ? "outline" : "ghost"}
+                onClick={toForm}
+              >
+                <ListChecks className="size-3.5" /> Form
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={view === "raw" ? "outline" : "ghost"}
+                onClick={toRaw}
+              >
+                <Code2 className="size-3.5" /> Raw
+              </Button>
+            </div>
           )}
         </CardTitle>
         <CardDescription>{file.description}</CardDescription>
@@ -204,32 +305,65 @@ function ConfigFileEditor({
                 server first if your change doesn&apos;t stick.
               </div>
             )}
-            <textarea
-              value={content}
-              onChange={(e) => setDraft(e.target.value)}
-              readOnly={!canWrite}
-              spellCheck={false}
-              className="h-96 w-full resize-y rounded-md border border-white/10 bg-[rgba(7,13,24,0.7)] p-3 font-mono text-xs text-foreground focus-visible:border-primary/50 focus-visible:outline-none"
-            />
+            {fields.length > 0 && parseIssue && (
+              <div className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs text-muted-foreground">
+                Showing the raw editor: this file can&apos;t be edited as a form
+                because {parseIssue}. Fix it here and the form comes back.
+              </div>
+            )}
+
+            {showForm ? (
+              <ConfigFieldForm
+                serverId={serverId}
+                rows={rows}
+                canWrite={canWrite}
+                onChange={(id, value) =>
+                  setDrafts((d) => ({ ...d, [id]: value }))
+                }
+                onAdd={(row) => {
+                  setAdded((a) => (a.includes(row.id) ? a : [...a, row.id]));
+                  setDrafts((d) => ({
+                    ...d,
+                    [row.id]: row.field.default ?? "",
+                  }));
+                }}
+                onRevert={(id) => {
+                  setDrafts((d) => {
+                    const next = { ...d };
+                    delete next[id];
+                    return next;
+                  });
+                  setAdded((a) => a.filter((x) => x !== id));
+                }}
+              />
+            ) : (
+              <textarea
+                value={base}
+                onChange={(e) => setRawDraft(e.target.value)}
+                readOnly={!canWrite}
+                spellCheck={false}
+                className="h-96 w-full resize-y rounded-md border border-white/10 bg-[rgba(7,13,24,0.7)] p-3 font-mono text-xs text-foreground focus-visible:border-primary/50 focus-visible:outline-none"
+              />
+            )}
+
             <div className="flex items-center justify-between gap-3">
               <p className="text-xs text-muted-foreground">
-                {dirty ? "Unsaved changes." : "Changes apply on the next restart."}
+                {invalidRows > 0
+                  ? `${invalidRows} setting${invalidRows === 1 ? "" : "s"} need${invalidRows === 1 ? "s" : ""} fixing before you can save.`
+                  : dirty
+                    ? "Unsaved changes."
+                    : "Changes apply on the next restart."}
               </p>
               <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  disabled={!dirty}
-                  onClick={() => {
-                    setDraft(null);
-                    refetch();
-                  }}
-                >
+                <Button variant="ghost" disabled={!dirty} onClick={discard}>
                   <RotateCcw className="size-4" /> Discard
                 </Button>
                 <Button
-                  disabled={!canWrite || !dirty || save.isPending}
+                  disabled={
+                    !canWrite || !dirty || invalidRows > 0 || save.isPending
+                  }
                   loading={save.isPending}
-                  onClick={() => save.mutate(content)}
+                  onClick={() => save.mutate(nextText)}
                 >
                   <Save className="size-4" /> Save
                 </Button>
