@@ -48,6 +48,7 @@ import {
   PORT_RANGE_START,
   PORT_RANGE_END,
   pickFreePort,
+  pickFreePortBlock,
   isPortEnvName,
   buildAllocationAlias,
   withPrimaryAllocation,
@@ -783,6 +784,62 @@ export class ServersService {
 
   // ---- reinstall ---------------------------------------------------------
 
+  /**
+   * Heal fixed-offset port blocks on EXISTING servers (template.portBlock):
+   * creates any missing P+1..P+N-1 allocations next to the primary so the agent
+   * publishes them on the next (re)install — servers provisioned before the
+   * template declared a block (e.g. Arma 3's BattlEye port, game+4) get their
+   * missing ports on the next Update instead of needing a re-provision. Ports
+   * already taken by other servers are skipped with a warning. Best-effort.
+   */
+  private async ensurePortBlock(serverId: string): Promise<void> {
+    const server = await this.prisma.server.findFirst({
+      where: { id: serverId, deletedAt: null },
+      select: {
+        nodeId: true,
+        template: { select: { portBlock: true } },
+        allocations: {
+          select: { ip: true, port: true, alias: true, isPrimary: true },
+        },
+      },
+    });
+    const blockSize = Math.max(1, server?.template?.portBlock ?? 1);
+    if (!server || blockSize <= 1) return;
+    const primary =
+      server.allocations.find((a) => a.isPrimary) ?? server.allocations[0];
+    if (!primary) return;
+    const have = new Set(server.allocations.map((a) => a.port));
+    for (let i = 1; i < blockSize; i++) {
+      const p = primary.port + i;
+      if (have.has(p)) continue;
+      try {
+        await this.prisma.allocation.create({
+          data: {
+            id: uuidv7(),
+            nodeId: server.nodeId,
+            ip: primary.ip,
+            alias: primary.alias,
+            port: p,
+            serverId,
+            isPrimary: false,
+            label: "port-block",
+          },
+        });
+      } catch (e) {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === "P2002"
+        ) {
+          this.logger.warn(
+            `port-block heal: ${p} taken on node ${server.nodeId}; server ${serverId} still missing a fixed-offset port`,
+          );
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
+
   async reinstall(
     id: string,
     preserveData = true,
@@ -791,6 +848,9 @@ export class ServersService {
     if (!STOPPED_STATES.includes(server.state) && server.state !== "RUNNING") {
       throw new ConflictException(`Cannot reinstall while ${server.state}`);
     }
+    // Top up fixed-offset port blocks before the spec is built so the agent
+    // publishes them on this very (re)install.
+    await this.ensurePortBlock(id).catch(() => undefined);
     await this.prisma.server.update({
       where: { id },
       data: { state: "REINSTALLING" },
@@ -1857,9 +1917,14 @@ export class ServersService {
     // game domain; otherwise null and we advertise the node fqdn as before.
     const srv = await this.prisma.server.findUniqueOrThrow({
       where: { id: serverId },
-      select: { shortId: true },
+      select: { shortId: true, template: { select: { portBlock: true } } },
     });
     const alias = buildAllocationAlias(srv.shortId, node.gameDomain);
+    // Games with FIXED port offsets (Arma 3: query +1, Steam +2, VON +3,
+    // BattlEye +4) declare template.portBlock = N and need P..P+N-1 reserved
+    // together — publishing only P leaves BattlEye/query unreachable through
+    // the container and players get the "cannot find channel" kick loop.
+    const blockSize = Math.max(1, srv.template?.portBlock ?? 1);
 
     // Per-node configurable range (falls back to the global default).
     const rangeStart = node.allocationPortStart || PORT_RANGE_START;
@@ -1874,11 +1939,20 @@ export class ServersService {
         where: { nodeId, port: { gte: rangeStart, lte: rangeEnd } },
         select: { port: true },
       });
-      const candidate = pickFreePort(
-        taken.map((a) => a.port),
-        rangeStart,
-        rangeEnd,
-      );
+      const candidate =
+        blockSize > 1
+          ? pickFreePortBlock(
+              taken.map((a) => a.port),
+              blockSize,
+              rangeStart,
+              rangeEnd,
+            )
+          : pickFreePort(
+              taken.map((a) => a.port),
+              rangeStart,
+              rangeEnd,
+            );
+      if (!candidate) break; // no contiguous block fits in the range
 
       try {
         await this.prisma.allocation.create({
@@ -1910,6 +1984,40 @@ export class ServersService {
 
     if (!port) {
       throw new ConflictException("No free port available on the node");
+    }
+
+    // Reserve the rest of the block (P+1..P+N-1) as non-primary allocations so
+    // the agent publishes them. label marks them as offset-reserved so they are
+    // identifiable and never handed to *_PORT variables below. A P2002 here
+    // means another server won the race for an offset port — rare since the
+    // block was verified free above; skip it (BattlEye may stay broken until a
+    // reinstall heals it) rather than failing provisioning outright.
+    for (let i = 1; i < blockSize; i++) {
+      try {
+        await this.prisma.allocation.create({
+          data: {
+            id: uuidv7(),
+            nodeId,
+            ip: node.fqdn,
+            alias,
+            port: port + i,
+            serverId,
+            isPrimary: false,
+            label: "port-block",
+          },
+        });
+      } catch (e) {
+        if (
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === "P2002"
+        ) {
+          this.logger.warn(
+            `port-block: ${port + i} already taken on node ${nodeId}; server ${serverId} is missing a fixed-offset port`,
+          );
+          continue;
+        }
+        throw e;
+      }
     }
 
     // Wire the primary port into the startup env so {{SERVER_PORT}} resolves.

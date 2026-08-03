@@ -117,6 +117,14 @@ export class CreateTemplateDto {
   @IsInt()
   steamAppId?: number;
 
+  @ApiPropertyOptional({
+    description:
+      "Contiguous ports the game needs incl. the primary (e.g. Arma 3 = 5).",
+  })
+  @IsOptional()
+  @IsInt()
+  portBlock?: number;
+
   @ApiProperty()
   @IsString()
   startupCommand!: string;

@@ -55,6 +55,7 @@ export class TemplatesService {
         supportsWindows: dto.supportsWindows ?? false,
         dockerImages: dto.dockerImages as Prisma.InputJsonValue,
         steamAppId: dto.steamAppId ?? null,
+        portBlock: dto.portBlock ?? null,
         startupCommand: dto.startupCommand,
         startupDetect: dto.startupDetect,
         stopCommand: dto.stopCommand ?? '^C',
@@ -103,6 +104,7 @@ export class TemplatesService {
       data.dockerImages = dto.dockerImages as Prisma.InputJsonValue;
     }
     if (dto.steamAppId !== undefined) data.steamAppId = dto.steamAppId;
+    if (dto.portBlock !== undefined) data.portBlock = dto.portBlock;
     if (dto.startupCommand !== undefined) data.startupCommand = dto.startupCommand;
     if (dto.startupDetect !== undefined) data.startupDetect = dto.startupDetect;
     if (dto.stopCommand !== undefined) data.stopCommand = dto.stopCommand;

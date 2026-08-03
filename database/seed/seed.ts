@@ -112,6 +112,7 @@ interface TemplateFile {
   supportsWindows?: boolean;
   dockerImages: Record<string, string>;
   steamAppId?: number | null;
+  portBlock?: number | null;
   startupCommand: string;
   startupDetect?: string | null;
   stopCommand?: string;
@@ -1368,6 +1369,7 @@ async function seedTemplates(
             supportsWindows: tpl.supportsWindows ?? false,
             dockerImages: tpl.dockerImages as Prisma.InputJsonValue,
             steamAppId: tpl.steamAppId ?? null,
+            portBlock: tpl.portBlock ?? null,
             startupCommand: tpl.startupCommand,
             startupDetect: tpl.startupDetect ?? null,
             stopCommand: tpl.stopCommand ?? "^C",
@@ -1439,6 +1441,7 @@ async function seedTemplates(
       supportsWindows: tpl.supportsWindows ?? false,
       dockerImages: tpl.dockerImages as Prisma.InputJsonValue,
       steamAppId: tpl.steamAppId ?? null,
+      portBlock: tpl.portBlock ?? null,
       startupCommand: tpl.startupCommand,
       startupDetect: tpl.startupDetect ?? null,
       stopCommand: tpl.stopCommand ?? "^C",

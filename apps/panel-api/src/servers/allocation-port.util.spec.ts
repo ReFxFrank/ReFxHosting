@@ -96,3 +96,32 @@ describe('buildAllocationAlias', () => {
     expect(buildAllocationAlias('___', 'fra.refx.gg')).toBeNull();
   });
 });
+
+describe('pickFreePortBlock', () => {
+  const { pickFreePortBlock } = require('./allocation-port.util');
+
+  it('finds the lowest port where the whole block is free', () => {
+    // 25565 taken, 25566 free but 25569 taken -> block of 5 can't start at
+    // 25566..25569; first fully-free run starts at 25570.
+    expect(pickFreePortBlock([25565, 25569], 5)).toBe(25570);
+  });
+
+  it('behaves like pickFreePort for size 1', () => {
+    expect(pickFreePortBlock([25565], 1)).toBe(25566);
+  });
+
+  it('returns 0 when no contiguous block fits in the range', () => {
+    // every even port taken -> no run of 2 anywhere
+    const taken: number[] = [];
+    for (let p = 25565; p <= 25999; p += 2) taken.push(p);
+    expect(pickFreePortBlock(taken, 2)).toBe(0);
+  });
+
+  it('never returns a block overflowing the range end', () => {
+    // only the last 3 ports free; a block of 5 must not start there
+    const taken: number[] = [];
+    for (let p = 25565; p <= 25996; p++) taken.push(p);
+    expect(pickFreePortBlock(taken, 5)).toBe(0);
+    expect(pickFreePortBlock(taken, 3)).toBe(25997);
+  });
+});

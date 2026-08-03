@@ -463,6 +463,11 @@ model GameTemplate {
   dockerImages    Json           // {"Java 21":"ghcr.io/refx/minecraft:21"}
   // Native install (used for NATIVE_PROCESS): SteamCMD app id, etc.
   steamAppId      Int?
+  /// Contiguous ports this game needs, INCLUDING the primary (null/1 = just the
+  /// primary). Arma 3 = 5: game port P plus fixed offsets P+1 (Steam query),
+  /// P+2 (Steam master), P+3 (VON), P+4 (BattlEye traffic - not configurable).
+  /// The allocator reserves the whole block so the agent publishes every port.
+  portBlock       Int?
 
   // Startup command template with {{VAR}} interpolation.
   startupCommand  String

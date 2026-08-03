@@ -29,6 +29,34 @@ export function isPortEnvName(envName: string): boolean {
 }
 
 /**
+ * Pick the lowest port P in [start, end] such that P..P+size-1 are ALL free.
+ * Games with fixed port offsets (Arma 3: query +1, Steam +2, VON +3, BattlEye
+ * +4 — none configurable) need the whole contiguous block published, so the
+ * primary port is only usable when its block is. Returns 0 when no block fits
+ * (caller decides how to fail).
+ */
+export function pickFreePortBlock(
+  takenPorts: Iterable<number>,
+  size: number,
+  start: number = PORT_RANGE_START,
+  end: number = PORT_RANGE_END,
+): number {
+  const span = Math.max(1, size);
+  const taken = new Set<number>(takenPorts);
+  for (let port = start; port + span - 1 <= end; port++) {
+    let free = true;
+    for (let i = 0; i < span; i++) {
+      if (taken.has(port + i)) {
+        free = false;
+        break;
+      }
+    }
+    if (free) return port;
+  }
+  return 0;
+}
+
+/**
  * Branded per-server connection hostname (GPortal-style). When a node has a
  * wildcard `gameDomain` (e.g. "fra.refx.gg") and a matching `*.fra.refx.gg` DNS
  * record points at the node, each server advertises "<shortId>.<gameDomain>"
