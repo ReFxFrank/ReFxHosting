@@ -40,7 +40,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # Matches the runtime the product ships on (node:26 in the panel-api
+          # and web Dockerfiles). undici 8 does not run on Node 20.
+          node-version: 26
           cache: npm
       - run: npm ci || npm install
       # Prisma 7 removed --schema; config (schema path) lives in
@@ -79,7 +81,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # Matches the runtime the product ships on (node:26 in the panel-api
+          # and web Dockerfiles). undici 8 does not run on Node 20.
+          node-version: 26
           cache: npm
       - run: npm ci || npm install
       - name: Generate Prisma client
@@ -122,7 +126,9 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
-          node-version: 20
+          # Matches the runtime the product ships on (node:26 in the panel-api
+          # and web Dockerfiles). undici 8 does not run on Node 20.
+          node-version: 26
           cache: npm
       - name: Install workspace deps
         run: npm ci || npm install
