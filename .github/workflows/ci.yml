@@ -38,7 +38,7 @@ jobs:
       DATABASE_URL: postgresql://user:pass@localhost:5432/db
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           # Matches the runtime the product ships on (node:26 in the panel-api
           # and web Dockerfiles). undici 8 does not run on Node 20.
@@ -79,7 +79,7 @@ jobs:
       DATABASE_URL: postgresql://refx:refx@localhost:5432/refx?schema=public
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           # Matches the runtime the product ships on (node:26 in the panel-api
           # and web Dockerfiles). undici 8 does not run on Node 20.
@@ -124,7 +124,7 @@ jobs:
             dir: packages/shared
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           # Matches the runtime the product ships on (node:26 in the panel-api
           # and web Dockerfiles). undici 8 does not run on Node 20.
