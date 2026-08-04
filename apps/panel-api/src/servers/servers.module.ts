@@ -12,6 +12,7 @@ import { PalworldModsService } from "./palworld-mods.service";
 import { HeadlessClientsService } from "./headless-clients.service";
 import { VanityAddressService } from "./vanity-address.service";
 import { PlayersService } from "./players.service";
+import { ProcessesService } from "./processes.service";
 import { WorkshopService } from "./workshop.service";
 import { VoiceService } from "./voice.service";
 import { ScheduleRunner } from "./schedule.runner";
@@ -55,6 +56,7 @@ import { QUEUE } from "../queues/queue.constants";
     HeadlessClientsService,
     VanityAddressService,
     PlayersService,
+    ProcessesService,
     WorkshopService,
     VoiceService,
     ModpackProcessor,

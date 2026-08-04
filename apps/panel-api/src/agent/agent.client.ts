@@ -104,6 +104,29 @@ export interface LiveStats {
 }
 
 /**
+ * One process running inside a server's container / process group. A single
+ * server legitimately runs several (an Arma 3 server plus its headless clients
+ * share one container) and only the command line tells their roles apart.
+ */
+export interface AgentProcessInfo {
+  pid: number;
+  /** Parent pid; the agent omits it when unknown (0). */
+  ppid?: number;
+  /** Full command line — what identifies the process's role. */
+  command: string;
+  cpuPercent: number;
+  memMb: number;
+  /** How long the process has been running, 0 when unknown. */
+  elapsedSec: number;
+}
+
+/** Agent response for the process listing of one server. */
+export interface AgentProcessList {
+  state: string;
+  processes: AgentProcessInfo[];
+}
+
+/**
  * Talks to the Go node-agent over HTTPS. Every request is signed with an
  * HMAC-SHA256 of (timestamp + method + path + body) keyed by the node's
  * bootstrap token, plus a nonce, so the agent can authenticate and reject
@@ -744,6 +767,15 @@ export class NodeAgentClient {
   /** Current live resource usage for a running server. */
   fetchStats(node: Node, serverId: string): Promise<LiveStats> {
     return this.request(node, "GET", `/api/v1/servers/${serverId}/stats`);
+  }
+
+  /**
+   * Processes running inside the server. The agent answers 501 when the
+   * runtime backend cannot enumerate (e.g. Windows containers) — callers
+   * should degrade rather than error on that.
+   */
+  fetchProcesses(node: Node, serverId: string): Promise<AgentProcessList> {
+    return this.request(node, "GET", `/api/v1/servers/${serverId}/processes`);
   }
 
   // ---- agent config -------------------------------------------------------

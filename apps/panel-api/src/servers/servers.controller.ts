@@ -23,6 +23,7 @@ import { PalworldModsService } from "./palworld-mods.service";
 import { HeadlessClientsService } from "./headless-clients.service";
 import { VanityAddressService } from "./vanity-address.service";
 import { PlayersService } from "./players.service";
+import { ProcessesService } from "./processes.service";
 import { WorkshopService } from "./workshop.service";
 import { VoiceService } from "./voice.service";
 import { JwtAuthGuard } from "../auth/guards/jwt-auth.guard";
@@ -87,6 +88,7 @@ export class ServersController {
     private readonly headlessClients: HeadlessClientsService,
     private readonly vanity: VanityAddressService,
     private readonly playersService: PlayersService,
+    private readonly processesService: ProcessesService,
   ) {}
 
   // ---- collection --------------------------------------------------------
@@ -302,6 +304,15 @@ export class ServersController {
   @RequirePermissions("server.read")
   players(@Param("id") id: string) {
     return this.playersService.get(id);
+  }
+
+  // ---- live processes ------------------------------------------------------
+
+  /** Processes inside the server (e.g. Arma 3 + its headless clients). */
+  @Get(":id/processes")
+  @RequirePermissions("server.read")
+  processes(@Param("id") id: string) {
+    return this.processesService.get(id);
   }
 
   // ---- crash auto-restart --------------------------------------------------
