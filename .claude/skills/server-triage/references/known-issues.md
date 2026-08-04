@@ -64,6 +64,18 @@ These come from real incidents on the Medieval MC (MMC4) server. Canonical error
 - **Platform bug?**: no — but a **product opportunity**: the panel could surface the server's exact mod manifest for customers to hand to their players. That would prevent a large fraction of "can't connect" tickets across every modded game. TODO(frank): worth considering.
 - **Tutorial written?**: no ← strong candidate; this error class is very common across all modded Minecraft hosting.
 
+### Arma 3 launcher blamed "steamclient.so / crash before init" for every mid-run death
+
+- **Game / stack**: Arma 3, Linux Docker node (refx egg launcher)
+- **Class**: A/C — the *diagnostic* misled; the underlying crash class varies
+- **Searchable error string**: `no .rpt written — crash was before Arma init` … `A code 139 here = missing/incompatible steamclient.so`
+- **Symptom**: Server runs healthily for minutes/hours (e.g. Antistasi mission fully initialised, headless clients connected), then dies — and the console's final line claims the crash happened "before Arma init" and hints at steamclient.so. Customers chase the wrong fix.
+- **Root cause**: The launcher's exit diagnostic keyed on "no `.rpt` file found". On Linux, Arma logs to stdout and frequently never writes an `.rpt` at all, so the no-rpt branch fired after *every* crash regardless of uptime, printing a startup-crash hint written for instant deaths. A container OOM kill (the likeliest cause of a silent mid-mission death with headless clients — each HC loads the full mod set) produced no memory error anywhere, so the misleading hint was all the customer saw.
+- **Fix**: Launcher rewrite (egg `database/seed/templates/arma3.json`): reads the cgroup `oom_kill` counter (v2 `memory.events`, v1 `memory.oom_control`) before launch and after exit and prints a definitive OUT OF MEMORY verdict when it rose; otherwise explains exit 137 (SIGKILL/RAM) and 139 (segfault, with the steamclient.so hint only when uptime < 30s); the no-rpt message is now uptime-aware ("Linux server logs to the console output above").
+- **Prevention**: Exit diagnostics must be evidence-keyed (exit code, uptime, cgroup counters), never inferred from a missing file that legitimately doesn't exist on this platform.
+- **Platform bug?**: yes — fixed fleet-wide via the egg (update-panel.sh re-seed + server Update to regenerate refx-run.sh).
+- **Tutorial written?**: no ← candidate: "Arma 3 server crashes after headless clients connect" is a searchable symptom, and the honest OOM explanation (HCs multiply the mod-set RAM cost) isn't written up anywhere.
+
 ---
 
 ## Patterns worth noticing
