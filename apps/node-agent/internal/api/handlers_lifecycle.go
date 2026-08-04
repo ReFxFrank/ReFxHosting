@@ -3,11 +3,13 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/refxfrank/refxhosting/node-agent/internal/panel"
+	"github.com/refxfrank/refxhosting/node-agent/internal/runtime"
 	"github.com/refxfrank/refxhosting/node-agent/internal/server"
 	"github.com/refxfrank/refxhosting/node-agent/internal/sftp"
 )
@@ -346,6 +348,30 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		"diskUsedMb": st.DiskUsedMB,
 		"netRxBytes": st.NetRxBytes,
 		"netTxBytes": st.NetTxBytes,
+	})
+}
+
+// handleProcesses lists the processes running inside the server, so the panel
+// can distinguish the roles a single server runs (an Arma 3 server and its
+// headless clients share one container). Backends that cannot enumerate answer
+// 501 and the panel degrades to what it knows without them.
+func (s *Server) handleProcesses(w http.ResponseWriter, r *http.Request) {
+	srv := serverFrom(r.Context())
+	procs, err := s.deps.Manager.Processes(r.Context(), srv)
+	if err != nil {
+		if errors.Is(err, runtime.ErrNotImplemented) {
+			writeError(w, http.StatusNotImplemented, err.Error())
+			return
+		}
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	if procs == nil {
+		procs = []runtime.ProcessInfo{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"state":     string(srv.State()),
+		"processes": procs,
 	})
 }
 

@@ -50,10 +50,11 @@ type NativeRuntime struct {
 
 // nativeProcess holds the live state for one running native server.
 type nativeProcess struct {
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	logs    *ringBuffer
-	limiter limiter // platform resource limiter (cgroup / job object)
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	logs      *ringBuffer
+	limiter   limiter // platform resource limiter (cgroup / job object)
+	startedAt time.Time
 
 	mu          sync.Mutex
 	subscribers map[chan []byte]struct{}
@@ -285,6 +286,7 @@ func (n *NativeRuntime) Start(ctx context.Context, s *server.Server) error {
 		stdin:       stdin,
 		logs:        newRingBuffer(512),
 		limiter:     lim,
+		startedAt:   time.Now(),
 		subscribers: make(map[chan []byte]struct{}),
 		exited:      make(chan struct{}),
 	}

@@ -53,6 +53,22 @@ type Stats struct {
 	State server.State `json:"state"`
 }
 
+// ProcessInfo describes one process running inside a server's container or
+// process group. It exists so the panel can tell apart the several processes a
+// single server legitimately runs — an Arma 3 server and its headless clients
+// all live inside one container, and only their command lines distinguish them.
+type ProcessInfo struct {
+	PID  int `json:"pid"`
+	PPID int `json:"ppid,omitempty"`
+	// Command is the full command line, which is what identifies a process's
+	// role (e.g. `-client -connect=127.0.0.1 -name=hc1`).
+	Command    string  `json:"command"`
+	CPUPercent float64 `json:"cpuPercent"`
+	MemMB      int64   `json:"memMb"`
+	// ElapsedSec is how long the process has been running, 0 when unknown.
+	ElapsedSec int64 `json:"elapsedSec"`
+}
+
 // Console is a bidirectional console attachment. Output streams the merged
 // stdout/stderr of the server; Input writes to the server's stdin. Closing the
 // Console detaches without stopping the server.
@@ -124,6 +140,11 @@ type Runtime interface {
 
 	// Stats samples current resource usage.
 	Stats(ctx context.Context, s *server.Server) (Stats, error)
+
+	// Processes lists the processes running inside the server's container or
+	// process group, most recently started last. Backends that cannot
+	// enumerate return ErrNotImplemented so callers degrade rather than fail.
+	Processes(ctx context.Context, s *server.Server) ([]ProcessInfo, error)
 
 	// Reconfigure applies updated resource limits to a (possibly running)
 	// server without reinstalling it.

@@ -46,6 +46,7 @@ import type {
   User,
   FileEntry,
   HeadlessClientsStatus,
+  ProcessInfo,
   LevelDatStatus,
   VanityAddressStatus,
   LevelDatRestoreResult,
@@ -515,6 +516,14 @@ export const api = {
         version?: string | null;
         latencyMs?: number;
       }>(`/servers/${id}/players`),
+    /** Live process list from inside the server, via the node agent.
+     *  `supported: false` = the runtime backend can't enumerate processes. */
+    processes: (id: string) =>
+      http.get<{
+        state: string;
+        supported: boolean;
+        processes: ProcessInfo[];
+      }>(`/servers/${id}/processes`),
     variables: (id: string) =>
       http.get<ServerVariableField[]>(`/servers/${id}/variables`),
     setVariable: (id: string, envName: string, value: string) =>

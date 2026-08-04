@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users, Globe, Copy, ClipboardCopy, TextSelect } from "lucide-react";
+import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users, Globe, Copy, ClipboardCopy, TextSelect, ListTree } from "lucide-react";
 import { api } from "@/lib/api";
 import { type ConsoleEvent, type ConsoleStats } from "@/lib/ws";
 import { getConsole, type ConsoleHandle } from "@/lib/console-hub";
@@ -11,6 +11,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -394,6 +402,7 @@ export default function ConsolePage() {
           history={diskHist}
         />
         <PlayersCard id={id} running={running} />
+        <ProcessesCard id={id} running={state === "RUNNING"} />
       </div>
     </div>
   );
@@ -449,4 +458,90 @@ function PlayersCard({ id, running }: { id: string; running: boolean }) {
       </p>
     </Card>
   );
+}
+
+/**
+ * Live process list from inside the server, via the node agent. One game server
+ * legitimately runs several processes — an Arma 3 server plus its paid headless
+ * clients share one container — and only the command lines tell them apart.
+ * Optional telemetry: renders nothing while the server isn't RUNNING, when the
+ * runtime can't enumerate processes (`supported: false`, e.g. Windows
+ * containers) or when the panel/agent errors — never a broken card or a toast.
+ */
+function ProcessesCard({ id, running }: { id: string; running: boolean }) {
+  const { data } = useQuery({
+    queryKey: ["server", id, "processes"],
+    queryFn: () => api.servers.processes(id),
+    refetchInterval: 10_000,
+    enabled: running,
+  });
+
+  if (!running || !data?.supported || data.processes.length === 0) return null;
+
+  return (
+    <Card className="space-y-2 p-4">
+      <div className="flex items-center justify-between">
+        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+          <ListTree className="size-4" /> Processes
+        </span>
+        <span className="text-lg font-semibold tabular-nums">
+          {data.processes.length}
+        </span>
+      </div>
+      <Table className="text-xs">
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-8 px-2 text-[0.625rem]">PID</TableHead>
+            <TableHead className="h-8 px-2 text-[0.625rem]">Command</TableHead>
+            <TableHead className="h-8 px-2 text-right text-[0.625rem]">CPU</TableHead>
+            <TableHead className="h-8 px-2 text-right text-[0.625rem]">Mem</TableHead>
+            <TableHead className="h-8 px-2 text-right text-[0.625rem]">Up</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {data.processes.map((p) => (
+            <TableRow key={p.pid}>
+              <TableCell className="p-2 font-mono tabular-nums text-muted-foreground">
+                {p.pid}
+              </TableCell>
+              <TableCell className="p-2">
+                <span
+                  className="block max-w-[160px] truncate font-mono"
+                  title={p.command}
+                >
+                  {p.command}
+                </span>
+                {/(^|\s)-client(\s|$)/.test(p.command) && (
+                  <Badge variant="secondary" className="mt-1 px-1.5 py-0 text-[0.5625rem]">
+                    Headless client
+                  </Badge>
+                )}
+              </TableCell>
+              <TableCell className="p-2 text-right tabular-nums">
+                {p.cpuPercent.toFixed(1)}%
+              </TableCell>
+              <TableCell className="p-2 text-right tabular-nums">
+                {formatMb(p.memMb)}
+              </TableCell>
+              <TableCell className="p-2 text-right tabular-nums text-muted-foreground">
+                {formatElapsed(p.elapsedSec)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </Card>
+  );
+}
+
+/** Seconds → compact uptime: "2h 5m", "5m 20s", "45s". 0 means the runtime
+ * couldn't determine it (busybox ps fallback), so it renders as unknown. */
+function formatElapsed(seconds: number): string {
+  if (!seconds || seconds < 0) return "—";
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }

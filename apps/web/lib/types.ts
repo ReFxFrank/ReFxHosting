@@ -949,6 +949,22 @@ export interface HeadlessClientsStatus {
   unbilled: boolean;
 }
 
+/**
+ * One OS process inside a server, as reported by the node agent
+ * (GET /servers/:id/processes). A single game server legitimately runs several
+ * processes — an Arma 3 server plus its paid headless clients share one
+ * container — and only the command lines tell them apart.
+ */
+export interface ProcessInfo {
+  pid: number;
+  /** Parent PID; omitted when unknown (0). */
+  ppid?: number;
+  command: string;
+  cpuPercent: number;
+  memMb: number;
+  elapsedSec: number;
+}
+
 export interface LevelDatStatus {
   world: string;
   hasLevelDat: boolean;

@@ -134,6 +134,7 @@ func (s *Server) routes() chi.Router {
 				r.Use(s.loadServer)
 				r.Get("/", s.handleGetServer)
 				r.Get("/stats", s.handleStats)
+				r.Get("/processes", s.handleProcesses)
 				r.Delete("/", s.handleDestroy)
 				r.Post("/power", s.handlePower)
 				r.Post("/command", s.handleCommand)
