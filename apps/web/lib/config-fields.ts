@@ -492,7 +492,8 @@ export const ARMA3_SERVER_CFG_FIELDS: ConfigFieldMeta[] = [
   {
     key: "headlessClients",
     label: "Headless client allowlist",
-    description: "IPs allowed to connect as headless clients.",
+    description:
+      "IPs allowed to connect as headless clients. The panel adds/removes 127.0.0.1 for its own headless clients on every boot; other IPs you add via the raw editor (remote/self-hosted HCs) are preserved.",
     type: "string[]",
     group: "Headless clients",
     managedByPanel: true,
@@ -501,7 +502,7 @@ export const ARMA3_SERVER_CFG_FIELDS: ConfigFieldMeta[] = [
     key: "localClient",
     label: "Local client allowlist",
     description:
-      "IPs treated as local, so they get unlimited bandwidth (headless clients belong here).",
+      "IPs treated as local, so they get unlimited bandwidth (headless clients belong here). Managed like the allowlist above: 127.0.0.1 is panel-owned, extra IPs survive.",
     type: "string[]",
     group: "Headless clients",
     managedByPanel: true,
