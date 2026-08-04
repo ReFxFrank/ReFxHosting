@@ -103,12 +103,14 @@ func TestWriteReadDelete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer rc.Close()
 	buf := make([]byte, 5)
 	_, _ = rc.Read(buf)
 	if string(buf) != "hello" {
 		t.Errorf("got %q", buf)
 	}
+	// Close before deleting: a Windows dev box refuses to delete a file with
+	// an open read handle (production nodes are Linux, where it's allowed).
+	rc.Close()
 	if err := m.Delete("a/b.txt"); err != nil {
 		t.Fatal(err)
 	}
