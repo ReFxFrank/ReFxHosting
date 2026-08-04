@@ -2,6 +2,7 @@ import {
   PORT_RANGE_START,
   PORT_RANGE_END,
   pickFreePort,
+  pickFreePortBlock,
   isPortEnvName,
   buildAllocationAlias,
   normalizeGameDomain,
@@ -98,8 +99,6 @@ describe('buildAllocationAlias', () => {
 });
 
 describe('pickFreePortBlock', () => {
-  const { pickFreePortBlock } = require('./allocation-port.util');
-
   it('finds the lowest port where the whole block is free', () => {
     // 25565 taken, 25566 free but 25569 taken -> block of 5 can't start at
     // 25566..25569; first fully-free run starts at 25570.
