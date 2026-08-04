@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users, Globe, Copy, ClipboardCopy, TextSelect, ListTree } from "lucide-react";
+import { Play, Square, RotateCw, Zap, Cpu, MemoryStick, HardDrive, Send, Users, Globe, Copy, ClipboardCopy, TextSelect, ListTree, ChevronDown } from "lucide-react";
 import { api } from "@/lib/api";
 import { type ConsoleEvent, type ConsoleStats } from "@/lib/ws";
 import { getConsole, type ConsoleHandle } from "@/lib/console-hub";
@@ -28,7 +28,7 @@ import {
 import { toast } from "@/components/ui/sonner";
 import { ResourceGauge, type GaugePoint } from "@/components/server/resource-gauge";
 import { formatMb, pct, copyToClipboard } from "@/lib/utils";
-import type { ServerState } from "@/lib/types";
+import type { ProcessInfo, ServerState } from "@/lib/types";
 
 const MAX_POINTS = 30;
 
@@ -460,13 +460,38 @@ function PlayersCard({ id, running }: { id: string; running: boolean }) {
   );
 }
 
+/** Container scaffolding that means nothing to customers (the supervisor,
+ *  launcher shells, log tailers) — never surface it as "the game". */
+const PLUMBING = new Set(["tini", "bash", "sh", "tail", "sleep", "tee"]);
+
+/** Basename of a command line's executable (argv[0]). */
+function argv0(command: string): string {
+  const first = command.trim().split(/\s+/)[0] ?? "";
+  return first.split(/[\\/]/).pop() || first;
+}
+
+/** Arma-style headless client: the standalone `-client` flag. */
+function isHeadlessClient(command: string): boolean {
+  return /(^|\s)-client(?=\s|$)/.test(command);
+}
+
+/** HC ordinal from its `-name=hcN` arg. Regex the whole arg, not a substring —
+ *  the profiles path also contains "hcprofileN". */
+function headlessClientOrdinal(command: string): number | null {
+  const m = /(^|\s)-name=hc(\d+)(?=\s|$)/.exec(command);
+  return m ? Number(m[2]) : null;
+}
+
 /**
- * Live process list from inside the server, via the node agent. One game server
- * legitimately runs several processes — an Arma 3 server plus its paid headless
- * clients share one container — and only the command lines tell them apart.
- * Optional telemetry: renders nothing while the server isn't RUNNING, when the
- * runtime can't enumerate processes (`supported: false`, e.g. Windows
- * containers) or when the panel/agent errors — never a broken card or a toast.
+ * What actually matters from the live process list: headless-client status
+ * (running/expected + a pill per client) and the game process itself — not the
+ * container plumbing (tini, launcher shells, tailers), which stays behind a
+ * collapsed "All processes" disclosure. "running" means the OS process exists;
+ * we deliberately don't say "connected" — process presence doesn't prove the
+ * HC joined the mission. Optional telemetry: renders nothing while the server
+ * isn't RUNNING, when the runtime can't enumerate processes
+ * (`supported: false`, e.g. Windows containers) or when the panel/agent
+ * errors — never a broken card or a toast.
  */
 function ProcessesCard({ id, running }: { id: string; running: boolean }) {
   const { data } = useQuery({
@@ -475,61 +500,198 @@ function ProcessesCard({ id, running }: { id: string; running: boolean }) {
     refetchInterval: 10_000,
     enabled: running,
   });
+  // Expected HC count (shared cache with the settings card). The endpoint
+  // needs settings.read, so a console-only sub-user gets a 403 — degrade
+  // silently to "expected = the HC processes we can see" and never retry.
+  const { data: hcStatus } = useQuery({
+    queryKey: ["headless-clients", id],
+    queryFn: () => api.servers.headlessClients(id),
+    enabled: running,
+    retry: false,
+  });
+  const [showAll, setShowAll] = useState(false);
 
   if (!running || !data?.supported || data.processes.length === 0) return null;
 
+  const procs = data.processes;
+  const hcProcs = procs.filter((p) => isHeadlessClient(p.command));
+  // The game itself: largest non-plumbing, non-HC process by memory (the Arma
+  // server binary dwarfs its helpers). Null when only plumbing is running.
+  const gameProc = procs
+    .filter((p) => !PLUMBING.has(argv0(p.command)) && !isHeadlessClient(p.command))
+    .reduce<ProcessInfo | null>((best, p) => (best && best.memMb >= p.memMb ? best : p), null);
+
+  const hcRunning = hcProcs.length;
+  const hcExpected = Math.max(
+    hcStatus ? Math.max(hcStatus.count, hcStatus.compedCount) : 0,
+    hcRunning,
+  );
+  // HCs spawn ~25s after the main server process, so right after a (re)start
+  // their absence is expected, not an outage. elapsedSec 0 = unknown → no grace.
+  const inGrace =
+    gameProc !== null && gameProc.elapsedSec > 0 && gameProc.elapsedSec < 60;
+
+  // Pills HC1..HC<expected>: match each slot by its `-name=hcN` arg; HC
+  // processes without a parsable (in-range) ordinal still count as running and
+  // fill the remaining slots in order.
+  const bySlot = new Map<number, ProcessInfo>();
+  const spare: ProcessInfo[] = [];
+  for (const p of hcProcs) {
+    const n = headlessClientOrdinal(p.command);
+    if (n !== null && n >= 1 && n <= hcExpected && !bySlot.has(n)) bySlot.set(n, p);
+    else spare.push(p);
+  }
+  const pills: { label: string; state: "running" | "starting" | "down" }[] = [];
+  for (let n = 1; n <= hcExpected; n += 1) {
+    let matched = bySlot.has(n);
+    if (!matched && spare.length > 0) {
+      spare.shift();
+      matched = true;
+    }
+    pills.push({
+      label: `HC${n}`,
+      state: matched ? "running" : inGrace ? "starting" : "down",
+    });
+  }
+
+  const hcDown = hcExpected - hcRunning;
+  // A missing client can also mean a count change that hasn't been applied yet
+  // (HEADLESS_CLIENTS only takes effect at boot) — and a restart fixes a
+  // crashed client too, so the advice holds for both.
+  const hcSubline =
+    hcRunning >= hcExpected
+      ? "All clients running"
+      : inGrace
+        ? "Waiting for clients to start…"
+        : hcRunning === 0
+          ? "No clients running — restart the server to launch them"
+          : `${hcDown} client${hcDown === 1 ? "" : "s"} not running`;
+
+  // The native runtime reports only the root wrapper process (no children), so
+  // an empty view of the tree must not be read as an outage: with neither the
+  // game process nor any HC visible, make no claims about client health.
+  const treeVisible = gameProc !== null || hcRunning > 0;
+
   return (
     <Card className="space-y-2 p-4">
-      <div className="flex items-center justify-between">
+      {hcExpected > 0 && treeVisible ? (
+        <>
+          <span className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Cpu className="size-4" /> Headless clients
+          </span>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-2xl font-semibold tabular-nums">
+              {hcRunning}/{hcExpected}
+            </span>
+            <span className="text-sm text-muted-foreground">running</span>
+          </div>
+          <p className="text-xs text-muted-foreground">{hcSubline}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {pills.map((pill) => (
+              <span
+                key={pill.label}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-accent/40 px-2.5 py-1 text-xs"
+              >
+                <span
+                  className={`size-1.5 rounded-full ${
+                    pill.state === "running"
+                      ? "bg-success"
+                      : pill.state === "starting"
+                        ? "bg-warning"
+                        : "bg-destructive/70"
+                  }`}
+                />
+                <span className="font-mono">{pill.label}</span>
+                <span className="text-muted-foreground">
+                  {pill.state === "running"
+                    ? "running"
+                    : pill.state === "starting"
+                      ? "starting…"
+                      : "not running"}
+                </span>
+              </span>
+            ))}
+          </div>
+        </>
+      ) : (
         <span className="flex items-center gap-2 text-sm text-muted-foreground">
           <ListTree className="size-4" /> Processes
         </span>
-        <span className="text-lg font-semibold tabular-nums">
-          {data.processes.length}
-        </span>
-      </div>
-      <Table className="text-xs">
-        <TableHeader>
-          <TableRow className="hover:bg-transparent">
-            <TableHead className="h-8 px-2 text-[0.625rem]">PID</TableHead>
-            <TableHead className="h-8 px-2 text-[0.625rem]">Command</TableHead>
-            <TableHead className="h-8 px-2 text-right text-[0.625rem]">CPU</TableHead>
-            <TableHead className="h-8 px-2 text-right text-[0.625rem]">Mem</TableHead>
-            <TableHead className="h-8 px-2 text-right text-[0.625rem]">Up</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.processes.map((p) => (
-            <TableRow key={p.pid}>
-              <TableCell className="p-2 font-mono tabular-nums text-muted-foreground">
-                {p.pid}
-              </TableCell>
-              <TableCell className="p-2">
-                <span
-                  className="block max-w-[160px] truncate font-mono"
-                  title={p.command}
-                >
-                  {p.command}
-                </span>
-                {/(^|\s)-client(\s|$)/.test(p.command) && (
-                  <Badge variant="secondary" className="mt-1 px-1.5 py-0 text-[0.5625rem]">
-                    Headless client
-                  </Badge>
-                )}
-              </TableCell>
-              <TableCell className="p-2 text-right tabular-nums">
-                {p.cpuPercent.toFixed(1)}%
-              </TableCell>
-              <TableCell className="p-2 text-right tabular-nums">
-                {formatMb(p.memMb)}
-              </TableCell>
-              <TableCell className="p-2 text-right tabular-nums text-muted-foreground">
-                {formatElapsed(p.elapsedSec)}
-              </TableCell>
+      )}
+      {gameProc && (
+        <div
+          className={`flex items-center justify-between gap-2 text-xs ${
+            hcExpected > 0 ? "border-t border-white/[0.07] pt-2" : ""
+          }`}
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="size-1.5 shrink-0 rounded-full bg-success" />
+            <span className="truncate font-mono" title={gameProc.command}>
+              {argv0(gameProc.command)}
+            </span>
+          </span>
+          <span className="shrink-0 tabular-nums text-muted-foreground">
+            {gameProc.cpuPercent.toFixed(1)}% · {formatMb(gameProc.memMb)}
+            {gameProc.elapsedSec > 0 && <> · {formatElapsed(gameProc.elapsedSec)}</>}
+          </span>
+        </div>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setShowAll((v) => !v)}
+        aria-expanded={showAll}
+        className="w-full justify-between px-2 text-xs"
+      >
+        All processes ({procs.length})
+        <ChevronDown
+          className={`transition-transform ${showAll ? "rotate-180" : ""}`}
+        />
+      </Button>
+      {showAll && (
+        <Table className="text-xs">
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead className="h-8 px-2 text-[0.625rem]">PID</TableHead>
+              <TableHead className="h-8 px-2 text-[0.625rem]">Command</TableHead>
+              <TableHead className="h-8 px-2 text-right text-[0.625rem]">CPU</TableHead>
+              <TableHead className="h-8 px-2 text-right text-[0.625rem]">Mem</TableHead>
+              <TableHead className="h-8 px-2 text-right text-[0.625rem]">Up</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {data.processes.map((p) => (
+              <TableRow key={p.pid}>
+                <TableCell className="p-2 font-mono tabular-nums text-muted-foreground">
+                  {p.pid}
+                </TableCell>
+                <TableCell className="p-2">
+                  <span
+                    className="block max-w-[160px] truncate font-mono"
+                    title={p.command}
+                  >
+                    {p.command}
+                  </span>
+                  {isHeadlessClient(p.command) && (
+                    <Badge variant="secondary" className="mt-1 px-1.5 py-0 text-[0.5625rem]">
+                      Headless client
+                    </Badge>
+                  )}
+                </TableCell>
+                <TableCell className="p-2 text-right tabular-nums">
+                  {p.cpuPercent.toFixed(1)}%
+                </TableCell>
+                <TableCell className="p-2 text-right tabular-nums">
+                  {formatMb(p.memMb)}
+                </TableCell>
+                <TableCell className="p-2 text-right tabular-nums text-muted-foreground">
+                  {formatElapsed(p.elapsedSec)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
     </Card>
   );
 }
