@@ -83,6 +83,18 @@ describe("ProcessesService", () => {
     });
   });
 
+  it("degrades to supported:false when the agent predates the route (agent 404)", async () => {
+    prisma.server.findFirst.mockResolvedValue(makeServer({ state: "RUNNING" }));
+    agent.fetchProcesses.mockRejectedValue(
+      new ServiceUnavailableException("Node agent error 404: not found"),
+    );
+    await expect(svc.get("srv-1")).resolves.toEqual({
+      state: "RUNNING",
+      supported: false,
+      processes: [],
+    });
+  });
+
   it("propagates other agent HTTP errors", async () => {
     prisma.server.findFirst.mockResolvedValue(makeServer());
     agent.fetchProcesses.mockRejectedValue(

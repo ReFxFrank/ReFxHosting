@@ -46,11 +46,13 @@ export class ProcessesService {
     } catch (err) {
       // The agent client rethrows every non-2xx as a ServiceUnavailableException
       // whose message embeds the agent's status ("Node agent error 501: ...").
-      // 501 = the runtime backend can't enumerate processes — degrade, don't
-      // error. Everything else propagates as a normal failure.
+      // 501 = the runtime backend can't enumerate processes; 404 = the agent
+      // predates the /processes route (nodes update after the panel). Both
+      // degrade rather than error — the web polls this every 10s and would
+      // otherwise spam failing requests for the whole rollout window.
       if (
         err instanceof ServiceUnavailableException &&
-        /^Node agent error 501\b/.test(err.message)
+        /^Node agent error (404|501)\b/.test(err.message)
       ) {
         return {
           state: server.state ?? "UNKNOWN",
