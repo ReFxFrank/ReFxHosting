@@ -69,7 +69,11 @@ export function HeadlessClientsCard({ server }: { server: Server }) {
         <CardDescription>
           Offload AI to dedicated helper processes for HC-aware missions
           (Antistasi, Liberation). They run inside your server&apos;s resources
-          with your mods and connect over localhost — no extra setup.
+          with your mods and connect over localhost — no extra setup. Each
+          client loads your full mod set, so it costs roughly another game
+          instance of RAM: with a heavy mod list, 2–3 clients usually need a
+          larger plan, and running out shows as the server being killed
+          (&quot;OUT OF MEMORY&quot; in the console).
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
